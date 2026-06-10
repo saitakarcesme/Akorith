@@ -6,6 +6,7 @@ import { app, ipcMain } from 'electron'
 import { isAbsolute, join } from 'path'
 import { createRequire } from 'module'
 import { loadConfig } from '../config'
+import { addMessage, recordUsageEvent, sessionExists } from '../db'
 import type {
   Provider,
   ProviderAvailability,
@@ -92,6 +93,8 @@ interface ChatSendArgs {
   providerId: string
   model?: string
   prompt: string
+  /** When set (and the session exists), the exchange + usage are persisted. */
+  sessionId?: string
 }
 
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
@@ -110,7 +113,8 @@ export function registerChatIpc(): void {
       typeof args.prompt !== 'string' ||
       args.prompt.length === 0 ||
       args.prompt.length > MAX_PROMPT_CHARS ||
-      (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model)))
+      (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model))) ||
+      (args.sessionId !== undefined && (typeof args.sessionId !== 'string' || !/^[\w-]{1,64}$/.test(args.sessionId)))
     ) {
       return { ok: false, error: 'invalid chat:send payload' }
     }
@@ -118,6 +122,18 @@ export function registerChatIpc(): void {
     const provider = buildProviders().get(args.providerId)
     if (!provider) {
       return { ok: false, error: `provider "${args.providerId}" is not enabled` }
+    }
+
+    // Persistence happens here — the single choke point for every send — so a
+    // usage_event can never be skipped by a UI path. DB trouble must not block
+    // the chat itself.
+    const sessionId = args.sessionId && sessionExists(args.sessionId) ? args.sessionId : undefined
+    if (sessionId) {
+      try {
+        addMessage(sessionId, 'user', args.prompt, args.providerId, args.model)
+      } catch (err) {
+        console.error('[registry] failed to persist user message:', err)
+      }
     }
 
     const sender = event.sender
@@ -133,6 +149,22 @@ export function registerChatIpc(): void {
           }
         }
       )
+      if (sessionId) {
+        try {
+          addMessage(sessionId, 'assistant', result.text, args.providerId, result.model)
+          recordUsageEvent({
+            providerId: args.providerId,
+            model: result.model,
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            costUsd: result.usage.costUsd,
+            estimated: result.usage.estimated,
+            sessionId
+          })
+        } catch (err) {
+          console.error('[registry] failed to persist exchange:', err)
+        }
+      }
       return { ok: true, result }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }

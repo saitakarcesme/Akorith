@@ -11,6 +11,7 @@ Built with Electron + TypeScript + React via electron-vite.
 - **Phase 2** — real interactive PTY terminals via node-pty: done
 - **Phase 3** — pluggable provider registry (Claude / ChatGPT / Ollama, API-key-free) + working planner chat: done
 - **Phase 4** — chat→terminal bridge (per-block / whole-message / selection sends, target switch, auto-Enter): done — the MVP
+- **Phase 5** — SQLite chat history (real sidebar folders) + usage dashboard (heatmap, daily stacked bars, provider donut): done
 
 See [AGENTS.md](AGENTS.md) for architecture, the provider contract, and how to add a provider.
 

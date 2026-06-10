@@ -55,6 +55,8 @@ export interface ChatSendRequest {
   providerId: string
   model?: string
   prompt: string
+  /** When set, the exchange + usage event are persisted to this session. */
+  sessionId?: string
 }
 
 export interface ChatApi {
@@ -90,11 +92,71 @@ export interface BridgeApi {
   setAutoEnter(autoEnter: boolean): Promise<BridgeSettings>
 }
 
+// ---- history (SQLite) ----
+
+export interface SessionRow {
+  id: string
+  providerId: string
+  title: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface MessageRow {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  providerId: string
+  model: string | null
+  createdAt: number
+}
+
+export interface HistoryApi {
+  list(): Promise<SessionRow[]>
+  messages(sessionId: string): Promise<{ session: SessionRow; messages: MessageRow[] } | null>
+  create(providerId: string, title: string): Promise<SessionRow>
+  rename(sessionId: string, title: string): Promise<boolean>
+  remove(sessionId: string): Promise<boolean>
+}
+
+// ---- usage (dashboard; TODO(phase 6): router reads the same data) ----
+
+export interface ProviderUsageSummary {
+  providerId: string
+  events: number
+  promptTokens: number
+  completionTokens: number
+  costUsd: number
+  estimated: boolean
+}
+
+export interface UsageSummary {
+  totalTokens: number
+  totalCostUsd: number
+  sessionCount: number
+  byProvider: ProviderUsageSummary[]
+}
+
+export interface DailyUsageRow {
+  day: string
+  providerId: string
+  events: number
+  tokens: number
+  estimated: boolean
+}
+
+export interface UsageApi {
+  summary(): Promise<UsageSummary>
+  daily(days: number): Promise<DailyUsageRow[]>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
   bridge: BridgeApi
-  // TODO(phase 5): session history methods
+  history: HistoryApi
+  usage: UsageApi
 }
 
 declare global {

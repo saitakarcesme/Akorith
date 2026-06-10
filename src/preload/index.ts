@@ -4,8 +4,6 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 // renderer never sees ipcRenderer itself. Payloads are routed strictly by
 // terminal id on both sides.
 //
-// TODO(phase 5): history API — list/load/save sessions (SQLite).
-
 interface PtyDataPayload {
   id: string
   data: string
@@ -57,8 +55,13 @@ interface ChatTokenPayload {
 const chat = Object.freeze({
   listProviders: (): Promise<unknown> => ipcRenderer.invoke('chat:providers'),
 
-  send: (args: { requestId: string; providerId: string; model?: string; prompt: string }): Promise<unknown> =>
-    ipcRenderer.invoke('chat:send', args),
+  send: (args: {
+    requestId: string
+    providerId: string
+    model?: string
+    prompt: string
+    sessionId?: string
+  }): Promise<unknown> => ipcRenderer.invoke('chat:send', args),
 
   cancel: (requestId: string): void => {
     ipcRenderer.send('chat:cancel', { requestId })
@@ -83,6 +86,21 @@ const bridge = Object.freeze({
     ipcRenderer.invoke('bridge:setAutoEnter', autoEnter)
 })
 
-const api = Object.freeze({ pty, chat, bridge })
+const history = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('history:list'),
+  messages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:messages', { sessionId }),
+  create: (providerId: string, title: string): Promise<unknown> =>
+    ipcRenderer.invoke('history:create', { providerId, title }),
+  rename: (sessionId: string, title: string): Promise<unknown> =>
+    ipcRenderer.invoke('history:rename', { sessionId, title }),
+  remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:delete', { sessionId })
+})
+
+const usage = Object.freeze({
+  summary: (): Promise<unknown> => ipcRenderer.invoke('usage:summary'),
+  daily: (days: number): Promise<unknown> => ipcRenderer.invoke('usage:daily', { days })
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, usage })
 
 contextBridge.exposeInMainWorld('api', api)

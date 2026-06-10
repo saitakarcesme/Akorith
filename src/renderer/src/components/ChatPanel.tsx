@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatUsage, ProviderInfo } from '../../../preload/index.d'
+import type { HistorySelection } from '../App'
 
 interface ChatMessage {
   id: string
@@ -15,7 +16,13 @@ const TERMINALS = [
   { id: 't2', label: 'Terminal 2' }
 ] as const
 
-// TODO(phase 5): persist messages (SQLite history) — for now state only.
+interface ChatPanelProps {
+  /** Sidebar instruction: load a session or start a fresh thread. */
+  historySel: HistorySelection | null
+  /** Notify the app that sessions changed (titles, ordering, creation). */
+  onHistoryChange: () => void
+  onActiveSession: (sessionId: string | null) => void
+}
 
 function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -61,7 +68,7 @@ interface SelectionPopover {
   text: string
 }
 
-export default function ChatPanel(): JSX.Element {
+export default function ChatPanel({ historySel, onHistoryChange, onActiveSession }: ChatPanelProps): JSX.Element {
   // Everything below is driven by the registry — never a hardcoded backend list.
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [providerId, setProviderId] = useState<string>('')
@@ -70,6 +77,7 @@ export default function ChatPanel(): JSX.Element {
   const [draft, setDraft] = useState('')
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // ---- bridge state: one current target + the persisted auto-Enter setting ----
@@ -105,6 +113,38 @@ export default function ChatPanel(): JSX.Element {
       clearTimeout(sentTimer.current)
     }
   }, [loadProviders])
+
+  // Sidebar instructions: load a stored session, or start a fresh thread.
+  useEffect(() => {
+    if (!historySel) return
+    if (historySel.sessionId === null) {
+      setMessages([])
+      setActiveSessionId(null)
+      onActiveSession(null)
+      if (historySel.providerId) setProviderId(historySel.providerId)
+      return
+    }
+    void (async () => {
+      const data = await window.api.history.messages(historySel.sessionId!)
+      if (!data) return
+      setMessages(
+        data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.content,
+          status: 'done' as const,
+          meta:
+            m.role === 'assistant'
+              ? { provider: m.providerId, model: m.model ?? 'default' }
+              : undefined
+        }))
+      )
+      setActiveSessionId(data.session.id)
+      onActiveSession(data.session.id)
+      setProviderId(data.session.providerId)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historySel?.nonce])
 
   const selected = providers?.find((p) => p.id === providerId)
 
@@ -178,6 +218,20 @@ export default function ChatPanel(): JSX.Element {
     const prompt = draft.trim()
     if (!prompt || busyRequestId || !selected?.available.ok) return
 
+    // A session belongs to one provider: create it on the first message.
+    let sessionId = activeSessionId
+    if (!sessionId) {
+      try {
+        const session = await window.api.history.create(selected.id, prompt.slice(0, 80))
+        sessionId = session.id
+        setActiveSessionId(session.id)
+        onActiveSession(session.id)
+        onHistoryChange()
+      } catch {
+        sessionId = null // persistence trouble must not block the chat
+      }
+    }
+
     const requestId = newId()
     const assistantId = newId()
     setDraft('')
@@ -202,7 +256,8 @@ export default function ChatPanel(): JSX.Element {
         requestId,
         providerId: selected.id,
         model: model || undefined,
-        prompt
+        prompt,
+        sessionId: sessionId ?? undefined
       })
       if (response.ok) {
         patchMessage(assistantId, {
@@ -225,6 +280,7 @@ export default function ChatPanel(): JSX.Element {
     } finally {
       offToken()
       setBusyRequestId(null)
+      onHistoryChange() // updated_at moved this session up the sidebar
     }
   }
 
@@ -253,7 +309,17 @@ export default function ChatPanel(): JSX.Element {
           <select
             className="model-select"
             value={providerId}
-            onChange={(event) => setProviderId(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value
+              if (next !== providerId && (activeSessionId || messages.length > 0)) {
+                // One provider per session: switching starts a fresh thread
+                // (the old conversation stays in the sidebar).
+                setMessages([])
+                setActiveSessionId(null)
+                onActiveSession(null)
+              }
+              setProviderId(next)
+            }}
             aria-label="Provider"
             disabled={!providers?.length}
           >

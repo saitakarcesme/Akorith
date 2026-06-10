@@ -3,8 +3,7 @@ import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
-
-// TODO(phase 5): SQLite session history persistence backing the sidebar folders.
+import { closeDb, initDb, registerDbIpc } from './db'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -43,6 +42,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  initDb()
+  registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
   registerBridgeIpc()
@@ -56,6 +57,7 @@ app.whenReady().then(() => {
 // No zombie shells: every PTY dies with the app.
 app.on('will-quit', () => {
   ptyManager.killAll()
+  closeDb()
 })
 
 app.on('window-all-closed', () => {

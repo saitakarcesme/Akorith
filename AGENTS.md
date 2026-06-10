@@ -4,8 +4,8 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 4 (the MVP:
-the chat→terminal bridge).
+with electron-vite, in strict numbered phases — currently through Phase 5 (SQLite
+history + usage dashboard).
 
 ## Prerequisites
 
@@ -25,10 +25,17 @@ npm run dev        # electron-vite dev server + Electron window
 npm run typecheck  # tsc over main, preload, and renderer
 ```
 
-Native-module note: node-pty 1.1.0 ships N-API prebuilds that load in Electron without a
-rebuild, so a clean `npm install` just works. Do **not** add an electron-rebuild
-postinstall — rebuilding node-pty from the npm tarball fails (missing winpty git
-metadata). `npm run rebuild` exists as the escape hatch for future native modules.
+Native modules — two different stories, both in `dependencies` (electron-vite's
+`externalizeDepsPlugin` keeps them out of the bundle) and both main-process only:
+
+- **node-pty 1.1.0** ships N-API prebuilds that load in Electron without any rebuild.
+  Never rebuild it — compiling node-pty from the npm tarball fails (missing winpty git
+  metadata, `GetCommitHash.bat`).
+- **better-sqlite3** is ABI-specific (not N-API), so `postinstall` runs
+  `electron-rebuild -f -o better-sqlite3` — for this module that's a prebuilt-binary
+  download for Electron's ABI, not a compile, so clean installs work without VS Build
+  Tools. `npm run rebuild` is the same command. The `-o` (only) flag matters: a bare
+  rebuild would walk node-pty too and fail.
 
 **Dev-server caveat:** `electron-vite dev` does NOT hot-rebuild `src/main` or
 `src/preload`. After changing anything there, restart the dev server. Renderer code
@@ -132,6 +139,33 @@ immediately. Multi-line text is wrapped in bracketed-paste markers
 PowerShell 5.1 prompt does not support bracketed paste, so multi-line sends are
 intended for the interactive CLIs. Dead-target sends return a clear error (surfaced as
 a toast), never a silent drop.
+
+### Persistence + dashboard (Phase 5)
+
+SQLite database at `loopex.db` in the userData dir (co-located with
+`loopex.config.json`), opened by `src/main/db.ts` (better-sqlite3, WAL,
+foreign keys ON). All DB access is main-process; the renderer uses the validated
+`history:*` / `usage:*` IPC only. Three tables:
+
+- `sessions(id, provider_id, title, created_at, updated_at)` — **a session belongs to
+  one provider**; switching provider in the chat starts a new session context.
+- `messages(id, session_id FK CASCADE, role user|assistant, content, provider_id,
+  model, created_at)`.
+- `usage_events(id, ts, provider_id, model, prompt_tokens, completion_tokens,
+  cost_usd, estimated 0/1, session_id nullable FK)` — **exactly one row per assistant
+  send**, written from the `SendResult.usage` contract inside the `chat:send` handler
+  (the single choke point). Claude/Local write real counts (`estimated=0`); ChatGPT
+  writes approximations (`estimated=1`). Indexed on `ts` and `(provider_id, ts)`.
+  The Phase 6 router will read `usage_events`.
+
+The sidebar shows one collapsible folder per registry provider (plus orphaned
+providers that still have sessions) with rename/delete/new-chat; clicking a session
+restores its conversation into the chat panel. Sidebar nav switches between
+**Workspace** (default, 3-pane) and **Dashboard**; the workspace stays mounted
+(`display:none`) while the dashboard is open so the terminal PTYs are never disturbed.
+The dashboard (recharts + a CSS-grid calendar heatmap) reads only `usage_events`:
+activity heatmap, per-day stacked token bars by provider, provider-distribution donut,
+and summary cards. Providers with estimated counts render hatched with an "≈" tag.
 
 ## Conventions
 
