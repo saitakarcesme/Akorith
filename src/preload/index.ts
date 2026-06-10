@@ -4,7 +4,6 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 // renderer never sees ipcRenderer itself. Payloads are routed strictly by
 // terminal id on both sides.
 //
-// TODO(phase 3): chat API — sendPlannerMessage/onChunk for Claude/ChatGPT/Ollama.
 // TODO(phase 4): bridge API — sendPromptToTerminal(terminalId, text); in the main
 //                process it funnels into the same PtyManager.write() as pty.input.
 // TODO(phase 5): history API — list/load/save sessions (SQLite).
@@ -52,6 +51,30 @@ const pty = Object.freeze({
   }
 })
 
-const api = Object.freeze({ pty })
+interface ChatTokenPayload {
+  requestId: string
+  token: string
+}
+
+const chat = Object.freeze({
+  listProviders: (): Promise<unknown> => ipcRenderer.invoke('chat:providers'),
+
+  send: (args: { requestId: string; providerId: string; model?: string; prompt: string }): Promise<unknown> =>
+    ipcRenderer.invoke('chat:send', args),
+
+  cancel: (requestId: string): void => {
+    ipcRenderer.send('chat:cancel', { requestId })
+  },
+
+  onToken: (requestId: string, listener: (token: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: ChatTokenPayload): void => {
+      if (payload.requestId === requestId) listener(payload.token)
+    }
+    ipcRenderer.on('chat:token', handler)
+    return () => ipcRenderer.removeListener('chat:token', handler)
+  }
+})
+
+const api = Object.freeze({ pty, chat })
 
 contextBridge.exposeInMainWorld('api', api)

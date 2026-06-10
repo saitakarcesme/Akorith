@@ -22,9 +22,55 @@ export interface PtyApi {
   onExit(id: string, listener: (code: number) => void): () => void
 }
 
+// ---- chat / providers (wire shapes mirroring src/main/providers/types.ts) ----
+
+export type ProviderKind = 'chat' | 'executor'
+
+export interface ProviderInfo {
+  id: string
+  label: string
+  kind: ProviderKind[]
+  available: { ok: boolean; reason?: string }
+  models: string[]
+}
+
+export interface ChatUsage {
+  promptTokens?: number
+  completionTokens?: number
+  costUsd?: number
+  estimated: boolean
+}
+
+export interface ChatSendResult {
+  text: string
+  usage: ChatUsage
+  model: string
+  raw?: unknown
+}
+
+export type ChatSendResponse = { ok: true; result: ChatSendResult } | { ok: false; error: string }
+
+export interface ChatSendRequest {
+  requestId: string
+  providerId: string
+  model?: string
+  prompt: string
+}
+
+export interface ChatApi {
+  /** Providers from the registry (config-driven), with availability + models. */
+  listProviders(): Promise<ProviderInfo[]>
+  /** Send a prompt; tokens stream via onToken for the same requestId. */
+  send(args: ChatSendRequest): Promise<ChatSendResponse>
+  /** Abort an in-flight send. */
+  cancel(requestId: string): void
+  /** Subscribe to streamed tokens for a request. Returns an unsubscribe fn. */
+  onToken(requestId: string, listener: (token: string) => void): () => void
+}
+
 export interface PreloadApi {
   pty: PtyApi
-  // TODO(phase 3): planner chat methods
+  chat: ChatApi
   // TODO(phase 4): chat→terminal prompt-bridge methods
   // TODO(phase 5): session history methods
 }

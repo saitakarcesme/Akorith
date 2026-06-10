@@ -1,10 +1,9 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
+import { registerChatIpc } from './providers/registry'
 
-// TODO(phase 3): chat backends (Claude / ChatGPT / local Ollama) — no API keys; route
-//                planner-chat requests from the renderer through the main process.
-// TODO(phase 4): SQLite session history persistence backing the sidebar folders.
+// TODO(phase 5): SQLite session history persistence backing the sidebar folders.
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -44,6 +43,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerPtyIpc()
+  registerChatIpc()
   // TODO(phase 4): register the chat→terminal prompt-bridge IPC here.
   createWindow()
 
