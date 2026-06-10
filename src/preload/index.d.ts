@@ -68,10 +68,32 @@ export interface ChatApi {
   onToken(requestId: string, listener: (token: string) => void): () => void
 }
 
+// ---- chat→terminal bridge ----
+
+export interface BridgeSettings {
+  autoEnter: boolean
+}
+
+export interface BridgeSendRequest {
+  text: string
+  targetTerminalId: string
+  autoEnter: boolean
+}
+
+export type BridgeSendResponse = { ok: true } | { ok: false; error: string }
+
+export interface BridgeApi {
+  /** Send text into a terminal via the single PtyManager.write() path. */
+  send(args: BridgeSendRequest): Promise<BridgeSendResponse>
+  getSettings(): Promise<BridgeSettings>
+  /** Persist the auto-Enter setting to loopex.config.json. */
+  setAutoEnter(autoEnter: boolean): Promise<BridgeSettings>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
-  // TODO(phase 4): chat→terminal prompt-bridge methods
+  bridge: BridgeApi
   // TODO(phase 5): session history methods
 }
 

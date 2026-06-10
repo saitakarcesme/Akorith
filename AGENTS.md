@@ -4,7 +4,8 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 3.
+with electron-vite, in strict numbered phases — currently through Phase 4 (the MVP:
+the chat→terminal bridge).
 
 ## Prerequisites
 
@@ -98,6 +99,39 @@ backends exist. It reads `loopex.config.json` from Electron's userData dir
   (`estimated: true`), cost never fabricated.
 - **local** — Ollama HTTP API: `/api/tags` for models, `/api/chat` with `stream: true`;
   real `prompt_eval_count`/`eval_count`, `costUsd: 0`.
+
+### Chat→terminal bridge (Phase 4)
+
+The bridge sends chat-produced text into a terminal with one click — no copy-paste.
+**There is exactly one injection path**: `bridgeSend({text, targetTerminalId, autoEnter})`
+in `src/main/bridge.ts`, which calls `PtyManager.write()`. Never add a second way to
+write programmatically to a PTY. The UI reaches it via the validated `bridge:send` IPC
+channel (`window.api.bridge.send`); the Phase 8 loop will call `bridgeSend()` directly
+with non-human prompts — design changes must keep it callable headlessly.
+
+Three send modes in the chat panel, all funneling through that one function:
+
+1. **Per code block** — each fenced code block in an assistant message renders with its
+   own "→ Terminal" button sending exactly that block's content.
+2. **Whole message** — a "→ Terminal" button in the message footer sends the **full
+   message text** (deliberate choice: literal and predictable; the per-block buttons
+   already cover the code-only case).
+3. **Manual selection** — highlighting text in the chat area shows a floating
+   "Send selection →" popover that sends just the highlighted text.
+
+**Target terminal**: a single current target (`t1` = Terminal 1, default, or `t2` =
+Terminal 2), shown and changed via the segmented control in the bridge bar at the top
+of the chat panel. Every send goes to the current target; it is never re-asked per send.
+
+**Auto-Enter**: the bridge-bar toggle, persisted in `loopex.config.json` as
+`"bridge": { "autoEnter": false }` (default OFF). OFF = text lands at the prompt and
+waits for the user's own Enter; ON = a trailing `\r` is appended so the CLI executes
+immediately. Multi-line text is wrapped in bracketed-paste markers
+(`ESC[200~ … ESC[201~`, inner newlines normalized to `\r`) so interactive TUIs
+(`claude`, `codex`) accept it as one paste without running lines early; note the plain
+PowerShell 5.1 prompt does not support bracketed paste, so multi-line sends are
+intended for the interactive CLIs. Dead-target sends return a clear error (surfaced as
+a toast), never a silent drop.
 
 ## Conventions
 

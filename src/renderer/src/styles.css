@@ -172,6 +172,7 @@ body {
 /* ---------- right chat column ---------- */
 
 .chat-panel {
+  position: relative;
   flex: 1 1 0;
   min-width: 300px;
   max-width: 480px;
@@ -246,6 +247,166 @@ body {
 .icon-button:hover {
   color: var(--text);
   border-color: var(--accent);
+}
+
+/* ---------- chat→terminal bridge ---------- */
+
+.bridge-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  user-select: none;
+}
+
+.bridge-bar-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.bridge-target {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bridge-target button {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: none;
+  cursor: pointer;
+}
+
+.bridge-target button + button {
+  border-left: 1px solid var(--border);
+}
+
+.bridge-target button.is-active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.bridge-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.bridge-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.bridge-button {
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bridge-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.bridge-button.is-sent {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.chat-code {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.chat-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.chat-code pre {
+  margin: 0;
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.chat-msg-meta .bridge-button {
+  float: right;
+  margin-left: 8px;
+}
+
+.selection-popover {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.bridge-toast {
+  position: absolute;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.bridge-toast.ok {
+  color: var(--accent);
+  background: #12261a;
+  border: 1px solid rgba(63, 185, 80, 0.4);
+}
+
+.bridge-toast.error {
+  color: #f85149;
+  background: #2b1213;
+  border: 1px solid rgba(248, 81, 73, 0.4);
 }
 
 .chat-notice {

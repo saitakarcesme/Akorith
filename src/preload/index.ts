@@ -4,8 +4,6 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 // renderer never sees ipcRenderer itself. Payloads are routed strictly by
 // terminal id on both sides.
 //
-// TODO(phase 4): bridge API — sendPromptToTerminal(terminalId, text); in the main
-//                process it funnels into the same PtyManager.write() as pty.input.
 // TODO(phase 5): history API — list/load/save sessions (SQLite).
 
 interface PtyDataPayload {
@@ -75,6 +73,16 @@ const chat = Object.freeze({
   }
 })
 
-const api = Object.freeze({ pty, chat })
+const bridge = Object.freeze({
+  send: (args: { text: string; targetTerminalId: string; autoEnter: boolean }): Promise<unknown> =>
+    ipcRenderer.invoke('bridge:send', args),
+
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('bridge:getSettings'),
+
+  setAutoEnter: (autoEnter: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('bridge:setAutoEnter', autoEnter)
+})
+
+const api = Object.freeze({ pty, chat, bridge })
 
 contextBridge.exposeInMainWorld('api', api)

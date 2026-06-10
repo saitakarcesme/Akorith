@@ -3,9 +3,9 @@
 // and IPC layer never assume a fixed provider set.
 
 import { app, ipcMain } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { createRequire } from 'module'
+import { loadConfig } from '../config'
 import type {
   Provider,
   ProviderAvailability,
@@ -16,18 +16,6 @@ import type {
 import { ClaudeProvider } from './claude'
 import { ChatGPTProvider } from './chatgpt'
 import { LocalProvider } from './local'
-
-interface LoopexConfig {
-  providers: Record<string, ProviderConfigEntry>
-}
-
-const DEFAULT_CONFIG: LoopexConfig = {
-  providers: {
-    claude: { enabled: true },
-    chatgpt: { enabled: true },
-    local: { enabled: true, baseUrl: 'http://localhost:11434' }
-  }
-}
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -41,28 +29,6 @@ const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
 const VALID_ID = /^[a-z0-9-]{1,32}$/
 const VALID_MODEL = /^[\w.:/-]{1,64}$/
 const MAX_PROMPT_CHARS = 200_000
-
-export function configPath(): string {
-  return join(app.getPath('userData'), 'loopex.config.json')
-}
-
-function loadConfig(): LoopexConfig {
-  const file = configPath()
-  if (!existsSync(file)) {
-    writeFileSync(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n', 'utf8')
-    return DEFAULT_CONFIG
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as LoopexConfig
-    if (!parsed || typeof parsed.providers !== 'object' || parsed.providers === null) {
-      throw new Error('missing "providers" object')
-    }
-    return parsed
-  } catch (err) {
-    console.error(`[registry] invalid ${file} — falling back to defaults:`, err)
-    return DEFAULT_CONFIG
-  }
-}
 
 function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider {
   const modulePath = isAbsolute(entry.module!) ? entry.module! : join(app.getPath('userData'), entry.module!)
@@ -180,7 +146,5 @@ export function registerChatIpc(): void {
     activeRequests.get(args.requestId)?.abort()
   })
 
-  // TODO(phase 4): bridge IPC — route a chat message's text into a terminal
-  //                via PtyManager.write().
   // TODO(phase 6): router — pick a provider by kind/cost using SendResult.usage.
 }

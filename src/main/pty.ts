@@ -94,6 +94,11 @@ class PtyManager {
     this.sessions.get(id)?.pty.write(data)
   }
 
+  /** Whether a live session exists for this terminal id. */
+  isAlive(id: string): boolean {
+    return this.sessions.has(id)
+  }
+
   resize(id: string, cols: number, rows: number): void {
     this.sessions.get(id)?.pty.resize(clampDimension(cols, 80), clampDimension(rows, 24))
   }

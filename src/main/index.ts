@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
+import { registerBridgeIpc } from './bridge'
 
 // TODO(phase 5): SQLite session history persistence backing the sidebar folders.
 
@@ -44,7 +45,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerPtyIpc()
   registerChatIpc()
-  // TODO(phase 4): register the chat→terminal prompt-bridge IPC here.
+  registerBridgeIpc()
   createWindow()
 
   app.on('activate', () => {
