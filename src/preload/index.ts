@@ -1,13 +1,57 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
-// Phase 1: the bridge is intentionally empty — no IPC surface exists yet.
-// Exposing the (typed, frozen) object now locks in the security pattern so later
-// phases only ever add vetted methods here, never enable nodeIntegration.
+// Every method here is a thin, typed shim over a vetted IPC channel — the
+// renderer never sees ipcRenderer itself. Payloads are routed strictly by
+// terminal id on both sides.
 //
-// TODO(phase 2): terminal API — createSession/write/resize/onData for node-pty PTYs.
 // TODO(phase 3): chat API — sendPlannerMessage/onChunk for Claude/ChatGPT/Ollama.
-// TODO(phase 3): bridge API — sendPromptToTerminal(terminalId, text).
-// TODO(phase 4): history API — list/load/save sessions (SQLite).
-const api = Object.freeze({})
+// TODO(phase 4): bridge API — sendPromptToTerminal(terminalId, text); in the main
+//                process it funnels into the same PtyManager.write() as pty.input.
+// TODO(phase 5): history API — list/load/save sessions (SQLite).
+
+interface PtyDataPayload {
+  id: string
+  data: string
+}
+
+interface PtyExitPayload {
+  id: string
+  code: number
+}
+
+const pty = Object.freeze({
+  create: (id: string, options: { cols: number; rows: number; cwd?: string }): Promise<void> =>
+    ipcRenderer.invoke('pty:create', { id, ...options }),
+
+  input: (id: string, data: string): void => {
+    ipcRenderer.send('pty:input', { id, data })
+  },
+
+  resize: (id: string, cols: number, rows: number): void => {
+    ipcRenderer.send('pty:resize', { id, cols, rows })
+  },
+
+  kill: (id: string): void => {
+    ipcRenderer.send('pty:kill', { id })
+  },
+
+  onData: (id: string, listener: (data: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: PtyDataPayload): void => {
+      if (payload.id === id) listener(payload.data)
+    }
+    ipcRenderer.on('pty:data', handler)
+    return () => ipcRenderer.removeListener('pty:data', handler)
+  },
+
+  onExit: (id: string, listener: (code: number) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: PtyExitPayload): void => {
+      if (payload.id === id) listener(payload.code)
+    }
+    ipcRenderer.on('pty:exit', handler)
+    return () => ipcRenderer.removeListener('pty:exit', handler)
+  }
+})
+
+const api = Object.freeze({ pty })
 
 contextBridge.exposeInMainWorld('api', api)

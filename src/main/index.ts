@@ -1,8 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
+import { ptyManager, registerPtyIpc } from './pty'
 
-// TODO(phase 2): node-pty session manager — spawn `claude` / `codex` CLIs in PTYs
-//                and stream their output to the renderer terminals over IPC.
 // TODO(phase 3): chat backends (Claude / ChatGPT / local Ollama) — no API keys; route
 //                planner-chat requests from the renderer through the main process.
 // TODO(phase 4): SQLite session history persistence backing the sidebar folders.
@@ -44,12 +43,18 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // TODO(phase 2): register IPC handlers here (terminal create/write/resize, prompt bridge).
+  registerPtyIpc()
+  // TODO(phase 4): register the chat→terminal prompt-bridge IPC here.
   createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// No zombie shells: every PTY dies with the app.
+app.on('will-quit', () => {
+  ptyManager.killAll()
 })
 
 app.on('window-all-closed', () => {

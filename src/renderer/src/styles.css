@@ -152,6 +152,10 @@ body {
   background: var(--text-faint);
 }
 
+.terminal-pane-dot.is-live {
+  background: var(--accent);
+}
+
 .terminal-host {
   flex: 1 1 0;
   min-height: 0;
