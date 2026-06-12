@@ -151,12 +151,61 @@ export interface UsageApi {
   daily(days: number): Promise<DailyUsageRow[]>
 }
 
+// ---- router (Phase 6: suggest-only) ----
+
+export type RouterTier = 'Asker' | 'Albay' | 'General'
+
+export interface RouterSuggestion {
+  tier: RouterTier
+  /** English rank shown alongside the tier (Soldier/Colonel/General). */
+  rank: string
+  classifiedBy: 'model' | 'heuristic'
+  classifierModel?: string
+  providerId: string
+  providerLabel: string
+  model?: string
+  available: boolean
+  degraded: boolean
+  reason: string
+  /** Usage-based limit warning (never an official plan limit). */
+  warning?: string
+}
+
+export type RouterSuggestResponse =
+  | { ok: true; suggestion: RouterSuggestion }
+  | { ok: false; error: string }
+
+export interface RouterApi {
+  /** Propose a provider/model for the prompt. Suggestion only — never applies it. */
+  suggest(prompt: string): Promise<RouterSuggestResponse>
+}
+
+// ---- repo context digest (Phase 6: opt-in) ----
+
+export interface DigestSettings {
+  enabled: boolean
+  workingDir?: string
+  maxDiffBytes: number
+  maxTotalBytes: number
+  treeDepth: number
+}
+
+export interface DigestApi {
+  getSettings(): Promise<DigestSettings>
+  /** Persist the "Include repo context" toggle. */
+  setEnabled(enabled: boolean): Promise<DigestSettings>
+  /** Persist the repo to digest (empty = the app's cwd). */
+  setWorkingDir(dir: string): Promise<DigestSettings>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
   bridge: BridgeApi
   history: HistoryApi
   usage: UsageApi
+  router: RouterApi
+  digest: DigestApi
 }
 
 declare global {

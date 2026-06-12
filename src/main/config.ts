@@ -12,9 +12,68 @@ export interface BridgeSettings {
   autoEnter: boolean
 }
 
+/** Difficulty tiers for the suggest-only router (Phase 6). */
+export type RouterTier = 'Asker' | 'Albay' | 'General'
+
+export interface TierMapEntry {
+  providerId: string
+  /** Optional model override; omitted = the provider's default. */
+  model?: string
+}
+
+export interface RouterWarnThresholds {
+  /** Rolling window over which recorded usage is summed. */
+  windowHours: number
+  costUsd?: number
+  events?: number
+  tokens?: number
+}
+
+export interface RouterSettings {
+  /** Ollama model used for classification. Empty/missing → first installed. */
+  classifierModel?: string
+  /** tier → provider/model. Edited freely; never hardcoded in router logic. */
+  tierMap: Record<RouterTier, TierMapEntry>
+  /** Warn (never switch) when recorded subscription usage exceeds these. */
+  warnThresholds: RouterWarnThresholds
+}
+
+export interface DigestSettings {
+  /** "Include repo context" toggle, persisted. Default OFF. */
+  enabled: boolean
+  /** Repo to digest. Empty/missing → the app's cwd. */
+  workingDir?: string
+  /** Hard cap on the embedded `git diff` body. */
+  maxDiffBytes: number
+  /** Hard cap on the whole digest block. */
+  maxTotalBytes: number
+  /** Depth limit for the file tree. */
+  treeDepth: number
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
+  router?: Partial<RouterSettings>
+  digest?: Partial<DigestSettings>
+}
+
+export const DEFAULT_ROUTER: RouterSettings = {
+  classifierModel: '',
+  tierMap: {
+    Asker: { providerId: 'local' },
+    Albay: { providerId: 'chatgpt' },
+    General: { providerId: 'claude' }
+  },
+  warnThresholds: { windowHours: 24, costUsd: 5, events: 50 }
+}
+
+export const DEFAULT_DIGEST: DigestSettings = {
+  enabled: false,
+  workingDir: '',
+  maxDiffBytes: 12_000,
+  maxTotalBytes: 24_000,
+  treeDepth: 3
 }
 
 export const DEFAULT_CONFIG: LoopexConfig = {
@@ -23,7 +82,9 @@ export const DEFAULT_CONFIG: LoopexConfig = {
     chatgpt: { enabled: true },
     local: { enabled: true, baseUrl: 'http://localhost:11434' }
   },
-  bridge: { autoEnter: false }
+  bridge: { autoEnter: false },
+  router: DEFAULT_ROUTER,
+  digest: DEFAULT_DIGEST
 }
 
 export function configPath(): string {
@@ -57,4 +118,42 @@ export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
   config.bridge = { ...config.bridge, autoEnter }
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return { autoEnter }
+}
+
+// ---- router + digest settings (Phase 6) ----
+// Getters merge defaults so config files written before Phase 6 still work.
+
+export function getRouterSettings(): RouterSettings {
+  const r = loadConfig().router ?? {}
+  return {
+    classifierModel: r.classifierModel ?? DEFAULT_ROUTER.classifierModel,
+    tierMap: { ...DEFAULT_ROUTER.tierMap, ...(r.tierMap ?? {}) },
+    warnThresholds: { ...DEFAULT_ROUTER.warnThresholds, ...(r.warnThresholds ?? {}) }
+  }
+}
+
+export function getDigestSettings(): DigestSettings {
+  const d = loadConfig().digest ?? {}
+  return {
+    enabled: d.enabled ?? DEFAULT_DIGEST.enabled,
+    workingDir: d.workingDir ?? DEFAULT_DIGEST.workingDir,
+    maxDiffBytes: d.maxDiffBytes ?? DEFAULT_DIGEST.maxDiffBytes,
+    maxTotalBytes: d.maxTotalBytes ?? DEFAULT_DIGEST.maxTotalBytes,
+    treeDepth: d.treeDepth ?? DEFAULT_DIGEST.treeDepth
+  }
+}
+
+function writeDigest(patch: Partial<DigestSettings>): DigestSettings {
+  const config = loadConfig()
+  config.digest = { ...config.digest, ...patch }
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return getDigestSettings()
+}
+
+export function setDigestEnabled(enabled: boolean): DigestSettings {
+  return writeDigest({ enabled })
+}
+
+export function setDigestWorkingDir(workingDir: string): DigestSettings {
+  return writeDigest({ workingDir })
 }

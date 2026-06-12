@@ -5,7 +5,8 @@
 import { app, ipcMain } from 'electron'
 import { isAbsolute, join } from 'path'
 import { createRequire } from 'module'
-import { loadConfig } from '../config'
+import { loadConfig, getDigestSettings } from '../config'
+import { buildDigest } from '../digest'
 import { addMessage, recordUsageEvent, sessionExists } from '../db'
 import type {
   Provider,
@@ -65,7 +66,8 @@ function buildProviders(): Map<string, Provider> {
   return providers
 }
 
-async function describeProviders(): Promise<ProviderInfo[]> {
+/** The available-provider snapshot, also consumed by the Phase 6 router. */
+export async function describeProviders(): Promise<ProviderInfo[]> {
   const providers = buildProviders()
   return Promise.all(
     [...providers.values()].map(async (provider): Promise<ProviderInfo> => {
@@ -136,12 +138,25 @@ export function registerChatIpc(): void {
       }
     }
 
+    // Opt-in repo context (Phase 6): prepend a bounded digest to what the
+    // PROVIDER sees — the stored user message and the usage event stay the
+    // clean typed prompt. A digest failure never blocks the send.
+    let promptForProvider = args.prompt
+    try {
+      if (getDigestSettings().enabled) {
+        const digest = await buildDigest()
+        if (digest) promptForProvider = `${digest}\n\n---\n\n${args.prompt}`
+      }
+    } catch (err) {
+      console.error('[registry] repo digest failed — sending without context:', err)
+    }
+
     const sender = event.sender
     const controller = new AbortController()
     activeRequests.set(args.requestId, controller)
     try {
       const result = await provider.send(
-        args.prompt,
+        promptForProvider,
         { model: args.model, signal: controller.signal },
         (token) => {
           if (!sender.isDestroyed()) {
@@ -178,5 +193,7 @@ export function registerChatIpc(): void {
     activeRequests.get(args.requestId)?.abort()
   })
 
-  // TODO(phase 6): router — pick a provider by kind/cost using SendResult.usage.
+  // Phase 6: the suggest-only router lives in ../router.ts (it reads this
+  // registry's describeProviders() + usage_events). It only suggests — every
+  // send still arrives here with the user's own selection.
 }

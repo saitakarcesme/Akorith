@@ -205,6 +205,39 @@ export function usageSummary(): UsageSummary {
   }
 }
 
+export interface RecentProviderUsage {
+  events: number
+  tokens: number
+  costUsd: number
+}
+
+/**
+ * Per-provider usage recorded since `sinceMs` (Phase 6 router limit-warnings).
+ * Based purely on what Loopex itself logged — NOT any official plan limit.
+ */
+export function recentUsageByProvider(sinceMs: number): Record<string, RecentProviderUsage> {
+  const rows = must()
+    .prepare(
+      `SELECT provider_id,
+              COUNT(*) AS events,
+              SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)) AS tokens,
+              SUM(COALESCE(cost_usd, 0)) AS cost_usd
+       FROM usage_events
+       WHERE ts >= ?
+       GROUP BY provider_id`
+    )
+    .all(sinceMs) as Record<string, number | string>[]
+  const out: Record<string, RecentProviderUsage> = {}
+  for (const r of rows) {
+    out[r.provider_id as string] = {
+      events: (r.events as number) ?? 0,
+      tokens: (r.tokens as number) ?? 0,
+      costUsd: (r.cost_usd as number) ?? 0
+    }
+  }
+  return out
+}
+
 export interface DailyUsageRow {
   day: string // YYYY-MM-DD, local time
   providerId: string

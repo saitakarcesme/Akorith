@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ChatUsage, ProviderInfo } from '../../../preload/index.d'
+import type { ChatUsage, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { HistorySelection } from '../App'
 
 interface ChatMessage {
@@ -86,6 +86,11 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [sentKey, setSentKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
+
+  // ---- Phase 6: suggest-only router + opt-in repo context ----
+  const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
+  const [digestEnabled, setDigestEnabled] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const sentTimer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -108,6 +113,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
   useEffect(() => {
     void loadProviders()
     void window.api.bridge.getSettings().then((s) => setAutoEnter(s.autoEnter))
+    void window.api.digest.getSettings().then((s) => setDigestEnabled(s.enabled))
     return () => {
       clearTimeout(toastTimer.current)
       clearTimeout(sentTimer.current)
@@ -187,6 +193,44 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
     const next = !(autoEnter ?? false)
     const settings = await window.api.bridge.setAutoEnter(next)
     setAutoEnter(settings.autoEnter)
+  }
+
+  const toggleDigest = async (): Promise<void> => {
+    const settings = await window.api.digest.setEnabled(!digestEnabled)
+    setDigestEnabled(settings.enabled)
+  }
+
+  // On-demand only (never per keystroke). The classifier runs locally in main;
+  // accepting just switches the visible selectors — nothing is sent or changed
+  // automatically.
+  const suggestTask = async (): Promise<void> => {
+    const prompt = draft.trim()
+    if (!prompt || suggesting) return
+    setSuggesting(true)
+    setSuggestion(null)
+    try {
+      const res = await window.api.router.suggest(prompt)
+      if (res.ok) setSuggestion(res.suggestion)
+      else showToast('error', res.error)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  const acceptSuggestion = (): void => {
+    if (!suggestion) return
+    // Switch the user's own selectors to the suggestion for this send. The send
+    // still goes through the normal chat:send path with these values.
+    if (suggestion.providerId !== providerId && (activeSessionId || messages.length > 0)) {
+      setMessages([])
+      setActiveSessionId(null)
+      onActiveSession(null)
+    }
+    setProviderId(suggestion.providerId)
+    setModel(suggestion.model ?? '')
+    setSuggestion(null)
   }
 
   const handleSelectionMouseUp = (): void => {
@@ -467,6 +511,42 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
       {toast && <div className={`bridge-toast ${toast.kind}`}>{toast.text}</div>}
 
       <div className="chat-composer">
+        {suggestion && (
+          <div className="router-suggestion">
+            <div className="router-suggestion-head">
+              <span className={`tier-badge tier-${suggestion.tier}`}>
+                {suggestion.rank} · {suggestion.tier}
+              </span>
+              {suggestion.classifiedBy === 'heuristic' && <span className="tier-heuristic">heuristic</span>}
+              <span className="router-target">
+                → {suggestion.providerLabel}
+                {suggestion.model ? ` · ${suggestion.model}` : ''}
+              </span>
+              {!suggestion.available && <span className="router-unavailable">unavailable</span>}
+            </div>
+            <div className="router-reason">
+              {suggestion.reason}
+              {suggestion.classifiedBy === 'model' && suggestion.classifierModel
+                ? ` · classified by ${suggestion.classifierModel}`
+                : ''}
+            </div>
+            {suggestion.warning && <div className="router-warning">⚠ {suggestion.warning}</div>}
+            <div className="router-actions">
+              <button
+                type="button"
+                className="router-accept"
+                disabled={!suggestion.available}
+                onClick={acceptSuggestion}
+                title="Switch the selector to this provider/model for your next send"
+              >
+                Accept
+              </button>
+              <button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>
+                Ignore
+              </button>
+            </div>
+          </div>
+        )}
         <textarea
           className="chat-input"
           placeholder={
@@ -486,6 +566,22 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
           spellCheck={false}
         />
         <div className="chat-composer-row">
+          <label
+            className="composer-toggle"
+            title="Prepend a bounded git digest (diff/log/tree) of the working repo to what the provider sees. Persisted."
+          >
+            <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
+            Repo context
+          </label>
+          <button
+            type="button"
+            className="suggest-button"
+            disabled={!draft.trim() || suggesting}
+            onClick={() => void suggestTask()}
+            title="Suggest a provider/model for this task (local classifier; you decide)"
+          >
+            {suggesting ? 'Classifying…' : '✦ Suggest'}
+          </button>
           {busyRequestId ? (
             <button type="button" className="send-button" onClick={cancel}>
               Stop

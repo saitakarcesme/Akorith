@@ -673,7 +673,168 @@ body {
 
 .chat-composer-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Send sits at the far right; the composer tools group on the left. */
+.chat-composer-row .send-button {
+  margin-left: auto;
+}
+
+.composer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.composer-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.suggest-button {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.suggest-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.suggest-button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* ---------- Phase 6: router suggestion card ---------- */
+
+.router-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.router-suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tier-badge {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+
+.tier-Asker {
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.14);
+  border-color: rgba(88, 166, 255, 0.35);
+}
+
+.tier-Albay {
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.14);
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.tier-General {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.14);
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.tier-heuristic {
+  padding: 1px 6px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+}
+
+.router-target {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.router-unavailable {
+  font-size: 10px;
+  color: #f85149;
+}
+
+.router-reason {
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.router-warning {
+  padding: 6px 8px;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.router-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.router-accept {
+  padding: 4px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.router-accept:disabled {
+  color: var(--text-faint);
+  background: var(--bg-raised);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+.router-ignore {
+  padding: 4px 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.router-ignore:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
 }
 
 .send-button {

@@ -3,6 +3,8 @@ import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
+import { registerRouterIpc } from './router'
+import { registerDigestIpc } from './digest'
 import { closeDb, initDb, registerDbIpc } from './db'
 
 function createWindow(): void {
@@ -47,6 +49,8 @@ app.whenReady().then(() => {
   registerPtyIpc()
   registerChatIpc()
   registerBridgeIpc()
+  registerRouterIpc()
+  registerDigestIpc()
   createWindow()
 
   app.on('activate', () => {

@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "rebuild": "electron-rebuild -f -o better-sqlite3",
-    "postinstall": "electron-rebuild -f -o better-sqlite3",
+    "postinstall": "electron-rebuild -f -o better-sqlite3 && node scripts/fix-spawn-helper.js",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {

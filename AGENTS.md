@@ -4,13 +4,14 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 5 (SQLite
-history + usage dashboard).
+with electron-vite, in strict numbered phases — currently through Phase 6 (macOS PTY
+fix + suggest-only router + opt-in repo digest).
 
 ## Prerequisites
 
 - **Node.js 22+** and npm (Node 20+ works; developed on 22).
-- **Windows 10 1809+** is the primary target (ConPTY). Other platforms are untested.
+- **Windows 10 1809+** (ConPTY) and **macOS (Apple Silicon)** are both supported as of
+  Phase 6 (see the spawn-helper note below). Linux is untested.
 - For the chat providers (all optional — the app runs with any subset):
   - `claude` CLI installed and logged in (Claude provider; uses the user's subscription).
   - `codex` CLI installed and logged in (ChatGPT provider; uses the user's ChatGPT login).
@@ -36,6 +37,15 @@ Native modules — two different stories, both in `dependencies` (electron-vite'
   download for Electron's ABI, not a compile, so clean installs work without VS Build
   Tools. `npm run rebuild` is the same command. The `-o` (only) flag matters: a bare
   rebuild would walk node-pty too and fail.
+- **macOS spawn-helper fix (Phase 6).** node-pty's npm tarball ships its prebuilt
+  `prebuilds/darwin-*/spawn-helper` companion binary with mode `0644` — no execute bit.
+  On macOS node-pty `exec()`s that helper to launch the shell, so without `+x` *every*
+  PTY spawn dies with `posix_spawnp failed` and both terminals fail to open. This hits
+  every macOS user on a clean install, so `postinstall` chains `node
+  scripts/fix-spawn-helper.js`, which on macOS only chmods `+x` each darwin spawn-helper
+  it finds (idempotent, defensive about node-pty's layout, never fails the install,
+  no-op on Windows/Linux). The shell-resolution logic in `pty.ts` was already
+  cross-platform (`$SHELL`/zsh/bash on non-Windows) and was **not** the bug.
 
 **Dev-server caveat:** `electron-vite dev` does NOT hot-rebuild `src/main` or
 `src/preload`. After changing anything there, restart the dev server. Renderer code
@@ -167,8 +177,55 @@ The dashboard (recharts + a CSS-grid calendar heatmap) reads only `usage_events`
 activity heatmap, per-day stacked token bars by provider, provider-distribution donut,
 and summary cards. Providers with estimated counts render hatched with an "≈" tag.
 
+### Model router — SUGGEST ONLY (Phase 6)
+
+`src/main/router.ts` proposes a provider/model for a prompt's difficulty and warns when
+recorded subscription usage is high. It **never switches providers** — the renderer shows
+the suggestion and the user Accepts (selectors switch for that send) or Ignores it. Every
+send still goes through the unchanged `chat:send` path with the user's own selection.
+
+- **Difficulty tiers** `Asker` / `Albay` / `General` (Soldier / Colonel / General):
+  trivial-mechanical / moderate / hard-complex-large.
+- **Classifier** runs **on demand** (the "✦ Suggest" button), never per keystroke. It
+  calls a **local Ollama** model *directly* (`/api/chat`, `stream:false`, temp 0) — never
+  through `chat:send` — so it **writes no `usage_event`** and burns no subscription tokens.
+  Model = `router.classifierModel` (default: first installed Ollama model). With no local
+  model it falls back to a rule-based heuristic (length/keywords/file-mentions/fences) and
+  the suggestion is tagged `heuristic`.
+- **tier→provider/model** is config-driven (`router.tierMap`, editable, never hardcoded in
+  logic). Default `Asker→local`, `Albay→chatgpt`, `General→claude`. Only available
+  providers (per the registry) are suggested; if the mapped one is unavailable the router
+  **degrades** to the best available and says why.
+- **Limit awareness — WARN ONLY.** It sums `usage_events` over a rolling window
+  (`router.warnThresholds`: `windowHours`, `costUsd`, `events`, `tokens`) per provider.
+  When a subscription provider is over threshold it shows a non-blocking warning — *"based
+  on usage recorded in Loopex, not your official plan limit"* — and for Asker/Albay nudges
+  (does not force) toward local. We cannot read official plan limits; this is Loopex's own
+  recorded usage only. Fulfils the old `TODO(phase 6)` in `db.ts`/`registry.ts`.
+
+Config keys (defaults filled in by `getRouterSettings()` so pre-Phase-6 config files still
+work): `router.classifierModel`, `router.tierMap`, `router.warnThresholds`.
+
+### Repo context digest — opt-in (Phase 6)
+
+`src/main/digest.ts` builds a **bounded** read-only snapshot of the working repo. The chat
+has an "Include repo context" toggle (default OFF, persisted in `digest.enabled`). When ON,
+`chat:send` prepends the digest to what the **provider** sees — the stored user message and
+the `usage_event` stay the clean typed prompt, and a digest failure never blocks the send.
+
+The digest is `git diff --stat` + a capped `git diff` + `git log --oneline -n 10` + a
+depth-limited file tree from `git ls-files` (tracked + untracked-not-ignored, so `.gitignore`
+is respected). A **hard total cap** (`digest.maxTotalBytes`) governs everything; the heavy
+full diff is included only if it fits, else a truncation note replaces it. A non-git dir
+yields just a filesystem tree and a clear "not a git repository" note instead of an error.
+It is prepended as a delimited `## Repo context` block labelled context, not instructions.
+Config: `digest.enabled`, `digest.workingDir` (default the app cwd), `digest.maxDiffBytes`,
+`digest.maxTotalBytes`, `digest.treeDepth`. `// TODO(phase 9):` the loop reuses `buildDigest()`.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
 - Mark future integration points with `// TODO(phase N):` comments.
 - Prompts and other untrusted text go to CLIs via **stdin**, never argv.
+- **At the end of EVERY phase, update BOTH `AGENTS.md` and `codex.md`** (flip the phase
+  checklist, record the new state) and commit + push to `origin main`.

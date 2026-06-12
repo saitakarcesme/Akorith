@@ -101,6 +101,18 @@ const usage = Object.freeze({
   daily: (days: number): Promise<unknown> => ipcRenderer.invoke('usage:daily', { days })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, usage })
+// Suggest-only router: returns a suggestion; never changes anything itself.
+const router = Object.freeze({
+  suggest: (prompt: string): Promise<unknown> => ipcRenderer.invoke('router:suggest', { prompt })
+})
+
+// Opt-in repo context digest settings (the digest is built in main at send time).
+const digest = Object.freeze({
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('digest:getSettings'),
+  setEnabled: (enabled: boolean): Promise<unknown> => ipcRenderer.invoke('digest:setEnabled', enabled),
+  setWorkingDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('digest:setWorkingDir', dir)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest })
 
 contextBridge.exposeInMainWorld('api', api)
