@@ -2,16 +2,18 @@
 
 Loopex is the current repository/package name. **Akorith** is the visible product name
 introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
-agents **without any API keys**: a planner chat on the right talks to the user's own
+agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
-center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 9.1 (Akorith UI
-polish and workspace projects).
+right execution area hosts two real PTY terminals; the left sidebar holds projects and session
+history. Built
+with electron-vite, in strict numbered phases — currently through Phase 9.1.1 (project-first
+workspace flow).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
-**9.1 Akorith UI polish + workspace projects** — all done. Pending: 10 packaging +
+9.1 Akorith UI polish + workspace projects · **9.1.1 project-first workspace flow** — all done.
+Pending: 10 packaging +
 `productName` / full package identity cleanup.
 
 ## Prerequisites
@@ -343,21 +345,20 @@ Sidebar changes:
 - Recent chats section backed by existing SQLite sessions.
 - Project folders backed by the `projects` table. Creating a new chat while a project is selected
   writes that project id to `sessions.project_id`; old chats remain valid with `NULL`.
-- Explicit "Move Olympus & Atlantis to project folder" action for selected projects with a path.
-  It sends a safely quoted `cd` command via `window.api.bridge.send`, preserving the single
-  `bridgeSend()` → `PtyManager.write()` path. It refuses newline-containing paths and never sends
-  terminal commands automatically on project selection.
+- Phase 9.1.1 supersedes the earlier "move terminals to folder" action: selecting/opening a
+  project with a valid path now restarts the execution panes in that cwd through the PTY lifecycle
+  path instead of sending `cd` into already-running terminals.
 - Local profile/settings entry stores a display name in renderer `localStorage`.
 
 Workspace changes:
 
 - User-facing terminal names are **Olympus** (`t2`, top) and **Atlantis** (`t1`, bottom). Internal
   IDs remain stable.
-- Terminal headers show live/exited status and a user-selected role badge (`Shell`, `Claude`,
-  `Codex`, `Local`) persisted in renderer `localStorage`. This is explicit labeling, not fake
-  command detection.
+- Terminal headers show live/exited status plus the actual requested/fallback command role
+  (`Codex`, `Claude`, or `Shell`) for the current project-first PTY session.
 - Terminal vertical split is draggable and persisted.
-- The planner/right panel is collapsible and resizable; xterm panes still use their existing
+- The center planning-chat surface stays available while the Macro loop strip is collapsible; the
+  right execution column and terminal split are resizable, and xterm panes still use their existing
   resize observers.
 - Planner composer and Macro loop presentation are polished, but provider calls, router behavior,
   dashboard usage semantics, and semi-automatic approval gates are unchanged.
@@ -368,7 +369,43 @@ Known limitations after Phase 9.1:
 - No fully automatic autopilot yet.
 - Terminal output is not parsed automatically.
 - Akorith does not auto-answer permission prompts or type `yes`, `1`, or similar into terminals.
-- Terminal role display is user-selected unless a future phase adds reliable detection.
+- CLI startup reflects the fixed project-first mapping, not terminal-output detection.
+
+### Project-first workspace flow (Phase 9.1.1)
+
+Phase 9.1.1 corrects the day-to-day workspace flow without a broad redesign. The main Workspace
+layout is now **Sidebar | center planning chat | right execution terminals**. The center surface
+keeps provider/model controls, bridge target controls, the semi-automatic Macro loop, normal chat
+messages, and the composer. Collapsing the Macro loop hides only that planning tool strip; normal
+chat and the composer remain available.
+
+The right execution column is project-first:
+
+- With no active project folder, it shows an onboarding surface instead of blank anonymous shells.
+- **Open Project** uses a main-process Electron folder dialog, validates the selected directory,
+  persists/reuses a `projects` row, selects it, and refreshes the sidebar.
+- **Create Project** asks for a project name in the renderer, then a parent folder in the main
+  process, creates the directory with conservative name validation, persists/selects it, and
+  refreshes the sidebar.
+- Filesystem work for Open/Create Project is main-process only; the renderer only calls validated
+  preload APIs.
+
+Once a project with a valid path is selected, Akorith starts the execution agents through the
+existing PTY/session manager:
+
+- **Olympus (`t2`) starts `codex`** in the project cwd.
+- **Atlantis (`t1`) starts `claude`** in the project cwd.
+- The PTY create path accepts only fixed command kinds (`shell`, `codex`, `claude`) plus a
+  validated absolute cwd. This is terminal lifecycle, not a second prompt/write path.
+- If `codex` or `claude` is missing from PATH, the pane falls back to a shell in the project folder
+  and prints a clear Akorith message instead of crashing.
+- Terminal split resizing and the right execution-column width resize remain local renderer layout
+  state; xterm panes still fit through their existing resize observers.
+
+Phase 9.1.1 also compacts Recent chats in the sidebar, adds clearer vertical separation between
+cards, and adds a subtle composer info row showing selected provider/model, last available usage
+from a completed assistant response, repo-context state, and target executor. It does not add
+autopilot, terminal-output parsing, or automatic permission prompt approval.
 
 ### Test page — isolated local-model test lab (Phase 7)
 

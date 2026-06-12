@@ -5,11 +5,18 @@ export interface PtyCreateOptions {
   cols: number
   rows: number
   cwd?: string
+  commandKind?: PtyCommandKind
 }
+
+export type PtyCommandKind = 'shell' | 'codex' | 'claude'
+
+export type PtyCreateResponse =
+  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string }
+  | { ok: false; error: string }
 
 export interface PtyApi {
   /** Spawn the platform shell in a PTY bound to this terminal id. */
-  create(id: string, options: PtyCreateOptions): Promise<void>
+  create(id: string, options: PtyCreateOptions): Promise<PtyCreateResponse>
   /** Send keystrokes/text to the shell's stdin. */
   input(id: string, data: string): void
   /** Propagate an xterm fit to the PTY so the shell reflows. */
@@ -150,6 +157,11 @@ export interface ProjectUpdateRequest {
 export interface ProjectsApi {
   list(): Promise<ProjectRow[]>
   create(args: ProjectCreateRequest): Promise<ProjectRow>
+  openFolder(projectId?: string | null): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
+  createFolder(args: {
+    name: string
+    projectId?: string | null
+  }): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
   update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
 }
 

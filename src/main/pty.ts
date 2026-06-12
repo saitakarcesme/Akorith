@@ -1,7 +1,7 @@
 import { ipcMain, type WebContents } from 'electron'
-import { existsSync } from 'fs'
+import { accessSync, constants, existsSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { delimiter, join } from 'path'
+import { delimiter, isAbsolute, join } from 'path'
 import { spawn, type IPty } from 'node-pty'
 
 // Terminal ids are renderer-supplied; accept only short slugs ("t1", "t2", ...).
@@ -11,7 +11,14 @@ export interface PtyCreateOptions {
   cols: number
   rows: number
   cwd?: string
+  commandKind?: PtyCommandKind
 }
+
+export type PtyCommandKind = 'shell' | 'codex' | 'claude'
+
+export type PtyCreateResponse =
+  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string }
+  | { ok: false; error: string }
 
 function clampDimension(value: unknown, fallback: number): number {
   const n = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback
@@ -37,6 +44,52 @@ function resolveDefaultShell(): string {
   return cachedShell
 }
 
+function safeCwd(cwd: unknown): string | null {
+  if (cwd === undefined || cwd === null || cwd === '') return homedir()
+  if (typeof cwd !== 'string' || cwd.length > 2_000 || /[\0\r\n]/.test(cwd)) return null
+  if (!isAbsolute(cwd)) return null
+  try {
+    return statSync(cwd).isDirectory() ? cwd : null
+  } catch {
+    return null
+  }
+}
+
+function resolveExecutable(command: 'codex' | 'claude'): string | null {
+  const pathDirs = (process.env['PATH'] ?? '').split(delimiter).filter(Boolean)
+  const suffixes =
+    process.platform === 'win32'
+      ? (process.env['PATHEXT'] ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      : ['']
+  for (const dir of pathDirs) {
+    for (const suffix of suffixes) {
+      const candidate = join(dir, process.platform === 'win32' ? `${command}${suffix}` : command)
+      try {
+        accessSync(candidate, constants.X_OK)
+        return candidate
+      } catch {
+        // Keep scanning PATH.
+      }
+    }
+  }
+  return null
+}
+
+function commandSpec(kind: PtyCommandKind): { command: string; args: string[]; started: PtyCommandKind; message?: string } {
+  if (kind === 'codex' || kind === 'claude') {
+    const resolved = resolveExecutable(kind)
+    if (resolved) return { command: resolved, args: [], started: kind }
+    const label = kind === 'codex' ? 'Codex' : 'Claude'
+    return {
+      command: resolveDefaultShell(),
+      args: [],
+      started: 'shell',
+      message: `[akorith] ${label} CLI was not found on PATH. Started a shell in the project folder instead.\r\n`
+    }
+  }
+  return { command: resolveDefaultShell(), args: [], started: 'shell' }
+}
+
 /**
  * Owns every PTY in the app. Sessions are keyed by terminal id and fully
  * independent — data and exit events are routed back only to the WebContents
@@ -49,19 +102,30 @@ interface Session {
 class PtyManager {
   private readonly sessions = new Map<string, Session>()
 
-  create(id: string, options: PtyCreateOptions, sink: WebContents): void {
-    // Replace any stale session with the same id (e.g. a remounted pane).
+  create(id: string, options: PtyCreateOptions, sink: WebContents): PtyCreateResponse {
+    const cwd = safeCwd(options.cwd)
+    if (!cwd) return { ok: false, error: 'invalid terminal working directory' }
+    const kind = options.commandKind ?? 'shell'
+    const spec = commandSpec(kind)
+
+    // Replace any stale session with the same id (e.g. a remounted pane) only
+    // after the new lifecycle request has passed validation.
     this.kill(id)
 
-    const pty = spawn(resolveDefaultShell(), [], {
-      name: 'xterm-color',
-      cols: clampDimension(options.cols, 80),
-      rows: clampDimension(options.rows, 24),
-      cwd: options.cwd ?? homedir(),
-      env: process.env as Record<string, string>
-      // useConpty is left to node-pty's auto-detection: ConPTY on Win10 1809+,
-      // winpty fallback on anything older.
-    })
+    let pty: IPty
+    try {
+      pty = spawn(spec.command, spec.args, {
+        name: 'xterm-color',
+        cols: clampDimension(options.cols, 80),
+        rows: clampDimension(options.rows, 24),
+        cwd,
+        env: process.env as Record<string, string>
+        // useConpty is left to node-pty's auto-detection: ConPTY on Win10 1809+,
+        // winpty fallback on anything older.
+      })
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
 
     const session: Session = { pty }
     this.sessions.set(id, session)
@@ -79,6 +143,12 @@ class PtyManager {
       this.sessions.delete(id)
       if (!sink.isDestroyed()) sink.send('pty:exit', { id, code: exitCode })
     })
+    return {
+      ok: true,
+      started: spec.started,
+      fallback: spec.started !== kind,
+      message: spec.message
+    }
   }
 
   /**
@@ -125,9 +195,15 @@ class PtyManager {
 export const ptyManager = new PtyManager()
 
 export function registerPtyIpc(): void {
-  ipcMain.handle('pty:create', (event, args: { id: string } & PtyCreateOptions) => {
-    if (typeof args?.id !== 'string' || !VALID_ID.test(args.id)) return
-    ptyManager.create(args.id, args, event.sender)
+  ipcMain.handle('pty:create', (event, args: { id: string } & PtyCreateOptions): PtyCreateResponse => {
+    if (
+      typeof args?.id !== 'string' ||
+      !VALID_ID.test(args.id) ||
+      (args.commandKind !== undefined && args.commandKind !== 'shell' && args.commandKind !== 'codex' && args.commandKind !== 'claude')
+    ) {
+      return { ok: false, error: 'invalid pty:create payload' }
+    }
+    return ptyManager.create(args.id, args, event.sender)
   })
 
   ipcMain.on('pty:input', (_event, args: { id: string; data: string }) => {

@@ -15,7 +15,7 @@ interface PtyExitPayload {
 }
 
 const pty = Object.freeze({
-  create: (id: string, options: { cols: number; rows: number; cwd?: string }): Promise<void> =>
+  create: (id: string, options: { cols: number; rows: number; cwd?: string; commandKind?: string }): Promise<unknown> =>
     ipcRenderer.invoke('pty:create', { id, ...options }),
 
   input: (id: string, data: string): void => {
@@ -99,6 +99,9 @@ const history = Object.freeze({
 const projects = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
   create: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:create', args),
+  openFolder: (projectId?: string | null): Promise<unknown> =>
+    ipcRenderer.invoke('projects:openFolder', { projectId }),
+  createFolder: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:createFolder', args),
   update: (projectId: string, patch: unknown): Promise<unknown> =>
     ipcRenderer.invoke('projects:update', { projectId, patch })
 })

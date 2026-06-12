@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import type { PtyCommandKind } from '../../../preload/index.d'
 import { MountainIcon, WaveIcon } from './icons'
 
 interface TerminalPaneProps {
@@ -9,40 +10,31 @@ interface TerminalPaneProps {
   id: string
   title: string
   identity: 'olympus' | 'atlantis'
+  cwd: string
+  commandKind: Extract<PtyCommandKind, 'codex' | 'claude'>
 }
 
 type PaneStatus = 'connecting' | 'live' | 'exited'
-type TerminalRole = 'shell' | 'claude' | 'codex' | 'local'
+type TerminalRole = 'shell' | 'claude' | 'codex'
 
 const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'shell', label: 'Shell' },
   { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' },
-  { id: 'local', label: 'Local' }
+  { id: 'codex', label: 'Codex' }
 ]
 
-function storedRole(id: string): TerminalRole {
-  try {
-    const raw = localStorage.getItem(`akorith.terminalRole.${id}`)
-    return ROLES.some((role) => role.id === raw) ? (raw as TerminalRole) : 'shell'
-  } catch {
-    return 'shell'
-  }
-}
-
-export default function TerminalPane({ id, title, identity }: TerminalPaneProps): JSX.Element {
+export default function TerminalPane({ id, title, identity, cwd, commandKind }: TerminalPaneProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<PaneStatus>('connecting')
   const [exitCode, setExitCode] = useState<number | null>(null)
-  const [role, setRole] = useState<TerminalRole>(() => storedRole(id))
-
-  useEffect(() => {
-    localStorage.setItem(`akorith.terminalRole.${id}`, role)
-  }, [id, role])
+  const [role, setRole] = useState<TerminalRole>(commandKind)
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    setStatus('connecting')
+    setExitCode(null)
+    setRole(commandKind)
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -77,13 +69,26 @@ export default function TerminalPane({ id, title, identity }: TerminalPaneProps)
 
     let disposed = false
     window.api.pty
-      .create(id, { cols: terminal.cols, rows: terminal.rows })
-      .then(() => {
-        if (!disposed) setStatus('live')
-        terminal.focus()
+      .create(id, { cols: terminal.cols, rows: terminal.rows, cwd, commandKind })
+      .then((res) => {
+        if (disposed) return
+        if (res.ok) {
+          setRole(res.started)
+          setStatus('live')
+          if (res.message) terminal.write(`\r\n\x1b[33m${res.message}\x1b[0m`)
+          terminal.focus()
+          return
+        }
+        setRole('shell')
+        setStatus('exited')
+        terminal.write(`\r\n\x1b[31m[akorith] ${res.error}\x1b[0m\r\n`)
       })
-      .catch(() => {
-        if (!disposed) setStatus('exited')
+      .catch((err) => {
+        if (!disposed) {
+          setRole('shell')
+          setStatus('exited')
+          terminal.write(`\r\n\x1b[31m[akorith] ${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`)
+        }
       })
 
     const resizeObserver = new ResizeObserver(() => {
@@ -104,7 +109,7 @@ export default function TerminalPane({ id, title, identity }: TerminalPaneProps)
       window.api.pty.kill(id)
       terminal.dispose()
     }
-  }, [id])
+  }, [id, cwd, commandKind])
 
   const statusLabel =
     status === 'connecting' ? 'connecting…' : status === 'live' ? 'live' : `exited (${exitCode ?? '?'})`
@@ -117,20 +122,8 @@ export default function TerminalPane({ id, title, identity }: TerminalPaneProps)
         <IdentityIcon size={15} />
         <span className="terminal-pane-title">
           <strong>{title}</strong>
-          <em>{ROLES.find((item) => item.id === role)?.label ?? 'Shell'}</em>
         </span>
-        <select
-          className="terminal-role-select"
-          value={role}
-          onChange={(event) => setRole(event.target.value as TerminalRole)}
-          aria-label={`${title} role`}
-        >
-          {ROLES.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <span className={`terminal-role-pill role-${role}`}>{ROLES.find((item) => item.id === role)?.label ?? 'Shell'}</span>
         <span className="terminal-pane-status">{statusLabel}</span>
       </header>
       <div className="terminal-host" ref={hostRef} />

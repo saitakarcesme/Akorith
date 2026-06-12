@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatUsage, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
-import { ChevronIcon, SendIcon, SparkIcon } from './icons'
+import { SendIcon, SparkIcon } from './icons'
 
 interface ChatMessage {
   id: string
@@ -79,19 +79,6 @@ function storageBoolean(key: string, fallback: boolean): boolean {
   }
 }
 
-function storageNumber(key: string, fallback: number): number {
-  try {
-    const raw = Number(localStorage.getItem(key))
-    return Number.isFinite(raw) ? raw : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
 export default function ChatPanel({
   historySel,
   activeProject,
@@ -115,8 +102,7 @@ export default function ChatPanel({
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [sentKey, setSentKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
-  const [panelCollapsed, setPanelCollapsed] = useState(() => storageBoolean('akorith.chatPanelCollapsed', false))
-  const [panelWidth, setPanelWidth] = useState(() => storageNumber('akorith.chatPanelWidth', 480))
+  const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', false))
 
   // ---- Phase 6: suggest-only router + opt-in repo context ----
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
@@ -152,12 +138,8 @@ export default function ChatPanel({
   }, [loadProviders])
 
   useEffect(() => {
-    localStorage.setItem('akorith.chatPanelCollapsed', String(panelCollapsed))
-  }, [panelCollapsed])
-
-  useEffect(() => {
-    localStorage.setItem('akorith.chatPanelWidth', String(panelWidth))
-  }, [panelWidth])
+    localStorage.setItem('akorith.planningToolsCollapsed', String(planningCollapsed))
+  }, [planningCollapsed])
 
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
@@ -237,22 +219,6 @@ export default function ChatPanel({
   const toggleDigest = async (): Promise<void> => {
     const settings = await window.api.digest.setEnabled(!digestEnabled)
     setDigestEnabled(settings.enabled)
-  }
-
-  const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (panelCollapsed) return
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = panelWidth
-    const move = (moveEvent: PointerEvent): void => {
-      setPanelWidth(clamp(startWidth + (startX - moveEvent.clientX), 360, 720))
-    }
-    const stop = (): void => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', stop)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', stop)
   }
 
   // On-demand only (never per keystroke). The classifier runs locally in main;
@@ -390,6 +356,17 @@ export default function ChatPanel({
   const canSend = Boolean(draft.trim()) && !busyRequestId && Boolean(selected?.available.ok)
 
   const bridgeLabel = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
+  const lastUsage = useMemo(
+    () => [...messages].reverse().find((m) => m.role === 'assistant' && m.meta?.usage)?.meta?.usage,
+    [messages]
+  )
+  const composerInfo = [
+    selected?.label ?? 'No provider',
+    model || 'default',
+    lastUsage ? usageLine(lastUsage) : null,
+    `repo context ${digestEnabled ? 'on' : 'off'}`,
+    `target ${bridgeLabel}`
+  ].filter((item): item is string => Boolean(item))
 
   const bridgeButton = (text: string, key: string, title: string): JSX.Element => (
     <button
@@ -403,29 +380,10 @@ export default function ChatPanel({
   )
 
   return (
-    <aside
-      className={`chat-panel ${panelCollapsed ? 'is-collapsed' : ''}`}
-      style={panelCollapsed ? undefined : { flexBasis: panelWidth, width: panelWidth }}
-    >
-      <div className="chat-resizer" onPointerDown={startResize} />
-      <button
-        type="button"
-        className="chat-panel-toggle"
-        title={panelCollapsed ? 'Expand planner' : 'Collapse planner'}
-        onClick={() => setPanelCollapsed((value) => !value)}
-      >
-        <ChevronIcon size={16} direction={panelCollapsed ? 'left' : 'right'} />
-      </button>
-      {panelCollapsed ? (
-        <div className="chat-collapsed-label">
-          <SparkIcon size={18} />
-          <span>Planner</span>
-        </div>
-      ) : (
-        <>
+    <main className={`chat-panel ${planningCollapsed ? 'planning-collapsed' : ''}`}>
       <header className="chat-header">
         <div className="chat-header-stack">
-          <span className="chat-header-title">Planner</span>
+          <span className="chat-header-title">Planning chat</span>
           {activeProject && <span className="chat-project-chip">{activeProject.name}</span>}
         </div>
         <div className="chat-header-controls">
@@ -467,6 +425,14 @@ export default function ChatPanel({
               ))}
             </select>
           )}
+          <button
+            type="button"
+            className="icon-button"
+            title={planningCollapsed ? 'Show macro-loop tools' : 'Hide macro-loop tools'}
+            onClick={() => setPlanningCollapsed((value) => !value)}
+          >
+            <SparkIcon size={15} />
+          </button>
           <button
             type="button"
             className="icon-button"
@@ -512,6 +478,8 @@ export default function ChatPanel({
         defaultModel={model}
         defaultTargetTerminal={bridgeTarget}
         activeProject={activeProject}
+        collapsed={planningCollapsed}
+        onToggleCollapsed={() => setPlanningCollapsed((value) => !value)}
       />
 
       {selected && !selected.available.ok && (
@@ -682,9 +650,8 @@ export default function ChatPanel({
             </button>
           )}
         </div>
+        <div className="composer-info-row">{composerInfo.join(' · ')}</div>
       </div>
-        </>
-      )}
-    </aside>
+    </main>
   )
 }

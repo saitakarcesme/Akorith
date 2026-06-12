@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppView } from '../App'
 import {
@@ -17,12 +17,14 @@ interface SidebarProps {
   view: AppView
   onNavigate: (view: AppView) => void
   historyVersion: number
+  projectVersion: number
   activeSessionId: string | null
   activeProject: ProjectRow | null
   onSelectProject: (project: ProjectRow | null) => void
   onSelectSession: (sessionId: string, project?: ProjectRow | null) => void
   onNewChat: (providerId: string) => void
   onHistoryChange: () => void
+  onProjectsChange: () => void
 }
 
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
@@ -62,10 +64,6 @@ function providerShortLabel(id: string, label: string): string {
   return label.slice(0, 2)
 }
 
-function shellQuotePath(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`
-}
-
 function formatDate(ts: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts))
 }
@@ -74,12 +72,14 @@ export default function Sidebar({
   view,
   onNavigate,
   historyVersion,
+  projectVersion,
   activeSessionId,
   activeProject,
   onSelectProject,
   onSelectSession,
   onNewChat,
-  onHistoryChange
+  onHistoryChange,
+  onProjectsChange
 }: SidebarProps): JSX.Element {
   // Folders come from the registry + DB — never a hardcoded provider list.
   const [providers, setProviders] = useState<ProviderInfo[]>([])
@@ -95,8 +95,6 @@ export default function Sidebar({
   const [projectPath, setProjectPath] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
-  const [toast, setToast] = useState<string | null>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     window.api.chat
@@ -117,7 +115,7 @@ export default function Sidebar({
       .list()
       .then(setProjects)
       .catch(() => setProjects([]))
-  }, [])
+  }, [projectVersion])
 
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
@@ -126,14 +124,6 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.displayName', displayName)
   }, [displayName])
-
-  useEffect(() => () => clearTimeout(toastTimer.current), [])
-
-  const showToast = (message: string): void => {
-    setToast(message)
-    clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 2600)
-  }
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const recentSessions = sessions.slice(0, 6)
@@ -165,6 +155,7 @@ export default function Sidebar({
     setProjectPath('')
     setProjectFormOpen(false)
     await refreshProjects()
+    onProjectsChange()
     onSelectProject(created)
   }
 
@@ -186,30 +177,6 @@ export default function Sidebar({
 
   const selectSession = (session: SessionRow): void => {
     onSelectSession(session.id, session.projectId ? projectById.get(session.projectId) ?? null : null)
-  }
-
-  const moveTerminalsToProject = async (): Promise<void> => {
-    if (!activeProject?.path) {
-      showToast('Select a project with a local path first.')
-      return
-    }
-    if (/[\r\n]/.test(activeProject.path)) {
-      showToast('Project path contains unsupported newline characters.')
-      return
-    }
-    const command = `cd ${shellQuotePath(activeProject.path)}`
-    const targets = [
-      { id: 't2', label: 'Olympus' },
-      { id: 't1', label: 'Atlantis' }
-    ]
-    for (const target of targets) {
-      const result = await window.api.bridge.send({ text: command, targetTerminalId: target.id, autoEnter: true })
-      if (!result.ok) {
-        showToast(`${target.label}: ${result.error}`)
-        return
-      }
-    }
-    showToast(`Moved Olympus and Atlantis to ${activeProject.name}.`)
   }
 
   return (
@@ -358,11 +325,7 @@ export default function Sidebar({
                 ))
               )}
             </div>
-            {activeProject?.path && (
-              <button type="button" className="project-cd-btn" onClick={() => void moveTerminalsToProject()}>
-                Move Olympus & Atlantis to project folder
-              </button>
-            )}
+            {activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
           </section>
 
           <section className="sidebar-section">
@@ -525,8 +488,6 @@ export default function Sidebar({
           {!sidebarCollapsed && <SettingsIcon size={16} />}
         </button>
       </div>
-
-      {toast && <div className="sidebar-toast">{toast}</div>}
     </aside>
   )
 }

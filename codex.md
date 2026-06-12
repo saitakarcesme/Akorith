@@ -8,10 +8,11 @@ unavailable. `AGENTS.md` is the deep architecture/spec reference; this file is t
 
 Loopex is the current repo/package name. **Akorith** is the visible product name introduced in
 Phase 9.1; full package identity cleanup remains Phase 10. It is an Electron + TypeScript + React
-desktop workspace that orchestrates coding agents **without any API keys**. A planner chat on the
-right talks to the user's own **Claude** / **ChatGPT**
+desktop workspace that orchestrates coding agents **without any API keys**. The center planning
+chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
-center hosts two real PTY terminals; the left sidebar holds session history. Built with
+right execution area hosts two real PTY terminals; the left sidebar holds projects and session
+history. Built with
 electron-vite in strict numbered phases.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
@@ -71,8 +72,14 @@ electron-vite in strict numbered phases.
 - [x] **Phase 9.1** — Akorith UI polish and workspace projects. Visible app branding, icon
       asset/fav icon, calm dark-gray + muted-purple theme, collapsible sidebar, icon nav,
       recent chats, SQLite project folders, local settings/profile entry, Olympus/Atlantis
-      terminal display names, terminal role labels, planner panel resize/collapse, terminal
-      split resize, and polished macro-loop presentation.
+      terminal display names, layout controls, terminal split resize, and polished macro-loop
+      presentation.
+- [x] **Phase 9.1.1** — project-first workspace flow. Workspace is now sidebar / center
+      planning-chat / right execution terminals; execution area opens or creates a project first,
+      then starts Olympus as `codex` and Atlantis as `claude` in that project folder through the
+      PTY session manager, with shell fallback when a CLI is missing. Recent chats are compacted,
+      Macro loop collapse no longer hides normal chat, and the composer shows subtle
+      provider/model/context/target info.
 - [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name,
       full package identity cleanup, native `.icns` / `.ico` assets).
 
@@ -105,14 +112,17 @@ electron-vite in strict numbered phases.
   `usage_event`; the user must approve or edit each executor prompt before it is sent through
   the existing bridge path. Terminal output is not auto-interpreted yet — the user pastes or
   summarizes the executor result before continuing.
-- **Phase 9.1 UI state is local and conservative.** Sidebar collapse, planner width/collapse,
-  terminal split, terminal role labels, and display name are renderer `localStorage`; projects are
+- **Phase 9.1 UI state is local and conservative.** Sidebar collapse, planning-tool collapse,
+  right execution width, terminal split, and display name are renderer `localStorage`; projects are
   SQLite rows, and new sessions can store nullable `project_id`.
-- **Terminal display names are presentation only.** `t2` is Olympus and `t1` is Atlantis in the UI;
-  internal IDs and IPC stay unchanged. Moving terminals to a selected project folder is an explicit
-  user action that sends a safely quoted `cd` through `window.api.bridge.send`, preserving
-  `bridgeSend()` → `PtyManager.write()`.
-- **No autopilot in Phase 9.1.** Akorith does not auto-parse terminal output, auto-answer
+- **Terminal display names are presentation only; command startup is explicit.** `t2` is Olympus and
+  `t1` is Atlantis in the UI; internal IDs and IPC stay unchanged.
+- **Project-first agents (Phase 9.1.1):** Open/Create Project uses validated main-process dialogs
+  and persists `projects` rows. Selecting a project with a valid path starts Olympus (`t2`) as
+  `codex` and Atlantis (`t1`) as `claude` in that cwd via the existing PTY manager. Missing CLI
+  binaries fall back to a shell with a visible message. This is terminal lifecycle, not a second
+  programmatic write path.
+- **No autopilot in Phase 9.1.1.** Akorith does not auto-parse terminal output, auto-answer
   permission prompts, or type `yes`, `1`, or similar into terminals.
 - A session belongs to **one** provider; switching provider starts a new session context.
 

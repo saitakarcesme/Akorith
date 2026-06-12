@@ -18,11 +18,13 @@ export interface HistorySelection {
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [projectVersion, setProjectVersion] = useState(0)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeProject, setActiveProject] = useState<ProjectRow | null>(null)
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
+  const bumpProjects = useCallback(() => setProjectVersion((v) => v + 1), [])
 
   const selectSession = useCallback((sessionId: string | null, providerId?: string, project?: ProjectRow | null) => {
     setHistorySel((prev) => ({ sessionId, providerId, nonce: (prev?.nonce ?? 0) + 1 }))
@@ -36,22 +38,28 @@ export default function App(): JSX.Element {
         view={view}
         onNavigate={setView}
         historyVersion={historyVersion}
+        projectVersion={projectVersion}
         activeSessionId={activeSessionId}
         activeProject={activeProject}
         onSelectProject={setActiveProject}
         onSelectSession={(id, project) => selectSession(id, undefined, project)}
         onNewChat={(providerId) => selectSession(null, providerId)}
         onHistoryChange={bumpHistory}
+        onProjectsChange={bumpProjects}
       />
       {/* The workspace stays mounted while the dashboard is shown (display:none)
           so the terminals' PTYs and scrollback are never disturbed. */}
       <div className="workspace" style={{ display: view === 'workspace' ? 'flex' : 'none' }}>
-        <TerminalColumn />
         <ChatPanel
           historySel={historySel}
           activeProject={activeProject}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
+        />
+        <TerminalColumn
+          activeProject={activeProject}
+          onProjectSelected={setActiveProject}
+          onProjectsChange={bumpProjects}
         />
       </div>
       {/* The test page stays mounted while hidden so a streaming run is never

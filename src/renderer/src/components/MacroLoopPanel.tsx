@@ -13,6 +13,8 @@ interface MacroLoopPanelProps {
   defaultModel: string
   defaultTargetTerminal: string
   activeProject: ProjectRow | null
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
 function latestActionableTurn(state: MacroState | null): MacroTurnRow | null {
@@ -33,7 +35,9 @@ export default function MacroLoopPanel({
   defaultProviderId,
   defaultModel,
   defaultTargetTerminal,
-  activeProject
+  activeProject,
+  collapsed,
+  onToggleCollapsed
 }: MacroLoopPanelProps): JSX.Element {
   const chatProviders = useMemo(() => (providers ?? []).filter((p) => p.available.ok && p.kind.includes('chat')), [providers])
   const [goal, setGoal] = useState('')
@@ -187,6 +191,25 @@ export default function MacroLoopPanel({
     }
   }
 
+  if (collapsed) {
+    return (
+      <section className="macro-panel is-collapsed">
+        <div className="macro-head">
+          <div>
+            <div className="macro-title">
+              <SparkIcon size={13} />
+              Macro loop
+            </div>
+            <div className={`macro-status status-${session?.status ?? 'idle'}`}>{statusLabel(session?.status)}</div>
+          </div>
+          <button type="button" className="macro-btn" onClick={onToggleCollapsed}>
+            Show
+          </button>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="macro-panel">
       <div className="macro-head">
@@ -197,6 +220,9 @@ export default function MacroLoopPanel({
           </div>
           <div className={`macro-status status-${session?.status ?? 'idle'}`}>{statusLabel(session?.status)}</div>
         </div>
+        <button type="button" className="macro-btn" onClick={onToggleCollapsed}>
+          Hide
+        </button>
         {session && session.status !== 'completed' && session.status !== 'stopped' && (
           <button type="button" className="macro-btn is-stop" disabled={isBusy && !session} onClick={() => void stop()}>
             Stop

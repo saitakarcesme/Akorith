@@ -5,9 +5,10 @@
 // TODO(phase 6): the router reads usage_events to pick providers by
 //                cost/volume. One row per assistant send, from SendResult.usage.
 
-import { app, ipcMain } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { join } from 'path'
+import { basename, isAbsolute, join, resolve, sep } from 'path'
+import { mkdirSync, statSync } from 'fs'
 import Database from 'better-sqlite3'
 
 let db: Database.Database | null = null
@@ -17,6 +18,7 @@ const MAX_TITLE = 200
 const MAX_PROJECT_NAME = 120
 const MAX_PROJECT_PATH = 2_000
 const MAX_PROJECT_META = 48
+const SAFE_PROJECT_DIR_NAME = /^[^/\\:*?"<>|\0\r\n]{1,120}$/
 
 interface StoredGeneratedFile {
   path: string
@@ -298,6 +300,20 @@ function cleanOptionalText(value: unknown, max: number): string | null {
   return trimmed || null
 }
 
+function cleanProjectPath(value: unknown): string | null {
+  const path = cleanOptionalText(value, MAX_PROJECT_PATH)
+  if (!path || /[\0\r\n]/.test(path) || !isAbsolute(path)) return null
+  try {
+    return statSync(path).isDirectory() ? path : null
+  } catch {
+    return null
+  }
+}
+
+function projectNameFromPath(path: string): string {
+  return basename(path).trim().slice(0, MAX_PROJECT_NAME) || 'Project'
+}
+
 export function listProjects(): ProjectRow[] {
   return (
     must().prepare('SELECT * FROM projects ORDER BY updated_at DESC, name COLLATE NOCASE').all() as Record<
@@ -318,7 +334,7 @@ export function createProject(input: {
   const row: ProjectRow = {
     id: randomUUID(),
     name,
-    path: cleanOptionalText(input.path, MAX_PROJECT_PATH),
+    path: cleanProjectPath(input.path),
     color: cleanOptionalText(input.color, MAX_PROJECT_META),
     icon: cleanOptionalText(input.icon, MAX_PROJECT_META),
     createdAt: now,
@@ -333,6 +349,38 @@ export function createProject(input: {
   return row
 }
 
+export function getProject(projectId: string): ProjectRow | null {
+  if (!VALID_ID.test(projectId)) return null
+  const row = must().prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as
+    | Record<string, unknown>
+    | undefined
+  return row ? toProject(row) : null
+}
+
+function findProjectByPath(path: string): ProjectRow | null {
+  const row = must().prepare('SELECT * FROM projects WHERE path = ? ORDER BY updated_at DESC LIMIT 1').get(path) as
+    | Record<string, unknown>
+    | undefined
+  return row ? toProject(row) : null
+}
+
+export function ensureProjectForPath(path: string, name?: string, projectId?: string | null): ProjectRow {
+  const safePath = cleanProjectPath(path)
+  if (!safePath) throw new Error('selected folder is not a valid directory')
+  if (projectId) {
+    const updated = updateProject(projectId, { path: safePath, name: name || undefined })
+    if (updated) return updated
+  }
+  const existing = findProjectByPath(safePath)
+  if (existing) return existing
+  return createProject({
+    name: name?.trim() || projectNameFromPath(safePath),
+    path: safePath,
+    color: null,
+    icon: 'folder'
+  })
+}
+
 export function updateProject(
   projectId: string,
   patch: Partial<Pick<ProjectRow, 'name' | 'path' | 'color' | 'icon'>>
@@ -345,7 +393,7 @@ export function updateProject(
   const row = toProject(current)
   const next = {
     name: patch.name !== undefined ? patch.name.trim().slice(0, MAX_PROJECT_NAME) || row.name : row.name,
-    path: patch.path !== undefined ? cleanOptionalText(patch.path, MAX_PROJECT_PATH) : row.path,
+    path: patch.path !== undefined ? cleanProjectPath(patch.path) : row.path,
     color: patch.color !== undefined ? cleanOptionalText(patch.color, MAX_PROJECT_META) : row.color,
     icon: patch.icon !== undefined ? cleanOptionalText(patch.icon, MAX_PROJECT_META) : row.icon
   }
@@ -1039,6 +1087,54 @@ export function usageDaily(days: number): DailyUsageRow[] {
   }))
 }
 
+type ProjectDialogResponse =
+  | { ok: true; project: ProjectRow }
+  | { ok: false; cancelled?: boolean; error: string }
+
+async function openProjectFolder(projectId?: string | null): Promise<ProjectDialogResponse> {
+  const result = await dialog.showOpenDialog({
+    title: 'Open Project',
+    properties: ['openDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true, error: 'cancelled' }
+  try {
+    return { ok: true, project: ensureProjectForPath(result.filePaths[0], undefined, projectId ?? null) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+async function createProjectFolder(name: string, projectId?: string | null): Promise<ProjectDialogResponse> {
+  const safeName = name.trim().slice(0, MAX_PROJECT_NAME)
+  if (!safeName || safeName === '.' || safeName === '..' || !SAFE_PROJECT_DIR_NAME.test(safeName)) {
+    return { ok: false, error: 'project name cannot contain path separators or reserved characters' }
+  }
+  const result = await dialog.showOpenDialog({
+    title: 'Choose Parent Folder',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true, error: 'cancelled' }
+  try {
+    const parent = cleanProjectPath(result.filePaths[0])
+    if (!parent) return { ok: false, error: 'selected parent is not a valid directory' }
+    const target = resolve(parent, safeName)
+    const parentWithSep = parent.endsWith(sep) ? parent : `${parent}${sep}`
+    if (!target.startsWith(parentWithSep)) return { ok: false, error: 'project folder must be inside the selected parent' }
+    try {
+      mkdirSync(target)
+    } catch (err) {
+      try {
+        if (!statSync(target).isDirectory()) throw err
+      } catch {
+        throw err
+      }
+    }
+    return { ok: true, project: ensureProjectForPath(target, safeName, projectId ?? null) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 // ---- IPC ----
 
 export function registerDbIpc(): void {
@@ -1110,6 +1206,24 @@ export function registerDbIpc(): void {
   })
 
   ipcMain.handle('projects:list', (): ProjectRow[] => listProjects())
+
+  ipcMain.handle('projects:openFolder', (_event, args: { projectId?: string | null }) => {
+    if (args?.projectId !== undefined && args.projectId !== null && (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId))) {
+      return { ok: false, error: 'invalid projects:openFolder payload' } satisfies ProjectDialogResponse
+    }
+    return openProjectFolder(args?.projectId ?? null)
+  })
+
+  ipcMain.handle('projects:createFolder', (_event, args: { name: string; projectId?: string | null }) => {
+    if (
+      typeof args?.name !== 'string' ||
+      args.name.length > MAX_PROJECT_NAME ||
+      (args.projectId !== undefined && args.projectId !== null && (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId)))
+    ) {
+      return { ok: false, error: 'invalid projects:createFolder payload' } satisfies ProjectDialogResponse
+    }
+    return createProjectFolder(args.name, args.projectId ?? null)
+  })
 
   ipcMain.handle(
     'projects:create',
