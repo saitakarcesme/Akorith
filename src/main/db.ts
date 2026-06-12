@@ -14,6 +14,9 @@ let db: Database.Database | null = null
 
 const VALID_ID = /^[\w-]{1,64}$/
 const MAX_TITLE = 200
+const MAX_PROJECT_NAME = 120
+const MAX_PROJECT_PATH = 2_000
+const MAX_PROJECT_META = 48
 
 interface StoredGeneratedFile {
   path: string
@@ -30,10 +33,21 @@ export function initDb(): void {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      path        TEXT,
+      color       TEXT,
+      icon        TEXT,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at);
     CREATE TABLE IF NOT EXISTS sessions (
       id          TEXT PRIMARY KEY,
       provider_id TEXT NOT NULL,
       title       TEXT NOT NULL,
+      project_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
       created_at  INTEGER NOT NULL,
       updated_at  INTEGER NOT NULL
     );
@@ -133,6 +147,8 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_macro_turns_session ON macro_turns(session_id, turn_index);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
+  ensureColumn('sessions', 'project_id', 'TEXT')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
 }
 
 export function closeDb(): void {
@@ -157,6 +173,7 @@ export interface SessionRow {
   id: string
   providerId: string
   title: string
+  projectId: string | null
   createdAt: number
   updatedAt: number
 }
@@ -175,16 +192,32 @@ const toSession = (r: Record<string, unknown>): SessionRow => ({
   id: r.id as string,
   providerId: r.provider_id as string,
   title: r.title as string,
+  projectId: (r.project_id as string | null) ?? null,
   createdAt: r.created_at as number,
   updatedAt: r.updated_at as number
 })
 
-export function createSession(providerId: string, title: string): SessionRow {
+export function projectExists(projectId: string): boolean {
+  if (!VALID_ID.test(projectId)) return false
+  return Boolean(must().prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId))
+}
+
+export function createSession(providerId: string, title: string, projectId?: string | null): SessionRow {
   const now = Date.now()
-  const row: SessionRow = { id: randomUUID(), providerId, title, createdAt: now, updatedAt: now }
+  const safeProjectId = projectId && projectExists(projectId) ? projectId : null
+  const row: SessionRow = {
+    id: randomUUID(),
+    providerId,
+    title,
+    projectId: safeProjectId,
+    createdAt: now,
+    updatedAt: now
+  }
   must()
-    .prepare('INSERT INTO sessions (id, provider_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(row.id, row.providerId, row.title, row.createdAt, row.updatedAt)
+    .prepare(
+      'INSERT INTO sessions (id, provider_id, title, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(row.id, row.providerId, row.title, row.projectId, row.createdAt, row.updatedAt)
   return row
 }
 
@@ -235,6 +268,94 @@ export function recordUsageEvent(input: UsageEventInput): void {
       input.estimated ? 1 : 0,
       input.sessionId ?? null
     )
+}
+
+// ---- projects (Phase 9.1 sidebar workspace folders) ----
+
+export interface ProjectRow {
+  id: string
+  name: string
+  path: string | null
+  color: string | null
+  icon: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+const toProject = (r: Record<string, unknown>): ProjectRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  path: (r.path as string | null) ?? null,
+  color: (r.color as string | null) ?? null,
+  icon: (r.icon as string | null) ?? null,
+  createdAt: r.created_at as number,
+  updatedAt: r.updated_at as number
+})
+
+function cleanOptionalText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().slice(0, max)
+  return trimmed || null
+}
+
+export function listProjects(): ProjectRow[] {
+  return (
+    must().prepare('SELECT * FROM projects ORDER BY updated_at DESC, name COLLATE NOCASE').all() as Record<
+      string,
+      unknown
+    >[]
+  ).map(toProject)
+}
+
+export function createProject(input: {
+  name: string
+  path?: string | null
+  color?: string | null
+  icon?: string | null
+}): ProjectRow {
+  const now = Date.now()
+  const name = input.name.trim().slice(0, MAX_PROJECT_NAME) || 'Untitled project'
+  const row: ProjectRow = {
+    id: randomUUID(),
+    name,
+    path: cleanOptionalText(input.path, MAX_PROJECT_PATH),
+    color: cleanOptionalText(input.color, MAX_PROJECT_META),
+    icon: cleanOptionalText(input.icon, MAX_PROJECT_META),
+    createdAt: now,
+    updatedAt: now
+  }
+  must()
+    .prepare(
+      `INSERT INTO projects (id, name, path, color, icon, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(row.id, row.name, row.path, row.color, row.icon, row.createdAt, row.updatedAt)
+  return row
+}
+
+export function updateProject(
+  projectId: string,
+  patch: Partial<Pick<ProjectRow, 'name' | 'path' | 'color' | 'icon'>>
+): ProjectRow | null {
+  if (!VALID_ID.test(projectId)) return null
+  const current = must().prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as
+    | Record<string, unknown>
+    | undefined
+  if (!current) return null
+  const row = toProject(current)
+  const next = {
+    name: patch.name !== undefined ? patch.name.trim().slice(0, MAX_PROJECT_NAME) || row.name : row.name,
+    path: patch.path !== undefined ? cleanOptionalText(patch.path, MAX_PROJECT_PATH) : row.path,
+    color: patch.color !== undefined ? cleanOptionalText(patch.color, MAX_PROJECT_META) : row.color,
+    icon: patch.icon !== undefined ? cleanOptionalText(patch.icon, MAX_PROJECT_META) : row.icon
+  }
+  must()
+    .prepare('UPDATE projects SET name = ?, path = ?, color = ?, icon = ?, updated_at = ? WHERE id = ?')
+    .run(next.name, next.path, next.color, next.icon, Date.now(), projectId)
+  const updated = must().prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as
+    | Record<string, unknown>
+    | undefined
+  return updated ? toProject(updated) : null
 }
 
 // ---- aggregations for the dashboard (and TODO(phase 6): the router) ----
@@ -296,7 +417,7 @@ export interface RecentProviderUsage {
 
 /**
  * Per-provider usage recorded since `sinceMs` (Phase 6 router limit-warnings).
- * Based purely on what Loopex itself logged — NOT any official plan limit.
+ * Based purely on what Akorith itself logged — NOT any official plan limit.
  */
 export function recentUsageByProvider(sinceMs: number): Record<string, RecentProviderUsage> {
   const rows = must()
@@ -951,15 +1072,18 @@ export function registerDbIpc(): void {
     return { session: toSession(session), messages }
   })
 
-  ipcMain.handle('history:create', (_event, args: { providerId: string; title: string }) => {
+  ipcMain.handle('history:create', (_event, args: { providerId: string; title: string; projectId?: string | null }) => {
     if (
       typeof args?.providerId !== 'string' ||
       !/^[a-z0-9-]{1,32}$/.test(args.providerId) ||
-      typeof args.title !== 'string'
+      typeof args.title !== 'string' ||
+      (args.projectId !== undefined &&
+        args.projectId !== null &&
+        (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId)))
     ) {
       throw new Error('invalid history:create payload')
     }
-    return createSession(args.providerId, args.title.slice(0, MAX_TITLE) || 'New chat')
+    return createSession(args.providerId, args.title.slice(0, MAX_TITLE) || 'New chat', args.projectId ?? null)
   })
 
   ipcMain.handle('history:rename', (_event, args: { sessionId: string; title: string }) => {
@@ -984,4 +1108,62 @@ export function registerDbIpc(): void {
     const days = typeof args?.days === 'number' && Number.isFinite(args.days) ? Math.min(Math.max(args.days, 1), 730) : 270
     return usageDaily(days)
   })
+
+  ipcMain.handle('projects:list', (): ProjectRow[] => listProjects())
+
+  ipcMain.handle(
+    'projects:create',
+    (_event, args: { name: string; path?: string | null; color?: string | null; icon?: string | null }) => {
+      if (
+        typeof args?.name !== 'string' ||
+        args.name.trim().length === 0 ||
+        args.name.length > MAX_PROJECT_NAME ||
+        (args.path !== undefined &&
+          args.path !== null &&
+          (typeof args.path !== 'string' || args.path.length > MAX_PROJECT_PATH)) ||
+        (args.color !== undefined &&
+          args.color !== null &&
+          (typeof args.color !== 'string' || args.color.length > MAX_PROJECT_META)) ||
+        (args.icon !== undefined &&
+          args.icon !== null &&
+          (typeof args.icon !== 'string' || args.icon.length > MAX_PROJECT_META))
+      ) {
+        throw new Error('invalid projects:create payload')
+      }
+      return createProject(args)
+    }
+  )
+
+  ipcMain.handle(
+    'projects:update',
+    (
+      _event,
+      args: { projectId: string; patch: Partial<Pick<ProjectRow, 'name' | 'path' | 'color' | 'icon'>> }
+    ) => {
+      if (
+        typeof args?.projectId !== 'string' ||
+        !VALID_ID.test(args.projectId) ||
+        typeof args.patch !== 'object' ||
+        !args.patch
+      ) {
+        return null
+      }
+      const patch = args.patch
+      if (
+        (patch.name !== undefined && (typeof patch.name !== 'string' || patch.name.length > MAX_PROJECT_NAME)) ||
+        (patch.path !== undefined &&
+          patch.path !== null &&
+          (typeof patch.path !== 'string' || patch.path.length > MAX_PROJECT_PATH)) ||
+        (patch.color !== undefined &&
+          patch.color !== null &&
+          (typeof patch.color !== 'string' || patch.color.length > MAX_PROJECT_META)) ||
+        (patch.icon !== undefined &&
+          patch.icon !== null &&
+          (typeof patch.icon !== 'string' || patch.icon.length > MAX_PROJECT_META))
+      ) {
+        return null
+      }
+      return updateProject(args.projectId, patch)
+    }
+  )
 }

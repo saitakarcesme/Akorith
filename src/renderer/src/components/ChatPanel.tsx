@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ChatUsage, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ChatUsage, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
+import { ChevronIcon, SendIcon, SparkIcon } from './icons'
 
 interface ChatMessage {
   id: string
@@ -13,13 +14,14 @@ interface ChatMessage {
 
 // Matches the panes mounted in TerminalColumn.
 const TERMINALS = [
-  { id: 't1', label: 'Terminal 1' },
-  { id: 't2', label: 'Terminal 2' }
+  { id: 't2', label: 'Olympus' },
+  { id: 't1', label: 'Atlantis' }
 ] as const
 
 interface ChatPanelProps {
   /** Sidebar instruction: load a session or start a fresh thread. */
   historySel: HistorySelection | null
+  activeProject: ProjectRow | null
   /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
@@ -69,7 +71,33 @@ interface SelectionPopover {
   text: string
 }
 
-export default function ChatPanel({ historySel, onHistoryChange, onActiveSession }: ChatPanelProps): JSX.Element {
+function storageBoolean(key: string, fallback: boolean): boolean {
+  try {
+    return localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true'
+  } catch {
+    return fallback
+  }
+}
+
+function storageNumber(key: string, fallback: number): number {
+  try {
+    const raw = Number(localStorage.getItem(key))
+    return Number.isFinite(raw) ? raw : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+export default function ChatPanel({
+  historySel,
+  activeProject,
+  onHistoryChange,
+  onActiveSession
+}: ChatPanelProps): JSX.Element {
   // Everything below is driven by the registry — never a hardcoded backend list.
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [providerId, setProviderId] = useState<string>('')
@@ -87,6 +115,8 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [sentKey, setSentKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
+  const [panelCollapsed, setPanelCollapsed] = useState(() => storageBoolean('akorith.chatPanelCollapsed', false))
+  const [panelWidth, setPanelWidth] = useState(() => storageNumber('akorith.chatPanelWidth', 480))
 
   // ---- Phase 6: suggest-only router + opt-in repo context ----
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
@@ -120,6 +150,14 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
       clearTimeout(sentTimer.current)
     }
   }, [loadProviders])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.chatPanelCollapsed', String(panelCollapsed))
+  }, [panelCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.chatPanelWidth', String(panelWidth))
+  }, [panelWidth])
 
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
@@ -201,6 +239,22 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
     setDigestEnabled(settings.enabled)
   }
 
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (panelCollapsed) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = panelWidth
+    const move = (moveEvent: PointerEvent): void => {
+      setPanelWidth(clamp(startWidth + (startX - moveEvent.clientX), 360, 720))
+    }
+    const stop = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
   // On-demand only (never per keystroke). The classifier runs locally in main;
   // accepting just switches the visible selectors — nothing is sent or changed
   // automatically.
@@ -267,7 +321,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
     let sessionId = activeSessionId
     if (!sessionId) {
       try {
-        const session = await window.api.history.create(selected.id, prompt.slice(0, 80))
+        const session = await window.api.history.create(selected.id, prompt.slice(0, 80), activeProject?.id ?? null)
         sessionId = session.id
         setActiveSessionId(session.id)
         onActiveSession(session.id)
@@ -335,6 +389,8 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
 
   const canSend = Boolean(draft.trim()) && !busyRequestId && Boolean(selected?.available.ok)
 
+  const bridgeLabel = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
+
   const bridgeButton = (text: string, key: string, title: string): JSX.Element => (
     <button
       type="button"
@@ -342,14 +398,36 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
       title={title}
       onClick={() => void sendToTerminal(text, key)}
     >
-      {sentKey === key ? '✓ sent' : '→ Terminal'}
+      {sentKey === key ? 'Sent' : `Send to ${bridgeLabel}`}
     </button>
   )
 
   return (
-    <aside className="chat-panel">
+    <aside
+      className={`chat-panel ${panelCollapsed ? 'is-collapsed' : ''}`}
+      style={panelCollapsed ? undefined : { flexBasis: panelWidth, width: panelWidth }}
+    >
+      <div className="chat-resizer" onPointerDown={startResize} />
+      <button
+        type="button"
+        className="chat-panel-toggle"
+        title={panelCollapsed ? 'Expand planner' : 'Collapse planner'}
+        onClick={() => setPanelCollapsed((value) => !value)}
+      >
+        <ChevronIcon size={16} direction={panelCollapsed ? 'left' : 'right'} />
+      </button>
+      {panelCollapsed ? (
+        <div className="chat-collapsed-label">
+          <SparkIcon size={18} />
+          <span>Planner</span>
+        </div>
+      ) : (
+        <>
       <header className="chat-header">
-        <span className="chat-header-title">Planner</span>
+        <div className="chat-header-stack">
+          <span className="chat-header-title">Planner</span>
+          {activeProject && <span className="chat-project-chip">{activeProject.name}</span>}
+        </div>
         <div className="chat-header-controls">
           <select
             className="model-select"
@@ -401,7 +479,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
       </header>
 
       <div className="bridge-bar">
-        <span className="bridge-bar-label">Send to</span>
+        <span className="bridge-bar-label">Executor</span>
         <div className="bridge-target" role="group" aria-label="Bridge target terminal">
           {TERMINALS.map((t) => (
             <button
@@ -433,6 +511,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
         defaultProviderId={providerId}
         defaultModel={model}
         defaultTargetTerminal={bridgeTarget}
+        activeProject={activeProject}
       />
 
       {selected && !selected.available.ok && (
@@ -559,7 +638,9 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
           className="chat-input"
           placeholder={
             selected?.available.ok
-              ? 'Describe what you want to build… (Enter to send, Shift+Enter for newline)'
+              ? activeProject
+                ? `Plan work in ${activeProject.name}... (Enter to send, Shift+Enter for newline)`
+                : 'Describe what you want to build... (Enter to send, Shift+Enter for newline)'
               : 'Select an available provider to start…'
           }
           value={draft}
@@ -596,11 +677,14 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
             </button>
           ) : (
             <button type="button" className="send-button" disabled={!canSend} onClick={() => void sendPrompt()}>
+              <SendIcon size={14} />
               Send
             </button>
           )}
         </div>
       </div>
+        </>
+      )}
     </aside>
   )
 }

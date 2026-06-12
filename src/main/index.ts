@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
@@ -10,16 +11,23 @@ import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc } from './macro'
 import { closeDb, initDb, registerDbIpc } from './db'
 
+function resolveAppIcon(): string | undefined {
+  const iconPath = join(app.getAppPath(), 'assets', 'akorith-icon.svg')
+  return existsSync(iconPath) ? iconPath : undefined
+}
+
 function createWindow(): void {
+  const icon = resolveAppIcon()
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
     minHeight: 600,
     show: false,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#0b0b10',
     autoHideMenuBar: true,
-    title: 'Agent Workspace',
+    title: 'Akorith',
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

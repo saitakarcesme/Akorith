@@ -4,6 +4,7 @@ import TerminalColumn from './components/TerminalColumn'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import TestPage from './components/TestPage'
+import type { ProjectRow } from '../../preload/index.d'
 
 export type AppView = 'workspace' | 'dashboard' | 'test'
 
@@ -18,12 +19,14 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
   const [historyVersion, setHistoryVersion] = useState(0)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [activeProject, setActiveProject] = useState<ProjectRow | null>(null)
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
 
-  const selectSession = useCallback((sessionId: string | null, providerId?: string) => {
+  const selectSession = useCallback((sessionId: string | null, providerId?: string, project?: ProjectRow | null) => {
     setHistorySel((prev) => ({ sessionId, providerId, nonce: (prev?.nonce ?? 0) + 1 }))
+    if (project !== undefined) setActiveProject(project)
     setView('workspace')
   }, [])
 
@@ -34,7 +37,9 @@ export default function App(): JSX.Element {
         onNavigate={setView}
         historyVersion={historyVersion}
         activeSessionId={activeSessionId}
-        onSelectSession={(id) => selectSession(id)}
+        activeProject={activeProject}
+        onSelectProject={setActiveProject}
+        onSelectSession={(id, project) => selectSession(id, undefined, project)}
         onNewChat={(providerId) => selectSession(null, providerId)}
         onHistoryChange={bumpHistory}
       />
@@ -44,6 +49,7 @@ export default function App(): JSX.Element {
         <TerminalColumn />
         <ChatPanel
           historySel={historySel}
+          activeProject={activeProject}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
         />

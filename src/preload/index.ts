@@ -89,11 +89,18 @@ const bridge = Object.freeze({
 const history = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('history:list'),
   messages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:messages', { sessionId }),
-  create: (providerId: string, title: string): Promise<unknown> =>
-    ipcRenderer.invoke('history:create', { providerId, title }),
+  create: (providerId: string, title: string, projectId?: string | null): Promise<unknown> =>
+    ipcRenderer.invoke('history:create', { providerId, title, projectId }),
   rename: (sessionId: string, title: string): Promise<unknown> =>
     ipcRenderer.invoke('history:rename', { sessionId, title }),
   remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:delete', { sessionId })
+})
+
+const projects = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
+  create: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:create', args),
+  update: (projectId: string, patch: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('projects:update', { projectId, patch })
 })
 
 const usage = Object.freeze({
@@ -160,6 +167,6 @@ const macro = Object.freeze({
   list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test, evaluate, macro })
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro })
 
 contextBridge.exposeInMainWorld('api', api)

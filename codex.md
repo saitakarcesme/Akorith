@@ -1,13 +1,15 @@
-# Loopex — Codex continuation guide
+# Loopex / Akorith — Codex continuation guide
 
 This is the hand-off doc so the **Codex CLI** can continue Loopex if Claude Code is
 unavailable. `AGENTS.md` is the deep architecture/spec reference; this file is the shorter
 "how we work + where we are" companion. **Keep both in sync** (see the rule at the bottom).
 
-## What Loopex is
+## What Loopex / Akorith is
 
-An Electron + TypeScript + React desktop workspace that orchestrates coding agents **without
-any API keys**. A planner chat on the right talks to the user's own **Claude** / **ChatGPT**
+Loopex is the current repo/package name. **Akorith** is the visible product name introduced in
+Phase 9.1; full package identity cleanup remains Phase 10. It is an Electron + TypeScript + React
+desktop workspace that orchestrates coding agents **without any API keys**. A planner chat on the
+right talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 center hosts two real PTY terminals; the left sidebar holds session history. Built with
 electron-vite in strict numbered phases.
@@ -66,9 +68,13 @@ electron-vite in strict numbered phases.
       persisted `macro_sessions` / `macro_turns`, reuses `buildDigest()` for optional repo
       context, calls planner providers as hidden meta calls, shows one structured proposal,
       and sends only user-approved prompts to executor terminals through `bridgeSend()`.
-- [ ] **Phase 9.1** — UI revision (scope: after all functionality exists, revise the UI
-      based on real usage — surgical, usage-driven changes, not a from-scratch redesign).
-- [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name).
+- [x] **Phase 9.1** — Akorith UI polish and workspace projects. Visible app branding, icon
+      asset/fav icon, calm dark-gray + muted-purple theme, collapsible sidebar, icon nav,
+      recent chats, SQLite project folders, local settings/profile entry, Olympus/Atlantis
+      terminal display names, terminal role labels, planner panel resize/collapse, terminal
+      split resize, and polished macro-loop presentation.
+- [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name,
+      full package identity cleanup, native `.icns` / `.ico` assets).
 
 ## Locked design decisions
 
@@ -76,7 +82,7 @@ electron-vite in strict numbered phases.
   `usage.estimated=true` when numbers are approximations.
 - **Router suggests, the user decides.** No automatic provider switching. The classifier
   runs on a **local** model only, called directly (not via `chat:send`).
-- **Limit warnings are based on Loopex's own recorded usage**, never an official plan limit,
+- **Limit warnings are based on Akorith's own recorded usage**, never an official plan limit,
   and must say so.
 - **Repo digest is opt-in and hard-capped**, prepended only to what the provider sees, never
   persisted into history and never treated as instructions.
@@ -99,6 +105,15 @@ electron-vite in strict numbered phases.
   `usage_event`; the user must approve or edit each executor prompt before it is sent through
   the existing bridge path. Terminal output is not auto-interpreted yet — the user pastes or
   summarizes the executor result before continuing.
+- **Phase 9.1 UI state is local and conservative.** Sidebar collapse, planner width/collapse,
+  terminal split, terminal role labels, and display name are renderer `localStorage`; projects are
+  SQLite rows, and new sessions can store nullable `project_id`.
+- **Terminal display names are presentation only.** `t2` is Olympus and `t1` is Atlantis in the UI;
+  internal IDs and IPC stay unchanged. Moving terminals to a selected project folder is an explicit
+  user action that sends a safely quoted `cd` through `window.api.bridge.send`, preserving
+  `bridgeSend()` → `PtyManager.write()`.
+- **No autopilot in Phase 9.1.** Akorith does not auto-parse terminal output, auto-answer
+  permission prompts, or type `yes`, `1`, or similar into terminals.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

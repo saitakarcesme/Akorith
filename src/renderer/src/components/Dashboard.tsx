@@ -16,7 +16,7 @@ import type { DailyUsageRow, UsageSummary } from '../../../preload/index.d'
 // Reads ONLY usage_events (via the usage IPC).
 // TODO(phase 6): the router consumes the same data to pick providers.
 
-const PALETTE = ['#3fb950', '#58a6ff', '#a371f7', '#e3b341', '#f85149', '#2dd4bf']
+const PALETTE = ['#a996ff', '#78a8d8', '#c79063', '#b8a060', '#d78282', '#7bb8aa']
 const HEATMAP_DAYS = 270
 const BAR_DAYS = 30
 
@@ -27,8 +27,8 @@ const dayKey = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const TOOLTIP_STYLE = {
-  backgroundColor: '#161c24',
-  border: '1px solid #232b36',
+  backgroundColor: '#191821',
+  border: '1px solid #2a2834',
   borderRadius: 6,
   fontSize: 12
 } as const
@@ -127,7 +127,7 @@ export default function Dashboard(): JSX.Element {
               patternTransform="rotate(45)"
             >
               <rect width={6} height={6} fill={colorOf(id)} />
-              <line x1={0} y1={0} x2={0} y2={6} stroke="rgba(13, 17, 23, 0.65)" strokeWidth={3} />
+              <line x1={0} y1={0} x2={0} y2={6} stroke="rgba(11, 11, 16, 0.68)" strokeWidth={3} />
             </pattern>
           ))}
         </defs>
@@ -184,7 +184,7 @@ export default function Dashboard(): JSX.Element {
             <BarChart data={barData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <XAxis dataKey="day" tick={{ fill: '#7d8590', fontSize: 10 }} interval={4} />
               <YAxis tick={{ fill: '#7d8590', fontSize: 10 }} tickFormatter={fmtTokens} width={44} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(63, 185, 80, 0.06)' }} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(169, 150, 255, 0.08)' }} />
               <Legend formatter={(v: string) => `${v}${isEstimated(v) ? ' ≈' : ''}`} />
               {providerIds.map((id) => (
                 <Bar key={id} dataKey={id} stackId="tokens" fill={fillOf(id)} />
@@ -202,7 +202,7 @@ export default function Dashboard(): JSX.Element {
               <PieChart>
                 <Pie data={donutData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={2}>
                   {donutData.map((d) => (
-                    <Cell key={d.providerId} fill={fillOf(d.providerId)} stroke="#0d1117" />
+                    <Cell key={d.providerId} fill={fillOf(d.providerId)} stroke="#0b0b10" />
                   ))}
                 </Pie>
                 <Tooltip

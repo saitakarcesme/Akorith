@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { MacroSessionRow, MacroState, MacroTurnRow, ProviderInfo } from '../../../preload/index.d'
+import type { MacroSessionRow, MacroState, MacroTurnRow, ProjectRow, ProviderInfo } from '../../../preload/index.d'
+import { SparkIcon } from './icons'
 
 const TERMINALS = [
-  { id: 't1', label: 'Terminal 1' },
-  { id: 't2', label: 'Terminal 2' }
+  { id: 't2', label: 'Olympus' },
+  { id: 't1', label: 'Atlantis' }
 ] as const
 
 interface MacroLoopPanelProps {
@@ -11,6 +12,7 @@ interface MacroLoopPanelProps {
   defaultProviderId: string
   defaultModel: string
   defaultTargetTerminal: string
+  activeProject: ProjectRow | null
 }
 
 function latestActionableTurn(state: MacroState | null): MacroTurnRow | null {
@@ -30,7 +32,8 @@ export default function MacroLoopPanel({
   providers,
   defaultProviderId,
   defaultModel,
-  defaultTargetTerminal
+  defaultTargetTerminal,
+  activeProject
 }: MacroLoopPanelProps): JSX.Element {
   const chatProviders = useMemo(() => (providers ?? []).filter((p) => p.available.ok && p.kind.includes('chat')), [providers])
   const [goal, setGoal] = useState('')
@@ -106,6 +109,9 @@ export default function MacroLoopPanel({
   const start = async (): Promise<void> => {
     if (!goal.trim() || !plannerProvider) return
     setError(null)
+    if (includeRepoDigest && activeProject?.path) {
+      await window.api.digest.setWorkingDir(activeProject.path)
+    }
     const created = await window.api.macro.createSession({
       goal: goal.trim(),
       plannerProvider,
@@ -185,7 +191,10 @@ export default function MacroLoopPanel({
     <section className="macro-panel">
       <div className="macro-head">
         <div>
-          <div className="macro-title">Macro loop</div>
+          <div className="macro-title">
+            <SparkIcon size={13} />
+            Macro loop
+          </div>
           <div className={`macro-status status-${session?.status ?? 'idle'}`}>{statusLabel(session?.status)}</div>
         </div>
         {session && session.status !== 'completed' && session.status !== 'stopped' && (
@@ -201,7 +210,7 @@ export default function MacroLoopPanel({
           value={goal}
           rows={2}
           disabled={isBusy}
-          placeholder="Describe the outcome you want Loopex to drive one approved step at a time."
+          placeholder="Describe the outcome you want Akorith to drive one approved step at a time."
           onChange={(e) => setGoal(e.target.value)}
         />
       </label>
@@ -262,6 +271,7 @@ export default function MacroLoopPanel({
       <label className="macro-toggle">
         <input type="checkbox" checked={includeRepoDigest} disabled={isBusy} onChange={() => setIncludeRepoDigest((v) => !v)} />
         Include repo context
+        {activeProject?.path && <em>{activeProject.name}</em>}
         {session?.includeRepoDigest && session.repoDigestSnapshot && <span>included</span>}
       </label>
 

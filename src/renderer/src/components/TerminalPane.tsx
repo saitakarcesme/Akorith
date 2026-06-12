@@ -2,19 +2,43 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { MountainIcon, WaveIcon } from './icons'
 
 interface TerminalPaneProps {
   /** PTY session id ("t1", "t2") — routes IPC streams to this pane only. */
   id: string
   title: string
+  identity: 'olympus' | 'atlantis'
 }
 
 type PaneStatus = 'connecting' | 'live' | 'exited'
+type TerminalRole = 'shell' | 'claude' | 'codex' | 'local'
 
-export default function TerminalPane({ id, title }: TerminalPaneProps): JSX.Element {
+const ROLES: { id: TerminalRole; label: string }[] = [
+  { id: 'shell', label: 'Shell' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'local', label: 'Local' }
+]
+
+function storedRole(id: string): TerminalRole {
+  try {
+    const raw = localStorage.getItem(`akorith.terminalRole.${id}`)
+    return ROLES.some((role) => role.id === raw) ? (raw as TerminalRole) : 'shell'
+  } catch {
+    return 'shell'
+  }
+}
+
+export default function TerminalPane({ id, title, identity }: TerminalPaneProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<PaneStatus>('connecting')
   const [exitCode, setExitCode] = useState<number | null>(null)
+  const [role, setRole] = useState<TerminalRole>(() => storedRole(id))
+
+  useEffect(() => {
+    localStorage.setItem(`akorith.terminalRole.${id}`, role)
+  }, [id, role])
 
   useEffect(() => {
     const host = hostRef.current
@@ -27,10 +51,10 @@ export default function TerminalPane({ id, title }: TerminalPaneProps): JSX.Elem
       fontSize: 13,
       lineHeight: 1.2,
       theme: {
-        background: '#0d1117',
-        foreground: '#c9d1d9',
-        cursor: '#3fb950',
-        selectionBackground: 'rgba(63, 185, 80, 0.25)'
+        background: '#0b0b10',
+        foreground: '#e6e1ea',
+        cursor: '#a996ff',
+        selectionBackground: 'rgba(169, 150, 255, 0.22)'
       }
     })
     const fitAddon = new FitAddon()
@@ -84,12 +108,29 @@ export default function TerminalPane({ id, title }: TerminalPaneProps): JSX.Elem
 
   const statusLabel =
     status === 'connecting' ? 'connecting…' : status === 'live' ? 'live' : `exited (${exitCode ?? '?'})`
+  const IdentityIcon = identity === 'olympus' ? MountainIcon : WaveIcon
 
   return (
     <section className="terminal-pane">
       <header className="terminal-pane-header">
         <span className={`terminal-pane-dot ${status === 'live' ? 'is-live' : ''}`} />
-        <span>{title}</span>
+        <IdentityIcon size={15} />
+        <span className="terminal-pane-title">
+          <strong>{title}</strong>
+          <em>{ROLES.find((item) => item.id === role)?.label ?? 'Shell'}</em>
+        </span>
+        <select
+          className="terminal-role-select"
+          value={role}
+          onChange={(event) => setRole(event.target.value as TerminalRole)}
+          aria-label={`${title} role`}
+        >
+          {ROLES.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
         <span className="terminal-pane-status">{statusLabel}</span>
       </header>
       <div className="terminal-host" ref={hostRef} />

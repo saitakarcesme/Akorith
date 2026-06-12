@@ -30,17 +30,17 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
       fontSize: 12,
       lineHeight: 1.2,
       theme: {
-        background: '#0a0e13',
-        foreground: '#c9d1d9',
-        cursor: '#0a0e13',
-        selectionBackground: 'rgba(63, 185, 80, 0.25)'
+        background: '#0b0b10',
+        foreground: '#e6e1ea',
+        cursor: '#0b0b10',
+        selectionBackground: 'rgba(169, 150, 255, 0.22)'
       }
     })
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     terminal.open(host)
     fitAddon.fit()
-    terminal.write('\x1b[90m[loopex] sandbox output appears here when a run starts.\x1b[0m\r\n')
+    terminal.write('\x1b[90m[akorith] sandbox output appears here when a run starts.\x1b[0m\r\n')
     termRef.current = terminal
     fitRef.current = fitAddon
 

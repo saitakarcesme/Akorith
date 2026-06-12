@@ -7,8 +7,8 @@ import { ptyManager } from './pty'
 import { getBridgeSettings, setBridgeAutoEnter, type BridgeSettings } from './config'
 
 const TERMINAL_LABELS: Record<string, string> = {
-  t1: 'Terminal 1',
-  t2: 'Terminal 2'
+  t1: 'Atlantis',
+  t2: 'Olympus'
 }
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/

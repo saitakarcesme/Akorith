@@ -1,17 +1,18 @@
-# Loopex — agent guide
+# Loopex / Akorith — agent guide
 
-Loopex is an Electron + TypeScript + React desktop workspace that orchestrates coding
+Loopex is the current repository/package name. **Akorith** is the visible product name
+introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 9 (semi-automatic
-macro-loop orchestration).
+with electron-vite, in strict numbered phases — currently through Phase 9.1 (Akorith UI
+polish and workspace projects).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
-7 isolated test page · 8 evaluate/ISAScore/PDF · **9 semi-automatic macro-loop** — all done.
-Pending: **9.1 UI revision** (usage-driven, surgical — not a redesign) · 10 packaging +
-`productName`.
+7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
+**9.1 Akorith UI polish + workspace projects** — all done. Pending: 10 packaging +
+`productName` / full package identity cleanup.
 
 ## Prerequisites
 
@@ -142,8 +143,8 @@ Three send modes in the chat panel, all funneling through that one function:
 3. **Manual selection** — highlighting text in the chat area shows a floating
    "Send selection →" popover that sends just the highlighted text.
 
-**Target terminal**: a single current target (`t1` = Terminal 1, default, or `t2` =
-Terminal 2), shown and changed via the segmented control in the bridge bar at the top
+**Target terminal**: a single current target (`t1` = **Atlantis**, default, or `t2` =
+**Olympus**), shown and changed via the segmented control in the bridge bar at the top
 of the chat panel. Every send goes to the current target; it is never re-asked per send.
 
 **Auto-Enter**: the bridge-bar toggle, persisted in `loopex.config.json` as
@@ -163,8 +164,13 @@ SQLite database at `loopex.db` in the userData dir (co-located with
 foreign keys ON). All DB access is main-process; the renderer uses validated IPC only
 (`history:*`, `usage:*`, `test:*`, `evaluate:*`). Core history/usage tables:
 
-- `sessions(id, provider_id, title, created_at, updated_at)` — **a session belongs to
-  one provider**; switching provider in the chat starts a new session context.
+- `projects(id, name, path nullable, color nullable, icon nullable, created_at, updated_at)` —
+  Phase 9.1 workspace folders. Paths are user-provided metadata and are only acted on by an
+  explicit user button.
+- `sessions(id, provider_id, title, project_id nullable, created_at, updated_at)` — **a session belongs to
+  one provider**; switching provider in the chat starts a new session context. Phase 9.1 adds
+  nullable `project_id` so new chats can be associated with the selected project without breaking
+  old sessions.
 - `messages(id, session_id FK CASCADE, role user|assistant, content, provider_id,
   model, created_at)`.
 - `usage_events(id, ts, provider_id, model, prompt_tokens, completion_tokens,
@@ -192,10 +198,11 @@ Phase-specific persistence also lives here:
   confidence_score, good_enough_score, risk_level, provider_used, model_used, error)` — one row
   per proposed/approved/skipped loop turn.
 
-The sidebar shows one collapsible folder per registry provider (plus orphaned
-providers that still have sessions) with rename/delete/new-chat; clicking a session
-restores its conversation into the chat panel. Sidebar nav switches between
-**Workspace** (default, 3-pane) and **Dashboard**; the workspace stays mounted
+The sidebar shows the Akorith brand, icon nav, project folders, recent chats, one colored
+folder per registry provider (plus orphaned providers that still have sessions), rename/delete/
+new-chat, and a local profile/settings entry. Clicking a session restores its conversation into
+the chat panel. Sidebar nav switches between **Workspace** (default, 3-pane), **Dashboard**, and
+**Test**; the workspace stays mounted
 (`display:none`) while the dashboard is open so the terminal PTYs are never disturbed.
 The dashboard (recharts + a CSS-grid calendar heatmap) reads only `usage_events`:
 activity heatmap, per-day stacked token bars by provider, provider-distribution donut,
@@ -223,8 +230,8 @@ send still goes through the unchanged `chat:send` path with the user's own selec
 - **Limit awareness — WARN ONLY.** It sums `usage_events` over a rolling window
   (`router.warnThresholds`: `windowHours`, `costUsd`, `events`, `tokens`) per provider.
   When a subscription provider is over threshold it shows a non-blocking warning — *"based
-  on usage recorded in Loopex, not your official plan limit"* — and for Asker/Albay nudges
-  (does not force) toward local. We cannot read official plan limits; this is Loopex's own
+  on usage recorded in Akorith, not your official plan limit"* — and for Asker/Albay nudges
+  (does not force) toward local. We cannot read official plan limits; this is Akorith's own
   recorded usage only. Fulfils the old `TODO(phase 6)` in `db.ts`/`registry.ts`.
 
 Config keys (defaults filled in by `getRouterSettings()` so pre-Phase-6 config files still
@@ -249,9 +256,10 @@ directly when its "Include repo context" option is enabled.
 
 ### Macro-loop orchestration — semi-automatic planner/executor loop (Phase 9)
 
-The Workspace chat panel now includes a compact **Macro loop** area near the bridge controls.
-It is intentionally not a UI redesign. The user enters a high-level goal, chooses a planner
-provider/model from the registry, picks target terminal `t1`/`t2`, sets max iterations and a
+The Workspace chat panel includes a compact **Macro loop** area near the bridge controls.
+Phase 9.1 polishes its presentation without changing the safety model. The user enters a
+high-level goal, chooses a planner provider/model from the registry, picks target terminal
+Atlantis/Olympus (`t1`/`t2` internally), sets max iterations and a
 good-enough threshold, and chooses whether to include repo context. The loop is
 semi-automatic only: every turn produces one proposed executor prompt, and the user must approve
 or edit it before anything is sent to a terminal.
@@ -280,13 +288,15 @@ call fails, the loop records an actionable error and leaves the persisted sessio
 **Planner prompt contract.** Each proposal asks the planner for strict JSON:
 `next_prompt`, `rationale`, `expected_result`, `done_score`, `risk_level`, and
 `requires_user_approval`. The prompt instructs the planner to produce one paste-ready executor
-step, preserve Loopex security invariants, avoid unsafe architecture changes, prefer surgical
+step, preserve Akorith security invariants, avoid unsafe architecture changes, prefer surgical
 edits, and require the executor to report changed files, tests run, failures, and commit status.
 If JSON parsing fails, the raw response becomes an editable proposal and is marked with an error
 on the turn.
 
 **Repo context reuse.** When enabled, the loop calls the existing `buildDigest()` and stores the
 bounded snapshot on `macro_sessions.repo_digest_snapshot`; there is no second repo scanner.
+If a Phase 9.1 project with a path is selected, the macro UI can point the existing digest
+working directory at that project before creating the loop.
 
 **Approval-gated executor send.** Approving a turn calls `bridgeSend()` in `src/main/bridge.ts`
 with the selected terminal and persisted Auto-Enter setting. This preserves the single
@@ -312,6 +322,53 @@ Known limitations for Phase 9:
 - Terminal output is not auto-interpreted; the user pastes or summarizes executor results.
 - The router remains suggest-only and is not allowed to auto-switch planner providers.
 - Ollama may be absent; Local provider paths degrade through existing availability checks.
+
+### Akorith UI + workspace projects (Phase 9.1)
+
+Phase 9.1 starts the visible rename from **Loopex** to **Akorith**. The app window title,
+top-left brand, renderer favicon/logo, terminal/product text, and PDF report branding now say
+Akorith. The repository, package name, `loopex.config.json`, `loopex.db`, and native packaging
+identifiers remain Phase 10 work.
+
+UI direction: deep neutral gray base, lifted dark panels, muted purple accent, restrained success/
+warning/error states, and subtle provider identity colors (Claude = clay, ChatGPT/Codex = muted
+blue, Local/Ollama = muted purple). Motion is intentionally fast and small (about 120-220ms), and
+the stylesheet respects `prefers-reduced-motion`.
+
+Sidebar changes:
+
+- Collapsible left sidebar, persisted in renderer `localStorage`.
+- Icon nav for Workspace / Dashboard / Test.
+- Colored provider groups, plus compact collapsed provider indicators.
+- Recent chats section backed by existing SQLite sessions.
+- Project folders backed by the `projects` table. Creating a new chat while a project is selected
+  writes that project id to `sessions.project_id`; old chats remain valid with `NULL`.
+- Explicit "Move Olympus & Atlantis to project folder" action for selected projects with a path.
+  It sends a safely quoted `cd` command via `window.api.bridge.send`, preserving the single
+  `bridgeSend()` → `PtyManager.write()` path. It refuses newline-containing paths and never sends
+  terminal commands automatically on project selection.
+- Local profile/settings entry stores a display name in renderer `localStorage`.
+
+Workspace changes:
+
+- User-facing terminal names are **Olympus** (`t2`, top) and **Atlantis** (`t1`, bottom). Internal
+  IDs remain stable.
+- Terminal headers show live/exited status and a user-selected role badge (`Shell`, `Claude`,
+  `Codex`, `Local`) persisted in renderer `localStorage`. This is explicit labeling, not fake
+  command detection.
+- Terminal vertical split is draggable and persisted.
+- The planner/right panel is collapsible and resizable; xterm panes still use their existing
+  resize observers.
+- Planner composer and Macro loop presentation are polished, but provider calls, router behavior,
+  dashboard usage semantics, and semi-automatic approval gates are unchanged.
+
+Known limitations after Phase 9.1:
+
+- Full package/app identity rename and native `.icns` / `.ico` packaging icons remain Phase 10.
+- No fully automatic autopilot yet.
+- Terminal output is not parsed automatically.
+- Akorith does not auto-answer permission prompts or type `yes`, `1`, or similar into terminals.
+- Terminal role display is user-selected unless a future phase adds reliable detection.
 
 ### Test page — isolated local-model test lab (Phase 7)
 

@@ -98,6 +98,7 @@ export interface SessionRow {
   id: string
   providerId: string
   title: string
+  projectId: string | null
   createdAt: number
   updatedAt: number
 }
@@ -115,9 +116,41 @@ export interface MessageRow {
 export interface HistoryApi {
   list(): Promise<SessionRow[]>
   messages(sessionId: string): Promise<{ session: SessionRow; messages: MessageRow[] } | null>
-  create(providerId: string, title: string): Promise<SessionRow>
+  create(providerId: string, title: string, projectId?: string | null): Promise<SessionRow>
   rename(sessionId: string, title: string): Promise<boolean>
   remove(sessionId: string): Promise<boolean>
+}
+
+// ---- sidebar projects (Phase 9.1) ----
+
+export interface ProjectRow {
+  id: string
+  name: string
+  path: string | null
+  color: string | null
+  icon: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ProjectCreateRequest {
+  name: string
+  path?: string | null
+  color?: string | null
+  icon?: string | null
+}
+
+export interface ProjectUpdateRequest {
+  name?: string
+  path?: string | null
+  color?: string | null
+  icon?: string | null
+}
+
+export interface ProjectsApi {
+  list(): Promise<ProjectRow[]>
+  create(args: ProjectCreateRequest): Promise<ProjectRow>
+  update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
 }
 
 // ---- usage (dashboard; TODO(phase 6): router reads the same data) ----
@@ -456,6 +489,7 @@ export interface PreloadApi {
   chat: ChatApi
   bridge: BridgeApi
   history: HistoryApi
+  projects: ProjectsApi
   usage: UsageApi
   router: RouterApi
   digest: DigestApi

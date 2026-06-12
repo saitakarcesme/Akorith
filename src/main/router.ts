@@ -182,7 +182,7 @@ export async function suggest(prompt: string): Promise<RouterSuggestion> {
     }
   }
 
-  // 3. Limit awareness — WARN ONLY, based on Loopex's own recorded usage.
+  // 3. Limit awareness — WARN ONLY, based on Akorith's own recorded usage.
   let warning: string | undefined
   const isSubscription = providerId !== 'local'
   if (isSubscription) {
@@ -192,7 +192,7 @@ export async function suggest(prompt: string): Promise<RouterSuggestion> {
       warning =
         `High recent ${labelOf(providerId, infos)} usage in the last ${router.warnThresholds.windowHours}h ` +
         `(${recent.events} sends, ${recent.tokens} tok, $${recent.costUsd.toFixed(2)}). ` +
-        `Based on usage recorded in Loopex, not your official plan limit.`
+        `Based on usage recorded in Akorith, not your official plan limit.`
       // Nudge (not switch) Asker/Albay toward local to spare the subscription.
       if (tier !== 'General' && availableIds.has('local')) {
         notes.push('nudged to Local to spare subscription usage')
