@@ -372,6 +372,85 @@ export interface EvaluateApi {
   openPdf(evaluationId: string): Promise<{ ok: true } | { ok: false; error: string }>
 }
 
+// ---- macro-loop orchestration (Phase 9) ----
+
+export type MacroStatus =
+  | 'idle'
+  | 'preparing_context'
+  | 'proposing'
+  | 'awaiting_approval'
+  | 'sending'
+  | 'awaiting_executor_result'
+  | 'completed'
+  | 'stopped'
+  | 'error'
+
+export interface MacroSessionRow {
+  id: string
+  createdAt: number
+  updatedAt: number
+  status: MacroStatus
+  goal: string
+  plannerProvider: string
+  plannerModel: string | null
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+  repoDigestSnapshot: string | null
+  finalScore: number | null
+  stopReason: string | null
+}
+
+export interface MacroTurnRow {
+  id: string
+  sessionId: string
+  turnIndex: number
+  createdAt: number
+  status: string
+  proposal: string | null
+  editedProposal: string | null
+  sentPrompt: string | null
+  executorResultSummary: string | null
+  plannerRationale: string | null
+  expectedResult: string | null
+  confidenceScore: number | null
+  goodEnoughScore: number | null
+  riskLevel: string | null
+  providerUsed: string | null
+  modelUsed: string | null
+  error: string | null
+}
+
+export interface MacroState {
+  session: MacroSessionRow
+  turns: MacroTurnRow[]
+}
+
+export interface MacroCreateRequest {
+  goal: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+}
+
+export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
+
+export interface MacroApi {
+  createSession(args: MacroCreateRequest): Promise<MacroResponse>
+  propose(sessionId: string): Promise<MacroResponse>
+  approve(args: { sessionId: string; turnId: string; editedProposal?: string }): Promise<MacroResponse>
+  recordResult(args: { sessionId: string; turnId: string; summary: string }): Promise<MacroResponse>
+  skip(args: { sessionId: string; turnId: string }): Promise<MacroResponse>
+  stop(sessionId: string): Promise<MacroResponse>
+  complete(sessionId: string): Promise<MacroResponse>
+  get(sessionId: string): Promise<MacroState | null>
+  list(limit?: number): Promise<MacroSessionRow[]>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -382,6 +461,7 @@ export interface PreloadApi {
   digest: DigestApi
   test: TestApi
   evaluate: EvaluateApi
+  macro: MacroApi
 }
 
 declare global {

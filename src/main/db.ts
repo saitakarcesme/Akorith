@@ -94,6 +94,43 @@ export function initDb(): void {
       pdf_path         TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_evaluations_ts ON evaluations(ts);
+    CREATE TABLE IF NOT EXISTS macro_sessions (
+      id                    TEXT PRIMARY KEY,
+      created_at            INTEGER NOT NULL,
+      updated_at            INTEGER NOT NULL,
+      status                TEXT NOT NULL,
+      goal                  TEXT NOT NULL,
+      planner_provider      TEXT NOT NULL,
+      planner_model         TEXT,
+      target_terminal       TEXT NOT NULL,
+      max_iterations        INTEGER NOT NULL,
+      good_enough_threshold INTEGER NOT NULL,
+      include_repo_digest   INTEGER NOT NULL DEFAULT 0,
+      repo_digest_snapshot  TEXT,
+      final_score           REAL,
+      stop_reason           TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_macro_sessions_updated ON macro_sessions(updated_at);
+    CREATE TABLE IF NOT EXISTS macro_turns (
+      id                      TEXT PRIMARY KEY,
+      session_id              TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      turn_index              INTEGER NOT NULL,
+      created_at              INTEGER NOT NULL,
+      status                  TEXT NOT NULL,
+      proposal                TEXT,
+      edited_proposal         TEXT,
+      sent_prompt             TEXT,
+      executor_result_summary TEXT,
+      planner_rationale       TEXT,
+      expected_result         TEXT,
+      confidence_score        REAL,
+      good_enough_score       REAL,
+      risk_level              TEXT,
+      provider_used           TEXT,
+      model_used              TEXT,
+      error                   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_macro_turns_session ON macro_turns(session_id, turn_index);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
 }
@@ -519,6 +556,333 @@ export function setEvaluationPdfPath(id: string, pdfPath: string): EvaluationRow
   if (!VALID_ID.test(id)) return null
   must().prepare('UPDATE evaluations SET pdf_path = ? WHERE id = ?').run(pdfPath, id)
   return getEvaluation(id)
+}
+
+// ---- macro loop sessions/turns (Phase 9) ----
+
+export type MacroStatus =
+  | 'idle'
+  | 'preparing_context'
+  | 'proposing'
+  | 'awaiting_approval'
+  | 'sending'
+  | 'awaiting_executor_result'
+  | 'completed'
+  | 'stopped'
+  | 'error'
+
+export interface MacroSessionRow {
+  id: string
+  createdAt: number
+  updatedAt: number
+  status: MacroStatus
+  goal: string
+  plannerProvider: string
+  plannerModel: string | null
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+  repoDigestSnapshot: string | null
+  finalScore: number | null
+  stopReason: string | null
+}
+
+export interface MacroTurnRow {
+  id: string
+  sessionId: string
+  turnIndex: number
+  createdAt: number
+  status: string
+  proposal: string | null
+  editedProposal: string | null
+  sentPrompt: string | null
+  executorResultSummary: string | null
+  plannerRationale: string | null
+  expectedResult: string | null
+  confidenceScore: number | null
+  goodEnoughScore: number | null
+  riskLevel: string | null
+  providerUsed: string | null
+  modelUsed: string | null
+  error: string | null
+}
+
+export interface MacroSessionWithTurns {
+  session: MacroSessionRow
+  turns: MacroTurnRow[]
+}
+
+const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
+  id: r.id as string,
+  createdAt: r.created_at as number,
+  updatedAt: r.updated_at as number,
+  status: r.status as MacroStatus,
+  goal: r.goal as string,
+  plannerProvider: r.planner_provider as string,
+  plannerModel: (r.planner_model as string | null) ?? null,
+  targetTerminal: r.target_terminal as string,
+  maxIterations: r.max_iterations as number,
+  goodEnoughThreshold: r.good_enough_threshold as number,
+  includeRepoDigest: r.include_repo_digest === 1,
+  repoDigestSnapshot: (r.repo_digest_snapshot as string | null) ?? null,
+  finalScore: (r.final_score as number | null) ?? null,
+  stopReason: (r.stop_reason as string | null) ?? null
+})
+
+const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
+  id: r.id as string,
+  sessionId: r.session_id as string,
+  turnIndex: r.turn_index as number,
+  createdAt: r.created_at as number,
+  status: r.status as string,
+  proposal: (r.proposal as string | null) ?? null,
+  editedProposal: (r.edited_proposal as string | null) ?? null,
+  sentPrompt: (r.sent_prompt as string | null) ?? null,
+  executorResultSummary: (r.executor_result_summary as string | null) ?? null,
+  plannerRationale: (r.planner_rationale as string | null) ?? null,
+  expectedResult: (r.expected_result as string | null) ?? null,
+  confidenceScore: (r.confidence_score as number | null) ?? null,
+  goodEnoughScore: (r.good_enough_score as number | null) ?? null,
+  riskLevel: (r.risk_level as string | null) ?? null,
+  providerUsed: (r.provider_used as string | null) ?? null,
+  modelUsed: (r.model_used as string | null) ?? null,
+  error: (r.error as string | null) ?? null
+})
+
+function touchMacroSession(sessionId: string, status?: MacroStatus): void {
+  if (status) {
+    must().prepare('UPDATE macro_sessions SET updated_at = ?, status = ? WHERE id = ?').run(Date.now(), status, sessionId)
+  } else {
+    must().prepare('UPDATE macro_sessions SET updated_at = ? WHERE id = ?').run(Date.now(), sessionId)
+  }
+}
+
+export function createMacroSession(input: {
+  goal: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+}): MacroSessionRow {
+  const now = Date.now()
+  const row: MacroSessionRow = {
+    id: randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    status: 'idle',
+    goal: input.goal,
+    plannerProvider: input.plannerProvider,
+    plannerModel: input.plannerModel ?? null,
+    targetTerminal: input.targetTerminal,
+    maxIterations: input.maxIterations,
+    goodEnoughThreshold: input.goodEnoughThreshold,
+    includeRepoDigest: input.includeRepoDigest,
+    repoDigestSnapshot: null,
+    finalScore: null,
+    stopReason: null
+  }
+  must()
+    .prepare(
+      `INSERT INTO macro_sessions
+       (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
+        max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      row.id,
+      row.createdAt,
+      row.updatedAt,
+      row.status,
+      row.goal,
+      row.plannerProvider,
+      row.plannerModel,
+      row.targetTerminal,
+      row.maxIterations,
+      row.goodEnoughThreshold,
+      row.includeRepoDigest ? 1 : 0,
+      row.repoDigestSnapshot,
+      row.finalScore,
+      row.stopReason
+    )
+  return row
+}
+
+export function updateMacroSession(
+  sessionId: string,
+  patch: Partial<Pick<MacroSessionRow, 'status' | 'repoDigestSnapshot' | 'finalScore' | 'stopReason'>>
+): MacroSessionRow | null {
+  if (!VALID_ID.test(sessionId)) return null
+  const current = getMacroSession(sessionId)
+  if (!current) return null
+  const next = {
+    status: patch.status ?? current.status,
+    repoDigestSnapshot: patch.repoDigestSnapshot ?? current.repoDigestSnapshot,
+    finalScore: patch.finalScore ?? current.finalScore,
+    stopReason: patch.stopReason ?? current.stopReason
+  }
+  must()
+    .prepare(
+      `UPDATE macro_sessions
+       SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?
+       WHERE id = ?`
+    )
+    .run(Date.now(), next.status, next.repoDigestSnapshot, next.finalScore, next.stopReason, sessionId)
+  return getMacroSession(sessionId)
+}
+
+export function getMacroSession(sessionId: string): MacroSessionRow | null {
+  if (!VALID_ID.test(sessionId)) return null
+  const row = must().prepare('SELECT * FROM macro_sessions WHERE id = ?').get(sessionId) as
+    | Record<string, unknown>
+    | undefined
+  return row ? toMacroSession(row) : null
+}
+
+export function listMacroSessions(limit = 20): MacroSessionRow[] {
+  const lim = Math.min(Math.max(limit, 1), 100)
+  return (
+    must().prepare('SELECT * FROM macro_sessions ORDER BY updated_at DESC LIMIT ?').all(lim) as Record<string, unknown>[]
+  ).map(toMacroSession)
+}
+
+export function listMacroTurns(sessionId: string): MacroTurnRow[] {
+  if (!VALID_ID.test(sessionId)) return []
+  return (
+    must()
+      .prepare('SELECT * FROM macro_turns WHERE session_id = ? ORDER BY turn_index, created_at')
+      .all(sessionId) as Record<string, unknown>[]
+  ).map(toMacroTurn)
+}
+
+export function getMacroState(sessionId: string): MacroSessionWithTurns | null {
+  const session = getMacroSession(sessionId)
+  if (!session) return null
+  return { session, turns: listMacroTurns(session.id) }
+}
+
+export function createMacroTurn(input: {
+  sessionId: string
+  turnIndex: number
+  status: string
+  proposal?: string
+  plannerRationale?: string
+  expectedResult?: string
+  confidenceScore?: number
+  goodEnoughScore?: number
+  riskLevel?: string
+  providerUsed?: string
+  modelUsed?: string
+  error?: string
+}): MacroTurnRow {
+  const now = Date.now()
+  const row: MacroTurnRow = {
+    id: randomUUID(),
+    sessionId: input.sessionId,
+    turnIndex: input.turnIndex,
+    createdAt: now,
+    status: input.status,
+    proposal: input.proposal ?? null,
+    editedProposal: null,
+    sentPrompt: null,
+    executorResultSummary: null,
+    plannerRationale: input.plannerRationale ?? null,
+    expectedResult: input.expectedResult ?? null,
+    confidenceScore: input.confidenceScore ?? null,
+    goodEnoughScore: input.goodEnoughScore ?? null,
+    riskLevel: input.riskLevel ?? null,
+    providerUsed: input.providerUsed ?? null,
+    modelUsed: input.modelUsed ?? null,
+    error: input.error ?? null
+  }
+  must()
+    .prepare(
+      `INSERT INTO macro_turns
+       (id, session_id, turn_index, created_at, status, proposal, edited_proposal, sent_prompt,
+        executor_result_summary, planner_rationale, expected_result, confidence_score, good_enough_score,
+        risk_level, provider_used, model_used, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      row.id,
+      row.sessionId,
+      row.turnIndex,
+      row.createdAt,
+      row.status,
+      row.proposal,
+      row.editedProposal,
+      row.sentPrompt,
+      row.executorResultSummary,
+      row.plannerRationale,
+      row.expectedResult,
+      row.confidenceScore,
+      row.goodEnoughScore,
+      row.riskLevel,
+      row.providerUsed,
+      row.modelUsed,
+      row.error
+    )
+  touchMacroSession(input.sessionId)
+  return row
+}
+
+export function updateMacroTurn(
+  turnId: string,
+  patch: Partial<
+    Pick<
+      MacroTurnRow,
+      | 'status'
+      | 'proposal'
+      | 'editedProposal'
+      | 'sentPrompt'
+      | 'executorResultSummary'
+      | 'plannerRationale'
+      | 'expectedResult'
+      | 'confidenceScore'
+      | 'goodEnoughScore'
+      | 'riskLevel'
+      | 'providerUsed'
+      | 'modelUsed'
+      | 'error'
+    >
+  >
+): MacroTurnRow | null {
+  if (!VALID_ID.test(turnId)) return null
+  const current = must().prepare('SELECT * FROM macro_turns WHERE id = ?').get(turnId) as
+    | Record<string, unknown>
+    | undefined
+  if (!current) return null
+  const row = toMacroTurn(current)
+  const next = { ...row, ...patch }
+  must()
+    .prepare(
+      `UPDATE macro_turns
+       SET status = ?, proposal = ?, edited_proposal = ?, sent_prompt = ?, executor_result_summary = ?,
+           planner_rationale = ?, expected_result = ?, confidence_score = ?, good_enough_score = ?,
+           risk_level = ?, provider_used = ?, model_used = ?, error = ?
+       WHERE id = ?`
+    )
+    .run(
+      next.status,
+      next.proposal,
+      next.editedProposal,
+      next.sentPrompt,
+      next.executorResultSummary,
+      next.plannerRationale,
+      next.expectedResult,
+      next.confidenceScore,
+      next.goodEnoughScore,
+      next.riskLevel,
+      next.providerUsed,
+      next.modelUsed,
+      next.error,
+      turnId
+    )
+  touchMacroSession(row.sessionId)
+  const updated = must().prepare('SELECT * FROM macro_turns WHERE id = ?').get(turnId) as Record<string, unknown> | undefined
+  return updated ? toMacroTurn(updated) : null
 }
 
 export interface DailyUsageRow {

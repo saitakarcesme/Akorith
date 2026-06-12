@@ -5,8 +5,8 @@
 // up a prompt. If the working dir is not a git repo we still return a plain
 // file tree and say so, rather than erroring.
 //
-// TODO(phase 9): the autonomous loop reuses buildDigest() to give each
-//                iteration the same repo context a human send would get.
+// Phase 9: the semi-automatic macro-loop reuses buildDigest() for optional
+// per-turn repo context; no second scanner exists.
 
 import { ipcMain } from 'electron'
 import { existsSync, readdirSync, statSync } from 'fs'

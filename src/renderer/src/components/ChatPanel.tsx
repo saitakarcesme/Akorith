@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatUsage, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { HistorySelection } from '../App'
+import MacroLoopPanel from './MacroLoopPanel'
 
 interface ChatMessage {
   id: string
@@ -174,7 +175,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
 
   // The single renderer-side entry to the bridge. All three send modes (code
   // block, whole message, selection) call this; main funnels it into
-  // PtyManager.write(). TODO(phase 9): the loop reuses the same main-side path.
+  // PtyManager.write(). The Phase 9 macro-loop uses the same main-side path.
   const sendToTerminal = async (text: string, sourceKey: string): Promise<void> => {
     if (autoEnter === null) return // settings not loaded yet
     const label = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
@@ -426,6 +427,13 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
           Auto-Enter
         </label>
       </div>
+
+      <MacroLoopPanel
+        providers={providers}
+        defaultProviderId={providerId}
+        defaultModel={model}
+        defaultTargetTerminal={bridgeTarget}
+      />
 
       {selected && !selected.available.ok && (
         <div className="chat-notice">

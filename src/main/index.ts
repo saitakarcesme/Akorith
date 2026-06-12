@@ -7,6 +7,7 @@ import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
 import { registerEvaluateIpc } from './evaluate'
+import { registerMacroIpc } from './macro'
 import { closeDb, initDb, registerDbIpc } from './db'
 
 function createWindow(): void {
@@ -55,6 +56,7 @@ app.whenReady().then(() => {
   registerDigestIpc()
   registerTestIpc()
   registerEvaluateIpc()
+  registerMacroIpc()
   createWindow()
 
   app.on('activate', () => {

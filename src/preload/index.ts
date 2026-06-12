@@ -148,6 +148,18 @@ const evaluate = Object.freeze({
     ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test, evaluate })
+const macro = Object.freeze({
+  createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
+  propose: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:propose', { sessionId }),
+  approve: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:approve', args),
+  recordResult: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:recordResult', args),
+  skip: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:skip', args),
+  stop: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:stop', { sessionId }),
+  complete: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:complete', { sessionId }),
+  get: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:get', { sessionId }),
+  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test, evaluate, macro })
 
 contextBridge.exposeInMainWorld('api', api)

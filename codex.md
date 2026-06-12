@@ -62,8 +62,10 @@ electron-vite in strict numbered phases.
       computes dimensional ISAScore (Tests, Speed, Token efficiency, optional Quality),
       stores one `evaluations` row per action, and exports one consistent PDF template for
       single and comparison reports via main-process `pdfkit`.
-- [ ] **Phase 9** — autonomous loop (scope: drive the CLIs headlessly via `bridgeSend()`,
-      reusing `buildDigest()` for per-iteration context).
+- [x] **Phase 9** — semi-automatic macro-loop orchestration. A compact loop panel creates
+      persisted `macro_sessions` / `macro_turns`, reuses `buildDigest()` for optional repo
+      context, calls planner providers as hidden meta calls, shows one structured proposal,
+      and sends only user-approved prompts to executor terminals through `bridgeSend()`.
 - [ ] **Phase 9.1** — UI revision (scope: after all functionality exists, revise the UI
       based on real usage — surgical, usage-driven changes, not a from-scratch redesign).
 - [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name).
@@ -93,6 +95,10 @@ electron-vite in strict numbered phases.
 - **PDF reports use one main-process template.** `pdfkit` generates single and comparison
   reports under the app's `userData/reports` directory, with consistent typography, objective
   metrics, score breakdowns, judge label, rationale when present, and generated-test excerpts.
+- **Macro-loop is semi-automatic.** Planner proposals are meta calls and do not write
+  `usage_event`; the user must approve or edit each executor prompt before it is sent through
+  the existing bridge path. Terminal output is not auto-interpreted yet — the user pastes or
+  summarizes the executor result before continuing.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

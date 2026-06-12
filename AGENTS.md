@@ -4,13 +4,14 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 8 (ISAScore
-evaluation + PDF reports).
+with electron-vite, in strict numbered phases — currently through Phase 9 (semi-automatic
+macro-loop orchestration).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
-7 isolated test page · **8 evaluate/ISAScore/PDF** — all done. Pending: 9 autonomous loop ·
-**9.1 UI revision** (usage-driven, surgical — not a redesign) · 10 packaging + `productName`.
+7 isolated test page · 8 evaluate/ISAScore/PDF · **9 semi-automatic macro-loop** — all done.
+Pending: **9.1 UI revision** (usage-driven, surgical — not a redesign) · 10 packaging +
+`productName`.
 
 ## Prerequisites
 
@@ -128,8 +129,8 @@ The bridge sends chat-produced text into a terminal with one click — no copy-p
 **There is exactly one injection path**: `bridgeSend({text, targetTerminalId, autoEnter})`
 in `src/main/bridge.ts`, which calls `PtyManager.write()`. Never add a second way to
 write programmatically to a PTY. The UI reaches it via the validated `bridge:send` IPC
-channel (`window.api.bridge.send`); the Phase 9 loop will call `bridgeSend()` directly
-with non-human prompts — design changes must keep it callable headlessly.
+channel (`window.api.bridge.send`); the Phase 9 macro-loop calls `bridgeSend()` directly
+after user approval — design changes must keep it callable headlessly.
 
 Three send modes in the chat panel, all funneling through that one function:
 
@@ -183,6 +184,13 @@ Phase-specific persistence also lives here:
   dimension_scores JSON, weights JSON, total_score, rationale nullable, pdf_path nullable)` —
   one row per Evaluate action. `dimension_scores` stores every per-run dimension, the
   formulas used, active/effective weights, optional judge usage, and any judge-failure note.
+- `macro_sessions(id, created_at, updated_at, status, goal, planner_provider,
+  planner_model, target_terminal, max_iterations, good_enough_threshold, include_repo_digest,
+  repo_digest_snapshot, final_score, stop_reason)` — one row per Phase 9 loop.
+- `macro_turns(id, session_id FK CASCADE, turn_index, created_at, status, proposal,
+  edited_proposal, sent_prompt, executor_result_summary, planner_rationale, expected_result,
+  confidence_score, good_enough_score, risk_level, provider_used, model_used, error)` — one row
+  per proposed/approved/skipped loop turn.
 
 The sidebar shows one collapsible folder per registry provider (plus orphaned
 providers that still have sessions) with rename/delete/new-chat; clicking a session
@@ -236,7 +244,74 @@ full diff is included only if it fits, else a truncation note replaces it. A non
 yields just a filesystem tree and a clear "not a git repository" note instead of an error.
 It is prepended as a delimited `## Repo context` block labelled context, not instructions.
 Config: `digest.enabled`, `digest.workingDir` (default the app cwd), `digest.maxDiffBytes`,
-`digest.maxTotalBytes`, `digest.treeDepth`. `// TODO(phase 9):` the loop reuses `buildDigest()`.
+`digest.maxTotalBytes`, `digest.treeDepth`. The Phase 9 macro-loop reuses `buildDigest()`
+directly when its "Include repo context" option is enabled.
+
+### Macro-loop orchestration — semi-automatic planner/executor loop (Phase 9)
+
+The Workspace chat panel now includes a compact **Macro loop** area near the bridge controls.
+It is intentionally not a UI redesign. The user enters a high-level goal, chooses a planner
+provider/model from the registry, picks target terminal `t1`/`t2`, sets max iterations and a
+good-enough threshold, and chooses whether to include repo context. The loop is
+semi-automatic only: every turn produces one proposed executor prompt, and the user must approve
+or edit it before anything is sent to a terminal.
+
+State machine statuses are explicit and persisted:
+
+- `idle`
+- `preparing_context`
+- `proposing`
+- `awaiting_approval`
+- `sending`
+- `awaiting_executor_result`
+- `completed`
+- `stopped`
+- `error`
+
+`src/main/macro.ts` owns the IPC/state transitions; `src/main/macro-core.ts` is the
+Electron-free parser/prompt helper exercised by `scripts/verify-macro-loop.ts`.
+
+**Planner calls are meta calls.** The macro-loop uses `sendMetaPrompt()` from the provider
+registry, so proposals use the same provider implementations (Claude CLI, Codex CLI, Ollama, or
+external providers) but write no chat messages and no `usage_event`. The dashboard remains
+reserved for normal visible planner chat sends. If the selected provider is unavailable or the
+call fails, the loop records an actionable error and leaves the persisted session recoverable.
+
+**Planner prompt contract.** Each proposal asks the planner for strict JSON:
+`next_prompt`, `rationale`, `expected_result`, `done_score`, `risk_level`, and
+`requires_user_approval`. The prompt instructs the planner to produce one paste-ready executor
+step, preserve Loopex security invariants, avoid unsafe architecture changes, prefer surgical
+edits, and require the executor to report changed files, tests run, failures, and commit status.
+If JSON parsing fails, the raw response becomes an editable proposal and is marked with an error
+on the turn.
+
+**Repo context reuse.** When enabled, the loop calls the existing `buildDigest()` and stores the
+bounded snapshot on `macro_sessions.repo_digest_snapshot`; there is no second repo scanner.
+
+**Approval-gated executor send.** Approving a turn calls `bridgeSend()` in `src/main/bridge.ts`
+with the selected terminal and persisted Auto-Enter setting. This preserves the single
+programmatic write path: `bridgeSend()` → `PtyManager.write()`. The sent prompt is recorded on
+`macro_turns.sent_prompt`.
+
+**Awaiting executor result.** Phase 9 does not parse terminal output. After sending, the loop
+enters `awaiting_executor_result` and waits for the user to paste or summarize the executor
+report before continuing. The next proposal includes prior proposals, sent prompts, result
+summaries, current iteration, and optional repo digest.
+
+Stop conditions:
+
+- Manual Stop aborts an in-flight planner call when possible and marks the session `stopped`.
+- Max iterations stops after the user records a result for the last allowed turn.
+- Good-enough threshold (`done_score >= good_enough_threshold`) is shown in the UI, but does not
+  auto-send. The user can mark complete, continue anyway, or stop.
+- Mark complete is available after proposals/results and sets status `completed`.
+
+Known limitations for Phase 9:
+
+- No fully automatic/autopilot mode yet.
+- Terminal output is not auto-interpreted; the user pastes or summarizes executor results.
+- The router remains suggest-only and is not allowed to auto-switch planner providers.
+- Ollama may be absent; Local provider paths degrade through existing availability checks.
 
 ### Test page — isolated local-model test lab (Phase 7)
 
