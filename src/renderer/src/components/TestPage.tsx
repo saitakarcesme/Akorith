@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  EvaluationRow,
+  IsaDimensionName,
   ProviderInfo,
   TestDetection,
   TestRunRow,
@@ -47,6 +49,20 @@ function statusColor(status: string | null | undefined): string {
   }
 }
 
+const SCORE_DIMS: IsaDimensionName[] = ['tests', 'speed', 'tokens', 'quality']
+
+function scoreLabel(score: number | null): string {
+  return score === null ? 'omitted' : score.toFixed(1)
+}
+
+function evaluationWarning(evaluation: EvaluationRow): string | null {
+  const scores = evaluation.dimensionScores
+  if (scores.qualityRequested && !scores.qualityIncluded) {
+    return scores.qualityFailure ? `Quality omitted: ${scores.qualityFailure}` : 'Quality omitted; objective dimensions re-normalized.'
+  }
+  return null
+}
+
 export default function TestPage({ active }: TestPageProps): JSX.Element {
   const [settings, setSettings] = useState<TestSettings | null>(null)
   const [sourceRepo, setSourceRepo] = useState('')
@@ -73,13 +89,30 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
   const [recent, setRecent] = useState<TestRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
 
+  // Phase 8: evaluate persisted test_runs without re-running them.
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([])
+  const [includeQuality, setIncludeQuality] = useState(false)
+  const [judgeProviderId, setJudgeProviderId] = useState('')
+  const [judgeModel, setJudgeModel] = useState('')
+  const [evaluating, setEvaluating] = useState(false)
+  const [evalError, setEvalError] = useState<string | null>(null)
+  const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRow | null>(null)
+  const [evaluations, setEvaluations] = useState<EvaluationRow[]>([])
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null)
+
   const currentRunId = useRef<string | null>(null)
   const currentReqId = useRef<string | null>(null)
 
   const selected = providers.find((p) => p.id === providerId)
+  const judgeProviders = providers.filter((p) => p.available.ok && p.kind.includes('chat'))
+  const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
 
   const refreshRecent = useCallback(() => {
     void window.api.test.listRuns(12).then(setRecent).catch(() => setRecent([]))
+  }, [])
+
+  const refreshEvaluations = useCallback(() => {
+    void window.api.evaluate.list(12).then(setEvaluations).catch(() => setEvaluations([]))
   }, [])
 
   // Initial load (providers, settings, history).
@@ -102,12 +135,26 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
       setProviderId((cur) => cur || s.defaultProviderId)
     })
     refreshRecent()
-  }, [refreshRecent])
+    refreshEvaluations()
+  }, [refreshRecent, refreshEvaluations])
 
   // Default the model when the provider/model list changes.
   useEffect(() => {
     setModel((cur) => (selected && selected.models.includes(cur) ? cur : (selected?.models[0] ?? '')))
   }, [selected])
+
+  // Pick a sensible but overridable judge default. Prefer a subscription model
+  // when available, but any chat-capable registry provider can be selected.
+  useEffect(() => {
+    setJudgeProviderId((cur) => {
+      if (judgeProviders.some((p) => p.id === cur)) return cur
+      return judgeProviders.find((p) => p.id === 'claude')?.id ?? judgeProviders.find((p) => p.id === 'chatgpt')?.id ?? judgeProviders[0]?.id ?? ''
+    })
+  }, [providers])
+
+  useEffect(() => {
+    setJudgeModel((cur) => (judgeSelected && judgeSelected.models.includes(cur) ? cur : (judgeSelected?.models[0] ?? '')))
+  }, [judgeSelected])
 
   const detect = async (): Promise<void> => {
     setError(null)
@@ -142,10 +189,12 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
     setPhase(`generating tests with ${useModel || providerId}…`)
     let genText: string
     let tokens: number | undefined
+    let runModel = useModel
     try {
       const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildGenPrompt() })
       if (!res.ok) return { model: useModel, pending: false, error: res.error }
       genText = res.result.text
+      runModel = res.result.model
       const u = res.result.usage
       tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
     } catch (err) {
@@ -166,7 +215,7 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
         sourceRepo: sourceRepo.trim(),
         targetDesc: targetDesc.trim(),
         providerId,
-        model: useModel,
+        model: runModel,
         framework,
         testCommand,
         installCommand: installCommand || undefined,
@@ -177,7 +226,7 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
         timeoutMs: settings?.timeoutMs
       })
       if (!res.ok) return { model: useModel, pending: false, error: res.error }
-      return { model: useModel, pending: false, run: res.run }
+      return { model: runModel, pending: false, run: res.run }
     } catch (err) {
       return { model: useModel, pending: false, error: err instanceof Error ? err.message : String(err) }
     } finally {
@@ -206,15 +255,22 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
     setRunning(true)
     setClearKey((k) => k + 1)
     setResults(models.map((m) => ({ model: m, pending: true })))
+    const completed: ResultItem[] = []
 
     for (let i = 0; i < models.length; i++) {
       const item = await runOne(models[i])
+      completed.push(item)
       setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
     }
 
     setRunning(false)
     setPhase('')
     refreshRecent()
+    const runIds = completed.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
+    if (runIds.length > 0) {
+      setSelectedRunIds(runIds)
+      setLatestEvaluation(null)
+    }
   }
 
   const stop = (): void => {
@@ -234,6 +290,68 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
     const tot = p + f + e
     return tot > 0 ? `${p}/${tot} passed${f ? `, ${f} failed` : ''}${e ? `, ${e} err` : ''}` : run.status ?? '—'
   }
+
+  const toggleRunSelection = (runId: string): void => {
+    setSelectedRunIds((prev) => (prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]))
+    setLatestEvaluation(null)
+  }
+
+  const runEvaluation = async (runIds = selectedRunIds): Promise<void> => {
+    setEvalError(null)
+    if (runIds.length === 0) {
+      setEvalError('Select at least one finished run.')
+      return
+    }
+    if (includeQuality && !judgeProviderId) {
+      setEvalError('Pick an available judge provider, or turn off quality.')
+      return
+    }
+    setEvaluating(true)
+    try {
+      const res = await window.api.evaluate.run({
+        testRunIds: runIds,
+        includeQuality,
+        judgeProviderId: includeQuality ? judgeProviderId : undefined,
+        judgeModel: includeQuality ? judgeModel || undefined : undefined
+      })
+      if (!res.ok) {
+        setEvalError(res.error)
+        return
+      }
+      setLatestEvaluation(res.evaluation)
+      setSelectedRunIds(res.evaluation.testRunIds)
+      refreshEvaluations()
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setEvaluating(false)
+    }
+  }
+
+  const exportPdf = async (evaluation: EvaluationRow): Promise<void> => {
+    setPdfBusyId(evaluation.id)
+    setEvalError(null)
+    try {
+      const res = await window.api.evaluate.exportPdf(evaluation.id)
+      if (!res.ok) {
+        setEvalError(res.error)
+        return
+      }
+      setLatestEvaluation(res.evaluation)
+      refreshEvaluations()
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPdfBusyId(null)
+    }
+  }
+
+  const revealPdf = async (evaluation: EvaluationRow): Promise<void> => {
+    const res = await window.api.evaluate.revealPdf(evaluation.id)
+    if (!res.ok) setEvalError(res.error)
+  }
+
+  const resultRunIds = results.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
 
   return (
     <div className="test-page">
@@ -384,13 +502,150 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
                       {r.run.durationMs != null ? `${(r.run.durationMs / 1000).toFixed(1)}s` : '—'} · exit{' '}
                       {r.run.exitCode ?? '—'} · {r.run.tokens ?? 0} tok
                     </div>
+                    <button
+                      type="button"
+                      className="test-mini-btn"
+                      onClick={() => {
+                        setSelectedRunIds([r.run!.id])
+                        setLatestEvaluation(null)
+                      }}
+                    >
+                      Evaluate
+                    </button>
                   </div>
                 )}
                 {r.error && <div className="test-result-body test-result-err">{r.error}</div>}
               </div>
             ))}
+            {resultRunIds.length > 1 && (
+              <button
+                type="button"
+                className="test-btn"
+                onClick={() => {
+                  setSelectedRunIds(resultRunIds)
+                  setLatestEvaluation(null)
+                }}
+              >
+                Use comparison set
+              </button>
+            )}
           </div>
         )}
+
+        <div className="test-evaluate">
+          <div className="test-evaluate-head">
+            <div>
+              <div className="test-recent-title">Evaluate</div>
+              <div className="test-hint">
+                {selectedRunIds.length === 0
+                  ? 'Select finished runs below.'
+                  : `${selectedRunIds.length} run${selectedRunIds.length === 1 ? '' : 's'} selected`}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="test-btn is-primary"
+              disabled={evaluating || selectedRunIds.length === 0 || (includeQuality && !judgeProviderId)}
+              onClick={() => void runEvaluation()}
+            >
+              {evaluating ? 'Evaluating…' : 'Compute ISAScore'}
+            </button>
+          </div>
+
+          <label className="test-toggle">
+            <input type="checkbox" checked={includeQuality} onChange={() => setIncludeQuality((v) => !v)} />
+            Include LLM quality
+          </label>
+
+          {includeQuality && (
+            <div className="test-grid">
+              <label className="test-field">
+                <span>Judge provider</span>
+                <select value={judgeProviderId} onChange={(e) => setJudgeProviderId(e.target.value)}>
+                  {judgeProviders.length === 0 && <option value="">No available chat providers</option>}
+                  {judgeProviders.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {judgeSelected && judgeSelected.models.length > 0 && (
+                <label className="test-field">
+                  <span>Judge model</span>
+                  <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
+                    {judgeSelected.models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+
+          {evalError && <div className="test-error">{evalError}</div>}
+
+          {latestEvaluation && (
+            <div className="isa-card">
+              <div className="isa-card-head">
+                <div>
+                  <div className="isa-title">
+                    ISAScore {latestEvaluation.totalScore.toFixed(1)} · {latestEvaluation.kind}
+                  </div>
+                  <div className="isa-meta">
+                    Judge: {latestEvaluation.judgeModel ?? 'objective-only'} · {new Date(latestEvaluation.ts).toLocaleString()}
+                  </div>
+                </div>
+                <div className="isa-actions">
+                  <button
+                    type="button"
+                    className="test-btn"
+                    disabled={pdfBusyId === latestEvaluation.id}
+                    onClick={() => void exportPdf(latestEvaluation)}
+                  >
+                    {pdfBusyId === latestEvaluation.id ? 'Exporting…' : 'Export PDF'}
+                  </button>
+                  {latestEvaluation.pdfPath && (
+                    <button type="button" className="test-btn" onClick={() => void revealPdf(latestEvaluation)}>
+                      Reveal
+                    </button>
+                  )}
+                </div>
+              </div>
+              {evaluationWarning(latestEvaluation) && <div className="isa-warning">{evaluationWarning(latestEvaluation)}</div>}
+              <div className="isa-runs">
+                {[...latestEvaluation.dimensionScores.runs]
+                  .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+                  .map((run) => (
+                    <div className="isa-run" key={run.testRunId}>
+                      <div className="isa-run-head">
+                        <span>
+                          #{run.rank ?? '—'} {run.model}
+                        </span>
+                        <strong>{run.totalScore.toFixed(1)}</strong>
+                      </div>
+                      <div className="isa-dims">
+                        {SCORE_DIMS.map((dim) => {
+                          const d = run.dimensions[dim]
+                          return (
+                            <div className={`isa-dim ${d.omitted ? 'is-omitted' : ''}`} key={dim} title={d.formula}>
+                              <span>{dim}</span>
+                              <strong>{scoreLabel(d.score)}</strong>
+                              <em>{Math.round(d.effectiveWeight * 100)}%</em>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {run.qualityRationale && <div className="isa-rationale">{run.qualityRationale}</div>}
+                    </div>
+                  ))}
+              </div>
+              {latestEvaluation.rationale && <div className="isa-rationale">{latestEvaluation.rationale}</div>}
+            </div>
+          )}
+        </div>
 
         <div className="test-recent">
           <div className="test-recent-title">Recent runs</div>
@@ -400,6 +655,7 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
             <table className="test-recent-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>when</th>
                   <th>model</th>
                   <th>fw</th>
@@ -410,13 +666,63 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
               </thead>
               <tbody>
                 {recent.map((r) => (
-                  <tr key={r.id} className={statusColor(r.status)}>
+                  <tr key={r.id} className={`${statusColor(r.status)} ${selectedRunIds.includes(r.id) ? 'is-selected' : ''}`}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedRunIds.includes(r.id)}
+                        onChange={() => toggleRunSelection(r.id)}
+                      />
+                    </td>
                     <td>{new Date(r.ts).toLocaleTimeString()}</td>
                     <td title={r.model ?? ''}>{r.model ?? '—'}</td>
                     <td>{r.framework ?? '—'}</td>
                     <td>{metric(r)}</td>
                     <td>{r.durationMs != null ? `${(r.durationMs / 1000).toFixed(1)}s` : '—'}</td>
                     <td>{r.tokens ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="test-recent">
+          <div className="test-recent-title">Past evaluations</div>
+          {evaluations.length === 0 ? (
+            <div className="test-hint">No evaluations yet.</div>
+          ) : (
+            <table className="test-recent-table">
+              <thead>
+                <tr>
+                  <th>when</th>
+                  <th>kind</th>
+                  <th>judge</th>
+                  <th>score</th>
+                  <th>pdf</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evaluations.map((ev) => (
+                  <tr key={ev.id}>
+                    <td>{new Date(ev.ts).toLocaleTimeString()}</td>
+                    <td>{ev.kind}</td>
+                    <td title={ev.judgeModel ?? 'objective-only'}>{ev.judgeModel ?? 'objective-only'}</td>
+                    <td>{ev.totalScore.toFixed(1)}</td>
+                    <td>
+                      <button type="button" className="test-table-btn" onClick={() => setLatestEvaluation(ev)}>
+                        View
+                      </button>
+                      {ev.pdfPath ? (
+                        <button type="button" className="test-table-btn" onClick={() => void revealPdf(ev)}>
+                          Reveal
+                        </button>
+                      ) : (
+                        <button type="button" className="test-table-btn" onClick={() => void exportPdf(ev)}>
+                          PDF
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

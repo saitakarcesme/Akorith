@@ -64,12 +64,25 @@ export interface TestLabSettings {
   defaultProviderId: string
 }
 
+export interface IsaScoreWeights {
+  tests: number
+  speed: number
+  tokens: number
+  quality: number
+}
+
+export interface IsaScoreSettings {
+  /** Dimensional score weights; active dimensions are re-normalized at scoring time. */
+  weights: IsaScoreWeights
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
   router?: Partial<RouterSettings>
   digest?: Partial<DigestSettings>
   test?: Partial<TestLabSettings>
+  isascore?: Partial<IsaScoreSettings>
 }
 
 export const DEFAULT_TEST: TestLabSettings = {
@@ -78,6 +91,15 @@ export const DEFAULT_TEST: TestLabSettings = {
   timeoutMs: 120_000,
   keepLastN: 3,
   defaultProviderId: 'local'
+}
+
+export const DEFAULT_ISASCORE: IsaScoreSettings = {
+  weights: {
+    tests: 0.55,
+    speed: 0.15,
+    tokens: 0.15,
+    quality: 0.15
+  }
 }
 
 export const DEFAULT_ROUTER: RouterSettings = {
@@ -107,7 +129,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   bridge: { autoEnter: false },
   router: DEFAULT_ROUTER,
   digest: DEFAULT_DIGEST,
-  test: DEFAULT_TEST
+  test: DEFAULT_TEST,
+  isascore: DEFAULT_ISASCORE
 }
 
 export function configPath(): string {
@@ -194,6 +217,18 @@ export function getTestSettings(): TestLabSettings {
     timeoutMs: t.timeoutMs ?? DEFAULT_TEST.timeoutMs,
     keepLastN: t.keepLastN ?? DEFAULT_TEST.keepLastN,
     defaultProviderId: t.defaultProviderId ?? DEFAULT_TEST.defaultProviderId
+  }
+}
+
+// ---- ISAScore settings (Phase 8) ----
+
+export function getIsaScoreSettings(): IsaScoreSettings {
+  const s = loadConfig().isascore ?? {}
+  return {
+    weights: {
+      ...DEFAULT_ISASCORE.weights,
+      ...(s.weights ?? {})
+    }
   }
 }
 

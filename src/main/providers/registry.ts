@@ -66,6 +66,24 @@ function buildProviders(): Map<string, Provider> {
   return providers
 }
 
+/**
+ * Meta/evaluation sends call providers directly without sessions, repo digest,
+ * messages, or usage_events. Phase 8 uses this for the optional ISAScore judge;
+ * dashboard accounting remains reserved for normal chat:send exchanges.
+ */
+export async function sendMetaPrompt(
+  providerId: string,
+  model: string | undefined,
+  prompt: string,
+  signal?: AbortSignal
+): Promise<SendResult> {
+  if (!VALID_ID.test(providerId)) throw new Error('invalid provider id')
+  if (model !== undefined && !VALID_MODEL.test(model)) throw new Error('invalid model')
+  const provider = buildProviders().get(providerId)
+  if (!provider) throw new Error(`provider "${providerId}" is not enabled`)
+  return provider.send(prompt, { model, signal }, () => {})
+}
+
 /** The available-provider snapshot, also consumed by the Phase 6 router. */
 export async function describeProviders(): Promise<ProviderInfo[]> {
   const providers = buildProviders()

@@ -58,8 +58,10 @@ electron-vite in strict numbered phases.
       they auto-run in a fresh ephemeral **temp sandbox** (source is read-only;
       timeout + process-tree kill + Stop + prune); objective metrics collected and
       persisted to `test_runs`; multi-model comparison mode. No score computed here.
-- [ ] **Phase 8** — evaluate / PDF / ISAScore (scope: reads `test_runs`, scores with the
-      smart model, exports a PDF report).
+- [x] **Phase 8** — evaluate / PDF / ISAScore. Reads `test_runs` without re-running tests;
+      computes dimensional ISAScore (Tests, Speed, Token efficiency, optional Quality),
+      stores one `evaluations` row per action, and exports one consistent PDF template for
+      single and comparison reports via main-process `pdfkit`.
 - [ ] **Phase 9** — autonomous loop (scope: drive the CLIs headlessly via `bridgeSend()`,
       reusing `buildDigest()` for per-iteration context).
 - [ ] **Phase 9.1** — UI revision (scope: after all functionality exists, revise the UI
@@ -80,6 +82,17 @@ electron-vite in strict numbered phases.
   sandbox** with a timeout + process-tree kill. Never write back to the source, never run as
   admin/sudo. Keep the safety core (`testlab.ts`) electron-free so it stays headlessly
   verifiable (`node --experimental-strip-types scripts/verify-testlab.ts`).
+- **ISAScore is dimensional, not a single opaque number.** Objective dimensions always work
+  without an LLM: Tests uses parsed pass/fail/error counts with bad exit statuses scoring 0,
+  Speed normalizes against the fastest selected run, and Token efficiency normalizes against
+  the lowest token count. Optional Quality is the only LLM-judged dimension; if skipped or
+  invalid, the total re-normalizes over the active objective dimensions.
+- **Evaluation judge calls are meta calls.** The user selects the judge provider/model each
+  time; the evaluation records the judge model and any usage in the evaluation payload, but
+  it writes no `usage_event` and does not affect the dashboard.
+- **PDF reports use one main-process template.** `pdfkit` generates single and comparison
+  reports under the app's `userData/reports` directory, with consistent typography, objective
+  metrics, score breakdowns, judge label, rationale when present, and generated-test excerpts.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

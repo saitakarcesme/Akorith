@@ -120,6 +120,7 @@ async function handleRun(args: RunArgs, sender: WebContents): Promise<RunRespons
       tokens: args.tokens ?? null,
       attempts: args.attempts ?? 1,
       sandboxPath: sandbox,
+      generatedFiles: args.files,
       rawOutput: metrics.rawOutput,
       status: metrics.status
     })

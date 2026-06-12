@@ -256,6 +256,7 @@ export interface TestRunRow {
   tokens: number | null
   attempts: number | null
   sandboxPath: string | null
+  generatedFiles: TestGeneratedFile[] | null
   rawOutput: string | null
   status: string | null
 }
@@ -276,6 +277,101 @@ export interface TestApi {
   onOutput(listener: (payload: { runId: string; chunk: string }) => void): () => void
 }
 
+// ---- evaluate + PDF reports (Phase 8) ----
+
+export interface IsaScoreWeights {
+  tests: number
+  speed: number
+  tokens: number
+  quality: number
+}
+
+export interface IsaScoreSettings {
+  weights: IsaScoreWeights
+}
+
+export type EvaluationKind = 'single' | 'comparison'
+export type IsaDimensionName = 'tests' | 'speed' | 'tokens' | 'quality'
+
+export interface IsaDimensionScore {
+  score: number | null
+  weight: number
+  effectiveWeight: number
+  value: string
+  formula: string
+  omitted?: boolean
+}
+
+export interface IsaRunScore {
+  testRunId: string
+  model: string
+  providerId: string | null
+  status: string | null
+  objective: {
+    passed: number | null
+    failed: number | null
+    errored: number | null
+    passRate: number | null
+    durationMs: number | null
+    tokens: number | null
+  }
+  dimensions: Record<IsaDimensionName, IsaDimensionScore>
+  totalScore: number
+  qualityRationale?: string
+  rank?: number
+}
+
+export interface IsaScorePayload {
+  version: 1
+  formulas: {
+    tests: string
+    speed: string
+    tokens: string
+    quality: string
+    total: string
+  }
+  qualityRequested: boolean
+  qualityIncluded: boolean
+  qualityFailure?: string
+  judgeUsage?: ChatUsage
+  codeAvailability: Record<string, string[]>
+  runs: IsaRunScore[]
+}
+
+export interface EvaluationRow {
+  id: string
+  ts: number
+  kind: EvaluationKind
+  testRunIds: string[]
+  judgeModel: string | null
+  dimensionScores: IsaScorePayload
+  weights: IsaScoreWeights
+  totalScore: number
+  rationale: string | null
+  pdfPath: string | null
+}
+
+export interface EvaluateRunRequest {
+  testRunIds: string[]
+  includeQuality: boolean
+  judgeProviderId?: string
+  judgeModel?: string
+}
+
+export type EvaluateRunResponse = { ok: true; evaluation: EvaluationRow } | { ok: false; error: string }
+export type EvaluatePdfResponse =
+  | { ok: true; evaluation: EvaluationRow; pdfPath: string }
+  | { ok: false; error: string }
+
+export interface EvaluateApi {
+  getSettings(): Promise<IsaScoreSettings>
+  list(limit?: number): Promise<EvaluationRow[]>
+  run(args: EvaluateRunRequest): Promise<EvaluateRunResponse>
+  exportPdf(evaluationId: string): Promise<EvaluatePdfResponse>
+  revealPdf(evaluationId: string): Promise<{ ok: true } | { ok: false; error: string }>
+  openPdf(evaluationId: string): Promise<{ ok: true } | { ok: false; error: string }>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -285,6 +381,7 @@ export interface PreloadApi {
   router: RouterApi
   digest: DigestApi
   test: TestApi
+  evaluate: EvaluateApi
 }
 
 declare global {

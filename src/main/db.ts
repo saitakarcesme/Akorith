@@ -15,6 +15,11 @@ let db: Database.Database | null = null
 const VALID_ID = /^[\w-]{1,64}$/
 const MAX_TITLE = 200
 
+interface StoredGeneratedFile {
+  path: string
+  content: string
+}
+
 export function dbPath(): string {
   // Co-located with loopex.config.json in userData.
   return join(app.getPath('userData'), 'loopex.db')
@@ -71,11 +76,26 @@ export function initDb(): void {
       tokens       INTEGER,
       attempts     INTEGER,
       sandbox_path TEXT,
+      generated_files TEXT,
       raw_output   TEXT,
       status       TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_test_runs_ts ON test_runs(ts);
+    CREATE TABLE IF NOT EXISTS evaluations (
+      id               TEXT PRIMARY KEY,
+      ts               INTEGER NOT NULL,
+      kind             TEXT NOT NULL CHECK (kind IN ('single', 'comparison')),
+      test_run_ids     TEXT NOT NULL,
+      judge_model      TEXT,
+      dimension_scores TEXT NOT NULL,
+      weights          TEXT NOT NULL,
+      total_score      REAL NOT NULL,
+      rationale        TEXT,
+      pdf_path         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_evaluations_ts ON evaluations(ts);
   `)
+  ensureColumn('test_runs', 'generated_files', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -86,6 +106,12 @@ export function closeDb(): void {
 function must(): Database.Database {
   if (!db) throw new Error('database not initialized')
   return db
+}
+
+function ensureColumn(table: string, column: string, ddl: string): void {
+  const columns = must().prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  if (columns.some((c) => c.name === column)) return
+  must().prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`).run()
 }
 
 // ---- session / message CRUD (also used by the chat:send handler) ----
@@ -258,7 +284,7 @@ export function recentUsageByProvider(sinceMs: number): Record<string, RecentPro
   return out
 }
 
-// ---- test runs (Phase 7; TODO(phase 8): evaluate reads these + adds ISAScore) ----
+// ---- test runs (Phase 7; Phase 8 evaluations consume these rows) ----
 
 export interface TestRunRow {
   id: string
@@ -276,11 +302,42 @@ export interface TestRunRow {
   tokens: number | null
   attempts: number | null
   sandboxPath: string | null
+  generatedFiles: StoredGeneratedFile[] | null
   rawOutput: string | null
   status: string | null
 }
 
 const RAW_OUTPUT_CAP = 60_000
+const GENERATED_FILES_CAP = 500_000
+
+function serializeGeneratedFiles(files: StoredGeneratedFile[] | null | undefined): string | null {
+  if (!files || files.length === 0) return null
+  const safe = files.slice(0, 20).map((f) => ({
+    path: String(f.path).slice(0, 1_000),
+    content: String(f.content)
+  }))
+  const json = JSON.stringify(safe)
+  return Buffer.byteLength(json, 'utf8') <= GENERATED_FILES_CAP ? json : JSON.stringify(safe.map((f) => ({
+    path: f.path,
+    content: f.content.slice(0, Math.max(0, Math.floor(GENERATED_FILES_CAP / safe.length) - 200))
+  })))
+}
+
+function parseGeneratedFiles(raw: unknown): StoredGeneratedFile[] | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return null
+    return parsed
+      .filter(
+        (f): f is StoredGeneratedFile =>
+          typeof f?.path === 'string' && typeof f?.content === 'string'
+      )
+      .slice(0, 20)
+  } catch {
+    return null
+  }
+}
 
 export function createTestRun(row: Omit<TestRunRow, 'id' | 'ts'> & { id?: string; ts?: number }): TestRunRow {
   const full: TestRunRow = {
@@ -299,16 +356,18 @@ export function createTestRun(row: Omit<TestRunRow, 'id' | 'ts'> & { id?: string
     tokens: row.tokens ?? null,
     attempts: row.attempts ?? null,
     sandboxPath: row.sandboxPath ?? null,
+    generatedFiles: row.generatedFiles ?? null,
     rawOutput: row.rawOutput != null ? row.rawOutput.slice(0, RAW_OUTPUT_CAP) : null,
     status: row.status ?? null
   }
+  const generatedFiles = serializeGeneratedFiles(full.generatedFiles)
   must()
     .prepare(
       `INSERT INTO test_runs
         (id, ts, source_repo, target_desc, provider_id, model, framework,
          passed, failed, errored, duration_ms, exit_code, tokens, attempts,
-         sandbox_path, raw_output, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         sandbox_path, generated_files, raw_output, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       full.id,
@@ -326,37 +385,140 @@ export function createTestRun(row: Omit<TestRunRow, 'id' | 'ts'> & { id?: string
       full.tokens,
       full.attempts,
       full.sandboxPath,
+      generatedFiles,
       full.rawOutput,
       full.status
     )
   return full
 }
 
+const toTestRun = (r: Record<string, unknown>): TestRunRow => ({
+  id: r.id as string,
+  ts: r.ts as number,
+  sourceRepo: r.source_repo as string,
+  targetDesc: (r.target_desc as string | null) ?? null,
+  providerId: (r.provider_id as string | null) ?? null,
+  model: (r.model as string | null) ?? null,
+  framework: (r.framework as string | null) ?? null,
+  passed: (r.passed as number | null) ?? null,
+  failed: (r.failed as number | null) ?? null,
+  errored: (r.errored as number | null) ?? null,
+  durationMs: (r.duration_ms as number | null) ?? null,
+  exitCode: (r.exit_code as number | null) ?? null,
+  tokens: (r.tokens as number | null) ?? null,
+  attempts: (r.attempts as number | null) ?? null,
+  sandboxPath: (r.sandbox_path as string | null) ?? null,
+  generatedFiles: parseGeneratedFiles(r.generated_files),
+  rawOutput: (r.raw_output as string | null) ?? null,
+  status: (r.status as string | null) ?? null
+})
+
 export function listTestRuns(limit = 50): TestRunRow[] {
   const lim = Math.min(Math.max(limit, 1), 500)
-  return (
-    must().prepare('SELECT * FROM test_runs ORDER BY ts DESC LIMIT ?').all(lim) as Record<string, unknown>[]
-  ).map(
-    (r): TestRunRow => ({
-      id: r.id as string,
-      ts: r.ts as number,
-      sourceRepo: r.source_repo as string,
-      targetDesc: (r.target_desc as string | null) ?? null,
-      providerId: (r.provider_id as string | null) ?? null,
-      model: (r.model as string | null) ?? null,
-      framework: (r.framework as string | null) ?? null,
-      passed: (r.passed as number | null) ?? null,
-      failed: (r.failed as number | null) ?? null,
-      errored: (r.errored as number | null) ?? null,
-      durationMs: (r.duration_ms as number | null) ?? null,
-      exitCode: (r.exit_code as number | null) ?? null,
-      tokens: (r.tokens as number | null) ?? null,
-      attempts: (r.attempts as number | null) ?? null,
-      sandboxPath: (r.sandbox_path as string | null) ?? null,
-      rawOutput: (r.raw_output as string | null) ?? null,
-      status: (r.status as string | null) ?? null
-    })
+  return (must().prepare('SELECT * FROM test_runs ORDER BY ts DESC LIMIT ?').all(lim) as Record<string, unknown>[]).map(
+    toTestRun
   )
+}
+
+export function getTestRunsByIds(ids: string[]): TestRunRow[] {
+  const safe = ids.filter((id) => VALID_ID.test(id)).slice(0, 50)
+  if (safe.length === 0) return []
+  const placeholders = safe.map(() => '?').join(', ')
+  return (
+    must().prepare(`SELECT * FROM test_runs WHERE id IN (${placeholders})`).all(...safe) as Record<string, unknown>[]
+  ).map(toTestRun)
+}
+
+// ---- evaluations (Phase 8: ISAScore + PDF reports) ----
+
+export type EvaluationKind = 'single' | 'comparison'
+
+export interface EvaluationRow {
+  id: string
+  ts: number
+  kind: EvaluationKind
+  testRunIds: string[]
+  judgeModel: string | null
+  dimensionScores: unknown
+  weights: unknown
+  totalScore: number
+  rationale: string | null
+  pdfPath: string | null
+}
+
+function parseJsonField(raw: unknown, fallback: unknown): unknown {
+  if (typeof raw !== 'string') return fallback
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return fallback
+  }
+}
+
+const toEvaluation = (r: Record<string, unknown>): EvaluationRow => ({
+  id: r.id as string,
+  ts: r.ts as number,
+  kind: r.kind as EvaluationKind,
+  testRunIds: parseJsonField(r.test_run_ids, []) as string[],
+  judgeModel: (r.judge_model as string | null) ?? null,
+  dimensionScores: parseJsonField(r.dimension_scores, {}),
+  weights: parseJsonField(r.weights, {}),
+  totalScore: Number(r.total_score ?? 0),
+  rationale: (r.rationale as string | null) ?? null,
+  pdfPath: (r.pdf_path as string | null) ?? null
+})
+
+export function createEvaluation(row: Omit<EvaluationRow, 'id' | 'ts'> & { id?: string; ts?: number }): EvaluationRow {
+  const full: EvaluationRow = {
+    id: row.id ?? randomUUID(),
+    ts: row.ts ?? Date.now(),
+    kind: row.kind,
+    testRunIds: row.testRunIds,
+    judgeModel: row.judgeModel ?? null,
+    dimensionScores: row.dimensionScores,
+    weights: row.weights,
+    totalScore: row.totalScore,
+    rationale: row.rationale ?? null,
+    pdfPath: row.pdfPath ?? null
+  }
+  must()
+    .prepare(
+      `INSERT INTO evaluations
+       (id, ts, kind, test_run_ids, judge_model, dimension_scores, weights, total_score, rationale, pdf_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      full.id,
+      full.ts,
+      full.kind,
+      JSON.stringify(full.testRunIds),
+      full.judgeModel,
+      JSON.stringify(full.dimensionScores),
+      JSON.stringify(full.weights),
+      full.totalScore,
+      full.rationale,
+      full.pdfPath
+    )
+  return full
+}
+
+export function getEvaluation(id: string): EvaluationRow | null {
+  if (!VALID_ID.test(id)) return null
+  const row = must().prepare('SELECT * FROM evaluations WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  return row ? toEvaluation(row) : null
+}
+
+export function listEvaluations(limit = 50): EvaluationRow[] {
+  const lim = Math.min(Math.max(limit, 1), 500)
+  return (
+    must().prepare('SELECT * FROM evaluations ORDER BY ts DESC LIMIT ?').all(lim) as Record<string, unknown>[]
+  ).map(toEvaluation)
+}
+
+export function setEvaluationPdfPath(id: string, pdfPath: string): EvaluationRow | null {
+  if (!VALID_ID.test(id)) return null
+  must().prepare('UPDATE evaluations SET pdf_path = ? WHERE id = ?').run(pdfPath, id)
+  return getEvaluation(id)
 }
 
 export interface DailyUsageRow {

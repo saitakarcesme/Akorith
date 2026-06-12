@@ -4,14 +4,13 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 7 (isolated
-local-model test page).
+with electron-vite, in strict numbered phases — currently through Phase 8 (ISAScore
+evaluation + PDF reports).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
-**7 isolated test page** — all done. Pending: 8 evaluate/ISAScore/PDF (reads `test_runs`) ·
-9 autonomous loop · **9.1 UI revision** (usage-driven, surgical — not a redesign) ·
-10 packaging + `productName`.
+7 isolated test page · **8 evaluate/ISAScore/PDF** — all done. Pending: 9 autonomous loop ·
+**9.1 UI revision** (usage-driven, surgical — not a redesign) · 10 packaging + `productName`.
 
 ## Prerequisites
 
@@ -129,7 +128,7 @@ The bridge sends chat-produced text into a terminal with one click — no copy-p
 **There is exactly one injection path**: `bridgeSend({text, targetTerminalId, autoEnter})`
 in `src/main/bridge.ts`, which calls `PtyManager.write()`. Never add a second way to
 write programmatically to a PTY. The UI reaches it via the validated `bridge:send` IPC
-channel (`window.api.bridge.send`); the Phase 8 loop will call `bridgeSend()` directly
+channel (`window.api.bridge.send`); the Phase 9 loop will call `bridgeSend()` directly
 with non-human prompts — design changes must keep it callable headlessly.
 
 Three send modes in the chat panel, all funneling through that one function:
@@ -160,8 +159,8 @@ a toast), never a silent drop.
 
 SQLite database at `loopex.db` in the userData dir (co-located with
 `loopex.config.json`), opened by `src/main/db.ts` (better-sqlite3, WAL,
-foreign keys ON). All DB access is main-process; the renderer uses the validated
-`history:*` / `usage:*` IPC only. Three tables:
+foreign keys ON). All DB access is main-process; the renderer uses validated IPC only
+(`history:*`, `usage:*`, `test:*`, `evaluate:*`). Core history/usage tables:
 
 - `sessions(id, provider_id, title, created_at, updated_at)` — **a session belongs to
   one provider**; switching provider in the chat starts a new session context.
@@ -173,6 +172,17 @@ foreign keys ON). All DB access is main-process; the renderer uses the validated
   (the single choke point). Claude/Local write real counts (`estimated=0`); ChatGPT
   writes approximations (`estimated=1`). Indexed on `ts` and `(provider_id, ts)`.
   The Phase 6 router will read `usage_events`.
+
+Phase-specific persistence also lives here:
+
+- `test_runs(...)` — Phase 7 test-lab metrics. Phase 8 adds nullable
+  `generated_files` JSON metadata for newly generated tests so reports and judges can
+  include the generated code excerpt; old rows remain valid and use the retained sandbox
+  path as a best-effort fallback.
+- `evaluations(id, ts, kind single|comparison, test_run_ids JSON, judge_model nullable,
+  dimension_scores JSON, weights JSON, total_score, rationale nullable, pdf_path nullable)` —
+  one row per Evaluate action. `dimension_scores` stores every per-run dimension, the
+  formulas used, active/effective weights, optional judge usage, and any judge-failure note.
 
 The sidebar shows one collapsible folder per registry provider (plus orphaned
 providers that still have sessions) with rename/delete/new-chat; clicking a session
@@ -265,12 +275,63 @@ a first-class use. Phase 7 ends at "tests ran, here are the metrics," persisted 
 - **Persistence**: every run is written to the `test_runs` table (`id, ts, source_repo,
   target_desc, provider_id, model, framework, passed, failed, errored, duration_ms, exit_code,
   tokens, attempts, sandbox_path, raw_output [capped], status`) so runs survive restart.
-  `// TODO(phase 8):` evaluate reads `test_runs` and adds ISAScore — **no score is computed here.**
+  Phase 8 reads `test_runs` and writes ISAScore/PDF results to `evaluations`; the Test page still
+  does not score while tests are being generated/run.
 - **Code layout**: `src/main/testlab.ts` is the electron-free safety core (detect / snapshot /
   bounded run / parse / prune — headlessly verifiable); `src/main/testlab-ipc.ts` is the
   electron wiring (sandbox lifecycle, streaming, persistence). Config: `test.sourceRepo`
   (defaults to `digest.workingDir`), `test.installDeps`, `test.timeoutMs`, `test.keepLastN`,
   `test.defaultProviderId`.
+
+### Evaluate + PDF — ISAScore reports (Phase 8)
+
+The Test page now evaluates existing `test_runs`; it **never re-runs tests** and does not change
+the Phase 7 sandbox safety model. "Evaluate" can target one finished run or a selected comparison
+set. The main process owns scoring, optional judging, persistence, PDF generation, and OS reveal/open
+actions via the frozen `window.api.evaluate` bridge.
+
+**ISAScore is dimensional.** Each evaluation stores the full breakdown, not just the total:
+
+- **TESTS** (objective, dominant): parsed from `test_runs` as
+  `passed / (passed + failed + errored) * 100`; `install-failed`, `timeout`, `aborted`, and
+  `no-tests` score 0 even if other fields are missing.
+- **SPEED** (objective): normalized within the selected evaluation set as
+  `fastest selected duration / this duration * 100`; missing/zero duration is omitted.
+- **TOKEN EFFICIENCY** (objective): normalized within the selected set as
+  `lowest selected token count / this token count * 100`; missing/zero token counts are omitted.
+- **QUALITY** (optional): the only LLM-scored dimension. It is omitted when the user skips the LLM
+  step or the judge returns invalid/unusable JSON. When any dimension is omitted, the weighted
+  total re-normalizes over the remaining active dimensions, so objective-only scoring is fully
+  meaningful with zero LLM calls.
+
+Weights live in `loopex.config.json` under `isascore.weights` and default to
+`tests=0.55`, `speed=0.15`, `tokens=0.15`, `quality=0.15`. `src/main/config.ts` merges defaults
+so old config files still work.
+
+**Optional quality judge.** The user selects a chat-capable registry provider/model for each
+evaluation (Claude, ChatGPT, Local, or any external chat provider). The judge prompt includes
+generated test code when available plus objective run metrics and asks for strict JSON:
+per-run `qualityScore` 0–100 and a short rationale covering coverage intent, readability,
+assertion correctness, and idiomatic framework use. `src/main/evaluate.ts` parses defensively;
+on failure it records the failure note, omits Quality, and keeps the objective score. Judge calls
+use `sendMetaPrompt()` in `providers/registry.ts`: they write no messages, no `usage_event`, and
+do not include repo digest. Judge usage may be recorded inside the evaluation JSON for transparency,
+and `judge_model` is stored/displayed so scores from different judges are not silently compared.
+
+**PDF reports.** `pdfkit` is the only report renderer (pure JS dependency, main process only).
+PDFs are written under `app.getPath('userData')/reports` and can be opened/revealed through
+validated `evaluate:*` IPC. A single reusable template covers both modes:
+
+- **Single**: project/source/target/date, objective metrics, dimensional ISAScore breakdown,
+  weighted total, judge label (`objective-only` when skipped), LLM rationale when present, and
+  generated test code excerpt.
+- **Comparison**: same template/branding with a ranked side-by-side table
+  (model, pass rate, duration, tokens, each dimension, total), judge label, rationale, and
+  generated-test excerpts.
+
+`test_runs.generated_files` is nullable metadata added in Phase 8 for new runs. Older rows remain
+valid; evaluation falls back to scanning the retained sandbox for generated test-like files and
+otherwise reports that the generated code excerpt is unavailable.
 
 ## Conventions
 

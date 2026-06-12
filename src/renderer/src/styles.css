@@ -1255,6 +1255,29 @@ body {
   margin-top: 2px;
 }
 
+.test-mini-btn,
+.test-table-btn {
+  margin-top: 7px;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.test-table-btn {
+  margin: 0 4px 0 0;
+  padding: 2px 6px;
+}
+
+.test-mini-btn:hover,
+.test-table-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .test-result-err {
   color: #f85149;
   font-family: var(--font-mono);
@@ -1263,6 +1286,139 @@ body {
 
 .test-recent {
   margin-top: 6px;
+}
+
+.test-evaluate {
+  margin-top: 4px;
+  padding: 11px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.test-evaluate-head,
+.isa-card-head,
+.isa-run-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.isa-card {
+  padding: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.isa-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.isa-meta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.isa-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.isa-warning {
+  margin-top: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+  border-radius: 6px;
+}
+
+.isa-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.isa-run {
+  padding: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.isa-run-head {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.isa-run-head strong {
+  color: var(--accent);
+}
+
+.isa-dims {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.isa-dim {
+  min-width: 0;
+  padding: 5px 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+}
+
+.isa-dim span,
+.isa-dim em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.isa-dim span {
+  font-size: 9px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.isa-dim strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.isa-dim em {
+  margin-top: 1px;
+  font-size: 9px;
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.isa-dim.is-omitted strong {
+  color: var(--text-faint);
+}
+
+.isa-rationale {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .test-recent-title {
@@ -1302,12 +1458,20 @@ body {
   max-width: 120px;
 }
 
-.test-recent-table tr.is-pass td:nth-child(4) {
+.test-recent-table input {
+  accent-color: var(--accent);
+}
+
+.test-recent-table tr.is-selected td {
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.test-recent-table tr.is-pass td:nth-child(5) {
   color: var(--accent);
 }
 
-.test-recent-table tr.is-fail td:nth-child(4),
-.test-recent-table tr.is-error td:nth-child(4) {
+.test-recent-table tr.is-fail td:nth-child(5),
+.test-recent-table tr.is-error td:nth-child(5) {
   color: #f85149;
 }
 

@@ -136,6 +136,18 @@ const test = Object.freeze({
   }
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test })
+const evaluate = Object.freeze({
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('evaluate:getSettings'),
+  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('evaluate:list', { limit }),
+  run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('evaluate:run', args),
+  exportPdf: (evaluationId: string): Promise<unknown> =>
+    ipcRenderer.invoke('evaluate:exportPdf', { evaluationId }),
+  revealPdf: (evaluationId: string): Promise<unknown> =>
+    ipcRenderer.invoke('evaluate:revealPdf', { evaluationId }),
+  openPdf: (evaluationId: string): Promise<unknown> =>
+    ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test, evaluate })
 
 contextBridge.exposeInMainWorld('api', api)
