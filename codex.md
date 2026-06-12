@@ -53,10 +53,17 @@ electron-vite in strict numbered phases.
 - [x] **Phase 6** — macOS PTY spawn fix; **suggest-only** router (local classifier,
       `tierMap`/`warnThresholds`/`classifierModel`, warn-not-switch, usage-based-not-
       official-limit, classifier writes no usage_event); **opt-in** bounded repo digest.
-- [ ] **Phase 7** — test page (scope: an in-app surface to exercise providers/PTY/bridge).
-- [ ] **Phase 8** — evaluate / PDF / ISAScore (scope: scoring + report export).
+- [x] **Phase 7** — isolated local-model **test page** (separate route, one chat + one
+      terminal). Local model writes pytest / jest|vitest tests for a user-picked repo;
+      they auto-run in a fresh ephemeral **temp sandbox** (source is read-only;
+      timeout + process-tree kill + Stop + prune); objective metrics collected and
+      persisted to `test_runs`; multi-model comparison mode. No score computed here.
+- [ ] **Phase 8** — evaluate / PDF / ISAScore (scope: reads `test_runs`, scores with the
+      smart model, exports a PDF report).
 - [ ] **Phase 9** — autonomous loop (scope: drive the CLIs headlessly via `bridgeSend()`,
       reusing `buildDigest()` for per-iteration context).
+- [ ] **Phase 9.1** — UI revision (scope: after all functionality exists, revise the UI
+      based on real usage — surgical, usage-driven changes, not a from-scratch redesign).
 - [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name).
 
 ## Locked design decisions
@@ -69,6 +76,10 @@ electron-vite in strict numbered phases.
   and must say so.
 - **Repo digest is opt-in and hard-capped**, prepended only to what the provider sees, never
   persisted into history and never treated as instructions.
+- **Test page: the source repo is read-only; all generated code runs in an ephemeral temp
+  sandbox** with a timeout + process-tree kill. Never write back to the source, never run as
+  admin/sudo. Keep the safety core (`testlab.ts`) electron-free so it stays headlessly
+  verifiable (`node --experimental-strip-types scripts/verify-testlab.ts`).
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

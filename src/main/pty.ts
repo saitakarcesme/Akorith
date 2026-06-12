@@ -88,7 +88,7 @@ class PtyManager {
    *
    * TODO(phase 4): the chat→terminal prompt bridge calls this with the
    *                planner's prompt text.
-   * TODO(phase 8): the autonomous loop calls this to drive the CLIs.
+   * TODO(phase 9): the autonomous loop calls this to drive the CLIs.
    */
   write(id: string, data: string): void {
     this.sessions.get(id)?.pty.write(data)

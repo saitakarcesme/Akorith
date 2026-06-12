@@ -113,6 +113,29 @@ const digest = Object.freeze({
   setWorkingDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('digest:setWorkingDir', dir)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest })
+interface TestOutputPayload {
+  runId: string
+  chunk: string
+}
+
+// Phase 7 test page: generate-and-run is orchestrated by the renderer; the
+// sandboxed execution + metrics live in main behind these channels.
+const test = Object.freeze({
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('test:getSettings'),
+  setSourceRepo: (dir: string): Promise<unknown> => ipcRenderer.invoke('test:setSourceRepo', dir),
+  detect: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:detect', { sourceRepo }),
+  run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:run', args),
+  stop: (runId: string): void => {
+    ipcRenderer.send('test:stop', { runId })
+  },
+  listRuns: (limit?: number): Promise<unknown> => ipcRenderer.invoke('test:listRuns', { limit }),
+  onOutput: (listener: (payload: { runId: string; chunk: string }) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: TestOutputPayload): void => listener(payload)
+    ipcRenderer.on('test:output', handler)
+    return () => ipcRenderer.removeListener('test:output', handler)
+  }
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, usage, router, digest, test })
 
 contextBridge.exposeInMainWorld('api', api)

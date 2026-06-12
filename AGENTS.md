@@ -4,8 +4,14 @@ Loopex is an Electron + TypeScript + React desktop workspace that orchestrates c
 agents **without any API keys**: a planner chat on the right talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 center hosts two real PTY terminals; the left sidebar will hold session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 6 (macOS PTY
-fix + suggest-only router + opt-in repo digest).
+with electron-vite, in strict numbered phases — currently through Phase 7 (isolated
+local-model test page).
+
+**Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
+bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
+**7 isolated test page** — all done. Pending: 8 evaluate/ISAScore/PDF (reads `test_runs`) ·
+9 autonomous loop · **9.1 UI revision** (usage-driven, surgical — not a redesign) ·
+10 packaging + `productName`.
 
 ## Prerequisites
 
@@ -221,6 +227,50 @@ yields just a filesystem tree and a clear "not a git repository" note instead of
 It is prepended as a delimited `## Repo context` block labelled context, not instructions.
 Config: `digest.enabled`, `digest.workingDir` (default the app cwd), `digest.maxDiffBytes`,
 `digest.maxTotalBytes`, `digest.treeDepth`. `// TODO(phase 9):` the loop reuses `buildDigest()`.
+
+### Test page — isolated local-model test lab (Phase 7)
+
+A **separate route** (sidebar nav: Workspace / Dashboard / **Test**; Workspace stays default).
+Simple layout: one chat (left) + one read-only output terminal (right). A local model writes
+tests for code in a repo the user picks, the tests run automatically in a **safe isolated
+sandbox**, and objective metrics are collected. Comparing how well local models write tests is
+a first-class use. Phase 7 ends at "tests ran, here are the metrics," persisted for Phase 8.
+
+- **Frameworks**: Python (`pytest`) and JS/TS (`jest`/`vitest`, or the package.json `test`
+  script). Auto-detected from the repo (pyproject/pytest.ini/requirements → pytest;
+  vitest/jest dep or `test` script → that runner). The user can override the runner/command;
+  if nothing is detected they must supply the test command.
+- **Source = read-only, execution = ephemeral sandbox (the safety contract).** The source
+  repo is **never written to** from this page. Each run creates a fresh dir under
+  `os.tmpdir()/loopex-testlab/<runId>` and **snapshots** the source in (git repos: copy the
+  `git ls-files` + untracked-not-ignored set — current working state, `.gitignore` respected,
+  heavy dirs excluded; non-git: recursive copy minus a denylist). Generated tests + auto-run
+  all happen in the sandbox.
+- **Execution = a bounded child process** (not a PTY), cwd = sandbox, with a configurable
+  **timeout** and a whole-**process-tree kill** (detached process group → `kill(-pid)` on
+  POSIX, `taskkill /T /F` on Windows). A manual **Stop** aborts a run the same way. Generated
+  file paths are confined to the sandbox (no absolute/`..`). Sandboxes are pruned to
+  `keepLastN`. **Residual risk:** generated code runs automatically — isolation (temp dir +
+  timeout + no-write-to-source + tree-kill) is what makes that acceptable; **network is not
+  sandboxed**, and nothing runs as admin/sudo.
+- **Dependencies**: configurable `installDeps` (default ON when a lockfile is present) runs
+  e.g. `npm ci` / `pip install -r` in the sandbox first; an install failure is its own
+  `install-failed` status, never reported as a misleading test failure.
+- **Metrics per run**: framework, pass/fail/error counts, total + per-test duration, exit
+  code, tokens used to generate (from `SendResult.usage`), model, attempts, sandbox path,
+  capped raw output. The test-page chat omits `sessionId`, so it writes **no `usage_event`**
+  (no dashboard pollution); tokens come from the send result.
+- **Multi-model comparison** (a mode, not the default): the same task runs against several
+  selected models in turn, each in its own fresh sandbox, metrics shown side by side.
+- **Persistence**: every run is written to the `test_runs` table (`id, ts, source_repo,
+  target_desc, provider_id, model, framework, passed, failed, errored, duration_ms, exit_code,
+  tokens, attempts, sandbox_path, raw_output [capped], status`) so runs survive restart.
+  `// TODO(phase 8):` evaluate reads `test_runs` and adds ISAScore — **no score is computed here.**
+- **Code layout**: `src/main/testlab.ts` is the electron-free safety core (detect / snapshot /
+  bounded run / parse / prune — headlessly verifiable); `src/main/testlab-ipc.ts` is the
+  electron wiring (sandbox lifecycle, streaming, persistence). Config: `test.sourceRepo`
+  (defaults to `digest.workingDir`), `test.installDeps`, `test.timeoutMs`, `test.keepLastN`,
+  `test.defaultProviderId`.
 
 ## Conventions
 

@@ -51,11 +51,33 @@ export interface DigestSettings {
   treeDepth: number
 }
 
+export interface TestLabSettings {
+  /** Source repo to test. Empty → fall back to digest.workingDir, then app cwd. */
+  sourceRepo?: string
+  /** Install deps in the sandbox before running (when a lockfile is present). */
+  installDeps: boolean
+  /** Per-phase (install, test) timeout; the whole process tree is killed on hit. */
+  timeoutMs: number
+  /** Ephemeral sandboxes to retain for debugging; older ones are pruned. */
+  keepLastN: number
+  /** Default provider for the test page's chat (a local model is the intent). */
+  defaultProviderId: string
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
   router?: Partial<RouterSettings>
   digest?: Partial<DigestSettings>
+  test?: Partial<TestLabSettings>
+}
+
+export const DEFAULT_TEST: TestLabSettings = {
+  sourceRepo: '',
+  installDeps: true,
+  timeoutMs: 120_000,
+  keepLastN: 3,
+  defaultProviderId: 'local'
 }
 
 export const DEFAULT_ROUTER: RouterSettings = {
@@ -84,7 +106,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   },
   bridge: { autoEnter: false },
   router: DEFAULT_ROUTER,
-  digest: DEFAULT_DIGEST
+  digest: DEFAULT_DIGEST,
+  test: DEFAULT_TEST
 }
 
 export function configPath(): string {
@@ -156,4 +179,27 @@ export function setDigestEnabled(enabled: boolean): DigestSettings {
 
 export function setDigestWorkingDir(workingDir: string): DigestSettings {
   return writeDigest({ workingDir })
+}
+
+// ---- test page settings (Phase 7) ----
+
+export function getTestSettings(): TestLabSettings {
+  const config = loadConfig()
+  const t = config.test ?? {}
+  // Source repo defaults to the Phase 6 digest repo when the user hasn't set one.
+  const sourceRepo = t.sourceRepo && t.sourceRepo.trim() ? t.sourceRepo : (config.digest?.workingDir ?? '')
+  return {
+    sourceRepo,
+    installDeps: t.installDeps ?? DEFAULT_TEST.installDeps,
+    timeoutMs: t.timeoutMs ?? DEFAULT_TEST.timeoutMs,
+    keepLastN: t.keepLastN ?? DEFAULT_TEST.keepLastN,
+    defaultProviderId: t.defaultProviderId ?? DEFAULT_TEST.defaultProviderId
+  }
+}
+
+export function setTestSourceRepo(sourceRepo: string): TestLabSettings {
+  const config = loadConfig()
+  config.test = { ...config.test, sourceRepo }
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return getTestSettings()
 }

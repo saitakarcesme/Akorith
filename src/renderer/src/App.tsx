@@ -3,8 +3,9 @@ import Sidebar from './components/Sidebar'
 import TerminalColumn from './components/TerminalColumn'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
+import TestPage from './components/TestPage'
 
-export type AppView = 'workspace' | 'dashboard'
+export type AppView = 'workspace' | 'dashboard' | 'test'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
 export interface HistorySelection {
@@ -46,6 +47,11 @@ export default function App(): JSX.Element {
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
         />
+      </div>
+      {/* The test page stays mounted while hidden so a streaming run is never
+          interrupted by navigating to the Workspace or Dashboard. */}
+      <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
+        <TestPage active={view === 'test'} />
       </div>
       {view === 'dashboard' && <Dashboard />}
     </div>

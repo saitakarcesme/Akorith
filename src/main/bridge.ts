@@ -27,7 +27,7 @@ export type BridgeSendResponse = { ok: true } | { ok: false; error: string }
  * Send text into a terminal exactly as if pasted there.
  *
  * Callable by the UI (via bridge:send IPC) and by non-human callers.
- * TODO(phase 8): the loop triggers this directly with generated prompts.
+ * TODO(phase 9): the loop triggers this directly with generated prompts.
  */
 export function bridgeSend({ text, targetTerminalId, autoEnter }: BridgeSendArgs): BridgeSendResponse {
   const label = TERMINAL_LABELS[targetTerminalId] ?? targetTerminalId

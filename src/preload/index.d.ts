@@ -198,6 +198,84 @@ export interface DigestApi {
   setWorkingDir(dir: string): Promise<DigestSettings>
 }
 
+// ---- test page (Phase 7) ----
+
+export interface TestSettings {
+  sourceRepo: string
+  installDeps: boolean
+  timeoutMs: number
+  keepLastN: number
+  defaultProviderId: string
+}
+
+export type TestFramework = 'pytest' | 'jest' | 'vitest' | 'npm-test' | 'unknown'
+
+export interface TestDetection {
+  framework: TestFramework
+  testCommand: string
+  installCommand: string
+  lockfile: string
+  suggestedTestPath: string
+  note?: string
+}
+
+export interface TestGeneratedFile {
+  path: string
+  content: string
+}
+
+export interface TestRunRequest {
+  runId: string
+  sourceRepo: string
+  targetDesc?: string
+  providerId?: string
+  model?: string
+  framework: string
+  testCommand: string
+  installCommand?: string
+  installDeps?: boolean
+  files: TestGeneratedFile[]
+  tokens?: number
+  attempts?: number
+  timeoutMs?: number
+}
+
+export interface TestRunRow {
+  id: string
+  ts: number
+  sourceRepo: string
+  targetDesc: string | null
+  providerId: string | null
+  model: string | null
+  framework: string | null
+  passed: number | null
+  failed: number | null
+  errored: number | null
+  durationMs: number | null
+  exitCode: number | null
+  tokens: number | null
+  attempts: number | null
+  sandboxPath: string | null
+  rawOutput: string | null
+  status: string | null
+}
+
+export type TestRunResponse = { ok: true; run: TestRunRow } | { ok: false; error: string }
+
+export interface TestApi {
+  getSettings(): Promise<TestSettings>
+  setSourceRepo(dir: string): Promise<TestSettings>
+  /** Auto-detect framework/test/install commands for the source repo. */
+  detect(sourceRepo: string): Promise<TestDetection | { error: string }>
+  /** Snapshot → (install) → run in a fresh ephemeral sandbox; persists the run. */
+  run(args: TestRunRequest): Promise<TestRunResponse>
+  /** Abort an in-flight run (kills the whole process tree). */
+  stop(runId: string): void
+  listRuns(limit?: number): Promise<TestRunRow[]>
+  /** Subscribe to live sandbox output. Returns an unsubscribe fn. */
+  onOutput(listener: (payload: { runId: string; chunk: string }) => void): () => void
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -206,6 +284,7 @@ export interface PreloadApi {
   usage: UsageApi
   router: RouterApi
   digest: DigestApi
+  test: TestApi
 }
 
 declare global {

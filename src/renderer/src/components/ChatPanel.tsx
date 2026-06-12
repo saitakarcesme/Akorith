@@ -174,7 +174,7 @@ export default function ChatPanel({ historySel, onHistoryChange, onActiveSession
 
   // The single renderer-side entry to the bridge. All three send modes (code
   // block, whole message, selection) call this; main funnels it into
-  // PtyManager.write(). TODO(phase 8): the loop reuses the same main-side path.
+  // PtyManager.write(). TODO(phase 9): the loop reuses the same main-side path.
   const sendToTerminal = async (text: string, sourceKey: string): Promise<void> => {
     if (autoEnter === null) return // settings not loaded yet
     const label = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget

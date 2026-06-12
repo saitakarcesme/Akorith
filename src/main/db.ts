@@ -55,6 +55,26 @@ export function initDb(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
     CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_events(provider_id, ts);
+    CREATE TABLE IF NOT EXISTS test_runs (
+      id           TEXT PRIMARY KEY,
+      ts           INTEGER NOT NULL,
+      source_repo  TEXT NOT NULL,
+      target_desc  TEXT,
+      provider_id  TEXT,
+      model        TEXT,
+      framework    TEXT,
+      passed       INTEGER,
+      failed       INTEGER,
+      errored      INTEGER,
+      duration_ms  INTEGER,
+      exit_code    INTEGER,
+      tokens       INTEGER,
+      attempts     INTEGER,
+      sandbox_path TEXT,
+      raw_output   TEXT,
+      status       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_test_runs_ts ON test_runs(ts);
   `)
 }
 
@@ -236,6 +256,107 @@ export function recentUsageByProvider(sinceMs: number): Record<string, RecentPro
     }
   }
   return out
+}
+
+// ---- test runs (Phase 7; TODO(phase 8): evaluate reads these + adds ISAScore) ----
+
+export interface TestRunRow {
+  id: string
+  ts: number
+  sourceRepo: string
+  targetDesc: string | null
+  providerId: string | null
+  model: string | null
+  framework: string | null
+  passed: number | null
+  failed: number | null
+  errored: number | null
+  durationMs: number | null
+  exitCode: number | null
+  tokens: number | null
+  attempts: number | null
+  sandboxPath: string | null
+  rawOutput: string | null
+  status: string | null
+}
+
+const RAW_OUTPUT_CAP = 60_000
+
+export function createTestRun(row: Omit<TestRunRow, 'id' | 'ts'> & { id?: string; ts?: number }): TestRunRow {
+  const full: TestRunRow = {
+    id: row.id ?? randomUUID(),
+    ts: row.ts ?? Date.now(),
+    sourceRepo: row.sourceRepo,
+    targetDesc: row.targetDesc ?? null,
+    providerId: row.providerId ?? null,
+    model: row.model ?? null,
+    framework: row.framework ?? null,
+    passed: row.passed ?? null,
+    failed: row.failed ?? null,
+    errored: row.errored ?? null,
+    durationMs: row.durationMs ?? null,
+    exitCode: row.exitCode ?? null,
+    tokens: row.tokens ?? null,
+    attempts: row.attempts ?? null,
+    sandboxPath: row.sandboxPath ?? null,
+    rawOutput: row.rawOutput != null ? row.rawOutput.slice(0, RAW_OUTPUT_CAP) : null,
+    status: row.status ?? null
+  }
+  must()
+    .prepare(
+      `INSERT INTO test_runs
+        (id, ts, source_repo, target_desc, provider_id, model, framework,
+         passed, failed, errored, duration_ms, exit_code, tokens, attempts,
+         sandbox_path, raw_output, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      full.id,
+      full.ts,
+      full.sourceRepo,
+      full.targetDesc,
+      full.providerId,
+      full.model,
+      full.framework,
+      full.passed,
+      full.failed,
+      full.errored,
+      full.durationMs,
+      full.exitCode,
+      full.tokens,
+      full.attempts,
+      full.sandboxPath,
+      full.rawOutput,
+      full.status
+    )
+  return full
+}
+
+export function listTestRuns(limit = 50): TestRunRow[] {
+  const lim = Math.min(Math.max(limit, 1), 500)
+  return (
+    must().prepare('SELECT * FROM test_runs ORDER BY ts DESC LIMIT ?').all(lim) as Record<string, unknown>[]
+  ).map(
+    (r): TestRunRow => ({
+      id: r.id as string,
+      ts: r.ts as number,
+      sourceRepo: r.source_repo as string,
+      targetDesc: (r.target_desc as string | null) ?? null,
+      providerId: (r.provider_id as string | null) ?? null,
+      model: (r.model as string | null) ?? null,
+      framework: (r.framework as string | null) ?? null,
+      passed: (r.passed as number | null) ?? null,
+      failed: (r.failed as number | null) ?? null,
+      errored: (r.errored as number | null) ?? null,
+      durationMs: (r.duration_ms as number | null) ?? null,
+      exitCode: (r.exit_code as number | null) ?? null,
+      tokens: (r.tokens as number | null) ?? null,
+      attempts: (r.attempts as number | null) ?? null,
+      sandboxPath: (r.sandbox_path as string | null) ?? null,
+      rawOutput: (r.raw_output as string | null) ?? null,
+      status: (r.status as string | null) ?? null
+    })
+  )
 }
 
 export interface DailyUsageRow {

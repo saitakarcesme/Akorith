@@ -86,6 +86,9 @@ export default function Sidebar({
         >
           Dashboard
         </button>
+        <button type="button" className={view === 'test' ? 'is-active' : ''} onClick={() => onNavigate('test')}>
+          Test
+        </button>
       </nav>
 
       {folderIds.map((providerId) => {

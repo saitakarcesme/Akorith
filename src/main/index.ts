@@ -5,6 +5,7 @@ import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
+import { registerTestIpc } from './testlab-ipc'
 import { closeDb, initDb, registerDbIpc } from './db'
 
 function createWindow(): void {
@@ -51,6 +52,7 @@ app.whenReady().then(() => {
   registerBridgeIpc()
   registerRouterIpc()
   registerDigestIpc()
+  registerTestIpc()
   createWindow()
 
   app.on('activate', () => {
