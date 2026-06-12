@@ -164,7 +164,11 @@ export default function TerminalColumn({
             <span>{activeProject!.name}</span>
             <em>{activeProject!.path}</em>
           </div>
-          <div className="terminal-slot" style={{ flexBasis: `${split}%` }}>
+          {/* Proportional grow (basis 0) so Olympus/Atlantis always divide the
+              available column height by the split ratio — equal (50/50) by
+              default, and honoring the user's drag — regardless of the fixed
+              project strip + resizer heights. */}
+          <div className="terminal-slot" style={{ flexGrow: split, flexBasis: 0 }}>
             <TerminalPane id="t2" title="Olympus" identity="olympus" cwd={activeProject!.path!} commandKind="codex" />
           </div>
           <div
@@ -173,7 +177,7 @@ export default function TerminalColumn({
             aria-orientation="horizontal"
             onPointerDown={startSplitResize}
           />
-          <div className="terminal-slot" style={{ flexBasis: `${100 - split}%` }}>
+          <div className="terminal-slot" style={{ flexGrow: 100 - split, flexBasis: 0 }}>
             <TerminalPane id="t1" title="Atlantis" identity="atlantis" cwd={activeProject!.path!} commandKind="claude" />
           </div>
         </>

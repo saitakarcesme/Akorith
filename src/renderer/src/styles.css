@@ -4,6 +4,11 @@
   --bg-raised: #191821;
   --bg-soft: #17161d;
   --bg-input: #0f0f15;
+  /* Center planning/chat surfaces sit a step above the dark base so the
+     thinking area reads lighter and more premium than the terminals. */
+  --bg-chat: #1a1922;
+  --bg-chat-bubble: #232230;
+  --bg-composer: #14131b;
   --border: #2a2834;
   --border-soft: rgba(255, 255, 255, 0.06);
   --text: #e6e1ea;
@@ -316,6 +321,208 @@ textarea:focus-visible {
 .sidebar-add:hover {
   color: var(--accent-strong);
   background: var(--accent-dim);
+}
+
+.sidebar-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- All-projects + popover menu ---------- */
+
+.sidebar-add-wrap {
+  position: relative;
+}
+
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.project-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 41;
+  min-width: 168px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+}
+
+.project-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-menu button:hover {
+  color: var(--text);
+  background: var(--accent-dim);
+}
+
+/* ---------- centered modal (Create Project) ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 6, 10, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  background: var(--bg-chat);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 720;
+  color: var(--text);
+}
+
+.modal-subtitle {
+  margin: -4px 0 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.modal-field input {
+  padding: 9px 11px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+
+.modal-field input:focus {
+  outline: none;
+  border-color: rgba(169, 150, 255, 0.48);
+}
+
+.modal-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-dir-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+
+.modal-dir-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--accent-strong);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.modal-dir-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modal-error {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(215, 130, 130, 0.12);
+  border-radius: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.modal-cancel {
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.modal-cancel:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.modal-confirm {
+  color: #15121f;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.modal-confirm:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .sidebar-item {
@@ -999,7 +1206,7 @@ textarea:focus-visible {
   min-width: 380px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
+  background: var(--bg-chat);
   border-right: 1px solid var(--border-soft);
 }
 
@@ -1547,7 +1754,7 @@ textarea:focus-visible {
 
 .chat-msg.assistant {
   align-self: flex-start;
-  background: var(--bg-raised);
+  background: var(--bg-chat-bubble);
   border: 1px solid var(--border-soft);
 }
 
@@ -1614,7 +1821,8 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px 14px;
-  border-top: 1px solid var(--border-soft);
+  background: var(--bg-composer);
+  border-top: 1px solid var(--border);
 }
 
 .chat-input {

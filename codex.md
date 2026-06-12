@@ -80,8 +80,27 @@ electron-vite in strict numbered phases.
       PTY session manager, with shell fallback when a CLI is missing. Recent chats are compacted,
       Macro loop collapse no longer hides normal chat, and the composer shows subtle
       provider/model/context/target info.
-- [ ] **Phase 10** — packaging + `productName` fix (scope: distributable build, app name,
-      full package identity cleanup, native `.icns` / `.ico` assets).
+- [x] **Phase 9.1.2** — workspace polish + app identity. Terminal split opens equal (50/50) by
+      `flex-grow` (still drag-resizable, still persisted); center chat surface lifted via new
+      `--bg-chat` / `--bg-chat-bubble` / `--bg-composer` tokens (terminals stay darker); the
+      sidebar *All projects* `+` opens an **Open Project / Create Project** menu; Create Project
+      uses a centered modal with project name + parent-folder picker (new `projects:pickDirectory`
+      IPC, extended `projects:createFolder` accepting a pre-picked `parentPath`); `app.setName`,
+      window title, and a raster `assets/akorith-logo.png` dock/window icon replace the Electron
+      identity in dev/runtime. Native `.icns`/`.ico` + `package.json` rename stay Phase 10.
+- [ ] **Phase 10** — packaging + full app identity. Scope/checklist:
+      - electron-builder installable builds: macOS `.app`/`.dmg` and Windows `.exe`/installer,
+        preserving the node-pty (never rebuild) + better-sqlite3 (`electron-rebuild -f -o
+        better-sqlite3`) + macOS `fix-spawn-helper` native-module rules in the packaged flow.
+      - Full rename of internal `loopex`/`letsgetit` → Akorith where safe (`package.json`
+        `name`/`productName`/`description`; decide on userData / `loopex.config.json` / `loopex.db`
+        migration vs. leave-as-is).
+      - Native `.icns` (macOS) + `.ico` (Windows) generated from `assets/akorith-logo.png`
+        (1254×1254 source), wired into the builder.
+      - Final dock / taskbar / Start-menu identity verified on macOS + Windows.
+      - README for humans (install + connect CLIs) + current AGENTS.md; explicit "Akorith stores
+        no credentials / no API keys" note; one-sentence install/connect prompt.
+      - Release checklist + smoke-test checklist run against a packaged build.
 
 ## Locked design decisions
 
@@ -124,6 +143,14 @@ electron-vite in strict numbered phases.
   programmatic write path.
 - **No autopilot in Phase 9.1.1.** Akorith does not auto-parse terminal output, auto-answer
   permission prompts, or type `yes`, `1`, or similar into terminals.
+- **Project create/open is main-process only (Phase 9.1.2).** The sidebar `+` menu and the
+  Create Project modal call validated preload APIs (`projects:openFolder`,
+  `projects:pickDirectory`, `projects:createFolder`); the renderer never touches the filesystem,
+  name validation + path-traversal guards live in main, and selecting a project with a valid path
+  starts Olympus/Atlantis through the existing PTY lifecycle — not a new write path.
+- **App identity in 9.1.2 is dev/runtime only.** `app.setName('Akorith')` + `assets/akorith-logo.png`
+  for the dock/window icon; native `.icns`/`.ico` and the `package.json`/userData rename are
+  deliberately deferred to Phase 10.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

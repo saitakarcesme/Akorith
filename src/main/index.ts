@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, shell } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
@@ -11,9 +11,33 @@ import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc } from './macro'
 import { closeDb, initDb, registerDbIpc } from './db'
 
+// Visible app identity is Akorith. Native packaging identity (.icns/.ico,
+// productName) is still Phase 10; this only fixes the dev/runtime name + icon.
+app.setName('Akorith')
+
+/**
+ * Prefer the raster Akorith logo (works with nativeImage for the dock /
+ * window icon); fall back to the vector mark. Returns the first asset present.
+ */
 function resolveAppIcon(): string | undefined {
-  const iconPath = join(app.getAppPath(), 'assets', 'akorith-icon.svg')
-  return existsSync(iconPath) ? iconPath : undefined
+  const base = app.getAppPath()
+  for (const rel of [
+    ['assets', 'akorith-logo.png'],
+    ['assets', 'akorith-icon.svg']
+  ]) {
+    const iconPath = join(base, ...rel)
+    if (existsSync(iconPath)) return iconPath
+  }
+  return undefined
+}
+
+/** macOS dock icon — needs a raster image; SVG yields an empty nativeImage. */
+function applyDockIcon(): void {
+  if (process.platform !== 'darwin' || !app.dock) return
+  const pngPath = join(app.getAppPath(), 'assets', 'akorith-logo.png')
+  if (!existsSync(pngPath)) return
+  const image = nativeImage.createFromPath(pngPath)
+  if (!image.isEmpty()) app.dock.setIcon(image)
 }
 
 function createWindow(): void {
@@ -65,6 +89,7 @@ app.whenReady().then(() => {
   registerTestIpc()
   registerEvaluateIpc()
   registerMacroIpc()
+  applyDockIcon()
   createWindow()
 
   app.on('activate', () => {

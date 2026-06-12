@@ -6,15 +6,15 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 9.1.1 (project-first
-workspace flow).
+with electron-vite, in strict numbered phases — currently through Phase 9.1.2 (workspace
+polish and app identity fix).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
-9.1 Akorith UI polish + workspace projects · **9.1.1 project-first workspace flow** — all done.
-Pending: 10 packaging +
-`productName` / full package identity cleanup.
+9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
+**9.1.2 workspace polish + app identity** — all done. Pending: 10 packaging +
+`productName` / full native package identity cleanup.
 
 ## Prerequisites
 
@@ -406,6 +406,62 @@ Phase 9.1.1 also compacts Recent chats in the sidebar, adds clearer vertical sep
 cards, and adds a subtle composer info row showing selected provider/model, last available usage
 from a completed assistant response, repo-context state, and target executor. It does not add
 autopilot, terminal-output parsing, or automatic permission prompt approval.
+
+### Workspace polish + app identity (Phase 9.1.2)
+
+Phase 9.1.2 is a focused polish/fix pass after 9.1.1; it does not start packaging.
+
+- **Equal terminal split by default.** The execution column's two panes now divide the available
+  height by `flex-grow` (Olympus = `split`, Atlantis = `100 - split`, `flex-basis: 0`) instead of
+  percentage `flex-basis`, so Olympus and Atlantis open ~50/50 regardless of the fixed project
+  strip + resizer heights. The split still persists to `akorith.terminalSplit` (default 50) and
+  drag-resize is unchanged; xterm panes keep fitting through their existing resize observers.
+- **Lighter center chat surface.** New theme tokens lift the planning area above the dark base
+  while terminals stay darkest, preserving hierarchy and the muted-purple direction (no light
+  theme, no neon): `--bg-chat` (#1a1922, the `.chat-panel` surface), `--bg-chat-bubble` (#232230,
+  assistant bubbles), `--bg-composer` (#14131b, the composer tray). Background `--bg` (#0b0b10)
+  remains the terminal column so the execution area reads darker than the thinking area.
+- **Sidebar "All projects" + menu.** The `+` next to *All projects* opens a small popover menu —
+  **Open Project** and **Create Project** — instead of the old inline metadata form. Open Project
+  reuses the validated main-process `projects:openFolder` dialog; both actions persist/select the
+  project and trigger the existing project-first terminal startup via `activeProject`.
+- **Create Project modal.** A centered `.modal-overlay` dialog collects a project name and a
+  parent folder. The parent is chosen through a new main-process `projects:pickDirectory` dialog
+  (validated, returns the path to display); **Create Project** then calls the extended
+  `projects:createFolder` with that `parentPath` (the picker is skipped when a parent is supplied).
+  Name validation (`SAFE_PROJECT_DIR_NAME`, no traversal/reserved chars) and main-process-only
+  filesystem work are unchanged; the renderer never touches the filesystem directly. On success
+  the project is created, persisted, activated, and Olympus/Atlantis start as Codex/Claude in it.
+- **Akorith app identity (dev/runtime).** `app.setName('Akorith')`, BrowserWindow `title: 'Akorith'`
+  (already set), and a raster logo `assets/akorith-logo.png` used for the BrowserWindow `icon` and
+  the macOS dock via `app.dock.setIcon(nativeImage…)` (SVG can't be a nativeImage, so the PNG is
+  required for the dock). `resolveAppIcon()` prefers the PNG, falling back to `akorith-icon.svg`.
+  Native `.icns`/`.ico` bundle identity and `package.json` `name`/`productName` remain Phase 10.
+- **Layout preserved.** Sidebar | center planning chat | right execution terminals is unchanged;
+  Olympus = Codex, Atlantis = Claude; collapsing the Macro loop still leaves chat + composer
+  visible. No second PTY write path, no autopilot, no auto-approval of permission prompts.
+
+### Phase 10 — packaging + full app identity (planned, NOT yet implemented)
+
+Phase 10 turns Akorith into a distributable, fully-branded app. Checklist:
+
+- [ ] **electron-builder** (or equivalent) installable builds — macOS `.app`/`.dmg` and Windows
+      `.exe`/installer; wire `build`/config without breaking the node-pty (N-API, never rebuild)
+      and better-sqlite3 (`electron-rebuild -f -o better-sqlite3`) native-module rules, and keep
+      the macOS `fix-spawn-helper` step in the packaged flow.
+- [ ] **Full identity rename** from internal `loopex`/`letsgetit` to Akorith where safe:
+      `package.json` `name`/`productName`/`description`, and a decision on whether to migrate the
+      userData dir + `loopex.config.json` / `loopex.db` filenames (migration vs. leave-as-is).
+- [ ] **Native icon generation** — `.icns` (macOS) and `.ico` (Windows) from `assets/akorith-logo.png`
+      (1254×1254 source; downscale to the standard icon sizes), wired into the builder config.
+- [ ] **Final dock / taskbar / Start-menu identity** verified on macOS and Windows.
+- [ ] **README for humans** (install + connect-your-CLIs) and AI-facing **`AGENTS.md`** kept current.
+- [ ] **"Akorith stores no credentials / no API keys"** explanation in the README.
+- [ ] One-sentence **user install/connect prompt** (e.g. "Install + log in to `claude`/`codex`,
+      then open Akorith").
+- [ ] **Release checklist** (version bump, build all targets, sign/notarize decision, artifacts).
+- [ ] **Smoke-test checklist** (terminals spawn, providers detected, chat→bridge send, macro-loop
+      proposal, test-lab run, evaluate/PDF) run against a packaged build.
 
 ### Test page — isolated local-model test lab (Phase 7)
 

@@ -102,6 +102,7 @@ const projects = Object.freeze({
   openFolder: (projectId?: string | null): Promise<unknown> =>
     ipcRenderer.invoke('projects:openFolder', { projectId }),
   createFolder: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:createFolder', args),
+  pickDirectory: (): Promise<unknown> => ipcRenderer.invoke('projects:pickDirectory'),
   update: (projectId: string, patch: unknown): Promise<unknown> =>
     ipcRenderer.invoke('projects:update', { projectId, patch })
 })

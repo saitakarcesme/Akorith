@@ -1104,18 +1104,44 @@ async function openProjectFolder(projectId?: string | null): Promise<ProjectDial
   }
 }
 
-async function createProjectFolder(name: string, projectId?: string | null): Promise<ProjectDialogResponse> {
-  const safeName = name.trim().slice(0, MAX_PROJECT_NAME)
-  if (!safeName || safeName === '.' || safeName === '..' || !SAFE_PROJECT_DIR_NAME.test(safeName)) {
-    return { ok: false, error: 'project name cannot contain path separators or reserved characters' }
-  }
+type DirPickResponse = { ok: true; path: string } | { ok: false; cancelled?: boolean; error: string }
+
+/** Standalone parent-folder picker so the Create Project modal can show the
+ *  chosen directory before committing. Main-process only; validates the path. */
+async function pickProjectDirectory(): Promise<DirPickResponse> {
   const result = await dialog.showOpenDialog({
     title: 'Choose Parent Folder',
     properties: ['openDirectory', 'createDirectory']
   })
   if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true, error: 'cancelled' }
+  const path = cleanProjectPath(result.filePaths[0])
+  if (!path) return { ok: false, error: 'selected folder is not a valid directory' }
+  return { ok: true, path }
+}
+
+async function createProjectFolder(
+  name: string,
+  projectId?: string | null,
+  parentPath?: string | null
+): Promise<ProjectDialogResponse> {
+  const safeName = name.trim().slice(0, MAX_PROJECT_NAME)
+  if (!safeName || safeName === '.' || safeName === '..' || !SAFE_PROJECT_DIR_NAME.test(safeName)) {
+    return { ok: false, error: 'project name cannot contain path separators or reserved characters' }
+  }
+  // A pre-picked parent (from the modal) skips the dialog; otherwise prompt.
+  let selectedParent: string
+  if (typeof parentPath === 'string' && parentPath.trim().length > 0) {
+    selectedParent = parentPath
+  } else {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose Parent Folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true, error: 'cancelled' }
+    selectedParent = result.filePaths[0]
+  }
   try {
-    const parent = cleanProjectPath(result.filePaths[0])
+    const parent = cleanProjectPath(selectedParent)
     if (!parent) return { ok: false, error: 'selected parent is not a valid directory' }
     const target = resolve(parent, safeName)
     const parentWithSep = parent.endsWith(sep) ? parent : `${parent}${sep}`
@@ -1214,16 +1240,26 @@ export function registerDbIpc(): void {
     return openProjectFolder(args?.projectId ?? null)
   })
 
-  ipcMain.handle('projects:createFolder', (_event, args: { name: string; projectId?: string | null }) => {
-    if (
-      typeof args?.name !== 'string' ||
-      args.name.length > MAX_PROJECT_NAME ||
-      (args.projectId !== undefined && args.projectId !== null && (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId)))
-    ) {
-      return { ok: false, error: 'invalid projects:createFolder payload' } satisfies ProjectDialogResponse
+  ipcMain.handle('projects:pickDirectory', () => pickProjectDirectory())
+
+  ipcMain.handle(
+    'projects:createFolder',
+    (_event, args: { name: string; projectId?: string | null; parentPath?: string | null }) => {
+      if (
+        typeof args?.name !== 'string' ||
+        args.name.length > MAX_PROJECT_NAME ||
+        (args.projectId !== undefined &&
+          args.projectId !== null &&
+          (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId))) ||
+        (args.parentPath !== undefined &&
+          args.parentPath !== null &&
+          (typeof args.parentPath !== 'string' || args.parentPath.length > MAX_PROJECT_PATH))
+      ) {
+        return { ok: false, error: 'invalid projects:createFolder payload' } satisfies ProjectDialogResponse
+      }
+      return createProjectFolder(args.name, args.projectId ?? null, args.parentPath ?? null)
     }
-    return createProjectFolder(args.name, args.projectId ?? null)
-  })
+  )
 
   ipcMain.handle(
     'projects:create',

@@ -161,7 +161,11 @@ export interface ProjectsApi {
   createFolder(args: {
     name: string
     projectId?: string | null
+    /** When set (from the Create Project modal) the native parent picker is skipped. */
+    parentPath?: string | null
   }): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
+  /** Pick a parent directory for the Create Project modal (main-process dialog). */
+  pickDirectory(): Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error: string }>
   update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
 }
 

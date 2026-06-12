@@ -90,9 +90,12 @@ export default function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [projectFormOpen, setProjectFormOpen] = useState(false)
-  const [projectName, setProjectName] = useState('')
-  const [projectPath, setProjectPath] = useState('')
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newParent, setNewParent] = useState<string | null>(null)
+  const [projectBusy, setProjectBusy] = useState<'open' | 'create' | null>(null)
+  const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
 
@@ -142,21 +145,66 @@ export default function Sidebar({
     setProjects(list)
   }
 
-  const createProject = async (): Promise<void> => {
-    const name = projectName.trim()
-    if (!name) return
-    const created = await window.api.projects.create({
-      name,
-      path: projectPath.trim() || null,
-      color: null,
-      icon: 'folder'
-    })
-    setProjectName('')
-    setProjectPath('')
-    setProjectFormOpen(false)
-    await refreshProjects()
-    onProjectsChange()
-    onSelectProject(created)
+  // Open Project — reuses the same validated main-process folder dialog as the
+  // terminal onboarding flow; persists/selects the project and starts its agents.
+  const openExistingProject = async (): Promise<void> => {
+    setProjectMenuOpen(false)
+    setProjectBusy('open')
+    setProjectError(null)
+    try {
+      const res = await window.api.projects.openFolder(null)
+      if (res.ok) {
+        await refreshProjects()
+        onProjectsChange()
+        onSelectProject(res.project)
+      } else if (!res.cancelled) {
+        setProjectError(res.error)
+      }
+    } finally {
+      setProjectBusy(null)
+    }
+  }
+
+  const beginCreateProject = (): void => {
+    setProjectMenuOpen(false)
+    setNewName('')
+    setNewParent(null)
+    setProjectError(null)
+    setCreateOpen(true)
+  }
+
+  const pickParentDir = async (): Promise<void> => {
+    setProjectError(null)
+    const res = await window.api.projects.pickDirectory()
+    if (res.ok) setNewParent(res.path)
+    else if (!res.cancelled) setProjectError(res.error)
+  }
+
+  const submitCreateProject = async (): Promise<void> => {
+    const name = newName.trim()
+    if (!name) {
+      setProjectError('Enter a project name.')
+      return
+    }
+    if (!newParent) {
+      setProjectError('Choose a parent folder.')
+      return
+    }
+    setProjectBusy('create')
+    setProjectError(null)
+    try {
+      const res = await window.api.projects.createFolder({ name, parentPath: newParent })
+      if (res.ok) {
+        setCreateOpen(false)
+        await refreshProjects()
+        onProjectsChange()
+        onSelectProject(res.project)
+      } else if (!res.cancelled) {
+        setProjectError(res.error)
+      }
+    } finally {
+      setProjectBusy(null)
+    }
   }
 
   const commitRename = async (sessionId: string): Promise<void> => {
@@ -264,46 +312,37 @@ export default function Sidebar({
                 <FolderIcon size={15} />
                 All projects
               </button>
-              <button
-                type="button"
-                className="sidebar-add"
-                title="New project"
-                onClick={() => setProjectFormOpen((value) => !value)}
-              >
-                <PlusIcon size={14} />
-              </button>
-            </div>
-            {projectFormOpen && (
-              <div className="project-form">
-                <input
-                  value={projectName}
-                  placeholder="Project name"
-                  onChange={(event) => setProjectName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void createProject()
-                    if (event.key === 'Escape') setProjectFormOpen(false)
-                  }}
-                  autoFocus
-                />
-                <input
-                  value={projectPath}
-                  placeholder="Optional local path"
-                  onChange={(event) => setProjectPath(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void createProject()
-                    if (event.key === 'Escape') setProjectFormOpen(false)
-                  }}
-                />
-                <div className="project-form-actions">
-                  <button type="button" onClick={() => void createProject()} disabled={!projectName.trim()}>
-                    Create
-                  </button>
-                  <button type="button" onClick={() => setProjectFormOpen(false)}>
-                    Cancel
-                  </button>
-                </div>
+              <div className="sidebar-add-wrap">
+                <button
+                  type="button"
+                  className="sidebar-add"
+                  title="Add project"
+                  aria-haspopup="menu"
+                  aria-expanded={projectMenuOpen}
+                  disabled={projectBusy !== null}
+                  onClick={() => setProjectMenuOpen((value) => !value)}
+                >
+                  <PlusIcon size={14} />
+                </button>
+                {projectMenuOpen && (
+                  <>
+                    <div className="popover-backdrop" onClick={() => setProjectMenuOpen(false)} />
+                    <div className="project-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => void openExistingProject()}>
+                        <FolderIcon size={14} />
+                        <span>Open Project</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={beginCreateProject}>
+                        <PlusIcon size={14} />
+                        <span>Create Project</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+            </div>
+            {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
+            {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
             <div className="project-list">
               {projects.length === 0 ? (
                 <div className="sidebar-item is-empty">No project folders yet</div>
@@ -488,6 +527,56 @@ export default function Sidebar({
           {!sidebarCollapsed && <SettingsIcon size={16} />}
         </button>
       </div>
+
+      {createOpen && (
+        <div className="modal-overlay" onClick={() => projectBusy === null && setCreateOpen(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Create project" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Create project</div>
+            <p className="modal-subtitle">
+              Akorith creates the folder, then starts Olympus as Codex and Atlantis as Claude inside it.
+            </p>
+            <label className="modal-field">
+              <span>Project name</span>
+              <input
+                value={newName}
+                placeholder="my-project"
+                autoFocus
+                onChange={(event) => setNewName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && newName.trim() && newParent) void submitCreateProject()
+                  if (event.key === 'Escape' && projectBusy === null) setCreateOpen(false)
+                }}
+              />
+            </label>
+            <label className="modal-field">
+              <span>Parent folder</span>
+              <div className="modal-dir-row">
+                <span className="modal-dir-path" title={newParent ?? ''}>
+                  {newParent ?? 'No folder selected'}
+                </span>
+                <button type="button" className="modal-dir-btn" onClick={() => void pickParentDir()} disabled={projectBusy !== null}>
+                  <FolderIcon size={14} />
+                  Choose…
+                </button>
+              </div>
+            </label>
+            {projectError && <div className="modal-error">{projectError}</div>}
+            <div className="modal-actions">
+              <button type="button" className="modal-cancel" onClick={() => setCreateOpen(false)} disabled={projectBusy !== null}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-confirm"
+                onClick={() => void submitCreateProject()}
+                disabled={projectBusy !== null || !newName.trim() || !newParent}
+              >
+                {projectBusy === 'create' ? 'Creating…' : 'Create Project'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
