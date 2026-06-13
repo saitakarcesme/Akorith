@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 14.1 (chat workflow +
-Test Lab reliability fixes).
+with electron-vite, in strict numbered phases — currently through Phase 14.2 (conversation
+memory + context reliability).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -709,6 +709,54 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
 - **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
+
+### Conversation memory + context reliability (Phase 14.2)
+
+Phase 14.2 fixes a critical product bug: the chat UI showed history, but the model never
+received it, so a visible session behaved as if it had no memory. Security invariants are
+unchanged (single `bridgeSend → PtyManager.write()` path, meta calls write no `usage_events`,
+contextIsolation/sandbox/frozen contextBridge, Workspace/General separation, per-project PTY
+reuse).
+
+- **Root cause.** `chat:send` (`providers/registry.ts`) sent only the current prompt to
+  `provider.send()`. Every provider is single-shot/stateless (`claude -p` over stdin, `codex`
+  CLI, Ollama single-message), so prior turns — though persisted per session in the DB — were
+  never read back into the request.
+- **The fix — assemble per-session context.** A new electron-free core `src/main/conversation.ts`
+  turns a session's stored messages into a bounded provider prompt. `chat:send` now loads the
+  session's prior messages (`getSessionMessages`, strictly `WHERE session_id = ?`) **before**
+  persisting the new one, then `renderProviderPrompt` frames them as an ongoing conversation
+  (role-tagged turns, new message last). Memory is keyed only by `session_id`, so there is no
+  cross-chat or cross-project leakage, and General vs Workspace sessions stay separate.
+- **Bounded context policy.** `selectContextWindow` keeps the recent turns verbatim, bounded by
+  count (`recentVerbatim = 24`) and chars (`maxChars = 48k`), always keeping the newest message.
+  Past that, older turns are compressed into a **cached session summary** via `sendMetaPrompt`
+  (a meta call — **no `usage_event`**), stored on `sessions.context_summary` /
+  `context_summary_count` and regenerated only when the older window grows. Recent turns are
+  always verbatim.
+- **New Chat / restore are context-safe.** New Chat opens a fresh `session_id` (no prior
+  memory). Restoring a Recent Chat reloads that session's messages and its real memory stats.
+  Switching projects restores that project's session.
+- **Memory indicator + reset control** under the composer: `Memory: N msgs` (+ `summarized K`,
+  + `Repo on` for Workspace), a tooltip explaining what the model sees, and a two-click
+  **Reset context** that clears ONLY the active session (`history:clearMessages`). Backed by the
+  read-only `chat:contextInfo` IPC (no model call).
+- **Agent summaries join session memory.** `agent:summarize` accepts the active `sessionId` and
+  persists the summary as an assistant message in that one session, so later follow-ups in the
+  same Workspace chat can reference what the agent did. Still a meta call (no `usage_event`).
+- **DB migrations.** Additive: `sessions.context_summary TEXT`, `sessions.context_summary_count
+  INTEGER NOT NULL DEFAULT 0`. New helpers: `getSessionMessages`, `getContextSummary`,
+  `setContextSummary`, `clearSessionMessages`. New IPC: `chat:contextInfo`,
+  `history:clearMessages`.
+- **Validation.** `scripts/verify-conversation-context.ts` unit-checks the assembly/bounded
+  logic; `scripts/memory-behavioral-check.ts` proves it end-to-end against the **real `claude`
+  CLI** (4/4: recalls a fact with memory; the no-memory baseline does not; a separate chat does
+  not leak; multi-turn recall works). See `docs/validation/conversation-memory-validation.md`.
+- **Known limitations.** Older-context summarization is model-generated and conservative
+  (recent turns always verbatim); the behavioral harness exercises the `claude` CLI (the
+  logged-in provider) though all providers share the same assembly; the indicator's token figure
+  is approximate; context is assembled as an in-prompt transcript (the uniform approach for
+  single-shot CLIs), not a provider-specific multi-message API.
 
 ### Chat workflow + Test Lab reliability (Phase 14.1)
 

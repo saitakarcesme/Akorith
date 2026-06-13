@@ -202,6 +202,23 @@ electron-vite in strict numbered phases.
       `docs/validation/testlab-10-run-validation.md` (12 real runs: 10 pass, 2 brittle→repaired,
       across pytest/vitest/jest). **PDF export unchanged.**
 
+- [x] **Phase 14.2** — conversation memory + context reliability. **Root cause:** `chat:send`
+      sent only the current prompt to `provider.send()`; prior session messages (persisted per
+      session) were never read back, so single-shot CLIs had no memory and the model claimed
+      "first message." **Fix:** new electron-free `src/main/conversation.ts` assembles the
+      session transcript; `chat:send` loads `getSessionMessages` (strictly `WHERE session_id = ?`)
+      before persisting the new turn and frames it as an ongoing conversation. **Bounded policy:**
+      recent turns verbatim (≤24 msgs / ≤48k chars, always keep newest); older turns compressed
+      into a cached `sessions.context_summary` via `sendMetaPrompt` (meta call, no usage_event),
+      regenerated only when the older window grows. **Indicator:** `chat:contextInfo` powers a
+      `Memory: N msgs · summarized K · Repo on` chip under the composer + a two-click **Reset
+      context** (`history:clearMessages`, current session only). **Agent summaries:**
+      `agent:summarize` takes the active `sessionId` and persists the summary into that session's
+      memory (still a meta call). **Separation:** memory is keyed only by `session_id` → no
+      cross-chat/cross-project leakage; New Chat = fresh session; restore reloads real memory.
+      **Validation:** `scripts/verify-conversation-context.ts` + `scripts/memory-behavioral-check.ts`
+      (4/4 against the real `claude` CLI) → `docs/validation/conversation-memory-validation.md`.
+
 ## Locked design decisions
 
 - **No API keys, ever** — subscriptions via CLIs, or local Ollama. Never fabricate costs;

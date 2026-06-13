@@ -77,6 +77,9 @@ const chat = Object.freeze({
     ipcRenderer.send('chat:cancel', { requestId })
   },
 
+  /** Phase 14.2: read-only memory/context stats for a session (no model call). */
+  contextInfo: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('chat:contextInfo', { sessionId }),
+
   onToken: (requestId: string, listener: (token: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, payload: ChatTokenPayload): void => {
       if (payload.requestId === requestId) listener(payload.token)
@@ -103,7 +106,9 @@ const history = Object.freeze({
     ipcRenderer.invoke('history:create', { providerId, title, projectId }),
   rename: (sessionId: string, title: string): Promise<unknown> =>
     ipcRenderer.invoke('history:rename', { sessionId, title }),
-  remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:delete', { sessionId })
+  remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:delete', { sessionId }),
+  /** Phase 14.2: reset context for ONE session (clears its messages + summary). */
+  clearMessages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:clearMessages', { sessionId })
 })
 
 const projects = Object.freeze({

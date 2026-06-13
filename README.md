@@ -38,6 +38,19 @@ Claude, ChatGPT/Codex, or Local models without selecting a project.
 - **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
 - The **provider/model switcher** is a labeled pill in the top bar of every chat.
 
+## Conversation memory
+
+Each chat is a real, continuous conversation: when you send a message, Akorith sends the
+model this session's previous turns, so it remembers what you said earlier in the same chat.
+A compact **memory indicator** under the text box shows how much is included (e.g.
+`Memory: 14 msgs`, plus `Repo on` in a Workspace, or `summarized` for very long chats), with
+a tooltip explaining what the model sees. Long chats are kept within a sensible window —
+recent turns are sent in full, and older ones are compressed into a short running summary so
+the chat still remembers without sending unbounded history. A **Reset context** button
+(two-click) clears the memory for the current chat only — it never touches your other chats.
+Memory is strictly per-chat: a new chat starts fresh, separate chats don't see each other's
+history, and each project workspace keeps its own conversation.
+
 ## Agent permission prompts & output summaries
 
 When Olympus/Codex or Atlantis/Claude pauses on a confirmation in its terminal (`proceed?`,

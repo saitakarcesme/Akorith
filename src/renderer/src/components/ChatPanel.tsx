@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatUsage, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import type { ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
@@ -131,6 +131,9 @@ export default function ChatPanel({
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  // Phase 14.2: live memory/context stats for the indicator near the composer.
+  const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null)
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   // Phase 14.1: only auto-scroll to the newest message when the user is already
   // near the bottom — never yank them away while they read older history.
@@ -195,15 +198,32 @@ export default function ChatPanel({
     localStorage.setItem('akorith.planningToolsCollapsed', String(planningCollapsed))
   }, [planningCollapsed])
 
+  // Read-only memory stats for the composer indicator (no model call). Each
+  // session is independent, so this only ever reflects the active session.
+  const refreshContextInfo = useCallback(async (sessionId: string | null): Promise<void> => {
+    if (!sessionId) {
+      setContextInfo(null)
+      return
+    }
+    try {
+      setContextInfo(await window.api.chat.contextInfo(sessionId))
+    } catch {
+      setContextInfo(null)
+    }
+  }, [])
+
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
     // A fresh session/thread always opens scrolled to the bottom.
     nearBottomRef.current = true
+    setConfirmingClear(false)
     if (historySel.sessionId === null) {
+      // New Chat / fresh thread: no old memory, truly empty session.
       setMessages([])
       setActiveSessionId(null)
       onActiveSession(null)
+      setContextInfo(null)
       if (historySel.providerId) setProviderId(historySel.providerId)
       return
     }
@@ -225,6 +245,8 @@ export default function ChatPanel({
       setActiveSessionId(data.session.id)
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
+      // Restore the REAL memory state, not just the UI transcript.
+      void refreshContextInfo(data.session.id)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historySel?.nonce, mode])
@@ -309,7 +331,10 @@ export default function ChatPanel({
         providerId: selected.id,
         model: model || undefined,
         goal: hasProject && activeProject ? `Work in ${activeProject.name}` : undefined,
-        lastPrompt: opts.lastPrompt
+        lastPrompt: opts.lastPrompt,
+        // Phase 14.2: fold the summary into THIS session's memory so later
+        // follow-ups in the same chat can reference what the agent did.
+        sessionId: activeSessionId ?? undefined
       })
       const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
       const source = `${label} / ${AGENT_ROLE[terminalId] ?? 'Agent'}`
@@ -326,6 +351,7 @@ export default function ChatPanel({
             summary: { source, needsAttention: res.summary.needsUserAttention || res.detection.detected }
           }
         ])
+        if (res.persisted) void refreshContextInfo(activeSessionId) // summary now in session memory
       } else if (!opts.auto) {
         showToast('error', `${source}: ${res.error}`)
       }
@@ -482,6 +508,7 @@ export default function ChatPanel({
       setMessages([])
       setActiveSessionId(null)
       onActiveSession(null)
+      setContextInfo(null)
     }
     setProviderId(suggestion.providerId)
     setModel(suggestion.model ?? '')
@@ -581,11 +608,34 @@ export default function ChatPanel({
       offToken()
       setBusyRequestId(null)
       onHistoryChange() // updated_at moved this session up the sidebar
+      void refreshContextInfo(sessionId) // memory indicator now includes this turn
     }
   }
 
   const cancel = (): void => {
     if (busyRequestId) window.api.chat.cancel(busyRequestId)
+  }
+
+  // Reset context for the ACTIVE session only (clears its messages + summary).
+  // Two-click confirm so it isn't destructive by accident; never touches other chats.
+  const clearContext = async (): Promise<void> => {
+    if (!activeSessionId || busyRequestId) return
+    if (!confirmingClear) {
+      setConfirmingClear(true)
+      setTimeout(() => setConfirmingClear(false), 3000)
+      return
+    }
+    setConfirmingClear(false)
+    try {
+      await window.api.history.clearMessages(activeSessionId)
+      setMessages([])
+      lastSummarySig.current = null
+      await refreshContextInfo(activeSessionId)
+      onHistoryChange()
+      showToast('ok', 'Context reset for this chat')
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : String(err))
+    }
   }
 
   const canSend = Boolean(draft.trim()) && !busyRequestId && Boolean(selected?.available.ok)
@@ -617,6 +667,44 @@ export default function ChatPanel({
 
   const hasConversation = messages.length > 0
   const summary = agentSummary(agentStatus)
+
+  // Phase 14.2 memory indicator + reset control, shown near the composer so it is
+  // obvious the model receives this session's prior turns (a trust surface).
+  const ctxCount = contextInfo?.totalMessages ?? 0
+  const memoryLabel = ((): string => {
+    if (ctxCount > 0) {
+      const bits = [`Memory: ${ctxCount} msg${ctxCount === 1 ? '' : 's'}`]
+      if (contextInfo?.hasSummary) bits.push(`summarized ${contextInfo.summarizedCount}`)
+      if (hasProject && digestEnabled) bits.push('Repo on')
+      return bits.join(' · ')
+    }
+    return hasProject ? 'Session memory on' : 'New chat — memory on'
+  })()
+  const memoryTooltip =
+    contextInfo && contextInfo.totalMessages > 0
+      ? `This chat remembers its previous messages. ${contextInfo.includedVerbatim} recent message(s) are sent in full` +
+        (contextInfo.hasSummary ? `, and ${contextInfo.summarizedCount} older message(s) are compressed into a summary` : '') +
+        ` (~${contextInfo.approxTokens} tokens of context).`
+      : 'The model will see this session’s previous messages as you continue the conversation.'
+  const memoryBar = (
+    <div className="context-bar">
+      <span className="context-chip" title={memoryTooltip}>
+        <span className="context-dot" />
+        {memoryLabel}
+      </span>
+      {activeSessionId && hasConversation && (
+        <button
+          type="button"
+          className={`context-clear ${confirmingClear ? 'is-confirm' : ''}`}
+          onClick={() => void clearContext()}
+          disabled={Boolean(busyRequestId)}
+          title="Clear this chat's memory (only this session). Click again to confirm."
+        >
+          {confirmingClear ? 'Reset context?' : 'Reset context'}
+        </button>
+      )}
+    </div>
+  )
 
   // The composer is the central work control, reused in the empty-state hero and
   // (when a conversation exists) docked at the bottom. Macro-loop mode/status live
@@ -790,6 +878,7 @@ export default function ChatPanel({
           )}
         </div>
       </div>
+      {memoryBar}
       <div className="composer-info">{composerInfo.join(' · ')}</div>
     </div>
   )
@@ -824,6 +913,7 @@ export default function ChatPanel({
                   setMessages([])
                   setActiveSessionId(null)
                   onActiveSession(null)
+                  setContextInfo(null)
                 }
                 setProviderId(next)
               }}

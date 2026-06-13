@@ -7,7 +7,22 @@ import { isAbsolute, join } from 'path'
 import { createRequire } from 'module'
 import { loadConfig, getDigestSettings } from '../config'
 import { buildDigest } from '../digest'
-import { addMessage, recordUsageEvent, sessionExists } from '../db'
+import {
+  addMessage,
+  getContextSummary,
+  getSessionMessages,
+  recordUsageEvent,
+  sessionExists,
+  setContextSummary
+} from '../db'
+import {
+  buildOlderSummaryPrompt,
+  describeContext,
+  DEFAULT_CONTEXT_POLICY,
+  renderProviderPrompt,
+  selectContextWindow,
+  type ConvMessage
+} from '../conversation'
 import type {
   Provider,
   ProviderAvailability,
@@ -123,6 +138,44 @@ type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: s
 
 const activeRequests = new Map<string, AbortController>()
 
+/** Convert stored rows to the pure conversation shape. */
+function toConv(messages: { role: 'user' | 'assistant'; content: string }[]): ConvMessage[] {
+  return messages.map((m) => ({ role: m.role, content: m.content }))
+}
+
+/**
+ * Ensure the session has a cached summary covering the current older (non-verbatim)
+ * window, regenerating only when the older set grew. Uses a META call
+ * (sendMetaPrompt → NO usage_event). Returns the summary text to fold into the
+ * prompt, or null when no summary is needed / generation failed (recent turns
+ * still carry the conversation).
+ */
+async function ensureOlderSummary(
+  sessionId: string,
+  prior: ConvMessage[],
+  providerId: string,
+  model: string | undefined,
+  signal: AbortSignal
+): Promise<string | null> {
+  const window = selectContextWindow(prior, DEFAULT_CONTEXT_POLICY)
+  if (window.older.length === 0) return null // everything fits verbatim
+  const cached = getContextSummary(sessionId)
+  // Reuse the cached summary while it still covers the whole older window.
+  if (cached.summary && cached.count >= window.older.length) return cached.summary
+  try {
+    const prompt = buildOlderSummaryPrompt(window.older, cached.summary)
+    const res = await sendMetaPrompt(providerId, model, prompt, signal)
+    const summary = res.text.trim()
+    if (summary) {
+      setContextSummary(sessionId, summary, window.older.length)
+      return summary
+    }
+  } catch (err) {
+    console.error('[registry] older-context summary failed — using recent turns only:', err)
+  }
+  return cached.summary // fall back to a stale summary if we have one
+}
+
 export function registerChatIpc(): void {
   ipcMain.handle('chat:providers', () => describeProviders())
 
@@ -151,7 +204,19 @@ export function registerChatIpc(): void {
     // usage_event can never be skipped by a UI path. DB trouble must not block
     // the chat itself.
     const sessionId = args.sessionId && sessionExists(args.sessionId) ? args.sessionId : undefined
+
+    // Phase 14.2 conversation memory: load the session's PRIOR messages BEFORE
+    // persisting the new one, so the provider actually receives the conversation
+    // (the visible chat truly remembers prior turns). Strictly per-session — no
+    // cross-chat / cross-project leakage is possible since only this session's
+    // rows are read.
+    let prior: ConvMessage[] = []
     if (sessionId) {
+      try {
+        prior = toConv(getSessionMessages(sessionId))
+      } catch (err) {
+        console.error('[registry] failed to load session context:', err)
+      }
       try {
         addMessage(sessionId, 'user', args.prompt, args.providerId, args.model)
       } catch (err) {
@@ -159,23 +224,31 @@ export function registerChatIpc(): void {
       }
     }
 
-    // Opt-in repo context (Phase 6): prepend a bounded digest to what the
-    // PROVIDER sees — the stored user message and the usage event stay the
-    // clean typed prompt. A digest failure never blocks the send.
-    let promptForProvider = args.prompt
-    try {
-      if (args.includeDigest !== false && getDigestSettings().enabled) {
-        const digest = await buildDigest()
-        if (digest) promptForProvider = `${digest}\n\n---\n\n${args.prompt}`
-      }
-    } catch (err) {
-      console.error('[registry] repo digest failed — sending without context:', err)
-    }
-
     const sender = event.sender
     const controller = new AbortController()
     activeRequests.set(args.requestId, controller)
     try {
+      // Opt-in repo context (Phase 6): a bounded digest the PROVIDER sees — the
+      // stored user message and the usage event stay the clean typed prompt. A
+      // digest failure never blocks the send.
+      let digest: string | null = null
+      try {
+        if (args.includeDigest !== false && getDigestSettings().enabled) {
+          digest = await buildDigest()
+        }
+      } catch (err) {
+        console.error('[registry] repo digest failed — sending without context:', err)
+      }
+
+      // If the session is long, compress the older turns into a cached summary
+      // (a meta call — no usage_event); recent turns are sent verbatim.
+      let summary: string | null = null
+      if (sessionId && prior.length > 0) {
+        summary = await ensureOlderSummary(sessionId, prior, args.providerId, args.model, controller.signal)
+      }
+
+      const built = renderProviderPrompt({ priorMessages: prior, currentPrompt: args.prompt, summary, digest })
+      const promptForProvider = built.prompt
       const result = await provider.send(
         promptForProvider,
         { model: args.model, signal: controller.signal },
@@ -212,6 +285,17 @@ export function registerChatIpc(): void {
   ipcMain.on('chat:cancel', (_event, args: { requestId: string }) => {
     if (typeof args?.requestId !== 'string') return
     activeRequests.get(args.requestId)?.abort()
+  })
+
+  // Phase 14.2: read-only report of what conversation context WOULD be sent for a
+  // session — the data behind the composer's memory indicator. Calls no model.
+  ipcMain.handle('chat:contextInfo', (_event, args: { sessionId: string }) => {
+    if (typeof args?.sessionId !== 'string' || !/^[\w-]{1,64}$/.test(args.sessionId) || !sessionExists(args.sessionId)) {
+      return { totalMessages: 0, includedVerbatim: 0, summarizedCount: 0, hasSummary: false, approxChars: 0, approxTokens: 0 }
+    }
+    const prior = toConv(getSessionMessages(args.sessionId))
+    const covers = getContextSummary(args.sessionId).count
+    return describeContext(prior, covers)
   })
 
   // Phase 6: the suggest-only router lives in ../router.ts (it reads this

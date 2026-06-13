@@ -151,6 +151,10 @@ export function initDb(): void {
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
+  // Phase 14.2 conversation memory: a cached summary of older (non-verbatim)
+  // turns plus how many messages it covers, so we never re-summarize each send.
+  ensureColumn('sessions', 'context_summary', 'TEXT')
+  ensureColumn('sessions', 'context_summary_count', 'INTEGER NOT NULL DEFAULT 0')
   // Phase 11 agentic-loop audit columns (safe additive migrations).
   ensureColumn('macro_sessions', 'mode', "TEXT NOT NULL DEFAULT 'approval'")
   ensureColumn('macro_sessions', 'auto_actions', 'TEXT')
@@ -249,6 +253,51 @@ export function addMessage(
     'INSERT INTO messages (id, session_id, role, content, provider_id, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, now)
   d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId)
+}
+
+// ---- Phase 14.2 conversation memory helpers ----
+
+/** All messages for a session in chronological order (used to assemble context). */
+export function getSessionMessages(sessionId: string): MessageRow[] {
+  return (
+    must()
+      .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at, rowid')
+      .all(sessionId) as Record<string, unknown>[]
+  ).map(
+    (r): MessageRow => ({
+      id: r.id as string,
+      sessionId: r.session_id as string,
+      role: r.role as 'user' | 'assistant',
+      content: r.content as string,
+      providerId: r.provider_id as string,
+      model: (r.model as string | null) ?? null,
+      createdAt: r.created_at as number
+    })
+  )
+}
+
+/** The cached older-context summary and how many messages it covers. */
+export function getContextSummary(sessionId: string): { summary: string | null; count: number } {
+  const row = must()
+    .prepare('SELECT context_summary, context_summary_count FROM sessions WHERE id = ?')
+    .get(sessionId) as { context_summary: string | null; context_summary_count: number } | undefined
+  return { summary: row?.context_summary ?? null, count: row?.context_summary_count ?? 0 }
+}
+
+export function setContextSummary(sessionId: string, summary: string, count: number): void {
+  must()
+    .prepare('UPDATE sessions SET context_summary = ?, context_summary_count = ? WHERE id = ?')
+    .run(summary, count, sessionId)
+}
+
+/** Reset context for ONE session: delete its messages + clear the cached summary. */
+export function clearSessionMessages(sessionId: string): void {
+  const d = must()
+  d.prepare('DELETE FROM messages WHERE session_id = ?').run(sessionId)
+  d.prepare('UPDATE sessions SET context_summary = NULL, context_summary_count = 0, updated_at = ? WHERE id = ?').run(
+    Date.now(),
+    sessionId
+  )
 }
 
 export interface UsageEventInput {
@@ -1301,6 +1350,14 @@ export function registerDbIpc(): void {
   ipcMain.handle('history:delete', (_event, args: { sessionId: string }) => {
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     must().prepare('DELETE FROM sessions WHERE id = ?').run(args.sessionId) // messages cascade
+    return true
+  })
+
+  // Phase 14.2: reset context for the active session only (keep the session row).
+  ipcMain.handle('history:clearMessages', (_event, args: { sessionId: string }) => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
+    if (!sessionExists(args.sessionId)) return false
+    clearSessionMessages(args.sessionId)
     return true
   })
 

@@ -80,6 +80,16 @@ export interface ChatSendRequest {
   includeDigest?: boolean
 }
 
+/** Phase 14.2: what conversation context a session would send (memory indicator). */
+export interface ContextInfo {
+  totalMessages: number
+  includedVerbatim: number
+  summarizedCount: number
+  hasSummary: boolean
+  approxChars: number
+  approxTokens: number
+}
+
 export interface ChatApi {
   /** Providers from the registry (config-driven), with availability + models. */
   listProviders(): Promise<ProviderInfo[]>
@@ -89,6 +99,8 @@ export interface ChatApi {
   cancel(requestId: string): void
   /** Subscribe to streamed tokens for a request. Returns an unsubscribe fn. */
   onToken(requestId: string, listener: (token: string) => void): () => void
+  /** Phase 14.2: read-only memory/context stats for a session (no model call). */
+  contextInfo(sessionId: string): Promise<ContextInfo>
 }
 
 // ---- chat→terminal bridge ----
@@ -140,6 +152,8 @@ export interface HistoryApi {
   create(providerId: string, title: string, projectId?: string | null): Promise<SessionRow>
   rename(sessionId: string, title: string): Promise<boolean>
   remove(sessionId: string): Promise<boolean>
+  /** Phase 14.2: reset context for ONE session (clears its messages + summary). */
+  clearMessages(sessionId: string): Promise<boolean>
 }
 
 // ---- sidebar projects (Phase 9.1) ----
@@ -493,7 +507,7 @@ export interface ExecutorSummary {
 }
 
 export type AgentSummaryResponse =
-  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string }
+  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string; persisted: boolean }
   | { ok: false; error: string; signature?: string }
 
 export type AgentPermissionResponse =
@@ -508,6 +522,8 @@ export interface AgentApi {
     model?: string
     goal?: string
     lastPrompt?: string
+    /** Phase 14.2: persist the summary into this chat session's memory. */
+    sessionId?: string
   }): Promise<AgentSummaryResponse>
   /** Phase 14.1: read-only detection of a pending terminal permission/confirm prompt. */
   detectPermission(terminalId: string): Promise<AgentPermissionResponse>

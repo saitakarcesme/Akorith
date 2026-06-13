@@ -15,11 +15,13 @@ import { getBridgeSettings } from './config'
 import { buildDigest } from './digest'
 import { ptyManager } from './pty'
 import {
+  addMessage,
   createMacroSession,
   createMacroTurn,
   getMacroSession,
   getMacroState,
   listMacroSessions,
+  sessionExists,
   updateMacroSession,
   updateMacroTurn,
   type MacroMode,
@@ -59,6 +61,9 @@ const POLL_INTERVAL_MS = 1200
 const MAX_WAIT_PER_TURN_MS = 30_000
 const SHORT_WAIT_MS = 6000
 const MAX_AUTO_ACTIONS = 80
+// Olympus = Codex (t2), Atlantis = Claude (t1) — for labeling persisted summaries.
+const TERMINAL_LABEL: Record<string, string> = { t1: 'Atlantis', t2: 'Olympus' }
+const AGENT_ROLE: Record<string, string> = { t1: 'Claude', t2: 'Codex' }
 
 type MacroResponse = { ok: true; state: MacroSessionWithTurns } | { ok: false; error: string; state?: MacroSessionWithTurns }
 
@@ -380,8 +385,15 @@ async function summarize(sessionId: string, turnId: string): Promise<MacroRespon
  * state instead of a spammy empty summary.
  */
 type AgentSummaryResponse =
-  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string }
+  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string; persisted: boolean }
   | { ok: false; error: string; signature?: string }
+
+/** One-line, role-appropriate text for an agent summary persisted into a chat. */
+function renderAgentSummaryMessage(terminalId: string, summary: ExecutorSummary): string {
+  const label = TERMINAL_LABEL[terminalId] ?? terminalId
+  const role = AGENT_ROLE[terminalId] ?? 'the agent'
+  return `[Agent activity — ${label} / ${role}]\n${renderSummaryText(summary)}`
+}
 
 async function summarizeAgentOutput(args: {
   terminalId: string
@@ -389,6 +401,8 @@ async function summarizeAgentOutput(args: {
   model?: string
   goal?: string
   lastPrompt?: string
+  /** Phase 14.2: when set, persist the summary into this chat session's memory. */
+  sessionId?: string
 }): Promise<AgentSummaryResponse> {
   const snap = ptyManager.snapshot(args.terminalId, SNAPSHOT_CHARS + 4000)
   const bounded = boundSnapshot(snap.text, SNAPSHOT_CHARS, 200)
@@ -412,7 +426,19 @@ async function summarizeAgentOutput(args: {
   } catch {
     summary = heuristicSummary(snap.text)
   }
-  return { ok: true, summary, detection, signature }
+  // Phase 14.2: fold the summary into the active session's memory so later
+  // follow-up questions in that SAME chat can reference what the agent did.
+  // Strictly scoped to the given session id — never another chat.
+  let persisted = false
+  if (args.sessionId && sessionExists(args.sessionId)) {
+    try {
+      addMessage(args.sessionId, 'assistant', renderAgentSummaryMessage(args.terminalId, summary), args.providerId, args.model)
+      persisted = true
+    } catch (err) {
+      console.error('[macro] failed to persist agent summary into session:', err)
+    }
+  }
+  return { ok: true, summary, detection, signature, persisted }
 }
 
 /**
@@ -786,7 +812,7 @@ export function registerMacroIpc(): void {
   // Sessionless summarize for the chat workflow (Phase 13.2). Meta call only.
   ipcMain.handle(
     'agent:summarize',
-    async (_event, args: { terminalId: string; providerId: string; model?: string; goal?: string; lastPrompt?: string }) => {
+    async (_event, args: { terminalId: string; providerId: string; model?: string; goal?: string; lastPrompt?: string; sessionId?: string }) => {
       if (
         typeof args?.terminalId !== 'string' ||
         !VALID_TERMINAL.test(args.terminalId) ||
@@ -794,7 +820,8 @@ export function registerMacroIpc(): void {
         !VALID_PROVIDER.test(args.providerId) ||
         (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model))) ||
         (args.goal !== undefined && typeof args.goal !== 'string') ||
-        (args.lastPrompt !== undefined && typeof args.lastPrompt !== 'string')
+        (args.lastPrompt !== undefined && typeof args.lastPrompt !== 'string') ||
+        (args.sessionId !== undefined && (typeof args.sessionId !== 'string' || !VALID_ID.test(args.sessionId)))
       ) {
         return { ok: false, error: 'invalid agent:summarize payload' }
       }
