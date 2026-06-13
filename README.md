@@ -8,11 +8,11 @@ terminal; Akorith runs them locally inside your chosen project. There are no API
 paste and no provider credentials stored by the app.
 
 ```
-┌────────────┬───────────────────────────┬──────────────────────┐
-│  Sidebar   │   Center planning / chat  │  Execution terminals │
-│ projects   │   provider + macro-loop   │  Olympus  = Codex    │
-│ history    │   chat → terminal bridge  │  Atlantis = Claude   │
-└────────────┴───────────────────────────┴──────────────────────┘
+┌────────────┬─────────────────────────────────────────────┐
+│  Sidebar   │  Workspace: project planning + agents       │
+│ projects   │  Chat: general model conversations          │
+│ providers  │  Test: generate tests + export PDF reports  │
+└────────────┴─────────────────────────────────────────────┘
 ```
 
 ## What it supports
@@ -21,9 +21,19 @@ paste and no provider credentials stored by the app.
 - **Codex / ChatGPT** — via the `codex` CLI (your ChatGPT login).
 - **Local models** — via a local **Ollama** server when one is running (optional).
 
-The center chat talks to whichever of these are installed and logged in; the right side
-hosts two real terminals (**Olympus** runs Codex, **Atlantis** runs Claude) inside the
-project folder you pick.
+The center chat talks to whichever of these are installed and logged in. In **Workspace**,
+Akorith also hosts two real project terminals in the Activity drawer: **Olympus** runs Codex
+and **Atlantis** runs Claude inside the project folder you pick. In **Chat**, you can talk to
+Claude, ChatGPT/Codex, or Local models without selecting a project.
+
+## Workspace vs Chat
+
+- **Workspace** is project-scoped. Selecting a project restores that project's latest workspace
+  chat if one exists, starts or reuses Olympus/Codex and Atlantis/Claude for that project, and
+  enables repo context, macro-loop, bridge, and Activity controls.
+- **Chat** is general model chat. It works without a project, stores conversations separately
+  from project workspaces, and does not show or send project context.
+- **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
 
 ## Connect your subscriptions
 
@@ -91,6 +101,13 @@ The macro-loop drives a planner → executor cycle toward a goal you set.
   confirmations, **pauses** for anything medium/high-risk, destructive, low-confidence, or
   ambiguous, **never** selects "always allow", and **Stop** always interrupts it.
 
+## Test Lab and PDF reports
+
+The Test route can generate tests in an isolated sandbox, compute ISAScore for selected runs,
+and export the evaluation as a PDF. Exported PDFs are saved to your **Downloads** folder with an
+`akorith-...pdf` filename; Akorith shows the exact saved path and provides **Reveal** and
+**Open** actions.
+
 ## Current limitations
 
 - **Auto Mode is cautious, not unlimited autonomous coding** — it pauses for you on anything
@@ -106,15 +123,14 @@ The macro-loop drives a planner → executor cycle toward a goal you set.
 ## Design
 
 Akorith is **chat-first**, in the spirit of a Codex-style product: a **light/white sidebar** for
-projects, history, and navigation; a **dark, calm center workspace** built around one large
-composer where you describe tasks; and the Codex/Claude **terminals running in the background**,
-revealed only when you want them via the **Agent activity** drawer. Pick a project from the
-sidebar and Akorith starts Codex and Claude in it automatically — you mostly just chat, and the
+projects, provider folders, recent chats, and navigation; a **dark, calm center workspace** built
+around one large composer; and the Codex/Claude **terminals running in the background**, revealed
+only when you want them via the **Agent activity** drawer. Pick a project from the sidebar and
+Akorith starts or reuses Codex and Claude in it automatically — you mostly just chat, and the
 agents work behind the scenes. After you send work to an agent, Akorith reads its terminal output
 and **summarizes the result back into the chat** ("Olympus/Codex created the files and ran tests —
-how would you like to continue?"), with a manual **Summarize output** action too. The accent is
-near-monochrome (no neon, no clutter), and the app **resumes your last project on launch** so it
-never opens empty.
+how would you like to continue?"), with a manual **Summarize output** action too. The separate
+**Chat** route is for normal, project-free conversations with any available provider.
 
 ![Akorith chat-first workspace](docs/validation/phase13-2-ui.png)
 

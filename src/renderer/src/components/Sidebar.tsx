@@ -23,7 +23,7 @@ interface SidebarProps {
   /** Bumped by the center empty-state "Create Project" button to open the modal. */
   createSignal?: number
   onSelectProject: (project: ProjectRow | null) => void
-  onSelectSession: (sessionId: string, project?: ProjectRow | null) => void
+  onSelectSession: (sessionId: string, project?: ProjectRow | null, providerId?: string) => void
   onNewChat: (providerId: string) => void
   onHistoryChange: () => void
   onProjectsChange: () => void
@@ -31,6 +31,7 @@ interface SidebarProps {
 
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
+  { view: 'general', label: 'Chat', icon: MessageIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Test', icon: FlaskIcon }
 ]
@@ -145,14 +146,14 @@ export default function Sidebar({
   }, [displayName])
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
-  const recentSessions = sessions.slice(0, 6)
-  const visibleSessions = activeProject ? sessions.filter((s) => s.projectId === activeProject.id) : sessions
+  const recentSessions = sessions
+  const generalSessions = sessions.filter((s) => !s.projectId)
 
   // Registry providers first (in registry order), then any orphaned provider
   // ids that still have sessions but are gone from config.
   const folderIds = [
     ...providers.map((p) => p.id),
-    ...[...new Set(visibleSessions.map((s) => s.providerId))].filter((id) => !providers.some((p) => p.id === id))
+    ...[...new Set(generalSessions.map((s) => s.providerId))].filter((id) => !providers.some((p) => p.id === id))
   ]
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
 
@@ -252,7 +253,7 @@ export default function Sidebar({
   }
 
   const selectSession = (session: SessionRow): void => {
-    onSelectSession(session.id, session.projectId ? projectById.get(session.projectId) ?? null : null)
+    onSelectSession(session.id, session.projectId ? projectById.get(session.projectId) ?? null : null, session.providerId)
   }
 
   return (
@@ -331,214 +332,217 @@ export default function Sidebar({
         </div>
       ) : (
         <div className="sidebar-scroll">
-          <section className="sidebar-section project-section">
-            <div className="sidebar-section-header">
-              <button
-                type="button"
-                className={`sidebar-fold ${!activeProject ? 'is-active' : ''}`}
-                onClick={() => onSelectProject(null)}
-              >
-                <FolderIcon size={15} />
-                All projects
-              </button>
-              <div className="sidebar-add-wrap">
+          <div className="sidebar-fixed-groups">
+            <section className="sidebar-section project-section">
+              <div className="sidebar-section-header">
                 <button
                   type="button"
-                  className="sidebar-add"
-                  title="Add project"
-                  aria-haspopup="menu"
-                  aria-expanded={projectMenuOpen}
-                  disabled={projectBusy !== null}
-                  onClick={() => setProjectMenuOpen((value) => !value)}
+                  className={`sidebar-fold ${view === 'workspace' && !activeProject ? 'is-active' : ''}`}
+                  onClick={() => onSelectProject(null)}
                 >
-                  <PlusIcon size={14} />
+                  <FolderIcon size={15} />
+                  All projects
                 </button>
-                {projectMenuOpen && (
-                  <>
-                    <div className="popover-backdrop" onClick={() => setProjectMenuOpen(false)} />
-                    <div className="project-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={() => void openExistingProject()}>
-                        <FolderIcon size={14} />
-                        <span>Open Project</span>
-                      </button>
-                      <button type="button" role="menuitem" onClick={beginCreateProject}>
-                        <PlusIcon size={14} />
-                        <span>Create Project</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-            {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
-            {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
-            <div className="project-list">
-              {projects.length === 0 ? (
-                <div className="sidebar-empty-state">
-                  <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
-                  <div className="sidebar-empty-actions">
-                    <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
-                      <FolderIcon size={14} />
-                      Open Project
-                    </button>
-                    <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
-                      <PlusIcon size={14} />
-                      Create Project
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                projects.map((project) => (
-                  <button
-                    type="button"
-                    key={project.id}
-                    className={`project-item ${activeProject?.id === project.id ? 'is-active' : ''}`}
-                    onClick={() => onSelectProject(project)}
-                    title={project.path ?? project.name}
-                  >
-                    <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
-                    <span className="project-text">
-                      <span>{project.name}</span>
-                      <em>{project.path || 'No path associated'}</em>
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-            {activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
-          </section>
-
-          <section className="sidebar-section">
-            <div className="sidebar-section-title">Recent chats</div>
-            {recentSessions.length === 0 ? (
-              <div className="sidebar-item is-empty">No recent chats yet</div>
-            ) : (
-              recentSessions.map((session) => {
-                const provider = labelOf(session.providerId)
-                const project = session.projectId ? projectById.get(session.projectId) : null
-                return (
-                  <button
-                    type="button"
-                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
-                    key={session.id}
-                    onClick={() => selectSession(session)}
-                    title={session.title}
-                  >
-                    <span className="recent-chat-text">
-                      <span>{session.title}</span>
-                      <em>
-                        {provider}
-                        {project ? ` · ${project.name}` : ''} · {formatDate(session.updatedAt)}
-                      </em>
-                    </span>
-                  </button>
-                )
-              })
-            )}
-          </section>
-
-          {folderIds.map((providerId) => {
-            const items = visibleSessions.filter((s) => s.providerId === providerId)
-            const isCollapsed = providerCollapsed[providerId] ?? true
-            return (
-              <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
-                <div className="sidebar-section-header provider-header">
-                  <button
-                    type="button"
-                    className="sidebar-fold"
-                    onClick={() => setProviderCollapsed((c) => ({ ...c, [providerId]: !isCollapsed }))}
-                    title={isCollapsed ? 'Expand' : 'Collapse'}
-                  >
-                    <ChevronIcon size={13} direction={isCollapsed ? 'right' : 'down'} />
-                    <FolderIcon size={15} />
-                    {labelOf(providerId)}
-                    {items.length > 0 && <span className="sidebar-count">{items.length}</span>}
-                  </button>
+                <div className="sidebar-add-wrap">
                   <button
                     type="button"
                     className="sidebar-add"
-                    title={`New ${labelOf(providerId)} chat`}
-                    onClick={() => onNewChat(providerId)}
+                    title="Add project"
+                    aria-haspopup="menu"
+                    aria-expanded={projectMenuOpen}
+                    disabled={projectBusy !== null}
+                    onClick={() => setProjectMenuOpen((value) => !value)}
                   >
                     <PlusIcon size={14} />
                   </button>
+                  {projectMenuOpen && (
+                    <>
+                      <div className="popover-backdrop" onClick={() => setProjectMenuOpen(false)} />
+                      <div className="project-menu" role="menu">
+                        <button type="button" role="menuitem" onClick={() => void openExistingProject()}>
+                          <FolderIcon size={14} />
+                          <span>Open Project</span>
+                        </button>
+                        <button type="button" role="menuitem" onClick={beginCreateProject}>
+                          <PlusIcon size={14} />
+                          <span>Create Project</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
-                {!isCollapsed &&
-                  (items.length === 0 ? (
-                    <div className="sidebar-item is-empty">
-                      <MessageIcon size={13} />
-                      <span>{activeProject ? 'No project chats yet' : 'No sessions yet'}</span>
+              </div>
+              {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
+              {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
+              <div className="project-list">
+                {projects.length === 0 ? (
+                  <div className="sidebar-empty-state">
+                    <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
+                    <div className="sidebar-empty-actions">
+                      <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
+                        <FolderIcon size={14} />
+                        Open Project
+                      </button>
+                      <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
+                        <PlusIcon size={14} />
+                        Create Project
+                      </button>
                     </div>
-                  ) : (
-                    items.map((s) =>
-                      renamingId === s.id ? (
-                        <div className="sidebar-item" key={s.id}>
-                          <input
-                            className="sidebar-rename-input"
-                            value={renameValue}
-                            autoFocus
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') void commitRename(s.id)
-                              if (e.key === 'Escape') setRenamingId(null)
-                            }}
-                            onBlur={() => void commitRename(s.id)}
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className={`sidebar-item is-session ${s.id === activeSessionId ? 'is-active' : ''}`}
-                          key={s.id}
-                          onClick={() => selectSession(s)}
-                          title={s.title}
-                        >
-                          <span className="sidebar-item-title">{s.title}</span>
-                          <span className="sidebar-item-actions">
-                            <button
-                              type="button"
-                              title="Rename"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setRenamingId(s.id)
-                                setRenameValue(s.title)
-                                setConfirmDeleteId(null)
+                  </div>
+                ) : (
+                  projects.map((project) => (
+                    <button
+                      type="button"
+                      key={project.id}
+                      className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
+                      onClick={() => onSelectProject(project)}
+                      title={project.path ?? project.name}
+                    >
+                      <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
+                      <span className="project-text">
+                        <span>{project.name}</span>
+                        <em>{project.path || 'No path associated'}</em>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
+            </section>
+
+            {folderIds.map((providerId) => {
+              const items = generalSessions.filter((s) => s.providerId === providerId)
+              const isCollapsed = providerCollapsed[providerId] ?? true
+              return (
+                <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
+                  <div className="sidebar-section-header provider-header">
+                    <button
+                      type="button"
+                      className="sidebar-fold"
+                      onClick={() => setProviderCollapsed((c) => ({ ...c, [providerId]: !isCollapsed }))}
+                      title={isCollapsed ? 'Expand' : 'Collapse'}
+                    >
+                      <ChevronIcon size={13} direction={isCollapsed ? 'right' : 'down'} />
+                      <FolderIcon size={15} />
+                      {labelOf(providerId)}
+                      {items.length > 0 && <span className="sidebar-count">{items.length}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className="sidebar-add"
+                      title={`New ${labelOf(providerId)} chat`}
+                      onClick={() => onNewChat(providerId)}
+                    >
+                      <PlusIcon size={14} />
+                    </button>
+                  </div>
+                  {!isCollapsed &&
+                    (items.length === 0 ? (
+                      <div className="sidebar-item is-empty">
+                        <MessageIcon size={13} />
+                        <span>No general chats yet</span>
+                      </div>
+                    ) : (
+                      items.map((s) =>
+                        renamingId === s.id ? (
+                          <div className="sidebar-item" key={s.id}>
+                            <input
+                              className="sidebar-rename-input"
+                              value={renameValue}
+                              autoFocus
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void commitRename(s.id)
+                                if (e.key === 'Escape') setRenamingId(null)
                               }}
-                            >
-                              Edit
-                            </button>
-                            {confirmDeleteId === s.id ? (
+                              onBlur={() => void commitRename(s.id)}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className={`sidebar-item is-session ${s.id === activeSessionId ? 'is-active' : ''}`}
+                            key={s.id}
+                            onClick={() => selectSession(s)}
+                            title={s.title}
+                          >
+                            <span className="sidebar-item-title">{s.title}</span>
+                            <span className="sidebar-item-actions">
                               <button
                                 type="button"
-                                className="is-danger"
-                                title="Click again to delete"
+                                title="Rename"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  void deleteSession(s)
+                                  setRenamingId(s.id)
+                                  setRenameValue(s.title)
+                                  setConfirmDeleteId(null)
                                 }}
                               >
-                                Delete?
+                                Edit
                               </button>
-                            ) : (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setConfirmDeleteId(s.id)
-                                  setTimeout(() => setConfirmDeleteId((id) => (id === s.id ? null : id)), 2500)
-                                }}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </span>
-                        </div>
+                              {confirmDeleteId === s.id ? (
+                                <button
+                                  type="button"
+                                  className="is-danger"
+                                  title="Click again to delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void deleteSession(s)
+                                  }}
+                                >
+                                  Delete?
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  title="Delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setConfirmDeleteId(s.id)
+                                    setTimeout(() => setConfirmDeleteId((id) => (id === s.id ? null : id)), 2500)
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </span>
+                          </div>
+                        )
                       )
-                    )
-                  ))}
-              </section>
-            )
-          })}
+                    ))}
+                </section>
+              )
+            })}
+          </div>
+
+          <section className="sidebar-section recent-section">
+            <div className="sidebar-section-title">Recent chats</div>
+            <div className="recent-list">
+              {recentSessions.length === 0 ? (
+                <div className="sidebar-item is-empty">No recent chats yet</div>
+              ) : (
+                recentSessions.map((session) => {
+                  const provider = labelOf(session.providerId)
+                  const project = session.projectId ? projectById.get(session.projectId) : null
+                  return (
+                    <button
+                      type="button"
+                      className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
+                      key={session.id}
+                      onClick={() => selectSession(session)}
+                      title={session.title}
+                    >
+                      <span className="recent-chat-text">
+                        <span>{session.title}</span>
+                        <em>
+                          {project ? `Workspace · ${project.name}` : 'General chat'} · {provider} · {formatDate(session.updatedAt)}
+                        </em>
+                      </span>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </section>
         </div>
       )}
 

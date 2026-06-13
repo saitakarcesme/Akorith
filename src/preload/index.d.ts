@@ -76,6 +76,8 @@ export interface ChatSendRequest {
   prompt: string
   /** When set, the exchange + usage event are persisted to this session. */
   sessionId?: string
+  /** False for General Chat; project workspace sends keep the existing opt-in repo digest behavior. */
+  includeDigest?: boolean
 }
 
 export interface ChatApi {

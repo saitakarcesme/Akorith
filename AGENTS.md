@@ -4,10 +4,10 @@ Loopex is the current repository/package name. **Akorith** is the visible produc
 introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
-right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built
-with electron-vite, in strict numbered phases — currently through Phase 13.3 (chat workflow
-polish + agent output feedback).
+Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
+provider folders, and session history. Built
+with electron-vite, in strict numbered phases — currently through Phase 14 (project/chat
+separation + activity drawer fixes).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -18,7 +18,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 12 full product validation · 13 Codex-quality light UI + persistent history ·
 13.1 chat-first Codex-style workspace ·
 13.2 chat workflow polish + agent output feedback ·
-**13.3 per-project agent sessions + test-lab presets** — all done.
+13.3 per-project agent sessions + test-lab presets ·
+**14 project/chat separation + activity drawer fixes** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -708,6 +709,37 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
 - **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
+
+### Project/chat separation + activity drawer fixes (Phase 14)
+
+- **Two chat modes.** Sidebar nav now separates **Workspace** from **Chat**. Workspace is
+  project-scoped orchestration: sessions are created/restored with `sessions.project_id`, the
+  header shows the selected project, repo context/macro-loop/bridge/Activity controls are available
+  only when a project folder is active, and Olympus/Atlantis remain tied to that project. **Chat** is
+  general provider chat: sessions use `project_id = NULL`, no project title or project context is
+  shown, and `chat:send` passes `includeDigest: false` so the global repo-context setting cannot
+  leak project digest text into general conversations.
+- **Project switching restores the matching conversation.** Selecting a project switches back to
+  Workspace and loads that project's newest session when one exists; otherwise it opens a clean
+  project workspace state. Recent chat clicks restore the correct mode: project sessions reopen
+  Workspace with their project selected, while general sessions open Chat without forcing project
+  context.
+- **Activity drawer visibility.** Agent Activity still hosts both `TerminalPane`s and closing the
+  drawer only hides it. Olympus/Codex and Atlantis/Claude are always represented for an active
+  project, have independent collapse/restore controls, show clear `Starting...` / `Live` /
+  `Exited (...)` states, and collapsed slots reserve a visible restore bar so one agent cannot
+  silently disappear.
+- **Sidebar information architecture.** Sidebar order is brand/nav, Projects, provider folders
+  (general chats only), Recent Chats, then fixed profile/footer. The sidebar itself no longer
+  scrolls; Recent Chats is the scrollable history region and each item labels **General chat** or
+  **Workspace · <project>** with provider/date metadata.
+- **PDF export clarity.** Evaluation PDFs now save automatically to the user's Downloads folder as
+  `akorith-...pdf`; the Test/Evaluate UI shows the exact saved path, and both current and past
+  evaluations offer **Reveal** (Finder at file) and **Open** (system PDF opener). Older internal
+  report paths remain allowed for reveal/open.
+- **Known limitations.** Project workspaces still choose the newest project-linked session on
+  project selection; there is no dedicated project-chat picker beyond Recent Chats yet. Packaged
+  macOS builds remain unsigned/not notarized.
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

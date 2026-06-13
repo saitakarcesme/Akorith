@@ -70,6 +70,7 @@ const chat = Object.freeze({
     model?: string
     prompt: string
     sessionId?: string
+    includeDigest?: boolean
   }): Promise<unknown> => ipcRenderer.invoke('chat:send', args),
 
   cancel: (requestId: string): void => {

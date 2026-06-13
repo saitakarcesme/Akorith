@@ -172,6 +172,17 @@ electron-vite in strict numbered phases.
       detected install command, optional instruction, advanced fields collapsed. **Macro loop**:
       "Repo context" + help line, advanced settings collapsed, "Plan with loop" / "Start Auto
       loop", Stop visible. **Small UI**: recent-chat dots removed, collapsed profile centered.
+- [x] **Phase 14** — project/chat separation and activity fixes. **Navigation:** `Workspace`
+      is project-scoped orchestration; new `Chat` route is general provider chat with
+      `project_id = NULL`, no project header, no agent controls, and `includeDigest: false` so repo
+      context cannot leak into general chats. **Project switching:** selecting a project opens
+      Workspace and restores its newest project session, or a clean project workspace if none
+      exists; Recent Chats restores either Workspace+project or General Chat correctly. **Activity
+      drawer:** Olympus/Codex and Atlantis/Claude are always represented for active projects, with
+      independent collapse/restore bars and clear Starting/Live/Exited states. **Sidebar IA:**
+      Projects → provider folders (general chats) → scrollable Recent Chats → fixed profile.
+      **PDF export:** evaluation reports save to Downloads as `akorith-...pdf`, show exact path,
+      and expose Reveal/Open for current and past evaluations.
 
 ## Locked design decisions
 
@@ -252,10 +263,11 @@ electron-vite in strict numbered phases.
   (`.sidebar` overrides text + surface + accent tokens so nothing dark leaks in). Accent is
   **near-monochrome (no purple/indigo)**; keep it restrained. Provider colors are tiny dots/chips
   only — no color blocks. The agent drawer / `.chat-code` / `.test-terminal-col` are dark surfaces.
-- **Chat-first layout (Phase 13.1).** `Sidebar | ChatPanel` + `AgentDrawer` overlay. Terminals are
-  hidden by default in the drawer, which is **always mounted while a project is active** (toggle =
-  CSS transform) — never unmount it or agents die. Project open/create is **sidebar-first**; do not
-  reintroduce a right-side onboarding/terminal column.
+- **Chat-first layout (Phase 13.1 + 14).** `Sidebar | ChatPanel` + `AgentDrawer` overlay.
+  `Workspace` is project-scoped orchestration; `Chat` is general model chat with no project context.
+  Terminals are hidden by default in the drawer, which is **always mounted while a project is
+  active** (toggle = CSS transform) — never unmount it or agents die. Project open/create is
+  **sidebar-first**; do not reintroduce a right-side onboarding/terminal column.
 - **Workspace continuity (Phase 13).** Last active project id is persisted to
   `localStorage` `akorith.lastActiveProjectId` and restored on launch; restoring re-starts agents
   **only** via the existing safe PTY startup (logged-in CLI in the project cwd, never destructive),

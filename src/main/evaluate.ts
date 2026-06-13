@@ -467,9 +467,17 @@ function reportsDir(): string {
   return join(app.getPath('userData'), 'reports')
 }
 
-function assertReportPath(p: string): boolean {
-  const rel = relative(reportsDir(), p)
+function downloadsDir(): string {
+  return app.getPath('downloads')
+}
+
+function isChildOf(dir: string, p: string): boolean {
+  const rel = relative(dir, p)
   return Boolean(rel) && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function assertPdfPath(p: string): boolean {
+  return isChildOf(reportsDir(), p) || isChildOf(downloadsDir(), p)
 }
 
 function scorePayload(evaluation: EvaluationRow): EvaluationScores {
@@ -676,10 +684,10 @@ async function exportPdf(evaluationId: string): Promise<PdfResponse> {
   const rows = getTestRunsByIds(evaluation.testRunIds)
   if (rows.length === 0) return { ok: false, error: 'evaluation has no test runs' }
 
-  const dir = reportsDir()
+  const dir = downloadsDir()
   mkdirSync(dir, { recursive: true })
   const stamp = new Date(evaluation.ts).toISOString().replace(/[:.]/g, '-')
-  const pdfPath = join(dir, `loopex-${evaluation.kind}-${stamp}-${evaluation.id.slice(0, 8)}.pdf`)
+  const pdfPath = join(dir, `akorith-${evaluation.kind}-${stamp}-${evaluation.id.slice(0, 8)}.pdf`)
   await writePdf(evaluation, rows, pdfPath)
   const updated = setEvaluationPdfPath(evaluation.id, pdfPath)
   if (!updated) return { ok: false, error: 'failed to update evaluation pdf path' }
@@ -690,8 +698,8 @@ function revealPdf(evaluationId: string): { ok: true } | { ok: false; error: str
   if (!VALID_ID.test(evaluationId)) return { ok: false, error: 'invalid evaluation id' }
   const evaluation = getEvaluation(evaluationId)
   if (!evaluation?.pdfPath) return { ok: false, error: 'evaluation has no PDF yet' }
-  if (!assertReportPath(evaluation.pdfPath) || !existsSync(evaluation.pdfPath)) {
-    return { ok: false, error: 'PDF file is missing or outside the reports directory' }
+  if (!assertPdfPath(evaluation.pdfPath) || !existsSync(evaluation.pdfPath)) {
+    return { ok: false, error: 'PDF file is missing or outside the allowed report locations' }
   }
   shell.showItemInFolder(evaluation.pdfPath)
   return { ok: true }
@@ -701,8 +709,8 @@ async function openPdf(evaluationId: string): Promise<{ ok: true } | { ok: false
   if (!VALID_ID.test(evaluationId)) return { ok: false, error: 'invalid evaluation id' }
   const evaluation = getEvaluation(evaluationId)
   if (!evaluation?.pdfPath) return { ok: false, error: 'evaluation has no PDF yet' }
-  if (!assertReportPath(evaluation.pdfPath) || !existsSync(evaluation.pdfPath)) {
-    return { ok: false, error: 'PDF file is missing or outside the reports directory' }
+  if (!assertPdfPath(evaluation.pdfPath) || !existsSync(evaluation.pdfPath)) {
+    return { ok: false, error: 'PDF file is missing or outside the allowed report locations' }
   }
   const err = await shell.openPath(evaluation.pdfPath)
   return err ? { ok: false, error: err } : { ok: true }

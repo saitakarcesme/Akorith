@@ -115,6 +115,8 @@ interface ChatSendArgs {
   prompt: string
   /** When set (and the session exists), the exchange + usage are persisted. */
   sessionId?: string
+  /** False for General Chat so repo context cannot leak out of project workspaces. */
+  includeDigest?: boolean
 }
 
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
@@ -134,7 +136,8 @@ export function registerChatIpc(): void {
       args.prompt.length === 0 ||
       args.prompt.length > MAX_PROMPT_CHARS ||
       (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model))) ||
-      (args.sessionId !== undefined && (typeof args.sessionId !== 'string' || !/^[\w-]{1,64}$/.test(args.sessionId)))
+      (args.sessionId !== undefined && (typeof args.sessionId !== 'string' || !/^[\w-]{1,64}$/.test(args.sessionId))) ||
+      (args.includeDigest !== undefined && typeof args.includeDigest !== 'boolean')
     ) {
       return { ok: false, error: 'invalid chat:send payload' }
     }
@@ -161,7 +164,7 @@ export function registerChatIpc(): void {
     // clean typed prompt. A digest failure never blocks the send.
     let promptForProvider = args.prompt
     try {
-      if (getDigestSettings().enabled) {
+      if (args.includeDigest !== false && getDigestSettings().enabled) {
         const digest = await buildDigest()
         if (digest) promptForProvider = `${digest}\n\n---\n\n${args.prompt}`
       }

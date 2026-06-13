@@ -5,14 +5,16 @@ import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import TestPage from './components/TestPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
-import type { ProjectRow } from '../../preload/index.d'
+import type { ProjectRow, SessionRow } from '../../preload/index.d'
 
-export type AppView = 'workspace' | 'dashboard' | 'test'
+export type ChatMode = 'workspace' | 'general'
+export type AppView = ChatMode | 'dashboard' | 'test'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
 export interface HistorySelection {
   sessionId: string | null
   providerId?: string
+  mode: ChatMode
   nonce: number
 }
 
@@ -33,6 +35,56 @@ export default function App(): JSX.Element {
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
   const bumpProjects = useCallback(() => setProjectVersion((v) => v + 1), [])
+  const selectHistory = useCallback((sessionId: string | null, mode: ChatMode, providerId?: string) => {
+    setHistorySel((prev) => ({ sessionId, providerId, mode, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
+
+  const latestSession = useCallback(async (projectId: string | null): Promise<SessionRow | null> => {
+    const sessions = await window.api.history.list()
+    return sessions.find((session) => session.projectId === projectId) ?? null
+  }, [])
+
+  const openWorkspaceForProject = useCallback(
+    async (project: ProjectRow | null): Promise<void> => {
+      setActiveProject(project)
+      setView('workspace')
+      setAgentStatus({})
+      if (!project?.id) {
+        selectHistory(null, 'workspace')
+        setActiveSessionId(null)
+        return
+      }
+      try {
+        const session = await latestSession(project.id)
+        selectHistory(session?.id ?? null, 'workspace', session?.providerId)
+        if (!session) setActiveSessionId(null)
+      } catch {
+        selectHistory(null, 'workspace')
+        setActiveSessionId(null)
+      }
+    },
+    [latestSession, selectHistory]
+  )
+
+  const openGeneralChat = useCallback(
+    async (providerId?: string): Promise<void> => {
+      setView('general')
+      if (providerId) {
+        selectHistory(null, 'general', providerId)
+        setActiveSessionId(null)
+        return
+      }
+      try {
+        const session = await latestSession(null)
+        selectHistory(session?.id ?? null, 'general', session?.providerId)
+        if (!session) setActiveSessionId(null)
+      } catch {
+        selectHistory(null, 'general')
+        setActiveSessionId(null)
+      }
+    },
+    [latestSession, selectHistory]
+  )
 
   // Phase 13: workspace continuity. On launch, restore the last active project so
   // the app resumes previous work instead of opening empty. Restoring a project
@@ -48,7 +100,7 @@ export default function App(): JSX.Element {
         .then((projects) => {
           if (cancelled) return
           const match = projects.find((p) => p.id === lastId)
-          if (match) setActiveProject(match)
+          if (match) void openWorkspaceForProject(match)
         })
         .catch(() => {})
     } catch {
@@ -57,7 +109,7 @@ export default function App(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [openWorkspaceForProject])
 
   // Persist the active project id; reset agent status when the project changes
   // (the drawer remounts its terminals for the new cwd).
@@ -83,11 +135,34 @@ export default function App(): JSX.Element {
     }
   }, [activeSessionId])
 
-  const selectSession = useCallback((sessionId: string | null, providerId?: string, project?: ProjectRow | null) => {
-    setHistorySel((prev) => ({ sessionId, providerId, nonce: (prev?.nonce ?? 0) + 1 }))
-    if (project !== undefined) setActiveProject(project)
-    setView('workspace')
-  }, [])
+  const handleNavigate = useCallback(
+    (nextView: AppView): void => {
+      if (nextView === 'general') {
+        void openGeneralChat()
+        return
+      }
+      if (nextView === 'workspace') {
+        void openWorkspaceForProject(activeProject)
+        return
+      }
+      setView(nextView)
+    },
+    [activeProject, openGeneralChat, openWorkspaceForProject]
+  )
+
+  const selectSession = useCallback(
+    (sessionId: string, project?: ProjectRow | null, providerId?: string) => {
+      if (project) {
+        setActiveProject(project)
+        setView('workspace')
+        selectHistory(sessionId, 'workspace', providerId)
+        return
+      }
+      setView('general')
+      selectHistory(sessionId, 'general', providerId)
+    },
+    [selectHistory]
+  )
 
   const handleAgentStatus = useCallback((id: 't1' | 't2', info: AgentStatusInfo) => {
     setAgentStatus((prev) => ({ ...prev, [id]: info }))
@@ -99,9 +174,10 @@ export default function App(): JSX.Element {
     const res = await window.api.projects.openFolder(activeProject?.id ?? null)
     if (res.ok) {
       setActiveProject(res.project)
+      void openWorkspaceForProject(res.project)
       bumpProjects()
     }
-  }, [activeProject?.id, bumpProjects])
+  }, [activeProject?.id, bumpProjects, openWorkspaceForProject])
 
   const requestCreateProject = useCallback(() => setCreateSignal((n) => n + 1), [])
 
@@ -109,24 +185,25 @@ export default function App(): JSX.Element {
     <div className="app">
       <Sidebar
         view={view}
-        onNavigate={setView}
+        onNavigate={handleNavigate}
         historyVersion={historyVersion}
         projectVersion={projectVersion}
         activeSessionId={activeSessionId}
         activeProject={activeProject}
         createSignal={createSignal}
-        onSelectProject={setActiveProject}
-        onSelectSession={(id, project) => selectSession(id, undefined, project)}
-        onNewChat={(providerId) => selectSession(null, providerId)}
+        onSelectProject={(project) => void openWorkspaceForProject(project)}
+        onSelectSession={(id, project, providerId) => selectSession(id, project, providerId)}
+        onNewChat={(providerId) => void openGeneralChat(providerId)}
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
       />
       {/* Chat-first workspace. Terminals are not part of this column anymore —
           they live in the AgentDrawer overlay (kept mounted to stay alive). */}
-      <div className="workspace" style={{ display: view === 'workspace' ? 'flex' : 'none' }}>
+      <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
         <ChatPanel
+          mode={view === 'general' ? 'general' : 'workspace'}
           historySel={historySel}
-          activeProject={activeProject}
+          activeProject={view === 'general' ? null : activeProject}
           agentStatus={agentStatus}
           drawerOpen={drawerOpen}
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
@@ -135,12 +212,14 @@ export default function App(): JSX.Element {
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
         />
-        <AgentDrawer
-          activeProject={activeProject}
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          onAgentStatus={handleAgentStatus}
-        />
+        {view === 'workspace' && (
+          <AgentDrawer
+            activeProject={activeProject}
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            onAgentStatus={handleAgentStatus}
+          />
+        )}
       </div>
       {/* The test page stays mounted while hidden so a streaming run is never
           interrupted by navigating to the Workspace or Dashboard. */}

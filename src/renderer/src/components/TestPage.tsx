@@ -136,6 +136,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRow | null>(null)
   const [evaluations, setEvaluations] = useState<EvaluationRow[]>([])
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null)
+  const [pdfNotice, setPdfNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   const currentRunId = useRef<string | null>(null)
   const currentReqId = useRef<string | null>(null)
@@ -408,24 +409,46 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const exportPdf = async (evaluation: EvaluationRow): Promise<void> => {
     setPdfBusyId(evaluation.id)
     setEvalError(null)
+    setPdfNotice(null)
     try {
       const res = await window.api.evaluate.exportPdf(evaluation.id)
       if (!res.ok) {
         setEvalError(res.error)
+        setPdfNotice({ kind: 'error', text: res.error })
         return
       }
       setLatestEvaluation(res.evaluation)
+      setPdfNotice({ kind: 'ok', text: `Saved PDF to ${res.pdfPath}` })
       refreshEvaluations()
     } catch (err) {
-      setEvalError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setEvalError(message)
+      setPdfNotice({ kind: 'error', text: message })
     } finally {
       setPdfBusyId(null)
     }
   }
 
   const revealPdf = async (evaluation: EvaluationRow): Promise<void> => {
+    setPdfNotice(null)
     const res = await window.api.evaluate.revealPdf(evaluation.id)
-    if (!res.ok) setEvalError(res.error)
+    if (!res.ok) {
+      setEvalError(res.error)
+      setPdfNotice({ kind: 'error', text: res.error })
+      return
+    }
+    setPdfNotice({ kind: 'ok', text: `Revealed PDF in Finder: ${evaluation.pdfPath}` })
+  }
+
+  const openPdf = async (evaluation: EvaluationRow): Promise<void> => {
+    setPdfNotice(null)
+    const res = await window.api.evaluate.openPdf(evaluation.id)
+    if (!res.ok) {
+      setEvalError(res.error)
+      setPdfNotice({ kind: 'error', text: res.error })
+      return
+    }
+    setPdfNotice({ kind: 'ok', text: `Opened PDF: ${evaluation.pdfPath}` })
   }
 
   const resultRunIds = results.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
@@ -694,6 +717,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           )}
 
           {evalError && <div className="test-error">{evalError}</div>}
+          {pdfNotice && <div className={`pdf-notice ${pdfNotice.kind}`}>{pdfNotice.text}</div>}
 
           {latestEvaluation && (
             <div className="isa-card">
@@ -716,12 +740,18 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                     {pdfBusyId === latestEvaluation.id ? 'Exporting…' : 'Export PDF'}
                   </button>
                   {latestEvaluation.pdfPath && (
-                    <button type="button" className="test-btn" onClick={() => void revealPdf(latestEvaluation)}>
-                      Reveal
-                    </button>
+                    <>
+                      <button type="button" className="test-btn" onClick={() => void revealPdf(latestEvaluation)}>
+                        Reveal
+                      </button>
+                      <button type="button" className="test-btn" onClick={() => void openPdf(latestEvaluation)}>
+                        Open
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+              {latestEvaluation.pdfPath && <div className="pdf-path">PDF: {latestEvaluation.pdfPath}</div>}
               {evaluationWarning(latestEvaluation) && <div className="isa-warning">{evaluationWarning(latestEvaluation)}</div>}
               <div className="isa-runs">
                 {[...latestEvaluation.dimensionScores.runs]
@@ -822,9 +852,14 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                         View
                       </button>
                       {ev.pdfPath ? (
-                        <button type="button" className="test-table-btn" onClick={() => void revealPdf(ev)}>
-                          Reveal
-                        </button>
+                        <>
+                          <button type="button" className="test-table-btn" onClick={() => void revealPdf(ev)}>
+                            Reveal
+                          </button>
+                          <button type="button" className="test-table-btn" onClick={() => void openPdf(ev)}>
+                            Open
+                          </button>
+                        </>
                       ) : (
                         <button type="button" className="test-table-btn" onClick={() => void exportPdf(ev)}>
                           PDF

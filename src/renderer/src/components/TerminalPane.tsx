@@ -148,7 +148,7 @@ export default function TerminalPane({
   }, [id, cwd, commandKind])
 
   const statusLabel =
-    status === 'connecting' ? 'connecting…' : status === 'live' ? 'live' : `exited (${exitCode ?? '?'})`
+    status === 'connecting' ? 'Starting...' : status === 'live' ? 'Live' : `Exited (${exitCode ?? '?'})`
   const IdentityIcon = identity === 'olympus' ? MountainIcon : WaveIcon
 
   return (

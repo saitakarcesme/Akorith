@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatUsage, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
-import type { AgentStatusMap, HistorySelection } from '../App'
+import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
 
@@ -24,6 +24,7 @@ const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t1: 'Claude' }
 const AUTO_SUMMARY_DELAY_MS = 6000
 
 interface ChatPanelProps {
+  mode: ChatMode
   /** Sidebar instruction: load a session or start a fresh thread. */
   historySel: HistorySelection | null
   activeProject: ProjectRow | null
@@ -105,6 +106,7 @@ function storageBoolean(key: string, fallback: boolean): boolean {
 }
 
 export default function ChatPanel({
+  mode,
   historySel,
   activeProject,
   agentStatus,
@@ -144,6 +146,8 @@ export default function ChatPanel({
   const autoSummaryTimer = useRef<ReturnType<typeof setTimeout>>()
   // Dedup: skip re-summarizing unchanged terminal output (no summary spam).
   const lastSummarySig = useRef<string | null>(null)
+  const isWorkspace = mode === 'workspace'
+  const hasProject = isWorkspace && Boolean(activeProject?.path)
 
   const loadProviders = useCallback(async (): Promise<void> => {
     setLoadError(null)
@@ -178,7 +182,7 @@ export default function ChatPanel({
 
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
-    if (!historySel) return
+    if (!historySel || historySel.mode !== mode) return
     if (historySel.sessionId === null) {
       setMessages([])
       setActiveSessionId(null)
@@ -206,7 +210,7 @@ export default function ChatPanel({
       setProviderId(data.session.providerId)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historySel?.nonce])
+  }, [historySel?.nonce, mode])
 
   const selected = providers?.find((p) => p.id === providerId)
 
@@ -280,7 +284,7 @@ export default function ChatPanel({
         terminalId,
         providerId: selected.id,
         model: model || undefined,
-        goal: activeProject ? `Work in ${activeProject.name}` : undefined,
+        goal: hasProject && activeProject ? `Work in ${activeProject.name}` : undefined,
         lastPrompt: opts.lastPrompt
       })
       const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
@@ -388,7 +392,7 @@ export default function ChatPanel({
     let sessionId = activeSessionId
     if (!sessionId) {
       try {
-        const session = await window.api.history.create(selected.id, prompt.slice(0, 80), activeProject?.id ?? null)
+        const session = await window.api.history.create(selected.id, prompt.slice(0, 80), hasProject ? activeProject?.id ?? null : null)
         sessionId = session.id
         setActiveSessionId(session.id)
         onActiveSession(session.id)
@@ -423,7 +427,8 @@ export default function ChatPanel({
         providerId: selected.id,
         model: model || undefined,
         prompt,
-        sessionId: sessionId ?? undefined
+        sessionId: sessionId ?? undefined,
+        includeDigest: hasProject
       })
       if (response.ok) {
         patchMessage(assistantId, {
@@ -462,11 +467,12 @@ export default function ChatPanel({
     [messages]
   )
   const composerInfo = [
+    isWorkspace ? `workspace ${activeProject?.name ?? 'no project'}` : 'general chat',
     selected?.label ?? 'No provider',
     model || 'default',
     lastUsage ? usageLine(lastUsage) : null,
-    `repo context ${digestEnabled ? 'on' : 'off'}`,
-    `target ${bridgeLabel}`
+    hasProject ? `repo context ${digestEnabled ? 'on' : 'off'}` : null,
+    hasProject ? `target ${bridgeLabel}` : null
   ].filter((item): item is string => Boolean(item))
 
   const bridgeButton = (text: string, key: string, title: string): JSX.Element => (
@@ -480,7 +486,6 @@ export default function ChatPanel({
     </button>
   )
 
-  const hasProject = Boolean(activeProject?.path)
   const hasConversation = messages.length > 0
   const summary = agentSummary(agentStatus)
 
@@ -514,7 +519,7 @@ export default function ChatPanel({
           </div>
         </div>
       )}
-      {hasProject && (
+      {hasProject && activeProject && (
         <MacroLoopPanel
           providers={providers}
           defaultProviderId={providerId}
@@ -533,7 +538,9 @@ export default function ChatPanel({
               ? 'Select an available provider to start…'
               : hasProject
                 ? `Describe a task for ${activeProject!.name}…  (Enter to send · Shift+Enter for newline)`
-                : 'Describe what you want to build…  (Enter to send · Shift+Enter for newline)'
+                : isWorkspace
+                  ? 'Open a project to start the workspace…'
+                  : 'Ask a model directly…  (Enter to send · Shift+Enter for newline)'
           }
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -548,27 +555,33 @@ export default function ChatPanel({
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
-            <div className="route-seg" role="group" aria-label="Target agent">
-              {TERMINALS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={bridgeTarget === t.id ? 'is-active' : ''}
-                  onClick={() => setBridgeTarget(t.id)}
-                  title={`Bridge sends go to ${t.label} (${t.id === 't2' ? 'Codex' : 'Claude'})`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <label className="composer-chip" title="Prepend a bounded git digest of the repo to what the provider sees.">
-              <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
-              Repo
-            </label>
-            <label className="composer-chip" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
-              <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
-              Auto-Enter
-            </label>
+            {hasProject && (
+              <div className="route-seg" role="group" aria-label="Target agent">
+                {TERMINALS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={bridgeTarget === t.id ? 'is-active' : ''}
+                    onClick={() => setBridgeTarget(t.id)}
+                    title={`Bridge sends go to ${t.label} (${t.id === 't2' ? 'Codex' : 'Claude'})`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hasProject && (
+              <label className="composer-chip" title="Prepend a bounded git digest of the repo to what the provider sees.">
+                <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
+                Repo
+              </label>
+            )}
+            {hasProject && (
+              <label className="composer-chip" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
+                <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
+                Auto-Enter
+              </label>
+            )}
             <button type="button" className="composer-chip" disabled={!draft.trim() || suggesting} onClick={() => void suggestTask()}>
               {suggesting ? 'Classifying…' : '✦ Suggest'}
             </button>
@@ -609,7 +622,8 @@ export default function ChatPanel({
     <main className="chat-panel">
       <header className="ws-topbar">
         <div className="ws-topbar-left">
-          <span className="ws-title">{activeProject ? activeProject.name : 'Workspace'}</span>
+          <span className="ws-title">{isWorkspace ? activeProject?.name ?? 'Workspace' : 'General chat'}</span>
+          <span className="ws-scope-pill">{isWorkspace ? 'Project workspace' : 'Model chat'}</span>
           {hasProject && (
             <button
               type="button"
@@ -671,7 +685,7 @@ export default function ChatPanel({
         </div>
       </header>
 
-      {!hasProject ? (
+      {isWorkspace && !hasProject ? (
         <div className="ws-hero">
           <div className="ws-hero-inner">
             <h1 className="ws-hero-title">What should we work on?</h1>
@@ -694,8 +708,10 @@ export default function ChatPanel({
       ) : !hasConversation ? (
         <div className="ws-hero">
           <div className="ws-hero-inner is-wide">
-            <h1 className="ws-hero-title">What should we build in {activeProject!.name}?</h1>
-            <p className="ws-hero-sub">Type a task — Akorith plans it and drives Codex and Claude for you.</p>
+            <h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : 'Ask a model directly'}</h1>
+            <p className="ws-hero-sub">
+              {hasProject ? 'Type a task — Akorith plans it and drives Codex and Claude for you.' : 'General chats are separate from project workspaces and do not use project context.'}
+            </p>
             {composer}
             {selected && !selected.available.ok && (
               <div className="chat-notice">
@@ -725,7 +741,7 @@ export default function ChatPanel({
                           <div className="chat-code" key={i}>
                             <div className="chat-code-header">
                               <span>{seg.lang ?? 'code'}</span>
-                              {m.status === 'done' &&
+                              {hasProject && m.status === 'done' &&
                                 bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
                             </div>
                             <pre>{seg.content}</pre>
@@ -747,7 +763,7 @@ export default function ChatPanel({
                           {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
                         </span>
                       )}
-                      {bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
+                      {hasProject && bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
                     </div>
                   )}
                 </div>
