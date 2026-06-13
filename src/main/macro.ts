@@ -372,6 +372,49 @@ async function summarize(sessionId: string, turnId: string): Promise<MacroRespon
   }
 }
 
+/**
+ * Phase 13.2: sessionless "summarize what an agent just did" for the chat workflow.
+ * Reads a read-only terminal snapshot and summarizes it as a meta call (NO
+ * usage_event) with a heuristic fallback. Returns a "no meaningful output" signal
+ * when the terminal has essentially nothing new, so the chat can show a graceful
+ * state instead of a spammy empty summary.
+ */
+type AgentSummaryResponse =
+  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string }
+  | { ok: false; error: string; signature?: string }
+
+async function summarizeAgentOutput(args: {
+  terminalId: string
+  providerId: string
+  model?: string
+  goal?: string
+  lastPrompt?: string
+}): Promise<AgentSummaryResponse> {
+  const snap = ptyManager.snapshot(args.terminalId, SNAPSHOT_CHARS + 4000)
+  const bounded = boundSnapshot(snap.text, SNAPSHOT_CHARS, 200)
+  // A signature lets the renderer skip re-summarizing unchanged output (no spam).
+  const signature = `${args.terminalId}:${bounded.chars}`
+  if (bounded.text.trim().length < 12) {
+    return { ok: false, error: 'No meaningful new output yet.', signature }
+  }
+  const detection = detectPermissionPrompt(snap.text)
+  let summary: ExecutorSummary
+  try {
+    const prompt = buildSummarizerPrompt({
+      goal: cleanText(args.goal ?? 'Summarize what the agent just did in the terminal.', MAX_GOAL_CHARS),
+      lastPrompt: cleanText(args.lastPrompt ?? '', MAX_PROMPT_CHARS),
+      snapshot: bounded.text,
+      turnIndex: 1,
+      repoDigest: null
+    })
+    const result = await sendMetaPrompt(args.providerId, args.model || undefined, prompt, AbortSignal.timeout(SUMMARIZE_TIMEOUT_MS))
+    summary = parseSummaryJson(result.text) ?? heuristicSummary(snap.text)
+  } catch {
+    summary = heuristicSummary(snap.text)
+  }
+  return { ok: true, summary, detection, signature }
+}
+
 /** Read-only permission detection over the target terminal's recent output. */
 function detectPermission(sessionId: string): { ok: true; detection: PermissionDetection } | { ok: false; error: string } {
   const s = getMacroSession(sessionId)
@@ -728,6 +771,29 @@ export function registerMacroIpc(): void {
       return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
     }
   })
+
+  // Sessionless summarize for the chat workflow (Phase 13.2). Meta call only.
+  ipcMain.handle(
+    'agent:summarize',
+    async (_event, args: { terminalId: string; providerId: string; model?: string; goal?: string; lastPrompt?: string }) => {
+      if (
+        typeof args?.terminalId !== 'string' ||
+        !VALID_TERMINAL.test(args.terminalId) ||
+        typeof args.providerId !== 'string' ||
+        !VALID_PROVIDER.test(args.providerId) ||
+        (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model))) ||
+        (args.goal !== undefined && typeof args.goal !== 'string') ||
+        (args.lastPrompt !== undefined && typeof args.lastPrompt !== 'string')
+      ) {
+        return { ok: false, error: 'invalid agent:summarize payload' }
+      }
+      try {
+        return await summarizeAgentOutput(args)
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 
   ipcMain.handle('macro:detectPermission', (_event, args: { sessionId: string }) => {
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {

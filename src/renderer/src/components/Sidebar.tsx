@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppView } from '../App'
 import {
-  AkorithMark,
   ChartIcon,
   ChevronIcon,
   FlaskIcon,
@@ -260,8 +259,9 @@ export default function Sidebar({
     <aside className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
       <div className="sidebar-brand">
         <div className="brand-lockup" title="Akorith">
-          <AkorithMark size={34} className="brand-mark" />
-          {!sidebarCollapsed && (
+          {sidebarCollapsed ? (
+            <div className="brand-name brand-name-compact">A</div>
+          ) : (
             <div>
               <div className="brand-name">Akorith</div>
               <div className="brand-subtitle">Agent orchestration</div>

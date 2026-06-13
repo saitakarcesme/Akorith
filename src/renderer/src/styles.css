@@ -2421,20 +2421,23 @@ textarea:focus-visible {
   gap: 20px;
 }
 
+/* GitHub-contribution-style grid: small adjacent squares, 7 rows = days of week,
+   columns = weeks, tight gap, a single-hue intensity ramp. */
 .heatmap {
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 12px);
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-columns: 11px;
   gap: 3px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
 .hm-cell {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 2px;
-  background: var(--bg-raised);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .hm-pad {
@@ -2442,15 +2445,15 @@ textarea:focus-visible {
 }
 
 .hm-l1 {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(95, 179, 126, 0.34);
 }
 
 .hm-l2 {
-  background: rgba(255, 255, 255, 0.46);
+  background: rgba(95, 179, 126, 0.62);
 }
 
 .hm-l3 {
-  background: var(--accent);
+  background: rgba(95, 179, 126, 0.95);
 }
 
 .dash-footnote {
@@ -3248,11 +3251,12 @@ textarea:focus-visible {
   background: var(--bg-composer);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  transition: border-color var(--fast), box-shadow var(--fast);
+  transition: border-color var(--fast), background-color var(--fast);
 }
+/* Subtle Codex-like focus: a soft gray border + faint background lift, no glow/ring. */
 .composer-box:focus-within {
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.20);
+  background: var(--bg-raised);
 }
 
 .composer-input {
@@ -3266,6 +3270,11 @@ textarea:focus-visible {
   color: var(--text);
   background: transparent;
   border: 0;
+  outline: none;
+}
+/* The box owns the focus treatment, so the textarea never draws its own ring. */
+.composer-input:focus,
+.composer-input:focus-visible {
   outline: none;
 }
 .composer-input::placeholder {
@@ -3478,4 +3487,116 @@ textarea:focus-visible {
 .recent-chat .recent-provider-dot,
 .collapsed-provider-dot {
   border-radius: 50%;
+}
+
+/* ============================================================
+   Phase 13.2 — chat spacing, agent summaries, drawer resize/collapse
+   ============================================================ */
+
+/* Chat column: more breathing room, intentional placement (not edge-stuck). */
+.chat-messages {
+  padding: 30px 32px 10px;
+}
+.chat-messages-col {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.chat-msg.assistant {
+  padding: 2px 14px;
+}
+.chat-msg.user {
+  padding: 12px 16px;
+}
+.composer-dock {
+  padding: 12px 32px 18px;
+}
+.composer-dock .composer {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Agent-output summary card header. */
+.chat-msg.is-summary {
+  align-self: stretch;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+.agent-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.agent-summary-head svg {
+  color: var(--text-dim);
+}
+.agent-summary-head em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+.agent-summary-head.needs-attention svg {
+  color: var(--warning);
+}
+
+/* Agent drawer: left-edge width resizer. */
+.agent-drawer-resizer {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 2;
+  cursor: col-resize;
+}
+.agent-drawer-resizer:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Per-terminal collapse: hide the host, shrink the slot to its header. */
+.terminal-pane.is-collapsed {
+  flex: 0 0 auto;
+}
+.terminal-pane.is-collapsed .terminal-host {
+  display: none;
+}
+.terminal-slot.is-collapsed {
+  min-height: 0;
+}
+.terminal-collapse-btn {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.terminal-collapse-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Sidebar collapsed brand mark (text "A"). */
+.brand-name-compact {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 10px;
 }

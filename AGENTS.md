@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 13.1 (chat-first
-Codex-style workspace).
+with electron-vite, in strict numbered phases — currently through Phase 13.2 (chat workflow
+polish + agent output feedback).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -16,7 +16,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 9.1.2 workspace polish + app identity · 9.1.3 app identity + sidebar defaults ·
 10 electron-builder packaging + macOS app identity · 11 agentic loop + final product polish ·
 12 full product validation · 13 Codex-quality light UI + persistent history ·
-**13.1 chat-first Codex-style workspace** — all done.
+13.1 chat-first Codex-style workspace ·
+**13.2 chat workflow polish + agent output feedback** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -630,6 +631,55 @@ blocks), dark Codex workspace, centered "What should we work on?" hero with Open
 provider/model + Activity. No right terminal column, no purple. Project-active states (hero
 composer, conversation, drawer) are code-verified (GUI click-through needs macOS Accessibility,
 unavailable here — same limitation as Phase 12/13).
+
+### Chat workflow polish + agent output feedback (Phase 13.2)
+
+Phase 13.2 polishes the chat-first workspace and adds **terminal-output → chat summaries**.
+
+- **Agent output summaries (the headline feature).** New sessionless main-process IPC
+  `agent:summarize` (in `macro.ts`, `summarizeAgentOutput`): reads a **read-only** terminal
+  snapshot, builds the agentic-core summarizer prompt, calls `sendMetaPrompt` (**meta call → no
+  `usage_event`**) with the `heuristicSummary` fallback, and returns `{ summary, detection,
+  signature }`; it returns a "No meaningful new output yet." signal when the snapshot is
+  essentially empty. Exposed via `window.api.agent.summarize`. In `ChatPanel`, after a bridge
+  send Akorith auto-summarizes once after a bounded delay (`AUTO_SUMMARY_DELAY_MS = 6000`),
+  **deduped by `signature`** so unchanged output never spams; a manual **"Summarize output"**
+  composer chip does the same on demand. The result is appended as a chat **summary card**
+  (`.is-summary`, source = "Olympus / Codex" or "Atlantis / Claude") with status / files /
+  commands / tests / failures / next step, and a permission-prompt note when detected. No second
+  PTY write path; summaries are meta calls only.
+- **Agent drawer resize + per-terminal collapse.** `AgentDrawer` is width-resizable (left-edge
+  handle, persisted `akorith.drawerWidth`, clamped 380–980) and each agent collapses
+  independently (persisted `akorith.olympusCollapsed`/`akorith.atlantisCollapsed`) — a collapsed
+  pane shrinks to its header and the other takes the height; the split resizer shows only when
+  both are expanded. `TerminalPane` gained `collapsed`/`onToggleCollapse` (header chevron); the
+  host is hidden via CSS when collapsed so **the PTY stays alive** (collapse/close never kills
+  agents). Closing the drawer is still just a transform.
+- **Composer focus.** Replaced the thick/ring focus with a subtle Codex treatment — soft gray
+  border + faint background lift, no glow; the textarea's own `:focus-visible` outline is removed
+  (the box owns focus).
+- **Dashboard colors (identity-based).** `Dashboard.colorOf` now maps by provider identity:
+  **Claude = orange `#d08a4f`, ChatGPT/Codex = blue `#5a93d8`, Local/Ollama = purple `#9a8fe0`**
+  (donut, stacked bars, legend dots, chips). The bar cursor tint is neutralized.
+- **GitHub-style heatmap.** 11px adjacent squares, tight 3px gap, 7-row week columns, with a
+  single-hue green intensity ramp (`--success`) instead of grayscale pills.
+- **Chat spacing.** Wider message padding (`30px 32px`), centered max-720px column with
+  `margin:auto`, and breathing room on user/assistant blocks; composer dock matches the column.
+- **Sidebar brand = text only.** Removed the `<AkorithMark>` logo from the sidebar header;
+  expanded shows "Akorith" + "Agent orchestration", collapsed shows a compact "A". The dock/app
+  icon is separate.
+- **New app icon.** `~/Downloads/newakorithlogo.png` (black/gray/white A-mark, 1254²) was found
+  and used: copied to `assets/akorith-logo.png` (the dock/window icon source) and regenerated
+  `build/icon.icns` / `build/icon.ico` / `build/icon.png` (sips + iconutil; 256px PNG-backed ICO).
+  The packaged bundle uses the new `icon.icns`.
+
+**Manual UI inspection (REAL).** Packaged app launched + screenshotted
+(`docs/validation/phase13-2-ui.png`) in the project-active state: text-only "Akorith" brand,
+top-bar agent-status chip "Codex & Claude ready" + Activity, hero "What should we build in
+<project>?" with the integrated MACRO LOOP bar + dark composer (route / Repo / Auto-Enter /
+Suggest / **Summarize output** / Show agents / Send), light sidebar with compact provider rows.
+Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are code-verified
+(GUI click-through needs macOS Accessibility, unavailable here).
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

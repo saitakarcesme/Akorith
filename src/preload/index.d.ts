@@ -459,6 +459,33 @@ export interface PermissionDetection {
   matchedText?: string
 }
 
+export interface ExecutorSummary {
+  changedFiles: string[]
+  commandsRun: string[]
+  testsRun: string | null
+  failures: string[]
+  currentStatus: string
+  likelyNextStep: string
+  confidence: number
+  needsUserAttention: boolean
+  source: 'model' | 'heuristic'
+}
+
+export type AgentSummaryResponse =
+  | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string }
+  | { ok: false; error: string; signature?: string }
+
+export interface AgentApi {
+  /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
+  summarize(args: {
+    terminalId: string
+    providerId: string
+    model?: string
+    goal?: string
+    lastPrompt?: string
+  }): Promise<AgentSummaryResponse>
+}
+
 export interface MacroSessionRow {
   id: string
   createdAt: number
@@ -560,6 +587,7 @@ export interface PreloadApi {
   test: TestApi
   evaluate: EvaluateApi
   macro: MacroApi
+  agent: AgentApi
 }
 
 declare global {

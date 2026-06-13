@@ -180,6 +180,11 @@ const macro = Object.freeze({
   list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro })
+const agent = Object.freeze({
+  // Phase 13.2: read a terminal snapshot and summarize it into chat (meta call).
+  summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent })
 
 contextBridge.exposeInMainWorld('api', api)

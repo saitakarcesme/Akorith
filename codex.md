@@ -149,6 +149,19 @@ electron-vite in strict numbered phases.
       integrated dark composer (route/Repo/Auto-Enter/Suggest/Show agents/Send). `MacroLoopPanel`
       engine unchanged but rendered inside the composer, collapsed by default, compact.
       Screenshot: `docs/validation/phase13-1-ui.png`.
+- [x] **Phase 13.2** — chat workflow polish + agent output feedback. **Agent→chat summaries:**
+      new sessionless `agent:summarize` IPC (`macro.ts` `summarizeAgentOutput`) reads a read-only
+      terminal snapshot + summarizes via `sendMetaPrompt` (meta, **no `usage_event`**) with
+      heuristic fallback and a "no meaningful output" signal; `window.api.agent.summarize` exposed.
+      ChatPanel auto-summarizes once 6s after a bridge send (deduped by `signature`) + a manual
+      "Summarize output" chip; result appended as a `.is-summary` card (source = Olympus/Codex or
+      Atlantis/Claude). **Drawer:** width-resizable (`akorith.drawerWidth`) + independent
+      Olympus/Atlantis collapse (`TerminalPane.collapsed`/`onToggleCollapse`, host hidden so PTY
+      survives). **Composer focus** = subtle border + bg lift (no ring). **Dashboard colors** by
+      identity (Claude orange / Codex blue / Local purple); **heatmap** = GitHub-style 11px squares
+      + green ramp. **Chat spacing** = centered max-720 column with padding. **Sidebar brand** =
+      text only (logo removed). **New icon** from `~/Downloads/newakorithlogo.png` → `assets/`
+      + regenerated `build/icon.{icns,ico,png}`. Screenshot: `docs/validation/phase13-2-ui.png`.
 
 ## Locked design decisions
 

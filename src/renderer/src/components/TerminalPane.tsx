@@ -23,6 +23,10 @@ interface TerminalPaneProps {
   /** Bubble status/role up so the chat can show "Codex ready" without the
    *  terminal being visible (the pane keeps running inside the hidden drawer). */
   onStatus?: (info: AgentStatusInfo) => void
+  /** When true the host is hidden (PTY stays alive); the header collapse toggle
+   *  is rendered when onToggleCollapse is provided. */
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
 const ROLES: { id: TerminalRole; label: string }[] = [
@@ -31,7 +35,16 @@ const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'codex', label: 'Codex' }
 ]
 
-export default function TerminalPane({ id, title, identity, cwd, commandKind, onStatus }: TerminalPaneProps): JSX.Element {
+export default function TerminalPane({
+  id,
+  title,
+  identity,
+  cwd,
+  commandKind,
+  onStatus,
+  collapsed = false,
+  onToggleCollapse
+}: TerminalPaneProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<PaneStatus>('connecting')
   const [exitCode, setExitCode] = useState<number | null>(null)
@@ -129,8 +142,19 @@ export default function TerminalPane({ id, title, identity, cwd, commandKind, on
   const IdentityIcon = identity === 'olympus' ? MountainIcon : WaveIcon
 
   return (
-    <section className="terminal-pane">
+    <section className={`terminal-pane ${collapsed ? 'is-collapsed' : ''}`}>
       <header className="terminal-pane-header">
+        {onToggleCollapse && (
+          <button
+            type="button"
+            className="terminal-collapse-btn"
+            onClick={onToggleCollapse}
+            title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? '▸' : '▾'}
+          </button>
+        )}
         <span className={`terminal-pane-dot ${status === 'live' ? 'is-live' : ''}`} />
         <IdentityIcon size={15} />
         <span className="terminal-pane-title">
@@ -139,6 +163,7 @@ export default function TerminalPane({ id, title, identity, cwd, commandKind, on
         <span className={`terminal-role-pill role-${role}`}>{ROLES.find((item) => item.id === role)?.label ?? 'Shell'}</span>
         <span className="terminal-pane-status">{statusLabel}</span>
       </header>
+      {/* Host stays mounted even when collapsed (CSS hides it) so the PTY lives. */}
       <div className="terminal-host" ref={hostRef} />
     </section>
   )

@@ -110,10 +110,13 @@ projects, history, and navigation; a **dark, calm center workspace** built aroun
 composer where you describe tasks; and the Codex/Claude **terminals running in the background**,
 revealed only when you want them via the **Agent activity** drawer. Pick a project from the
 sidebar and Akorith starts Codex and Claude in it automatically — you mostly just chat, and the
-agents work behind the scenes. The accent is near-monochrome (no neon, no clutter), and the app
-**resumes your last project on launch** so it never opens empty.
+agents work behind the scenes. After you send work to an agent, Akorith reads its terminal output
+and **summarizes the result back into the chat** ("Olympus/Codex created the files and ran tests —
+how would you like to continue?"), with a manual **Summarize output** action too. The accent is
+near-monochrome (no neon, no clutter), and the app **resumes your last project on launch** so it
+never opens empty.
 
-![Akorith chat-first workspace](docs/validation/phase13-1-ui.png)
+![Akorith chat-first workspace](docs/validation/phase13-2-ui.png)
 
 _More screenshots / a short demo clip can be added before public launch._
 

@@ -16,7 +16,15 @@ import type { DailyUsageRow, UsageSummary } from '../../../preload/index.d'
 // Reads ONLY usage_events (via the usage IPC).
 // TODO(phase 6): the router consumes the same data to pick providers.
 
-const PALETTE = ['#a996ff', '#78a8d8', '#c79063', '#b8a060', '#d78282', '#7bb8aa']
+// Provider-identity colors (Phase 13.2): Claude = orange, ChatGPT/Codex = blue,
+// Local/Ollama = purple. Anything else falls back to a neutral gray.
+function providerColor(id: string): string {
+  const n = id.toLowerCase()
+  if (n.includes('claude')) return '#d08a4f'
+  if (n.includes('chatgpt') || n.includes('codex') || n.includes('openai') || n.includes('gpt')) return '#5a93d8'
+  if (n.includes('local') || n.includes('ollama')) return '#9a8fe0'
+  return '#8a8893'
+}
 const HEATMAP_DAYS = 270
 const BAR_DAYS = 30
 
@@ -49,7 +57,7 @@ export default function Dashboard(): JSX.Element {
 
   // Stable provider order/colors from the summary (largest first).
   const providerIds = useMemo(() => summary?.byProvider.map((p) => p.providerId) ?? [], [summary])
-  const colorOf = (id: string): string => PALETTE[providerIds.indexOf(id) % PALETTE.length] ?? PALETTE[0]
+  const colorOf = (id: string): string => providerColor(id)
   const isEstimated = (id: string): boolean => summary?.byProvider.find((p) => p.providerId === id)?.estimated ?? false
   const fillOf = (id: string): string => (isEstimated(id) ? `url(#hatch-${id})` : colorOf(id))
   const estimatedIds = providerIds.filter(isEstimated)
@@ -184,7 +192,7 @@ export default function Dashboard(): JSX.Element {
             <BarChart data={barData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <XAxis dataKey="day" tick={{ fill: '#7d8590', fontSize: 10 }} interval={4} />
               <YAxis tick={{ fill: '#7d8590', fontSize: 10 }} tickFormatter={fmtTokens} width={44} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(169, 150, 255, 0.08)' }} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }} />
               <Legend formatter={(v: string) => `${v}${isEstimated(v) ? ' ≈' : ''}`} />
               {providerIds.map((id) => (
                 <Bar key={id} dataKey={id} stackId="tokens" fill={fillOf(id)} />

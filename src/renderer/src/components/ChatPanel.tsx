@@ -10,13 +10,18 @@ interface ChatMessage {
   text: string
   status: 'streaming' | 'done' | 'error'
   meta?: { provider: string; model: string; usage?: ChatUsage }
+  /** Phase 13.2: a terminal-output summary card (source = agent label). */
+  summary?: { source: string; needsAttention: boolean }
 }
 
-// Matches the panes mounted in TerminalColumn.
+// Olympus = Codex (t2), Atlantis = Claude (t1).
 const TERMINALS = [
   { id: 't2', label: 'Olympus' },
   { id: 't1', label: 'Atlantis' }
 ] as const
+const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t1: 'Claude' }
+// Bounded delay before auto-summarizing terminal output after a bridge send.
+const AUTO_SUMMARY_DELAY_MS = 6000
 
 interface ChatPanelProps {
   /** Sidebar instruction: load a session or start a fresh thread. */
@@ -133,8 +138,12 @@ export default function ChatPanel({
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [digestEnabled, setDigestEnabled] = useState(false)
+  const [summarizingAgent, setSummarizingAgent] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const sentTimer = useRef<ReturnType<typeof setTimeout>>()
+  const autoSummaryTimer = useRef<ReturnType<typeof setTimeout>>()
+  // Dedup: skip re-summarizing unchanged terminal output (no summary spam).
+  const lastSummarySig = useRef<string | null>(null)
 
   const loadProviders = useCallback(async (): Promise<void> => {
     setLoadError(null)
@@ -159,6 +168,7 @@ export default function ChatPanel({
     return () => {
       clearTimeout(toastTimer.current)
       clearTimeout(sentTimer.current)
+      clearTimeout(autoSummaryTimer.current)
     }
   }, [loadProviders])
 
@@ -230,9 +240,75 @@ export default function ChatPanel({
       clearTimeout(sentTimer.current)
       sentTimer.current = setTimeout(() => setSentKey(null), 1500)
       showToast('ok', `Sent to ${label}${autoEnter ? ' (running)' : ''}`)
+      // Phase 13.2: after a bounded delay, read what the agent did and summarize
+      // it back into chat (once, deduped). Manual button also available.
+      scheduleAutoSummary(bridgeTarget, text)
     } else {
       showToast('error', res.error)
     }
+  }
+
+  /** Render an ExecutorSummary into a compact, readable chat card body. */
+  const formatAgentSummary = (
+    summary: import('../../../preload/index.d').ExecutorSummary,
+    detection: import('../../../preload/index.d').PermissionDetection
+  ): string => {
+    const lines: string[] = [summary.currentStatus]
+    if (summary.changedFiles.length) lines.push(`Files changed: ${summary.changedFiles.slice(0, 8).join(', ')}`)
+    if (summary.commandsRun.length) lines.push(`Commands: ${summary.commandsRun.slice(0, 6).join(' · ')}`)
+    if (summary.testsRun) lines.push(`Tests: ${summary.testsRun}`)
+    if (summary.failures.length) lines.push(`Failures: ${summary.failures.slice(0, 3).join(' | ')}`)
+    lines.push(`Recommended next step: ${summary.likelyNextStep}`)
+    if (detection.detected) lines.push(`⚠ A permission prompt is waiting — ${detection.rationale} Open the activity drawer to review.`)
+    lines.push('How would you like to continue?')
+    return lines.join('\n')
+  }
+
+  /**
+   * Summarize a target terminal's recent output into a chat-visible assistant
+   * card. Meta call → never writes a usage_event. `auto` runs silently after a
+   * send; the manual button surfaces the "no meaningful output" state.
+   */
+  const runAgentSummary = async (terminalId: string, opts: { auto: boolean; lastPrompt?: string }): Promise<void> => {
+    if (!selected?.available.ok) {
+      if (!opts.auto) showToast('error', 'Select an available provider to summarize agent output.')
+      return
+    }
+    setSummarizingAgent(true)
+    try {
+      const res = await window.api.agent.summarize({
+        terminalId,
+        providerId: selected.id,
+        model: model || undefined,
+        goal: activeProject ? `Work in ${activeProject.name}` : undefined,
+        lastPrompt: opts.lastPrompt
+      })
+      const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
+      const source = `${label} / ${AGENT_ROLE[terminalId] ?? 'Agent'}`
+      if (res.ok) {
+        if (opts.auto && res.signature === lastSummarySig.current) return // unchanged → no spam
+        lastSummarySig.current = res.signature
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'assistant',
+            status: 'done',
+            text: formatAgentSummary(res.summary, res.detection),
+            summary: { source, needsAttention: res.summary.needsUserAttention || res.detection.detected }
+          }
+        ])
+      } else if (!opts.auto) {
+        showToast('error', `${source}: ${res.error}`)
+      }
+    } finally {
+      setSummarizingAgent(false)
+    }
+  }
+
+  const scheduleAutoSummary = (terminalId: string, lastPrompt: string): void => {
+    clearTimeout(autoSummaryTimer.current)
+    autoSummaryTimer.current = setTimeout(() => void runAgentSummary(terminalId, { auto: true, lastPrompt }), AUTO_SUMMARY_DELAY_MS)
   }
 
   const toggleAutoEnter = async (): Promise<void> => {
@@ -497,6 +573,17 @@ export default function ChatPanel({
               {suggesting ? 'Classifying…' : '✦ Suggest'}
             </button>
             {hasProject && (
+              <button
+                type="button"
+                className="composer-chip"
+                disabled={summarizingAgent}
+                onClick={() => void runAgentSummary(bridgeTarget, { auto: false })}
+                title={`Read ${TERMINALS.find((t) => t.id === bridgeTarget)?.label}'s recent terminal output and summarize it into chat`}
+              >
+                {summarizingAgent ? 'Reading…' : 'Summarize output'}
+              </button>
+            )}
+            {hasProject && (
               <button type="button" className="composer-chip" onClick={onToggleDrawer}>
                 {drawerOpen ? 'Hide agents' : 'Show agents'}
               </button>
@@ -623,7 +710,14 @@ export default function ChatPanel({
           <div className="chat-messages" ref={scrollRef} onMouseUp={handleSelectionMouseUp} onScroll={() => setSelection(null)}>
             <div className="chat-messages-col">
               {messages.map((m) => (
-                <div key={m.id} className={`chat-msg ${m.role} ${m.status}`}>
+                <div key={m.id} className={`chat-msg ${m.role} ${m.status} ${m.summary ? 'is-summary' : ''}`}>
+                  {m.summary && (
+                    <div className={`agent-summary-head ${m.summary.needsAttention ? 'needs-attention' : ''}`}>
+                      <SparkIcon size={13} />
+                      <span>{m.summary.source}</span>
+                      <em>agent output summary</em>
+                    </div>
+                  )}
                   {m.role === 'assistant' && m.status !== 'streaming' ? (
                     <div className="chat-msg-text">
                       {splitFences(m.text).map((seg, i) =>
@@ -644,7 +738,7 @@ export default function ChatPanel({
                   ) : (
                     <div className="chat-msg-text">{m.text || (m.status === 'streaming' ? '…' : '')}</div>
                   )}
-                  {m.role === 'assistant' && m.status === 'done' && (
+                  {m.role === 'assistant' && m.status === 'done' && !m.summary && (
                     <div className="chat-msg-meta">
                       {m.meta && (
                         <span>
