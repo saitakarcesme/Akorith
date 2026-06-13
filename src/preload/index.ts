@@ -30,6 +30,10 @@ const pty = Object.freeze({
     ipcRenderer.send('pty:kill', { id })
   },
 
+  /** Read-only bounded snapshot of a terminal's recent output (Phase 11). */
+  snapshot: (id: string, maxChars?: number): Promise<unknown> =>
+    ipcRenderer.invoke('pty:snapshot', { id, maxChars }),
+
   onData: (id: string, listener: (data: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, payload: PtyDataPayload): void => {
       if (payload.id === id) listener(payload.data)
@@ -167,6 +171,11 @@ const macro = Object.freeze({
   skip: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:skip', args),
   stop: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:stop', { sessionId }),
   complete: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:complete', { sessionId }),
+  setMode: (sessionId: string, mode: string): Promise<unknown> => ipcRenderer.invoke('macro:setMode', { sessionId, mode }),
+  startAuto: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:startAuto', { sessionId }),
+  summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:summarize', args),
+  detectPermission: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:detectPermission', { sessionId }),
+  respondPermission: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:respondPermission', args),
   get: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:get', { sessionId }),
   list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
 })

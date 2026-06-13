@@ -11,7 +11,11 @@ interface TerminalColumnProps {
 
 function storageNumber(key: string, fallback: number): number {
   try {
-    const raw = Number(localStorage.getItem(key))
+    const item = localStorage.getItem(key)
+    // Guard the empty/missing case: Number(null) is 0 (finite), which would
+    // silently override the fallback — that bug opened the split at 0/100.
+    if (item === null || item.trim() === '') return fallback
+    const raw = Number(item)
     return Number.isFinite(raw) ? raw : fallback
   } catch {
     return fallback
@@ -22,6 +26,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+// Olympus/Atlantis split must stay sane: never tiny-vs-huge. Anything outside
+// 30–70 (incl. a stale 0 from the old bug) resets to an even 50/50.
+const SPLIT_MIN = 30
+const SPLIT_MAX = 70
+function sanitizeSplit(value: number): number {
+  return value >= SPLIT_MIN && value <= SPLIT_MAX ? value : 50
+}
+
 // Stacked executor terminals: Olympus on top (t2), Atlantis on the bottom (t1).
 // Each runs an independent interactive PTY keyed by its stable id.
 export default function TerminalColumn({
@@ -30,7 +42,7 @@ export default function TerminalColumn({
   onProjectsChange
 }: TerminalColumnProps): JSX.Element {
   const columnRef = useRef<HTMLElement>(null)
-  const [split, setSplit] = useState(() => storageNumber('akorith.terminalSplit', 50))
+  const [split, setSplit] = useState(() => sanitizeSplit(storageNumber('akorith.terminalSplit', 50)))
   const [width, setWidth] = useState(() => storageNumber('akorith.executionWidth', 560))
   const [projectName, setProjectName] = useState(activeProject?.name ?? '')
   const [busy, setBusy] = useState<'open' | 'create' | null>(null)
@@ -55,7 +67,7 @@ export default function TerminalColumn({
     const height = columnRef.current?.clientHeight ?? 1
     const move = (moveEvent: PointerEvent): void => {
       const delta = ((moveEvent.clientY - startY) / height) * 100
-      setSplit(clamp(startSplit + delta, 24, 76))
+      setSplit(clamp(startSplit + delta, SPLIT_MIN, SPLIT_MAX))
     }
     const stop = (): void => {
       window.removeEventListener('pointermove', move)

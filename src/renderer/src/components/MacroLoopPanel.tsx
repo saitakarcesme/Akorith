@@ -1,11 +1,53 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { MacroSessionRow, MacroState, MacroTurnRow, ProjectRow, ProviderInfo } from '../../../preload/index.d'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  MacroMode,
+  MacroSessionRow,
+  MacroState,
+  MacroTurnRow,
+  PermissionDetection,
+  ProjectRow,
+  ProviderInfo
+} from '../../../preload/index.d'
 import { SparkIcon } from './icons'
 
 const TERMINALS = [
   { id: 't2', label: 'Olympus' },
   { id: 't1', label: 'Atlantis' }
 ] as const
+
+// Statuses where an Auto-Mode loop is actively working — drives UI polling.
+const AUTO_ACTIVE = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
+
+function terminalLabel(id: string | undefined): string {
+  return TERMINALS.find((t) => t.id === id)?.label ?? id ?? '—'
+}
+
+interface AutoActionEntry {
+  type: string
+  reason?: string
+  action?: string
+  at?: number
+  [k: string]: unknown
+}
+
+function parseAutoActions(json: string | null | undefined): AutoActionEntry[] {
+  if (!json) return []
+  try {
+    const list = JSON.parse(json) as AutoActionEntry[]
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function parsePermission(json: string | null | undefined): PermissionDetection | null {
+  if (!json) return null
+  try {
+    return JSON.parse(json) as PermissionDetection
+  } catch {
+    return null
+  }
+}
 
 interface MacroLoopPanelProps {
   providers: ProviderInfo[] | null
@@ -23,7 +65,13 @@ function latestActionableTurn(state: MacroState | null): MacroTurnRow | null {
 }
 
 function busyStatus(status: string | undefined): boolean {
-  return status === 'preparing_context' || status === 'proposing' || status === 'sending'
+  return (
+    status === 'preparing_context' ||
+    status === 'proposing' ||
+    status === 'sending' ||
+    status === 'summarizing' ||
+    status === 'auto_running'
+  )
 }
 
 function statusLabel(status: string | undefined): string {
@@ -52,8 +100,13 @@ export default function MacroLoopPanel({
   const [resultSummary, setResultSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<MacroSessionRow[]>([])
+  // Loop mode for the create form (before a session exists). Default Approval.
+  const [formMode, setFormMode] = useState<MacroMode>('approval')
+  const [summarizing, setSummarizing] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const session = state?.session ?? null
+  const mode: MacroMode = session?.mode ?? formMode
   const turn = latestActionableTurn(state)
   const planner = chatProviders.find((p) => p.id === plannerProvider)
   const isBusy = busyStatus(session?.status)
@@ -85,6 +138,31 @@ export default function MacroLoopPanel({
   useEffect(() => {
     setProposalDraft(turn?.editedProposal ?? turn?.proposal ?? '')
   }, [turn?.id, turn?.editedProposal, turn?.proposal])
+
+  // While an Auto-Mode loop is running in the main process, poll its persisted
+  // state so the UI tracks progress (sends, summaries, pauses) live.
+  useEffect(() => {
+    const sid = session?.id
+    const active = sid != null && AUTO_ACTIVE.has(session?.status ?? '')
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    if (active && sid) {
+      pollRef.current = setInterval(() => {
+        void window.api.macro
+          .get(sid)
+          .then((loaded) => {
+            if (loaded) setState(loaded)
+          })
+          .catch(() => {})
+      }, 1500)
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [session?.id, session?.status])
 
   const applyResponse = (res: Awaited<ReturnType<typeof window.api.macro.propose>>): boolean => {
     if (res.ok) {
@@ -123,11 +201,62 @@ export default function MacroLoopPanel({
       targetTerminal,
       maxIterations,
       goodEnoughThreshold,
-      includeRepoDigest
+      includeRepoDigest,
+      mode: formMode
     })
     if (!applyResponse(created)) return
     if (!created.ok) return
+    if (formMode === 'auto') {
+      const started = await window.api.macro.startAuto(created.state.session.id)
+      applyResponse(started)
+      return
+    }
     await propose(created.state.session.id)
+  }
+
+  // Auto Mode: kick (or resume) the cautious loop in the main process.
+  const startAuto = async (): Promise<void> => {
+    if (!session) return
+    setError(null)
+    const res = await window.api.macro.startAuto(session.id)
+    applyResponse(res)
+  }
+
+  const changeMode = async (next: MacroMode): Promise<void> => {
+    if (next === mode) return
+    if (!session) {
+      setFormMode(next)
+      return
+    }
+    setFormMode(next)
+    const res = await window.api.macro.setMode(session.id, next)
+    applyResponse(res)
+  }
+
+  // Approval Mode: fill the executor-result summary from the terminal snapshot.
+  const summarizeFromTerminal = async (): Promise<void> => {
+    if (!session || !turn) return
+    setSummarizing(true)
+    setError(null)
+    try {
+      const res = await window.api.macro.summarize({ sessionId: session.id, turnId: turn.id })
+      if (res.ok) {
+        if (res.summaryText) setResultSummary(res.summaryText)
+        if (res.state) setState(res.state)
+      } else {
+        setError(res.error)
+      }
+    } finally {
+      setSummarizing(false)
+    }
+  }
+
+  // Send a (user-approved) response to a detected permission prompt.
+  const respondPermission = async (action: string): Promise<void> => {
+    if (!session || !turn) return
+    setError(null)
+    const res = await window.api.macro.respondPermission({ sessionId: session.id, turnId: turn.id, action })
+    applyResponse(res)
   }
 
   const approve = async (): Promise<void> => {
@@ -187,6 +316,7 @@ export default function MacroLoopPanel({
       setMaxIterations(loaded.session.maxIterations)
       setGoodEnoughThreshold(loaded.session.goodEnoughThreshold)
       setIncludeRepoDigest(loaded.session.includeRepoDigest)
+      setFormMode(loaded.session.mode)
       setError(null)
     }
   }
@@ -229,6 +359,36 @@ export default function MacroLoopPanel({
           </button>
         )}
       </div>
+
+      <div className="macro-mode-row">
+        <div className="macro-mode" role="tablist" aria-label="Loop mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'approval'}
+            className={mode === 'approval' ? 'is-active' : ''}
+            onClick={() => void changeMode('approval')}
+          >
+            Approval
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'auto'}
+            className={mode === 'auto' ? 'is-active' : ''}
+            onClick={() => void changeMode('auto')}
+          >
+            Auto
+          </button>
+        </div>
+        <span className="macro-reading">reads {terminalLabel(session?.targetTerminal ?? targetTerminal)}</span>
+      </div>
+      {mode === 'auto' && (
+        <div className="macro-auto-note">
+          Auto Mode can send follow-up prompts to agents and auto-answer only low-risk one-time
+          confirmations. Medium/high-risk prompts pause for you. Stop remains available.
+        </div>
+      )}
 
       <label className="macro-field">
         <span>Goal</span>
@@ -303,9 +463,23 @@ export default function MacroLoopPanel({
 
       {!session || session.status === 'completed' || session.status === 'stopped' ? (
         <button type="button" className="macro-btn is-primary" disabled={!goal.trim() || !plannerProvider || isBusy} onClick={() => void start()}>
-          Start loop
+          {formMode === 'auto' ? 'Start Auto loop' : 'Start loop'}
         </button>
       ) : null}
+
+      {/* Auto Mode is paused on a safety gate — let the user resume cautiously. */}
+      {session &&
+        mode === 'auto' &&
+        (session.status === 'awaiting_executor_result' || session.status === 'awaiting_approval') &&
+        session.pauseReason && (
+          <button type="button" className="macro-btn is-primary" onClick={() => void startAuto()}>
+            Resume Auto
+          </button>
+        )}
+
+      {session?.pauseReason && session.status !== 'stopped' && session.status !== 'completed' && (
+        <div className="macro-warning">Auto paused: {session.pauseReason.replace(/_/g, ' ')}</div>
+      )}
 
       {error && <div className="macro-error">{error}</div>}
 
@@ -345,27 +519,87 @@ export default function MacroLoopPanel({
         </div>
       )}
 
+      {/* Detected permission prompt awaiting the user (Approval mode, or an Auto
+          pause on a medium/high-risk or low-confidence permission). */}
+      {session?.status === 'awaiting_permission' && turn && (() => {
+        const det = parsePermission(turn.permissionDetection)
+        return (
+          <div className="macro-permission">
+            <div className="macro-title small">Permission prompt detected</div>
+            <div className={`macro-perm-risk risk-${det?.riskLevel ?? 'medium'}`}>
+              {det ? `${det.kind.replace(/_/g, ' ')} · risk ${det.riskLevel}` : 'review required'}
+            </div>
+            {det?.rationale && <div className="macro-rationale">{det.rationale}</div>}
+            {det?.matchedText && <pre className="macro-perm-snippet">{det.matchedText.slice(-220)}</pre>}
+            <div className="macro-actions">
+              {det && det.suggestedAction !== '' && (
+                <button type="button" className="macro-btn is-primary" onClick={() => void respondPermission(det.suggestedAction)}>
+                  Send “{det.suggestedAction}”
+                </button>
+              )}
+              <button type="button" className="macro-btn" onClick={() => void respondPermission('')}>
+                Send Enter
+              </button>
+              <button type="button" className="macro-btn is-stop" onClick={() => void stop()}>
+                Stop
+              </button>
+            </div>
+            <div className="macro-hint">Akorith never auto-selects “always allow”. One-time approval only.</div>
+          </div>
+        )
+      })()}
+
       {session?.status === 'awaiting_executor_result' && turn && (
         <div className="macro-result">
-          <div className="macro-title small">Executor result</div>
+          <div className="macro-title small">Executor result · reads {terminalLabel(session.targetTerminal)}</div>
           <textarea
             value={resultSummary}
             rows={4}
-            placeholder="Paste or summarize the executor report: changed files, tests, failures, commit status."
+            placeholder="Paste the executor report, or click Summarize from terminal to read it automatically."
             onChange={(e) => setResultSummary(e.target.value)}
           />
           <div className="macro-actions">
+            <button type="button" className="macro-btn" disabled={summarizing} onClick={() => void summarizeFromTerminal()}>
+              {summarizing ? 'Summarizing…' : 'Summarize from terminal'}
+            </button>
             <button type="button" className="macro-btn is-primary" onClick={() => void recordAndContinue()}>
               Continue loop
             </button>
+            {mode === 'auto' && (
+              <button type="button" className="macro-btn" onClick={() => void startAuto()}>
+                Resume Auto
+              </button>
+            )}
             <button type="button" className="macro-btn" onClick={() => void complete()}>
               Mark complete
             </button>
-            <button type="button" className="macro-btn" onClick={() => void stop()}>
+            <button type="button" className="macro-btn is-stop" onClick={() => void stop()}>
               Stop
             </button>
           </div>
         </div>
+      )}
+
+      {turn?.executorResultSummary && session?.status !== 'awaiting_executor_result' && (
+        <div className="macro-summary-readout">
+          <div className="macro-title small">Latest summary</div>
+          <pre>{turn.executorResultSummary}</pre>
+        </div>
+      )}
+
+      {session && parseAutoActions(session.autoActions).length > 0 && (
+        <details className="macro-autolog">
+          <summary>Auto-actions log ({parseAutoActions(session.autoActions).length})</summary>
+          {parseAutoActions(session.autoActions)
+            .slice(-8)
+            .reverse()
+            .map((a, i) => (
+              <div key={i} className="macro-autolog-row">
+                <span>{a.type.replace(/_/g, ' ')}</span>
+                <em>{a.action ? `“${a.action}”` : a.reason ? a.reason.replace(/_/g, ' ') : ''}</em>
+              </div>
+            ))}
+        </details>
       )}
 
       {session?.stopReason && <div className="macro-hint">Stop reason: {session.stopReason}</div>}

@@ -6,9 +6,17 @@
   --bg-input: #0f0f15;
   /* Center planning/chat surfaces sit a step above the dark base so the
      thinking area reads lighter and more premium than the terminals. */
-  --bg-chat: #1a1922;
-  --bg-chat-bubble: #232230;
-  --bg-composer: #14131b;
+  --bg-chat: #201f29;
+  --bg-chat-raised: #262533;
+  --bg-composer: #1b1a23;
+  /* Chat bubbles are light/near-white for readability against the dark app. */
+  --bubble-user: #f4f1fb;
+  --bubble-user-text: #1c1830;
+  --bubble-assistant: #e9e6f2;
+  --bubble-assistant-text: #1d1a2b;
+  /* Soft glass sidebar — slightly lighter + translucent over the window base. */
+  --bg-sidebar: rgba(36, 34, 48, 0.72);
+  --bg-sidebar-solid: #201e2b;
   --border: #2a2834;
   --border-soft: rgba(255, 255, 255, 0.06);
   --text: #e6e1ea;
@@ -28,6 +36,11 @@
   --provider-local: #a996ff;
   --provider-local-bg: rgba(169, 150, 255, 0.13);
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.28);
+  /* Slightly softer corners across the app (polished desktop, not cartoonish). */
+  --radius-sm: 10px;
+  --radius: 13px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 150ms var(--ease);
   --font-ui:
@@ -120,9 +133,21 @@ textarea:focus-visible {
   width: 284px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #14131a 0%, #101016 100%);
+  /* Soft glass: lighter than before, gently translucent, subtle top highlight. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 140px),
+    var(--bg-sidebar);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
   border-right: 1px solid var(--border-soft);
   overflow: hidden;
+}
+
+/* Solid fallback if the platform can't composite backdrop blur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sidebar {
+    background: var(--bg-sidebar-solid);
+  }
 }
 
 .sidebar.is-collapsed {
@@ -166,10 +191,12 @@ textarea:focus-visible {
   gap: 10px;
 }
 
-.brand-lockup img {
+.brand-lockup img,
+.brand-mark {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  flex: 0 0 auto;
+  border-radius: 11px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
 }
 
@@ -201,7 +228,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -230,7 +257,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 9px;
+  border-radius: 11px;
   cursor: pointer;
 }
 
@@ -290,7 +317,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -305,7 +332,7 @@ textarea:focus-visible {
   font-size: 10px;
   color: var(--text-faint);
   background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .sidebar-add {
@@ -314,7 +341,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -352,7 +379,7 @@ textarea:focus-visible {
   gap: 2px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -428,7 +455,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 11px;
 }
 
 .modal-field input:focus {
@@ -454,7 +481,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 11px;
 }
 
 .modal-dir-btn {
@@ -467,7 +494,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 11px;
   cursor: pointer;
 }
 
@@ -481,7 +508,7 @@ textarea:focus-visible {
   font-size: 12px;
   color: var(--danger);
   background: rgba(215, 130, 130, 0.12);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .modal-actions {
@@ -495,7 +522,7 @@ textarea:focus-visible {
   padding: 8px 16px;
   font-size: 12px;
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: 11px;
   cursor: pointer;
 }
 
@@ -531,7 +558,7 @@ textarea:focus-visible {
   gap: 8px;
   margin-top: 2px;
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-dim);
   user-select: none;
 }
@@ -616,7 +643,7 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 7px;
   background: var(--bg-soft);
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .project-form input,
@@ -626,7 +653,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .project-form-actions {
@@ -639,7 +666,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.04);
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -670,7 +697,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -678,7 +705,7 @@ textarea:focus-visible {
 .recent-chat {
   gap: 7px;
   padding: 5px 7px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.025);
 }
 
@@ -707,7 +734,7 @@ textarea:focus-visible {
   justify-content: center;
   color: var(--accent-strong);
   background: var(--accent-dim);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -749,7 +776,7 @@ textarea:focus-visible {
   padding: 6px 8px;
   color: var(--text-faint);
   background: rgba(255, 255, 255, 0.035);
-  border-radius: 8px;
+  border-radius: 10px;
   line-height: 1.35;
   font-size: 11px;
 }
@@ -757,7 +784,7 @@ textarea:focus-visible {
 .provider-section {
   margin: 4px 0;
   padding: 7px 4px 5px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .provider-section.tone-claude,
@@ -849,7 +876,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.035);
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
 }
 
@@ -890,7 +917,7 @@ textarea:focus-visible {
   gap: 9px;
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -924,7 +951,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--shadow-soft);
   font-size: 12px;
 }
@@ -1010,7 +1037,7 @@ textarea:focus-visible {
   padding: 22px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -1022,7 +1049,7 @@ textarea:focus-visible {
   justify-content: center;
   color: var(--accent-strong);
   background: var(--accent-dim);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .project-onboarding h2 {
@@ -1057,7 +1084,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 11px;
 }
 
 .project-onboarding-actions button,
@@ -1070,7 +1097,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 0;
-  border-radius: 9px;
+  border-radius: 11px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1091,7 +1118,7 @@ textarea:focus-visible {
   color: var(--danger);
   background: rgba(215, 130, 130, 0.12);
   border: 1px solid rgba(215, 130, 130, 0.26);
-  border-radius: 9px;
+  border-radius: 11px;
   font-size: 12px;
 }
 
@@ -1265,7 +1292,7 @@ textarea:focus-visible {
   background-repeat: no-repeat;
   background-position: right 9px center;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -1294,7 +1321,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -1326,7 +1353,7 @@ textarea:focus-visible {
   display: flex;
   padding: 2px;
   background: var(--bg-input);
-  border-radius: 9px;
+  border-radius: 11px;
   overflow: hidden;
 }
 
@@ -1388,10 +1415,16 @@ textarea:focus-visible {
 
 .chat-code {
   margin: 8px 0;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: var(--bg-input);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-sm);
+  background: #16151d;
+  /* Light bubbles carry dark text; the dark code block restores light text. */
+  color: var(--text);
   overflow: hidden;
+}
+
+.chat-code pre {
+  color: var(--text);
 }
 
 .chat-code-header {
@@ -1559,7 +1592,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .macro-field textarea,
@@ -1625,7 +1658,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -1673,14 +1706,136 @@ textarea:focus-visible {
 }
 
 .macro-proposal,
-.macro-result {
+.macro-result,
+.macro-permission {
   padding: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+/* ---------- Phase 11 agentic loop UI ---------- */
+
+.macro-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.macro-mode {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.macro-mode button {
+  padding: 4px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.macro-mode button.is-active {
+  color: var(--accent-strong);
+  background: var(--accent-dim);
+}
+
+.macro-reading {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.macro-auto-note {
+  padding: 7px 9px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--accent-strong);
+  background: rgba(169, 150, 255, 0.08);
+  border: 1px solid rgba(169, 150, 255, 0.22);
+  border-radius: 10px;
+}
+
+.macro-permission {
+  border-color: rgba(198, 169, 107, 0.4);
+  background: rgba(198, 169, 107, 0.07);
+}
+
+.macro-perm-risk {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warning);
+}
+
+.macro-perm-risk.risk-high {
+  color: var(--danger);
+}
+
+.macro-perm-risk.risk-low {
+  color: var(--success);
+}
+
+.macro-perm-snippet,
+.macro-summary-readout pre {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 110px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.macro-summary-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.macro-autolog {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.macro-autolog summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.macro-autolog-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.macro-autolog-row em {
+  color: var(--text-faint);
+  font-style: normal;
+  text-align: right;
 }
 
 .macro-proposal-meta {
@@ -1742,11 +1897,13 @@ textarea:focus-visible {
 }
 
 .chat-msg {
-  max-width: 92%;
-  padding: 9px 12px;
-  border-radius: 12px;
+  max-width: 80%;
+  padding: 11px 15px;
+  border: none;
+  border-radius: var(--radius-lg);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 
 .chat-msg-text {
@@ -1754,21 +1911,24 @@ textarea:focus-visible {
   word-break: break-word;
 }
 
+/* Clean, borderless, light chat bubbles with dark readable text. */
 .chat-msg.user {
   align-self: flex-end;
-  background: var(--accent-dim);
-  border: 1px solid rgba(169, 150, 255, 0.2);
+  border-bottom-right-radius: var(--radius-sm);
+  background: var(--bubble-user);
+  color: var(--bubble-user-text);
 }
 
 .chat-msg.assistant {
   align-self: flex-start;
-  background: var(--bg-chat-bubble);
-  border: 1px solid var(--border-soft);
+  border-bottom-left-radius: var(--radius-sm);
+  background: var(--bubble-assistant);
+  color: var(--bubble-assistant-text);
 }
 
 .chat-msg.assistant.error {
-  border-color: rgba(215, 130, 130, 0.45);
-  color: var(--danger);
+  background: #f6e2e2;
+  color: #7e2b2b;
 }
 
 .chat-msg.assistant.streaming .chat-msg-text::after {
@@ -1843,7 +2003,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
@@ -1900,7 +2060,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -1923,7 +2083,7 @@ textarea:focus-visible {
   padding: 10px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   font-size: 12px;
 }
 
@@ -2024,7 +2184,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -2043,7 +2203,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 11px;
   cursor: pointer;
 }
 
@@ -2082,7 +2242,7 @@ textarea:focus-visible {
   padding: 12px 18px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   min-width: 120px;
 }
 
@@ -2133,7 +2293,7 @@ textarea:focus-visible {
   padding: 14px 16px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   min-width: 0;
 }
 
@@ -2406,7 +2566,7 @@ textarea:focus-visible {
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-left: 3px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .test-result.is-pass {
@@ -2493,7 +2653,7 @@ textarea:focus-visible {
   padding: 11px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2512,7 +2672,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .isa-title {

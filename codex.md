@@ -114,6 +114,16 @@ electron-vite in strict numbered phases.
       identity correct, `loopex.db` created (better-sqlite3 loads). README rewritten for humans;
       `docs/release-checklist.md` added. Remaining: code signing/notarization + a built Windows
       installer (config ready).
+- [x] **Phase 11** — agentic loop + product polish. Polish: inline `<AkorithMark>` SVG logo
+      (fixes packaged broken-box from absolute `/` path), terminal-split root-cause fix
+      (`storageNumber` null→fallback + 30–70 `sanitizeSplit`), lighter chat surface, light
+      borderless chat bubbles, soft translucent glass sidebar, larger global radii. Agentic:
+      `src/main/agentic-core.ts` (electron-free: snapshot bounding, permission detection,
+      summarizer parse/heuristic, Auto policy + stop gates) verified by
+      `scripts/verify-agentic-loop.ts`; read-only bounded `ptyManager.snapshot` + `pty:snapshot`
+      IPC; `macro.ts` gains `mode` (approval default | auto), `summarizeTurn` (meta call + heuristic
+      fallback, no `usage_event`), `respondPermission` (one-time token via bridge), and an
+      abortable `runAutoLoop`. Additive macro DB columns. Approval Mode unchanged + default.
 
 ## Locked design decisions
 
@@ -140,10 +150,20 @@ electron-vite in strict numbered phases.
 - **PDF reports use one main-process template.** `pdfkit` generates single and comparison
   reports under the app's `userData/reports` directory, with consistent typography, objective
   metrics, score breakdowns, judge label, rationale when present, and generated-test excerpts.
-- **Macro-loop is semi-automatic.** Planner proposals are meta calls and do not write
-  `usage_event`; the user must approve or edit each executor prompt before it is sent through
-  the existing bridge path. Terminal output is not auto-interpreted yet — the user pastes or
-  summarizes the executor result before continuing.
+- **Macro-loop: Approval Mode is the default and is unchanged.** Planner proposals are meta
+  calls and do not write `usage_event`; the user approves or edits each executor prompt before
+  it is sent through the bridge path.
+- **Auto Mode (Phase 11) is opt-in and cautious — do not loosen its gates.** It may auto-send
+  the planner's prompt and auto-answer ONLY low-risk, one-time, high-confidence (≥0.6)
+  confirmations (`agentic-core.decidePermissionPolicy`). Medium/high-risk, low-confidence,
+  destructive, "always allow", or ambiguous prompts always pause for the user. It never
+  auto-selects a permanent allow. Planner risk `high` pauses. Summarizer calls are meta calls
+  (no `usage_event`). Every auto-action is logged to `macro_sessions.auto_actions`. Stop aborts
+  the loop at every await. Permission responses and proposals both go through the single
+  `bridgeSend → PtyManager.write()` path — never a second write path.
+- **Terminal snapshots are read-only + bounded.** `ptyManager.snapshot` / `pty:snapshot` expose
+  only a capped tail of recent output; no filesystem, no exec, no write. Keep `agentic-core.ts`
+  electron-free so `scripts/verify-agentic-loop.ts` stays headless.
 - **Phase 9.1 UI state is local and conservative.** Sidebar collapse, planning-tool collapse,
   right execution width, terminal split, and display name are renderer `localStorage`; projects are
   SQLite rows, and new sessions can store nullable `project_id`.

@@ -6,15 +6,16 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 10 (electron-builder
-packaging + Akorith desktop identity).
+with electron-vite, in strict numbered phases — currently through Phase 11 (agentic loop +
+final product polish).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
 9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
 9.1.2 workspace polish + app identity · 9.1.3 app identity + sidebar defaults ·
-**10 electron-builder packaging + macOS app identity** — all done. Remaining: code
+10 electron-builder packaging + macOS app identity ·
+**11 agentic loop + final product polish** — all done. Remaining: code
 signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -474,6 +475,71 @@ Phase 9.1.3 is a focused follow-up after 9.1.2; still no packaging.
   menu + Create Project modal, project activation starting Olympus=Codex / Atlantis=Claude, the
   right execution column, chat-visible-on-macro-collapse, semi-automatic macro-loop, and the
   Dashboard/Test routes are all preserved.
+
+### Agentic loop + product polish (Phase 11)
+
+Phase 11 adds an optional **Auto Mode** to the macro-loop and polishes the UI, without
+changing any invariant: the single write path, meta-call/no-`usage_event` accounting, and
+the manual Approval flow all stand.
+
+**Product polish.**
+- *Sidebar logo* renders via an inline `<AkorithMark>` SVG (in `icons.tsx`), not
+  `<img src="/akorith-icon.svg">` — an absolute `/` asset path resolves under the dev server
+  but against filesystem root under `file://`, which is why the packaged logo was a broken
+  box. The favicon in `index.html` is now `./akorith-icon.svg` (relative).
+- *Terminal split* root-cause fix: `storageNumber` returned `Number(null)=0` when the key was
+  missing, opening the split at 0/100. It now returns the fallback for missing/empty, and the
+  split is clamped/`sanitizeSplit`'d to 30–70 (stale/invalid → even 50/50).
+- *Theme*: lighter center chat (`--bg-chat` #201f29), light **borderless** chat bubbles
+  (`--bubble-user`/`--bubble-assistant`, dark text, larger radius; dark code blocks restore
+  light text inside them), a soft translucent **glass sidebar** (`--bg-sidebar` rgba +
+  `backdrop-filter`, solid `@supports` fallback), and slightly larger global radii
+  (`--radius-*` + a one-step bump of existing radii).
+
+**agentic-core.ts (electron-free, headlessly verified).** Pure functions only — no terminal,
+DB, or provider access — so `scripts/verify-agentic-loop.ts` exercises them directly:
+- `stripAnsi` / `boundSnapshot` — clean + bound a terminal snapshot (last N lines / chars).
+- `detectPermissionPrompt(snapshot)` → `{ detected, kind, suggestedAction, riskLevel,
+  rationale, requiresUserReview }`. Conservative: numbered menus pick the **one-time** "Yes"
+  (never an "always allow"), destructive context (`rm -rf`, `sudo`, `--force`, …) forces
+  `high` risk and no auto-answer, access/permission requests always require review.
+- `buildSummarizerPrompt` / `parseSummaryJson` / `heuristicSummary` — executor-result summary
+  with a deterministic fallback when the model call fails or returns unusable JSON. Output:
+  `changedFiles, commandsRun, testsRun, failures, currentStatus, likelyNextStep, confidence,
+  needsUserAttention, source`.
+- `decidePermissionPolicy({mode, detection, confidence})` → `auto_send | pause_for_user |
+  ignore`. Approval Mode **never** auto-answers; Auto Mode auto-sends only low-risk, one-time,
+  high-confidence (≥0.6) confirmations.
+- `evaluateAutoOutcome(...)` → `continue | complete | stop | pause` (max iterations, good-enough
+  threshold, repeated failures, needs-attention, low confidence).
+
+**Terminal snapshot API (read-only).** `PtyManager` keeps a bounded ring buffer per session
+(`MAX_BUFFER_CHARS = 120k`, sliced on each `onData`). `ptyManager.snapshot(id, maxChars)` and
+the `pty:snapshot` IPC / `window.api.pty.snapshot` return the raw tail only — **no write, no
+exec, no filesystem**. This is the input to the summarizer/detector; it is not a second write
+path.
+
+**Orchestration (`macro.ts`).** New session field `mode` (`approval` default | `auto`).
+- `summarizeTurn` reads the snapshot, calls the planner provider via `sendMetaPrompt` (a meta
+  call → **no `usage_event`**) with a `heuristicSummary` fallback, and persists the summary +
+  `summarizer_confidence` + `permission_detection` + `terminal_snapshot_meta` + `result_status`.
+- `respondPermission` sends a short one-time token (`"1"`, `"y"`, Enter) through `bridgeSend`
+  — the **same single write path**, never arbitrary commands.
+- `runAutoLoop` (abortable via `activeLoops`; Stop wins at every await): propose → auto-send
+  proposal (bridge) → `waitForOutput` (bounded poll, never spins) → summarize → permission
+  policy (auto-answer low-risk one-time, else pause) → `evaluateAutoOutcome`. Planner `high`
+  risk pauses. Every automatic action is appended to the session's `auto_actions` audit log.
+- The renderer polls `macro:get` (~1.5s) while a loop is active; it does not drive the loop.
+
+**Persistence (additive, safe `ensureColumn` migrations).** `macro_sessions`: `mode`,
+`auto_actions` (JSON), `pause_reason`. `macro_turns`: `summarizer_confidence`,
+`permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`.
+Verified present in the packaged app's DB schema.
+
+**Safety summary.** Default is Approval Mode (unchanged Phase 9 flow). Auto Mode is opt-in with
+a visible note, never auto-selects "always allow", never auto-answers medium/high-risk or
+low-confidence prompts, pauses on failures/attention, and Stop always aborts. Planner +
+summarizer are meta calls and never touch the dashboard.
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

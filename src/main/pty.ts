@@ -97,6 +97,20 @@ function commandSpec(kind: PtyCommandKind): { command: string; args: string[]; s
  */
 interface Session {
   pty: IPty
+  /** Bounded ring of recent raw output for read-only snapshots (Phase 11). */
+  buffer: string
+}
+
+// Hard cap on retained scrollback per terminal — keeps memory bounded.
+const MAX_BUFFER_CHARS = 120_000
+
+export interface PtySnapshot {
+  id: string
+  alive: boolean
+  /** Raw (still ANSI-bearing) tail of recent output, bounded by maxChars. */
+  text: string
+  chars: number
+  truncated: boolean
 }
 
 class PtyManager {
@@ -127,7 +141,7 @@ class PtyManager {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
 
-    const session: Session = { pty }
+    const session: Session = { pty, buffer: '' }
     this.sessions.set(id, session)
 
     // A killed session can keep emitting until ConPTY tears it down, after a
@@ -136,6 +150,8 @@ class PtyManager {
     // current session.
     pty.onData((data) => {
       if (this.sessions.get(id) !== session) return
+      // Retain a bounded tail for read-only snapshots (Phase 11 agentic loop).
+      session.buffer = (session.buffer + data).slice(-MAX_BUFFER_CHARS)
       if (!sink.isDestroyed()) sink.send('pty:data', { id, data })
     })
     pty.onExit(({ exitCode }) => {
@@ -168,6 +184,21 @@ class PtyManager {
   /** Whether a live session exists for this terminal id. */
   isAlive(id: string): boolean {
     return this.sessions.has(id)
+  }
+
+  /**
+   * Read-only bounded snapshot of recent terminal output. Returns the raw tail
+   * (still ANSI-bearing); cleaning/parsing happens in agentic-core. This never
+   * writes to the PTY, exposes no filesystem, and runs no command — it only
+   * reads the in-memory ring this manager already keeps.
+   */
+  snapshot(id: string, maxChars = 8000): PtySnapshot {
+    const session = this.sessions.get(id)
+    const cap = Math.min(Math.max(Math.floor(maxChars) || 0, 1), MAX_BUFFER_CHARS)
+    if (!session) return { id, alive: false, text: '', chars: 0, truncated: false }
+    const full = session.buffer
+    const text = full.slice(-cap)
+    return { id, alive: true, text, chars: text.length, truncated: full.length > text.length }
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -220,5 +251,14 @@ export function registerPtyIpc(): void {
   ipcMain.on('pty:kill', (_event, args: { id: string }) => {
     if (typeof args?.id !== 'string' || !VALID_ID.test(args.id)) return
     ptyManager.kill(args.id)
+  })
+
+  // Read-only output snapshot. Bounded; no write/exec/filesystem surface.
+  ipcMain.handle('pty:snapshot', (_event, args: { id: string; maxChars?: number }): PtySnapshot => {
+    if (typeof args?.id !== 'string' || !VALID_ID.test(args.id)) {
+      return { id: '', alive: false, text: '', chars: 0, truncated: false }
+    }
+    const maxChars = typeof args.maxChars === 'number' && Number.isFinite(args.maxChars) ? args.maxChars : 8000
+    return ptyManager.snapshot(args.id, maxChars)
   })
 }

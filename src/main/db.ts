@@ -151,6 +151,15 @@ export function initDb(): void {
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
+  // Phase 11 agentic-loop audit columns (safe additive migrations).
+  ensureColumn('macro_sessions', 'mode', "TEXT NOT NULL DEFAULT 'approval'")
+  ensureColumn('macro_sessions', 'auto_actions', 'TEXT')
+  ensureColumn('macro_sessions', 'pause_reason', 'TEXT')
+  ensureColumn('macro_turns', 'summarizer_confidence', 'REAL')
+  ensureColumn('macro_turns', 'permission_detection', 'TEXT')
+  ensureColumn('macro_turns', 'terminal_snapshot_meta', 'TEXT')
+  ensureColumn('macro_turns', 'auto_action', 'TEXT')
+  ensureColumn('macro_turns', 'result_status', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -736,9 +745,14 @@ export type MacroStatus =
   | 'awaiting_approval'
   | 'sending'
   | 'awaiting_executor_result'
+  | 'summarizing'
+  | 'awaiting_permission'
+  | 'auto_running'
   | 'completed'
   | 'stopped'
   | 'error'
+
+export type MacroMode = 'approval' | 'auto'
 
 export interface MacroSessionRow {
   id: string
@@ -755,6 +769,11 @@ export interface MacroSessionRow {
   repoDigestSnapshot: string | null
   finalScore: number | null
   stopReason: string | null
+  /** Phase 11 agentic loop. */
+  mode: MacroMode
+  /** JSON audit trail of automatic actions (sends, auto-answers, pauses). */
+  autoActions: string | null
+  pauseReason: string | null
 }
 
 export interface MacroTurnRow {
@@ -775,6 +794,12 @@ export interface MacroTurnRow {
   providerUsed: string | null
   modelUsed: string | null
   error: string | null
+  /** Phase 11 agentic loop (JSON / metrics). */
+  summarizerConfidence: number | null
+  permissionDetection: string | null
+  terminalSnapshotMeta: string | null
+  autoAction: string | null
+  resultStatus: string | null
 }
 
 export interface MacroSessionWithTurns {
@@ -796,7 +821,10 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   includeRepoDigest: r.include_repo_digest === 1,
   repoDigestSnapshot: (r.repo_digest_snapshot as string | null) ?? null,
   finalScore: (r.final_score as number | null) ?? null,
-  stopReason: (r.stop_reason as string | null) ?? null
+  stopReason: (r.stop_reason as string | null) ?? null,
+  mode: (r.mode as MacroMode | null) === 'auto' ? 'auto' : 'approval',
+  autoActions: (r.auto_actions as string | null) ?? null,
+  pauseReason: (r.pause_reason as string | null) ?? null
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -816,7 +844,12 @@ const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
   riskLevel: (r.risk_level as string | null) ?? null,
   providerUsed: (r.provider_used as string | null) ?? null,
   modelUsed: (r.model_used as string | null) ?? null,
-  error: (r.error as string | null) ?? null
+  error: (r.error as string | null) ?? null,
+  summarizerConfidence: (r.summarizer_confidence as number | null) ?? null,
+  permissionDetection: (r.permission_detection as string | null) ?? null,
+  terminalSnapshotMeta: (r.terminal_snapshot_meta as string | null) ?? null,
+  autoAction: (r.auto_action as string | null) ?? null,
+  resultStatus: (r.result_status as string | null) ?? null
 })
 
 function touchMacroSession(sessionId: string, status?: MacroStatus): void {
@@ -835,6 +868,7 @@ export function createMacroSession(input: {
   maxIterations: number
   goodEnoughThreshold: number
   includeRepoDigest: boolean
+  mode?: MacroMode
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -851,14 +885,18 @@ export function createMacroSession(input: {
     includeRepoDigest: input.includeRepoDigest,
     repoDigestSnapshot: null,
     finalScore: null,
-    stopReason: null
+    stopReason: null,
+    mode: input.mode === 'auto' ? 'auto' : 'approval',
+    autoActions: null,
+    pauseReason: null
   }
   must()
     .prepare(
       `INSERT INTO macro_sessions
        (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
-        max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason,
+        mode, auto_actions, pause_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -874,14 +912,19 @@ export function createMacroSession(input: {
       row.includeRepoDigest ? 1 : 0,
       row.repoDigestSnapshot,
       row.finalScore,
-      row.stopReason
+      row.stopReason,
+      row.mode,
+      row.autoActions,
+      row.pauseReason
     )
   return row
 }
 
 export function updateMacroSession(
   sessionId: string,
-  patch: Partial<Pick<MacroSessionRow, 'status' | 'repoDigestSnapshot' | 'finalScore' | 'stopReason'>>
+  patch: Partial<
+    Pick<MacroSessionRow, 'status' | 'repoDigestSnapshot' | 'finalScore' | 'stopReason' | 'mode' | 'autoActions' | 'pauseReason'>
+  >
 ): MacroSessionRow | null {
   if (!VALID_ID.test(sessionId)) return null
   const current = getMacroSession(sessionId)
@@ -890,15 +933,29 @@ export function updateMacroSession(
     status: patch.status ?? current.status,
     repoDigestSnapshot: patch.repoDigestSnapshot ?? current.repoDigestSnapshot,
     finalScore: patch.finalScore ?? current.finalScore,
-    stopReason: patch.stopReason ?? current.stopReason
+    stopReason: patch.stopReason ?? current.stopReason,
+    mode: patch.mode ?? current.mode,
+    autoActions: patch.autoActions !== undefined ? patch.autoActions : current.autoActions,
+    pauseReason: patch.pauseReason !== undefined ? patch.pauseReason : current.pauseReason
   }
   must()
     .prepare(
       `UPDATE macro_sessions
-       SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?
+       SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
+           mode = ?, auto_actions = ?, pause_reason = ?
        WHERE id = ?`
     )
-    .run(Date.now(), next.status, next.repoDigestSnapshot, next.finalScore, next.stopReason, sessionId)
+    .run(
+      Date.now(),
+      next.status,
+      next.repoDigestSnapshot,
+      next.finalScore,
+      next.stopReason,
+      next.mode,
+      next.autoActions,
+      next.pauseReason,
+      sessionId
+    )
   return getMacroSession(sessionId)
 }
 
@@ -964,15 +1021,21 @@ export function createMacroTurn(input: {
     riskLevel: input.riskLevel ?? null,
     providerUsed: input.providerUsed ?? null,
     modelUsed: input.modelUsed ?? null,
-    error: input.error ?? null
+    error: input.error ?? null,
+    summarizerConfidence: null,
+    permissionDetection: null,
+    terminalSnapshotMeta: null,
+    autoAction: null,
+    resultStatus: null
   }
   must()
     .prepare(
       `INSERT INTO macro_turns
        (id, session_id, turn_index, created_at, status, proposal, edited_proposal, sent_prompt,
         executor_result_summary, planner_rationale, expected_result, confidence_score, good_enough_score,
-        risk_level, provider_used, model_used, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        risk_level, provider_used, model_used, error,
+        summarizer_confidence, permission_detection, terminal_snapshot_meta, auto_action, result_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -991,7 +1054,12 @@ export function createMacroTurn(input: {
       row.riskLevel,
       row.providerUsed,
       row.modelUsed,
-      row.error
+      row.error,
+      row.summarizerConfidence,
+      row.permissionDetection,
+      row.terminalSnapshotMeta,
+      row.autoAction,
+      row.resultStatus
     )
   touchMacroSession(input.sessionId)
   return row
@@ -1015,6 +1083,11 @@ export function updateMacroTurn(
       | 'providerUsed'
       | 'modelUsed'
       | 'error'
+      | 'summarizerConfidence'
+      | 'permissionDetection'
+      | 'terminalSnapshotMeta'
+      | 'autoAction'
+      | 'resultStatus'
     >
   >
 ): MacroTurnRow | null {
@@ -1030,7 +1103,9 @@ export function updateMacroTurn(
       `UPDATE macro_turns
        SET status = ?, proposal = ?, edited_proposal = ?, sent_prompt = ?, executor_result_summary = ?,
            planner_rationale = ?, expected_result = ?, confidence_score = ?, good_enough_score = ?,
-           risk_level = ?, provider_used = ?, model_used = ?, error = ?
+           risk_level = ?, provider_used = ?, model_used = ?, error = ?,
+           summarizer_confidence = ?, permission_detection = ?, terminal_snapshot_meta = ?,
+           auto_action = ?, result_status = ?
        WHERE id = ?`
     )
     .run(
@@ -1047,6 +1122,11 @@ export function updateMacroTurn(
       next.providerUsed,
       next.modelUsed,
       next.error,
+      next.summarizerConfidence,
+      next.permissionDetection,
+      next.terminalSnapshotMeta,
+      next.autoAction,
+      next.resultStatus,
       turnId
     )
   touchMacroSession(row.sessionId)

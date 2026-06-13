@@ -14,6 +14,14 @@ export type PtyCreateResponse =
   | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string }
   | { ok: false; error: string }
 
+export interface PtySnapshot {
+  id: string
+  alive: boolean
+  text: string
+  chars: number
+  truncated: boolean
+}
+
 export interface PtyApi {
   /** Spawn the platform shell in a PTY bound to this terminal id. */
   create(id: string, options: PtyCreateOptions): Promise<PtyCreateResponse>
@@ -23,6 +31,8 @@ export interface PtyApi {
   resize(id: string, cols: number, rows: number): void
   /** Kill the PTY process. */
   kill(id: string): void
+  /** Read-only bounded snapshot of recent terminal output (Phase 11). */
+  snapshot(id: string, maxChars?: number): Promise<PtySnapshot>
   /** Subscribe to shell output for this id. Returns an unsubscribe fn. */
   onData(id: string, listener: (data: string) => void): () => void
   /** Subscribe to shell exit for this id. Returns an unsubscribe fn. */
@@ -430,9 +440,24 @@ export type MacroStatus =
   | 'awaiting_approval'
   | 'sending'
   | 'awaiting_executor_result'
+  | 'summarizing'
+  | 'awaiting_permission'
+  | 'auto_running'
   | 'completed'
   | 'stopped'
   | 'error'
+
+export type MacroMode = 'approval' | 'auto'
+
+export interface PermissionDetection {
+  detected: boolean
+  kind: 'numbered_choice' | 'yes_no' | 'press_enter' | 'allow_access' | 'generic_confirm' | 'none'
+  suggestedAction: string
+  riskLevel: 'low' | 'medium' | 'high'
+  rationale: string
+  requiresUserReview: boolean
+  matchedText?: string
+}
 
 export interface MacroSessionRow {
   id: string
@@ -449,6 +474,9 @@ export interface MacroSessionRow {
   repoDigestSnapshot: string | null
   finalScore: number | null
   stopReason: string | null
+  mode: MacroMode
+  autoActions: string | null
+  pauseReason: string | null
 }
 
 export interface MacroTurnRow {
@@ -469,6 +497,11 @@ export interface MacroTurnRow {
   providerUsed: string | null
   modelUsed: string | null
   error: string | null
+  summarizerConfidence: number | null
+  permissionDetection: string | null
+  terminalSnapshotMeta: string | null
+  autoAction: string | null
+  resultStatus: string | null
 }
 
 export interface MacroState {
@@ -484,9 +517,14 @@ export interface MacroCreateRequest {
   maxIterations: number
   goodEnoughThreshold: number
   includeRepoDigest: boolean
+  mode?: MacroMode
 }
 
 export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
+export type MacroSummarizeResponse =
+  | { ok: true; state: MacroState; summaryText?: string }
+  | { ok: false; error: string; state?: MacroState }
+export type PermissionDetectResponse = { ok: true; detection: PermissionDetection } | { ok: false; error: string }
 
 export interface MacroApi {
   createSession(args: MacroCreateRequest): Promise<MacroResponse>
@@ -496,6 +534,16 @@ export interface MacroApi {
   skip(args: { sessionId: string; turnId: string }): Promise<MacroResponse>
   stop(sessionId: string): Promise<MacroResponse>
   complete(sessionId: string): Promise<MacroResponse>
+  /** Phase 11: switch Approval/Auto mode. */
+  setMode(sessionId: string, mode: MacroMode): Promise<MacroResponse>
+  /** Phase 11: begin the cautious Auto-Mode loop (returns immediately). */
+  startAuto(sessionId: string): Promise<MacroResponse>
+  /** Phase 11: summarize a turn's executor result from the terminal snapshot. */
+  summarize(args: { sessionId: string; turnId: string }): Promise<MacroSummarizeResponse>
+  /** Phase 11: read-only permission-prompt detection for the target terminal. */
+  detectPermission(sessionId: string): Promise<PermissionDetectResponse>
+  /** Phase 11: send a (user-approved) response to a detected permission prompt. */
+  respondPermission(args: { sessionId: string; turnId: string; action: string }): Promise<MacroResponse>
   get(sessionId: string): Promise<MacroState | null>
   list(limit?: number): Promise<MacroSessionRow[]>
 }

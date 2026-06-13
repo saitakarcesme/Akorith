@@ -79,13 +79,26 @@ comes from the dev Electron bundle and only the packaged build can override it.)
   preload bridge, a strict CSP, and prompts passed to CLIs over **stdin (never as shell
   arguments)**. There is a single programmatic path that can type into a terminal.
 
+## Macro-loop: Approval & Auto modes
+
+The macro-loop drives a planner → executor cycle toward a goal you set.
+
+- **Approval Mode (default)** — the planner proposes one step; you approve or edit it before
+  anything is sent. You stay in control of every send.
+- **Auto Mode (opt-in)** — Akorith can continue the cycle with less manual copying: it sends the
+  planner's prompt, reads a **read-only snapshot** of the terminal to summarize the result, and
+  continues. It is deliberately cautious — it auto-answers only **low-risk, one-time**
+  confirmations, **pauses** for anything medium/high-risk, destructive, low-confidence, or
+  ambiguous, **never** selects "always allow", and **Stop** always interrupts it.
+
 ## Current limitations
 
-- **No full autopilot** — the macro-loop is semi-automatic: you approve or edit every step
-  before it is sent to a terminal.
-- **No automatic terminal-output parsing** — you paste or summarize executor results yourself.
-- **No automatic permission-prompt approval** — Akorith never auto-answers `yes`/`1`/etc.
-  in a terminal.
+- **Auto Mode is cautious, not unlimited autonomous coding** — it pauses for you on anything
+  risky and stops on repeated failures or low confidence.
+- **No permanent "always allow"** auto-selection — only one-time approvals.
+- **Terminal-output parsing is heuristic/model-assisted** and may need your review.
+- **No automatic approval of risky permission prompts** — Akorith never auto-answers
+  destructive or medium/high-risk prompts.
 - **Ollama is optional** and may be absent; local-model features degrade gracefully.
 - Packaged builds are not yet code-signed/notarized for public distribution (Gatekeeper may
   warn on first open on other machines).

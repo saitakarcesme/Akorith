@@ -148,3 +148,43 @@ export function SendIcon(props: IconProps): JSX.Element {
     </IconShell>
   )
 }
+
+/**
+ * Akorith brand mark as inline SVG. Inlining (vs. an <img src="/akorith-icon.svg">)
+ * is the robust choice: an absolute "/" asset path resolves against the dev server
+ * in dev but against the filesystem root under `file://` in the packaged app, which
+ * is why the packaged sidebar logo rendered as a broken box. This always renders.
+ */
+export function AkorithMark({ size = 34, className }: IconProps): JSX.Element {
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 256 256"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect x="16" y="16" width="224" height="224" rx="52" fill="#14131B" />
+      <rect x="17" y="17" width="222" height="222" rx="51" stroke="#FFFFFF" strokeOpacity="0.06" strokeWidth="2" />
+      <path
+        d="M75 164L112.8 84.5C119.2 71.1 136.8 71.1 143.2 84.5L181 164"
+        stroke="#A996FF"
+        strokeWidth="17"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M96 149C117.8 122.3 138.2 122.3 160 149" stroke="#D8CEFF" strokeWidth="13" strokeLinecap="round" />
+      <path
+        d="M78 130C91.4 109.8 111.9 98 128 98C144.1 98 164.6 109.8 178 130C164.6 150.2 144.1 162 128 162C111.9 162 91.4 150.2 78 130Z"
+        stroke="#7E65D8"
+        strokeWidth="10"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.78"
+      />
+      <circle cx="128" cy="130" r="7" fill="#D8CEFF" />
+    </svg>
+  )
+}
