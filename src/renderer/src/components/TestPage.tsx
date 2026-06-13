@@ -3,6 +3,7 @@ import type {
   EvaluationRow,
   IsaDimensionName,
   ProviderInfo,
+  ProjectRow,
   TestDetection,
   TestRunRow,
   TestSettings
@@ -11,6 +12,7 @@ import TestTerminal from './TestTerminal'
 
 interface TestPageProps {
   active: boolean
+  activeProject: ProjectRow | null
 }
 
 interface ResultItem {
@@ -51,6 +53,37 @@ function statusColor(status: string | null | undefined): string {
 
 const SCORE_DIMS: IsaDimensionName[] = ['tests', 'speed', 'tokens', 'quality']
 
+// Phase 13.3 Test Lab presets. Framework presets fix the command/path; focus
+// presets (empty command) auto-detect and steer the generation prompt instead.
+interface TestPreset {
+  id: string
+  label: string
+  framework?: string
+  testCommand?: string
+  testPath?: string
+  focus?: string
+}
+const PRESETS: TestPreset[] = [
+  { id: 'auto', label: 'Auto-detect' },
+  { id: 'vitest', label: 'Vitest', framework: 'vitest', testCommand: 'npx vitest run', testPath: 'akorith.generated.test.ts' },
+  { id: 'jest', label: 'Jest', framework: 'jest', testCommand: 'npx jest', testPath: 'akorith.generated.test.js' },
+  { id: 'pytest', label: 'pytest', framework: 'pytest', testCommand: 'python3 -m pytest -q', testPath: 'test_akorith_generated.py' },
+  {
+    id: 'react',
+    label: 'React component tests',
+    framework: 'vitest',
+    testCommand: 'npx vitest run',
+    testPath: 'akorith.generated.test.tsx',
+    focus: 'React component rendering and interaction tests (Testing Library style).'
+  },
+  { id: 'unit', label: 'Utility/unit tests', focus: 'Pure utility/unit tests for the core logic.' },
+  {
+    id: 'security',
+    label: 'Security-focused tests',
+    focus: 'Security edge cases: input validation, injection, XSS, path traversal, unsafe parsing.'
+  }
+]
+
 function scoreLabel(score: number | null): string {
   return score === null ? 'omitted' : score.toFixed(1)
 }
@@ -63,9 +96,10 @@ function evaluationWarning(evaluation: EvaluationRow): string | null {
   return null
 }
 
-export default function TestPage({ active }: TestPageProps): JSX.Element {
+export default function TestPage({ active, activeProject }: TestPageProps): JSX.Element {
   const [settings, setSettings] = useState<TestSettings | null>(null)
   const [sourceRepo, setSourceRepo] = useState('')
+  const [projects, setProjects] = useState<ProjectRow[]>([])
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [providerId, setProviderId] = useState('')
   const [model, setModel] = useState('')
@@ -81,6 +115,9 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
   const [targetDesc, setTargetDesc] = useState('')
   const [comparison, setComparison] = useState(false)
   const [compareModels, setCompareModels] = useState<string[]>([])
+  // Phase 13.3: simple preset-driven flow; advanced fields are collapsed.
+  const [preset, setPreset] = useState('auto')
+  const [presetFocus, setPresetFocus] = useState('')
 
   const [running, setRunning] = useState(false)
   const [phase, setPhase] = useState('')
@@ -106,6 +143,8 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
   const selected = providers.find((p) => p.id === providerId)
   const judgeProviders = providers.filter((p) => p.available.ok && p.kind.includes('chat'))
   const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
+  const projectOptions = projects.filter((project) => Boolean(project.path))
+  const selectedProjectPath = projectOptions.find((project) => project.path === sourceRepo)?.path ?? ''
 
   const refreshRecent = useCallback(() => {
     void window.api.test.listRuns(12).then(setRecent).catch(() => setRecent([]))
@@ -134,9 +173,22 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
       // Prefer the configured default provider when it is available.
       setProviderId((cur) => cur || s.defaultProviderId)
     })
+    void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
     refreshRecent()
     refreshEvaluations()
   }, [refreshRecent, refreshEvaluations])
+
+  useEffect(() => {
+    if (!active) return
+    void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
+  }, [active])
+
+  // If the user already has an active project, make it the simple-flow default
+  // without overwriting an explicit Test Lab repo path from settings/user input.
+  useEffect(() => {
+    if (!activeProject?.path) return
+    setSourceRepo((cur) => cur || activeProject.path || '')
+  }, [activeProject?.path])
 
   // Default the model when the provider/model list changes.
   useEffect(() => {
@@ -156,30 +208,55 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
     setJudgeModel((cur) => (judgeSelected && judgeSelected.models.includes(cur) ? cur : (judgeSelected?.models[0] ?? '')))
   }, [judgeSelected])
 
-  const detect = async (): Promise<void> => {
+  const detect = async (): Promise<TestDetection | null> => {
     setError(null)
     if (!sourceRepo.trim()) {
       setError('Pick a source repo first.')
-      return
+      return null
     }
     await window.api.test.setSourceRepo(sourceRepo.trim())
     const d = await window.api.test.detect(sourceRepo.trim())
     if ('error' in d) {
       setError(d.error)
       setDetection(null)
-      return
+      return null
     }
     setDetection(d)
     setFramework(d.framework)
     setTestCommand(d.testCommand)
     setInstallCommand(d.installCommand)
     setTestPath(d.suggestedTestPath)
+    return d
   }
+
+  // Apply a preset: fill framework/command/path defaults + a generation focus.
+  // Presets without their own command auto-detect from the repo.
+  const applyPreset = async (id: string): Promise<void> => {
+    setPreset(id)
+    const p = PRESETS.find((x) => x.id === id)
+    if (!p || id === 'auto') {
+      setPresetFocus('')
+      if (sourceRepo.trim()) await detect()
+      return
+    }
+    // Detect first when a repo is selected so lockfile-aware install defaults
+    // stay accurate; then overlay the explicit preset command/path.
+    if (sourceRepo.trim()) await detect()
+    if (p.framework) setFramework(p.framework)
+    if (p.testCommand) setTestCommand(p.testCommand)
+    if (p.testPath) setTestPath(p.testPath)
+    setPresetFocus(p.focus ?? '')
+  }
+
+  // Optional instruction; falls back to the preset focus, then a sane default.
+  const effectiveTarget = (): string =>
+    targetDesc.trim() || presetFocus || 'the most important logic in this repository'
 
   const buildGenPrompt = (): string =>
     `Write ${framework || 'unit'} tests for this repository.\n\n` +
-    `Target: ${targetDesc.trim()}\n\n` +
-    `Respond with ONLY the complete test file content inside a single fenced code block — no prose. ` +
+    `Target: ${effectiveTarget()}\n` +
+    (presetFocus ? `Emphasis: ${presetFocus}\n` : '') +
+    `\nRespond with ONLY the complete test file content inside a single fenced code block — no prose. ` +
     `It will be saved as "${testPath}" and run with: ${testCommand}`
 
   /** Generate (local model) → write into a fresh sandbox → run → metrics. */
@@ -213,7 +290,7 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
       const res = await window.api.test.run({
         runId,
         sourceRepo: sourceRepo.trim(),
-        targetDesc: targetDesc.trim(),
+        targetDesc: effectiveTarget(),
         providerId,
         model: runModel,
         framework,
@@ -238,16 +315,16 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
     !running &&
     Boolean(sourceRepo.trim()) &&
     Boolean(testCommand.trim()) &&
-    Boolean(targetDesc.trim()) &&
+    Boolean(testPath.trim()) &&
     Boolean(selected?.available.ok)
 
   const handleRun = async (): Promise<void> => {
     setError(null)
     if (!canRun) {
-      if (!testCommand.trim()) setError('No test command — run Detect, or enter one manually.')
-      else if (!targetDesc.trim()) setError('Describe what to test in the box below.')
+      if (!sourceRepo.trim()) setError('Pick a source repo.')
+      else if (!testCommand.trim()) setError('Choose a preset (or run Detect) to set the test command.')
+      else if (!testPath.trim()) setError('Set a test file path in Advanced.')
       else if (!selected?.available.ok) setError('Pick an available provider.')
-      else if (!sourceRepo.trim()) setError('Pick a source repo.')
       return
     }
 
@@ -363,7 +440,24 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
         </p>
 
         <label className="test-field">
-          <span>Source repo</span>
+          <span>Project / repo</span>
+          {projectOptions.length > 0 && (
+            <select
+              value={selectedProjectPath}
+              onChange={(e) => {
+                setSourceRepo(e.target.value)
+                setDetection(null)
+                setError(null)
+              }}
+            >
+              <option value="">Custom path</option>
+              {projectOptions.map((project) => (
+                <option key={project.id} value={project.path ?? ''}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="test-row">
             <input
               type="text"
@@ -386,32 +480,18 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
           </div>
         )}
 
+        {/* Simple flow: preset + provider/model + optional instruction. */}
         <div className="test-grid">
           <label className="test-field">
-            <span>Framework</span>
-            <input value={framework} onChange={(e) => setFramework(e.target.value)} spellCheck={false} />
+            <span>Preset</span>
+            <select value={preset} onChange={(e) => void applyPreset(e.target.value)}>
+              {PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="test-field">
-            <span>Test file path (in sandbox)</span>
-            <input value={testPath} onChange={(e) => setTestPath(e.target.value)} spellCheck={false} />
-          </label>
-        </div>
-        <label className="test-field">
-          <span>Test command</span>
-          <input value={testCommand} onChange={(e) => setTestCommand(e.target.value)} spellCheck={false} placeholder="e.g. python3 -m pytest -q" />
-        </label>
-        <div className="test-grid">
-          <label className="test-field">
-            <span>Install command</span>
-            <input value={installCommand} onChange={(e) => setInstallCommand(e.target.value)} spellCheck={false} placeholder="(optional)" />
-          </label>
-          <label className="test-toggle">
-            <input type="checkbox" checked={installDeps} onChange={() => setInstallDeps((v) => !v)} />
-            Install deps in sandbox
-          </label>
-        </div>
-
-        <div className="test-grid">
           <label className="test-field">
             <span>Provider</span>
             <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
@@ -423,49 +503,77 @@ export default function TestPage({ active }: TestPageProps): JSX.Element {
               ))}
             </select>
           </label>
-          {selected && selected.models.length > 0 && !comparison && (
-            <label className="test-field">
-              <span>Model</span>
-              <select value={model} onChange={(e) => setModel(e.target.value)}>
-                {selected.models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </div>
-
-        <label className="test-toggle">
-          <input type="checkbox" checked={comparison} onChange={() => setComparison((v) => !v)} />
-          Compare multiple models (each in its own sandbox)
-        </label>
-        {comparison && (
-          <div className="test-compare-models">
-            {selected && selected.models.length > 0 ? (
-              selected.models.map((m) => (
-                <label key={m} className="test-compare-model">
-                  <input type="checkbox" checked={compareModels.includes(m)} onChange={() => compareModelToggle(m)} />
+        {selected && selected.models.length > 0 && !comparison && (
+          <label className="test-field">
+            <span>Model</span>
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              {selected.models.map((m) => (
+                <option key={m} value={m}>
                   {m}
-                </label>
-              ))
-            ) : (
-              <span className="test-hint">Selected provider exposes no model list to compare.</span>
-            )}
-          </div>
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         <label className="test-field">
-          <span>What to test</span>
+          <span>Optional instruction</span>
           <textarea
             value={targetDesc}
             onChange={(e) => setTargetDesc(e.target.value)}
-            rows={3}
-            placeholder='e.g. "write pytest tests for src/main/testlab.ts parseMetrics-style logic"'
+            rows={2}
+            placeholder={presetFocus || 'Leave blank to use the preset, or describe what to test…'}
             spellCheck={false}
           />
         </label>
+
+        {/* Advanced: framework / commands / comparison (auto-filled by preset/detect). */}
+        <details className="test-advanced">
+          <summary>Advanced</summary>
+          <div className="test-grid">
+            <label className="test-field">
+              <span>Framework</span>
+              <input value={framework} onChange={(e) => setFramework(e.target.value)} spellCheck={false} />
+            </label>
+            <label className="test-field">
+              <span>Test file path (in sandbox)</span>
+              <input value={testPath} onChange={(e) => setTestPath(e.target.value)} spellCheck={false} />
+            </label>
+          </div>
+          <label className="test-field">
+            <span>Test command</span>
+            <input value={testCommand} onChange={(e) => setTestCommand(e.target.value)} spellCheck={false} placeholder="e.g. python3 -m pytest -q" />
+          </label>
+          <div className="test-grid">
+            <label className="test-field">
+              <span>Install command</span>
+              <input value={installCommand} onChange={(e) => setInstallCommand(e.target.value)} spellCheck={false} placeholder="(optional)" />
+            </label>
+            <label className="test-toggle">
+              <input type="checkbox" checked={installDeps} onChange={() => setInstallDeps((v) => !v)} />
+              Install deps in sandbox
+            </label>
+          </div>
+          <label className="test-toggle">
+            <input type="checkbox" checked={comparison} onChange={() => setComparison((v) => !v)} />
+            Compare multiple models (each in its own sandbox)
+          </label>
+          {comparison && (
+            <div className="test-compare-models">
+              {selected && selected.models.length > 0 ? (
+                selected.models.map((m) => (
+                  <label key={m} className="test-compare-model">
+                    <input type="checkbox" checked={compareModels.includes(m)} onChange={() => compareModelToggle(m)} />
+                    {m}
+                  </label>
+                ))
+              ) : (
+                <span className="test-hint">Selected provider exposes no model list to compare.</span>
+              )}
+            </div>
+          )}
+        </details>
 
         <div className="test-actions">
           {running ? (

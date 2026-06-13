@@ -6,7 +6,7 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 13.2 (chat workflow
+with electron-vite, in strict numbered phases — currently through Phase 13.3 (chat workflow
 polish + agent output feedback).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
@@ -17,7 +17,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 10 electron-builder packaging + macOS app identity · 11 agentic loop + final product polish ·
 12 full product validation · 13 Codex-quality light UI + persistent history ·
 13.1 chat-first Codex-style workspace ·
-**13.2 chat workflow polish + agent output feedback** — all done.
+13.2 chat workflow polish + agent output feedback ·
+**13.3 per-project agent sessions + test-lab presets** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -680,6 +681,33 @@ top-bar agent-status chip "Codex & Claude ready" + Activity, hero "What should w
 Suggest / **Summarize output** / Show agents / Send), light sidebar with compact provider rows.
 Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are code-verified
 (GUI click-through needs macOS Accessibility, unavailable here).
+
+### Usability fixes — per-project agents + test-lab presets (Phase 13.3)
+
+- **Per-project agent session preservation (the fix).** PTY sessions are now keyed
+  `t1::<projectId>` / `t2::<projectId>` (AgentDrawer builds the composite id; App calls
+  `pty.setActiveProject(projectKey)` so the logical bridge targets `t1`/`t2` resolve to the active
+  project's session). `PtyManager.create` **reuses** an already-live session for the same project
+  cwd/command instead of kill+respawn, so switching projects and back keeps the running
+  Codex/Claude; if project metadata changes to a different cwd, the stale PTY is replaced through
+  the normal lifecycle path. `TerminalPane` no longer kills on unmount (detach only) and **replays
+  the snapshot buffer** on re-attach. Bounded to `MAX_LIVE_PROJECTS = 3` (oldest project's sessions
+  evicted). Still one write path (`bridgeSend → PtyManager.write`); `write`/`resize`/`kill`/
+  `snapshot`/`isAlive` resolve logical → active.
+- **Terminal restore handle.** A collapsed Olympus/Atlantis shows a clickable restore bar
+  ("click to restore"); the chevron also toggles. Collapse hides the host but keeps the PTY alive.
+- **Test Lab simple mode.** Project/repo selector uses workspace project paths (with custom path
+  still editable). Preset selector (Auto-detect / Vitest / Jest / pytest / React component /
+  Utility-unit / Security-focused) auto-fills framework/command/path plus lockfile-aware install
+  command when detection is possible, and steers the generation prompt; instruction is optional;
+  framework/commands/comparison moved behind an **Advanced** `<details>`.
+- **Macro-loop simplification.** "Include repo context" → **"Repo context"** with help line
+  *"Adds a compact project digest so Akorith understands your codebase. Better planning, more
+  tokens."*; planner/model/executor/max/threshold moved behind an **Advanced** `<details>`; start
+  button reads **"Plan with loop"** (Approval default) / "Start Auto loop"; Stop stays visible.
+- **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
+  composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
+  13.2 and retained.
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

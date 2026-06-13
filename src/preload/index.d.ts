@@ -11,7 +11,7 @@ export interface PtyCreateOptions {
 export type PtyCommandKind = 'shell' | 'codex' | 'claude'
 
 export type PtyCreateResponse =
-  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string }
+  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string; reused?: boolean }
   | { ok: false; error: string }
 
 export interface PtySnapshot {
@@ -31,6 +31,8 @@ export interface PtyApi {
   resize(id: string, cols: number, rows: number): void
   /** Kill the PTY process. */
   kill(id: string): void
+  /** Set which project's session logical bridge targets resolve to (Phase 13.3). */
+  setActiveProject(projectKey: string): void
   /** Read-only bounded snapshot of recent terminal output (Phase 11). */
   snapshot(id: string, maxChars?: number): Promise<PtySnapshot>
   /** Subscribe to shell output for this id. Returns an unsubscribe fn. */

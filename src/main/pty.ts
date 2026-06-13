@@ -4,8 +4,12 @@ import { homedir } from 'os'
 import { delimiter, isAbsolute, join } from 'path'
 import { spawn, type IPty } from 'node-pty'
 
-// Terminal ids are renderer-supplied; accept only short slugs ("t1", "t2", ...).
-const VALID_ID = /^[a-z0-9-]{1,32}$/
+// Terminal ids are renderer-supplied. Logical ids ("t1", "t2") may be suffixed
+// with a sanitized per-project key ("t1::<projectId>") so each project keeps
+// its own live session. Keep the accepted shape narrow; do not accept arbitrary
+// colon-delimited strings.
+const VALID_ID = /^[a-z0-9-]{1,32}(::[a-z0-9-]{1,40})?$/
+const VALID_PROJECT_KEY = /^[a-z0-9-]{1,40}$/
 
 export interface PtyCreateOptions {
   cols: number
@@ -17,7 +21,7 @@ export interface PtyCreateOptions {
 export type PtyCommandKind = 'shell' | 'codex' | 'claude'
 
 export type PtyCreateResponse =
-  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string }
+  | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string; reused?: boolean }
   | { ok: false; error: string }
 
 function clampDimension(value: unknown, fallback: number): number {
@@ -99,10 +103,17 @@ interface Session {
   pty: IPty
   /** Bounded ring of recent raw output for read-only snapshots (Phase 11). */
   buffer: string
+  /** The command kind that actually started (codex/claude/shell) for reuse reports. */
+  started: PtyCommandKind
+  /** Requested cwd/kind, used to avoid reusing a live session after project metadata changes. */
+  cwd: string
+  requestedKind: PtyCommandKind
 }
 
 // Hard cap on retained scrollback per terminal — keeps memory bounded.
 const MAX_BUFFER_CHARS = 120_000
+// Keep live agent sessions for at most this many recent projects (Phase 13.3).
+const MAX_LIVE_PROJECTS = 3
 
 export interface PtySnapshot {
   id: string
@@ -115,16 +126,52 @@ export interface PtySnapshot {
 
 class PtyManager {
   private readonly sessions = new Map<string, Session>()
+  /** Logical bridge target ("t1"/"t2") resolves to the active project's session. */
+  private activeProjectKey = ''
+  /** Recency-ordered project keys for bounded eviction (oldest first). */
+  private projectOrder: string[] = []
+
+  /** Composite-key suffix for a project ("t1" → "t1::<key>"). */
+  private projectKeyOf(id: string): string | null {
+    const at = id.indexOf('::')
+    if (at === -1) return null
+    const key = id.slice(at + 2)
+    return VALID_PROJECT_KEY.test(key) ? key : null
+  }
+
+  /**
+   * Resolve a logical id ("t1"/"t2") to a concrete session key. If the exact id
+   * already names a live session (renderer passes the composite id), use it;
+   * otherwise bind it to the active project's session (bridge/snapshot use this).
+   */
+  private resolve(id: string): string {
+    if (this.sessions.has(id)) return id
+    if (id.includes('::')) return id
+    return this.activeProjectKey ? `${id}::${this.activeProjectKey}` : id
+  }
+
+  setActiveProject(projectKey: string): void {
+    this.activeProjectKey = projectKey
+  }
 
   create(id: string, options: PtyCreateOptions, sink: WebContents): PtyCreateResponse {
     const cwd = safeCwd(options.cwd)
     if (!cwd) return { ok: false, error: 'invalid terminal working directory' }
     const kind = options.commandKind ?? 'shell'
-    const spec = commandSpec(kind)
 
-    // Replace any stale session with the same id (e.g. a remounted pane) only
-    // after the new lifecycle request has passed validation.
-    this.kill(id)
+    // Phase 13.3: reuse an already-live session (e.g. switching back to a project)
+    // instead of killing + respawning — this preserves the running agent.
+    const existing = this.sessions.get(id)
+    if (existing) {
+      if (existing.cwd !== cwd || existing.requestedKind !== kind) {
+        this.kill(id)
+      } else {
+        this.touchProject(this.projectKeyOf(id))
+        return { ok: true, started: existing.started, reused: true }
+      }
+    }
+
+    const spec = commandSpec(kind)
 
     let pty: IPty
     try {
@@ -141,8 +188,9 @@ class PtyManager {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
 
-    const session: Session = { pty, buffer: '' }
+    const session: Session = { pty, buffer: '', started: spec.started, cwd, requestedKind: kind }
     this.sessions.set(id, session)
+    this.touchProject(this.projectKeyOf(id))
 
     // A killed session can keep emitting until ConPTY tears it down, after a
     // replacement session has already claimed this id. Guard every event with
@@ -157,6 +205,7 @@ class PtyManager {
     pty.onExit(({ exitCode }) => {
       if (this.sessions.get(id) !== session) return
       this.sessions.delete(id)
+      this.removeProjectIfEmpty(this.projectKeyOf(id))
       if (!sink.isDestroyed()) sink.send('pty:exit', { id, code: exitCode })
     })
     return {
@@ -178,12 +227,32 @@ class PtyManager {
    * bridgeSend() after user approval.
    */
   write(id: string, data: string): void {
-    this.sessions.get(id)?.pty.write(data)
+    this.sessions.get(this.resolve(id))?.pty.write(data)
   }
 
-  /** Whether a live session exists for this terminal id. */
+  /** Whether a live session exists for this terminal id (logical → active project). */
   isAlive(id: string): boolean {
-    return this.sessions.has(id)
+    return this.sessions.has(this.resolve(id))
+  }
+
+  /** Mark a project most-recently-used and evict the oldest beyond the cap. */
+  private touchProject(projectKey: string | null): void {
+    if (!projectKey) return
+    this.projectOrder = this.projectOrder.filter((k) => k !== projectKey)
+    this.projectOrder.push(projectKey)
+    while (this.projectOrder.length > MAX_LIVE_PROJECTS) {
+      const evicted = this.projectOrder.shift()
+      if (!evicted) break
+      for (const sid of [...this.sessions.keys()]) {
+        if (sid.endsWith(`::${evicted}`)) this.kill(sid)
+      }
+    }
+  }
+
+  private removeProjectIfEmpty(projectKey: string | null): void {
+    if (!projectKey) return
+    if ([...this.sessions.keys()].some((sid) => sid.endsWith(`::${projectKey}`))) return
+    this.projectOrder = this.projectOrder.filter((k) => k !== projectKey)
   }
 
   /**
@@ -193,7 +262,7 @@ class PtyManager {
    * reads the in-memory ring this manager already keeps.
    */
   snapshot(id: string, maxChars = 8000): PtySnapshot {
-    const session = this.sessions.get(id)
+    const session = this.sessions.get(this.resolve(id))
     const cap = Math.min(Math.max(Math.floor(maxChars) || 0, 1), MAX_BUFFER_CHARS)
     if (!session) return { id, alive: false, text: '', chars: 0, truncated: false }
     const full = session.buffer
@@ -202,15 +271,17 @@ class PtyManager {
   }
 
   resize(id: string, cols: number, rows: number): void {
-    this.sessions.get(id)?.pty.resize(clampDimension(cols, 80), clampDimension(rows, 24))
+    this.sessions.get(this.resolve(id))?.pty.resize(clampDimension(cols, 80), clampDimension(rows, 24))
   }
 
   kill(id: string): void {
-    const session = this.sessions.get(id)
+    const resolved = this.resolve(id)
+    const session = this.sessions.get(resolved)
     if (!session) return
     // Delete first: this marks the session superseded, so its (asynchronous,
     // ConPTY-driven) exit event is suppressed rather than misattributed.
-    this.sessions.delete(id)
+    this.sessions.delete(resolved)
+    this.removeProjectIfEmpty(this.projectKeyOf(resolved))
     try {
       session.pty.kill()
     } catch {
@@ -251,6 +322,14 @@ export function registerPtyIpc(): void {
   ipcMain.on('pty:kill', (_event, args: { id: string }) => {
     if (typeof args?.id !== 'string' || !VALID_ID.test(args.id)) return
     ptyManager.kill(args.id)
+  })
+
+  // Phase 13.3: tell the manager which project's session the logical bridge
+  // targets ("t1"/"t2") resolve to. Empty string clears (no active project).
+  ipcMain.on('pty:setActiveProject', (_event, args: { projectKey: string }) => {
+    if (typeof args?.projectKey !== 'string') return
+    if (args.projectKey !== '' && !VALID_PROJECT_KEY.test(args.projectKey)) return
+    ptyManager.setActiveProject(args.projectKey)
   })
 
   // Read-only output snapshot. Bounded; no write/exec/filesystem surface.

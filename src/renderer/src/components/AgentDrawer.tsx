@@ -112,6 +112,12 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const olympusGrow = olympusCollapsed ? 0 : bothExpanded ? split : 1
   const atlantisGrow = atlantisCollapsed ? 0 : bothExpanded ? 100 - split : 1
 
+  // Per-project session keys (Phase 13.3): each project keeps its own live
+  // Codex/Claude session, so switching projects and back reuses them.
+  const projectKey = activeProject.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)
+  const olympusId = `t2::${projectKey}`
+  const atlantisId = `t1::${projectKey}`
+
   return (
     <>
       <div className={`agent-drawer-scrim ${open ? 'is-open' : ''}`} onClick={onClose} />
@@ -130,7 +136,8 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
             style={{ flexGrow: olympusGrow, flexBasis: 0, flexShrink: olympusCollapsed ? 0 : 1 }}
           >
             <TerminalPane
-              id="t2"
+              key={olympusId}
+              id={olympusId}
               title="Olympus"
               identity="olympus"
               cwd={activeProject.path}
@@ -153,7 +160,8 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
             style={{ flexGrow: atlantisGrow, flexBasis: 0, flexShrink: atlantisCollapsed ? 0 : 1 }}
           >
             <TerminalPane
-              id="t1"
+              key={atlantisId}
+              id={atlantisId}
               title="Atlantis"
               identity="atlantis"
               cwd={activeProject.path}

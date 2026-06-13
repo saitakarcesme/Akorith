@@ -401,69 +401,76 @@ export default function MacroLoopPanel({
         />
       </label>
 
-      <div className="macro-grid">
-        <label className="macro-field">
-          <span>Planner</span>
-          <select value={plannerProvider} disabled={isBusy || chatProviders.length === 0} onChange={(e) => setPlannerProvider(e.target.value)}>
-            {chatProviders.length === 0 && <option value="">No available planner</option>}
-            {chatProviders.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="macro-field">
-          <span>Model</span>
-          <select value={plannerModel} disabled={isBusy || !planner?.models.length} onChange={(e) => setPlannerModel(e.target.value)}>
-            {!planner?.models.length && <option value="">Default</option>}
-            {planner?.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="macro-grid three">
-        <label className="macro-field">
-          <span>Executor</span>
-          <select value={targetTerminal} disabled={isBusy} onChange={(e) => setTargetTerminal(e.target.value)}>
-            {TERMINALS.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="macro-field">
-          <span>Max</span>
-          <input type="number" min={1} max={50} value={maxIterations} disabled={isBusy} onChange={(e) => setMaxIterations(Number(e.target.value))} />
-        </label>
-        <label className="macro-field">
-          <span>Threshold</span>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={goodEnoughThreshold}
-            disabled={isBusy}
-            onChange={(e) => setGoodEnoughThreshold(Number(e.target.value))}
-          />
-        </label>
-      </div>
-
-      <label className="macro-toggle">
+      <label
+        className="macro-toggle"
+        title="Adds a compact project digest so Akorith understands your codebase. Better planning, more tokens."
+      >
         <input type="checkbox" checked={includeRepoDigest} disabled={isBusy} onChange={() => setIncludeRepoDigest((v) => !v)} />
-        Include repo context
+        Repo context
         {activeProject?.path && <em>{activeProject.name}</em>}
         {session?.includeRepoDigest && session.repoDigestSnapshot && <span>included</span>}
       </label>
+      <div className="macro-help">Adds a compact project digest so Akorith understands your codebase. Better planning, more tokens.</div>
+
+      <details className="macro-advanced">
+        <summary>Advanced settings</summary>
+        <div className="macro-grid">
+          <label className="macro-field">
+            <span>Planner</span>
+            <select value={plannerProvider} disabled={isBusy || chatProviders.length === 0} onChange={(e) => setPlannerProvider(e.target.value)}>
+              {chatProviders.length === 0 && <option value="">No available planner</option>}
+              {chatProviders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="macro-field">
+            <span>Model</span>
+            <select value={plannerModel} disabled={isBusy || !planner?.models.length} onChange={(e) => setPlannerModel(e.target.value)}>
+              {!planner?.models.length && <option value="">Default</option>}
+              {planner?.models.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="macro-grid three">
+          <label className="macro-field">
+            <span>Executor</span>
+            <select value={targetTerminal} disabled={isBusy} onChange={(e) => setTargetTerminal(e.target.value)}>
+              {TERMINALS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="macro-field">
+            <span>Max</span>
+            <input type="number" min={1} max={50} value={maxIterations} disabled={isBusy} onChange={(e) => setMaxIterations(Number(e.target.value))} />
+          </label>
+          <label className="macro-field">
+            <span>Threshold</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={goodEnoughThreshold}
+              disabled={isBusy}
+              onChange={(e) => setGoodEnoughThreshold(Number(e.target.value))}
+            />
+          </label>
+        </div>
+      </details>
 
       {!session || session.status === 'completed' || session.status === 'stopped' ? (
         <button type="button" className="macro-btn is-primary" disabled={!goal.trim() || !plannerProvider || isBusy} onClick={() => void start()}>
-          {formMode === 'auto' ? 'Start Auto loop' : 'Start loop'}
+          {formMode === 'auto' ? 'Start Auto loop' : 'Plan with loop'}
         </button>
       ) : null}
 

@@ -69,6 +69,10 @@ export default function App(): JSX.Element {
       /* ignore */
     }
     setAgentStatus({})
+    // Phase 13.3: point the bridge's logical targets (t1/t2) at this project's
+    // live sessions, matching the per-project keys used in AgentDrawer.
+    const projectKey = activeProject?.id ? activeProject.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40) : ''
+    window.api.pty.setActiveProject(projectKey)
   }, [activeProject?.id])
 
   useEffect(() => {
@@ -141,7 +145,7 @@ export default function App(): JSX.Element {
       {/* The test page stays mounted while hidden so a streaming run is never
           interrupted by navigating to the Workspace or Dashboard. */}
       <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
-        <TestPage active={view === 'test'} />
+        <TestPage active={view === 'test'} activeProject={activeProject} />
       </div>
       {view === 'dashboard' && <Dashboard />}
     </div>

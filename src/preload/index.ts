@@ -30,6 +30,11 @@ const pty = Object.freeze({
     ipcRenderer.send('pty:kill', { id })
   },
 
+  /** Phase 13.3: set which project's session logical bridge targets resolve to. */
+  setActiveProject: (projectKey: string): void => {
+    ipcRenderer.send('pty:setActiveProject', { projectKey })
+  },
+
   /** Read-only bounded snapshot of a terminal's recent output (Phase 11). */
   snapshot: (id: string, maxChars?: number): Promise<unknown> =>
     ipcRenderer.invoke('pty:snapshot', { id, maxChars }),

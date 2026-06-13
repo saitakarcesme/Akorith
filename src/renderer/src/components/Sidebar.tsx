@@ -419,14 +419,11 @@ export default function Sidebar({
                 return (
                   <button
                     type="button"
-                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''} ${providerTone(
-                      session.providerId
-                    )}`}
+                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
                     key={session.id}
                     onClick={() => selectSession(session)}
                     title={session.title}
                   >
-                    <span className="recent-provider-dot" />
                     <span className="recent-chat-text">
                       <span>{session.title}</span>
                       <em>

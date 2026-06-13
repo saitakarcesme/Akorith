@@ -162,6 +162,16 @@ electron-vite in strict numbered phases.
       + green ramp. **Chat spacing** = centered max-720 column with padding. **Sidebar brand** =
       text only (logo removed). **New icon** from `~/Downloads/newakorithlogo.png` → `assets/`
       + regenerated `build/icon.{icns,ico,png}`. Screenshot: `docs/validation/phase13-2-ui.png`.
+- [x] **Phase 13.3** — usability fixes. **Per-project agent sessions:** PTY keyed
+      `t1::<projectId>`/`t2::<projectId>`; `pty.setActiveProject` maps the logical bridge targets;
+      `PtyManager.create` reuses live sessions for the same cwd/command (no kill+respawn),
+      `TerminalPane` detaches (not kill) on unmount and replays the snapshot on re-attach; bounded
+      to 3 recent projects; single write path unchanged. **Terminal restore bar** for collapsed
+      Olympus/Atlantis. **Test Lab simple mode**: project/repo selector + preset dropdown
+      (auto-detect/vitest/jest/pytest/react/unit/security) auto-fills framework+command+path plus
+      detected install command, optional instruction, advanced fields collapsed. **Macro loop**:
+      "Repo context" + help line, advanced settings collapsed, "Plan with loop" / "Start Auto
+      loop", Stop visible. **Small UI**: recent-chat dots removed, collapsed profile centered.
 
 ## Locked design decisions
 

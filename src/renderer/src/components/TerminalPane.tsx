@@ -101,6 +101,13 @@ export default function TerminalPane({
         if (res.ok) {
           setRole(res.started)
           setStatus('live')
+          if (res.reused) {
+            // Re-attaching to a still-running session (e.g. switched back to this
+            // project): replay its recent scrollback into the fresh xterm.
+            void window.api.pty.snapshot(id, 120_000).then((snap) => {
+              if (!disposed && snap.text) terminal.write(snap.text)
+            })
+          }
           if (res.message) terminal.write(`\r\n\x1b[33m${res.message}\x1b[0m`)
           terminal.focus()
           return
@@ -126,13 +133,16 @@ export default function TerminalPane({
     resizeObserver.observe(host)
 
     return () => {
+      // Phase 13.3: detach only — never kill on unmount. The session keeps running
+      // in the main process so switching projects (and back) preserves the live
+      // agent. Bounded eviction in PtyManager caps how many projects stay alive;
+      // app quit kills everything via will-quit.
       disposed = true
       resizeObserver.disconnect()
       inputSub.dispose()
       resizeSub.dispose()
       offData()
       offExit()
-      window.api.pty.kill(id)
       terminal.dispose()
     }
   }, [id, cwd, commandKind])
@@ -143,12 +153,15 @@ export default function TerminalPane({
 
   return (
     <section className={`terminal-pane ${collapsed ? 'is-collapsed' : ''}`}>
-      <header className="terminal-pane-header">
+      <header className={`terminal-pane-header ${collapsed ? 'is-collapsed-bar' : ''}`} title={collapsed ? `Restore ${title}` : undefined}>
         {onToggleCollapse && (
           <button
             type="button"
             className="terminal-collapse-btn"
-            onClick={onToggleCollapse}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleCollapse()
+            }}
             title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
             aria-expanded={!collapsed}
           >
@@ -161,7 +174,13 @@ export default function TerminalPane({
           <strong>{title}</strong>
         </span>
         <span className={`terminal-role-pill role-${role}`}>{ROLES.find((item) => item.id === role)?.label ?? 'Shell'}</span>
-        <span className="terminal-pane-status">{statusLabel}</span>
+        {collapsed && onToggleCollapse ? (
+          <button type="button" className="terminal-restore-label" onClick={onToggleCollapse}>
+            click to restore
+          </button>
+        ) : (
+          <span className="terminal-pane-status">{statusLabel}</span>
+        )}
       </header>
       {/* Host stays mounted even when collapsed (CSS hides it) so the PTY lives. */}
       <div className="terminal-host" ref={hostRef} />

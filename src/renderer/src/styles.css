@@ -977,9 +977,16 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
+.sidebar.is-collapsed .sidebar-profile {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
 .sidebar.is-collapsed .profile-button {
-  width: 44px;
+  width: 42px;
   height: 42px;
+  flex: 0 0 auto;
   justify-content: center;
   padding: 0;
 }
@@ -1272,6 +1279,23 @@ textarea:focus-visible {
   margin-left: auto;
   font-size: 10px;
   color: var(--text-faint);
+}
+
+.terminal-restore-label {
+  margin-left: auto;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-strong);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.terminal-restore-label:hover,
+.terminal-restore-label:focus-visible {
+  color: var(--text);
+  outline: none;
 }
 
 .terminal-pane-title {
@@ -3599,4 +3623,51 @@ textarea:focus-visible {
   font-weight: 700;
   border: 1px solid var(--sidebar-border);
   border-radius: 10px;
+}
+
+/* ============================================================
+   Phase 13.3 — collapsed terminal bar, macro/test advanced sections
+   ============================================================ */
+
+/* Collapsed terminal pane = a clickable restore bar. */
+.terminal-pane-header.is-collapsed-bar:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Collapsible advanced sections (macro loop + test lab). */
+.macro-advanced,
+.test-advanced {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+}
+.macro-advanced > summary,
+.test-advanced > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  list-style: none;
+  padding: 2px 0 6px;
+}
+.macro-advanced > summary::-webkit-details-marker,
+.test-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.macro-advanced > summary::before,
+.test-advanced > summary::before {
+  content: '▸ ';
+  color: var(--text-faint);
+}
+.macro-advanced[open] > summary::before,
+.test-advanced[open] > summary::before {
+  content: '▾ ';
+}
+
+/* Repo-context help line under the macro toggle. */
+.macro-help {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
 }
