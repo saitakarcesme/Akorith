@@ -103,6 +103,9 @@ export default function Sidebar({
       return {}
     }
   })
+  // The Projects group is a collapsible folder like the provider folders below.
+  // Defaults to expanded since the workspace is the primary entry point.
+  const [projectsCollapsed, setProjectsCollapsed] = useState(() => storageBoolean('akorith.projectsCollapsed', false))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -140,6 +143,10 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.projectsCollapsed', String(projectsCollapsed))
+  }, [projectsCollapsed])
 
   useEffect(() => {
     localStorage.setItem('akorith.providerCollapsed', JSON.stringify(providerCollapsed))
@@ -347,14 +354,17 @@ export default function Sidebar({
         <div className="sidebar-scroll">
           <div className="sidebar-fixed-groups">
             <section className="sidebar-section project-section">
-              <div className="sidebar-section-header">
+              <div className="sidebar-section-header provider-header">
                 <button
                   type="button"
-                  className={`sidebar-fold ${view === 'workspace' && !activeProject ? 'is-active' : ''}`}
-                  onClick={() => onSelectProject(null)}
+                  className="sidebar-fold"
+                  onClick={() => setProjectsCollapsed((value) => !value)}
+                  title={projectsCollapsed ? 'Expand' : 'Collapse'}
                 >
+                  <ChevronIcon size={13} direction={projectsCollapsed ? 'right' : 'down'} />
                   <FolderIcon size={15} />
-                  All projects
+                  Projects
+                  {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
                 </button>
                 <div className="sidebar-add-wrap">
                   <button
@@ -385,42 +395,61 @@ export default function Sidebar({
                   )}
                 </div>
               </div>
-              {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
-              {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
-              <div className="project-list">
-                {projects.length === 0 ? (
-                  <div className="sidebar-empty-state">
-                    <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
-                    <div className="sidebar-empty-actions">
-                      <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
-                        <FolderIcon size={14} />
-                        Open Project
-                      </button>
-                      <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
-                        <PlusIcon size={14} />
-                        Create Project
-                      </button>
-                    </div>
+              {!projectsCollapsed && (
+                <>
+                  {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
+                  {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
+                  <div className="project-list">
+                    {projects.length === 0 ? (
+                      <div className="sidebar-empty-state">
+                        <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
+                        <div className="sidebar-empty-actions">
+                          <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
+                            <FolderIcon size={14} />
+                            Open Project
+                          </button>
+                          <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
+                            <PlusIcon size={14} />
+                            Create Project
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className={`project-item is-all ${view === 'workspace' && !activeProject ? 'is-active' : ''}`}
+                          onClick={() => onSelectProject(null)}
+                          title="All projects"
+                        >
+                          <span className="project-avatar">
+                            <FolderIcon size={14} />
+                          </span>
+                          <span className="project-text">
+                            <span>All projects</span>
+                          </span>
+                        </button>
+                        {projects.map((project) => (
+                          <button
+                            type="button"
+                            key={project.id}
+                            className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
+                            onClick={() => onSelectProject(project)}
+                            title={project.path ?? project.name}
+                          >
+                            <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
+                            <span className="project-text">
+                              <span>{project.name}</span>
+                              <em>{project.path || 'No path associated'}</em>
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
-                ) : (
-                  projects.map((project) => (
-                    <button
-                      type="button"
-                      key={project.id}
-                      className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
-                      onClick={() => onSelectProject(project)}
-                      title={project.path ?? project.name}
-                    >
-                      <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
-                      <span className="project-text">
-                        <span>{project.name}</span>
-                        <em>{project.path || 'No path associated'}</em>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-              {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
+                  {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
+                </>
+              )}
             </section>
 
             {folderIds.map((providerId) => {
