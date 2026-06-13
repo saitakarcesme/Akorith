@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 13 (Codex-quality
-light UI + persistent workspace history).
+with electron-vite, in strict numbered phases — currently through Phase 13.1 (chat-first
+Codex-style workspace).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -15,7 +15,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
 9.1.2 workspace polish + app identity · 9.1.3 app identity + sidebar defaults ·
 10 electron-builder packaging + macOS app identity · 11 agentic loop + final product polish ·
-12 full product validation · **13 Codex-quality light UI + persistent history** — all done.
+12 full product validation · 13 Codex-quality light UI + persistent history ·
+**13.1 chat-first Codex-style workspace** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -580,6 +581,55 @@ light (`#f4f4f3`) to avoid a dark first-paint flash. Radius system tightened to 
 (`docs/validation/phase13-ui.png`): white sidebar with logo/nav/empty-state/recent-chats/profile,
 light planning chat with macro-loop Approval/Auto toggle and filled Send, dark right execution
 column. Menu bar shows "Akorith". Reads as a calm, intentional developer product.
+
+### Chat-first Codex-style workspace (Phase 13.1)
+
+Phase 13.1 is a **structural** UI pass (not just colors): the workspace becomes chat-first with
+terminals hidden behind an activity drawer. Backend/orchestration/security are untouched.
+
+**Layout shift.** The old `Sidebar | ChatPanel | TerminalColumn` becomes `Sidebar | ChatPanel`
+(full-width chat-first), plus an `AgentDrawer` overlay. `App.tsx` no longer renders
+`TerminalColumn` (the file is kept but unused); the right-side "Open a project to start agents"
+onboarding is gone — project open/create is **sidebar-first** (the center hero just routes back to
+that flow via `onOpenProject`/`onCreateProject`, the latter bumping `createSignal` so the sidebar
+opens its existing create modal).
+
+**Theme flip.** `:root` is now a **dark** Codex workspace (bg `#1a1a1d`, panels `#232327`, light
+text) with a **near-monochrome accent** (`--accent` near-white `#ededf0`, `--on-accent` dark) — no
+purple/indigo (the old indigo was globally replaced with white-alpha; a `--focus-ring` token was
+added). The **sidebar keeps its own light scope** (`.sidebar { --sidebar-* }`) and now also
+overrides surface tokens (`--bg-panel`/`--bg-raised`/`--bg-input`) to light + inverts the accent
+(dark CTA on white) + a dark focus ring, so no dark surface leaks into the white sidebar. The
+create modal (mounted inside the sidebar) uses `--bg-panel` so it's a readable light dialog.
+
+**Agent drawer = background agents (`AgentDrawer.tsx`).** The two `TerminalPane`s (Olympus=Codex
+`t2`, Atlantis=Claude `t1`) live here. The drawer is **always mounted while a project with a path
+is active** and toggled by a CSS `translateX` — so closing it only hides it; the PTYs and their
+snapshot buffers keep running (closing never kills agents). Opening reveals the live panes (already
+sized, so xterm stays fitted). Selecting/opening/creating a project starts the agents in the
+background immediately. `TerminalPane` gained an `onStatus` callback; statuses bubble through
+`App` to a header **agent-status chip** ("Codex & Claude ready" / "Agents starting…" / shell-
+fallback warning) so the user knows agents run without opening the drawer. The single write path
+(`bridgeSend → PtyManager.write`) is unchanged.
+
+**Chat-first ChatPanel.** Three states: (1) **no project** → centered hero "What should we work
+on?" + Open/Create buttons (composer hidden); (2) **project, no messages** → hero "What should we
+build in <project>?" + the large centered composer; (3) **conversation** → a centered max-760px
+message column (Codex-style full-width turns, subtle user block, borderless assistant text) with
+the composer docked at the bottom. The composer is one large rounded dark surface with inline
+controls: target route (Olympus/Atlantis), Repo, Auto-Enter, ✦ Suggest, Show agents, Send/Stop.
+
+**Macro-loop integrated.** `MacroLoopPanel` (unchanged engine/state) now renders **inside the
+composer**, collapsed by default, restyled compact/dark (a status-chip head when collapsed;
+proposal/result/permission cards when expanded). Approval/Auto toggle, status, and Stop are part
+of the composer flow rather than a top debug strip.
+
+**Manual UI inspection (REAL).** Packaged app launched + screenshotted
+(`docs/validation/phase13-1-ui.png`): light simplified sidebar (compact provider rows, no color
+blocks), dark Codex workspace, centered "What should we work on?" hero with Open/Create, top-bar
+provider/model + Activity. No right terminal column, no purple. Project-active states (hero
+composer, conversation, drawer) are code-verified (GUI click-through needs macOS Accessibility,
+unavailable here — same limitation as Phase 12/13).
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

@@ -105,12 +105,15 @@ The macro-loop drives a planner → executor cycle toward a goal you set.
 
 ## Design
 
-Akorith uses a calm, light "developer workbench" interface: a **white left sidebar** for
-projects/history/navigation, a light off-white center planning surface, and a dark right
-execution column (terminals are naturally dark). The accent is a restrained muted indigo — no
-neon, no clutter. The app **resumes your last project on launch** so it never opens empty.
+Akorith is **chat-first**, in the spirit of a Codex-style product: a **light/white sidebar** for
+projects, history, and navigation; a **dark, calm center workspace** built around one large
+composer where you describe tasks; and the Codex/Claude **terminals running in the background**,
+revealed only when you want them via the **Agent activity** drawer. Pick a project from the
+sidebar and Akorith starts Codex and Claude in it automatically — you mostly just chat, and the
+agents work behind the scenes. The accent is near-monochrome (no neon, no clutter), and the app
+**resumes your last project on launch** so it never opens empty.
 
-![Akorith workspace](docs/validation/phase13-ui.png)
+![Akorith chat-first workspace](docs/validation/phase13-1-ui.png)
 
 _More screenshots / a short demo clip can be added before public launch._
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatUsage, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
-import type { HistorySelection } from '../App'
+import type { AgentStatusMap, HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
-import { SendIcon, SparkIcon } from './icons'
+import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
 
 interface ChatMessage {
   id: string
@@ -22,9 +22,29 @@ interface ChatPanelProps {
   /** Sidebar instruction: load a session or start a fresh thread. */
   historySel: HistorySelection | null
   activeProject: ProjectRow | null
+  /** Background agent status (Codex/Claude) so the header can show readiness. */
+  agentStatus: AgentStatusMap
+  drawerOpen: boolean
+  onToggleDrawer: () => void
+  /** Open/Create routed back through the app/sidebar single project flow. */
+  onOpenProject: () => void
+  onCreateProject: () => void
   /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
+}
+
+const AGENT_LABELS: Record<'t1' | 't2', string> = { t1: 'Claude', t2: 'Codex' }
+
+/** Compact readiness summary for the header chip from the two agents' statuses. */
+function agentSummary(status: AgentStatusMap): { label: string; tone: 'ready' | 'starting' | 'idle' | 'warn' } {
+  const vals = [status.t2, status.t1]
+  if (vals.every((v) => !v)) return { label: 'Agents starting…', tone: 'starting' }
+  const live = vals.filter((v) => v?.status === 'live').length
+  const anyShellFallback = vals.some((v) => v && v.status === 'live' && v.role === 'shell')
+  if (live === 2) return { label: anyShellFallback ? 'Agents ready (shell fallback)' : 'Codex & Claude ready', tone: anyShellFallback ? 'warn' : 'ready' }
+  if (vals.some((v) => v?.status === 'exited')) return { label: 'An agent exited', tone: 'warn' }
+  return { label: 'Agents starting…', tone: 'starting' }
 }
 
 function newId(): string {
@@ -82,6 +102,11 @@ function storageBoolean(key: string, fallback: boolean): boolean {
 export default function ChatPanel({
   historySel,
   activeProject,
+  agentStatus,
+  drawerOpen,
+  onToggleDrawer,
+  onOpenProject,
+  onCreateProject,
   onHistoryChange,
   onActiveSession
 }: ChatPanelProps): JSX.Element {
@@ -102,7 +127,7 @@ export default function ChatPanel({
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [sentKey, setSentKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
-  const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', false))
+  const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', true))
 
   // ---- Phase 6: suggest-only router + opt-in repo context ----
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
@@ -379,22 +404,144 @@ export default function ChatPanel({
     </button>
   )
 
-  return (
-    <main className={`chat-panel ${planningCollapsed ? 'planning-collapsed' : ''}`}>
-      <header className="chat-header">
-        <div className="chat-header-stack">
-          <span className="chat-header-title">Planning chat</span>
-          {activeProject && <span className="chat-project-chip">{activeProject.name}</span>}
+  const hasProject = Boolean(activeProject?.path)
+  const hasConversation = messages.length > 0
+  const summary = agentSummary(agentStatus)
+
+  // The composer is the central work control, reused in the empty-state hero and
+  // (when a conversation exists) docked at the bottom. Macro-loop mode/status live
+  // inside it via the compact MacroLoopPanel above the input.
+  const composer = (
+    <div className="composer">
+      {suggestion && (
+        <div className="router-suggestion">
+          <div className="router-suggestion-head">
+            <span className={`tier-badge tier-${suggestion.tier}`}>
+              {suggestion.rank} · {suggestion.tier}
+            </span>
+            {suggestion.classifiedBy === 'heuristic' && <span className="tier-heuristic">heuristic</span>}
+            <span className="router-target">
+              → {suggestion.providerLabel}
+              {suggestion.model ? ` · ${suggestion.model}` : ''}
+            </span>
+            {!suggestion.available && <span className="router-unavailable">unavailable</span>}
+          </div>
+          <div className="router-reason">{suggestion.reason}</div>
+          {suggestion.warning && <div className="router-warning">⚠ {suggestion.warning}</div>}
+          <div className="router-actions">
+            <button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>
+              Accept
+            </button>
+            <button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>
+              Ignore
+            </button>
+          </div>
         </div>
-        <div className="chat-header-controls">
+      )}
+      {hasProject && (
+        <MacroLoopPanel
+          providers={providers}
+          defaultProviderId={providerId}
+          defaultModel={model}
+          defaultTargetTerminal={bridgeTarget}
+          activeProject={activeProject}
+          collapsed={planningCollapsed}
+          onToggleCollapsed={() => setPlanningCollapsed((value) => !value)}
+        />
+      )}
+      <div className="composer-box">
+        <textarea
+          className="composer-input"
+          placeholder={
+            !selected?.available.ok
+              ? 'Select an available provider to start…'
+              : hasProject
+                ? `Describe a task for ${activeProject!.name}…  (Enter to send · Shift+Enter for newline)`
+                : 'Describe what you want to build…  (Enter to send · Shift+Enter for newline)'
+          }
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void sendPrompt()
+            }
+          }}
+          rows={3}
+          spellCheck={false}
+        />
+        <div className="composer-controls">
+          <div className="composer-controls-left">
+            <div className="route-seg" role="group" aria-label="Target agent">
+              {TERMINALS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={bridgeTarget === t.id ? 'is-active' : ''}
+                  onClick={() => setBridgeTarget(t.id)}
+                  title={`Bridge sends go to ${t.label} (${t.id === 't2' ? 'Codex' : 'Claude'})`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <label className="composer-chip" title="Prepend a bounded git digest of the repo to what the provider sees.">
+              <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
+              Repo
+            </label>
+            <label className="composer-chip" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
+              <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
+              Auto-Enter
+            </label>
+            <button type="button" className="composer-chip" disabled={!draft.trim() || suggesting} onClick={() => void suggestTask()}>
+              {suggesting ? 'Classifying…' : '✦ Suggest'}
+            </button>
+            {hasProject && (
+              <button type="button" className="composer-chip" onClick={onToggleDrawer}>
+                {drawerOpen ? 'Hide agents' : 'Show agents'}
+              </button>
+            )}
+          </div>
+          {busyRequestId ? (
+            <button type="button" className="send-button" onClick={cancel}>
+              Stop
+            </button>
+          ) : (
+            <button type="button" className="send-button" disabled={!canSend} onClick={() => void sendPrompt()}>
+              <SendIcon size={14} />
+              Send
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="composer-info">{composerInfo.join(' · ')}</div>
+    </div>
+  )
+
+  return (
+    <main className="chat-panel">
+      <header className="ws-topbar">
+        <div className="ws-topbar-left">
+          <span className="ws-title">{activeProject ? activeProject.name : 'Workspace'}</span>
+          {hasProject && (
+            <button
+              type="button"
+              className={`agent-status agent-${summary.tone}`}
+              onClick={onToggleDrawer}
+              title="Open the agent activity drawer"
+            >
+              <span className="agent-status-dot" />
+              {summary.label}
+            </button>
+          )}
+        </div>
+        <div className="ws-topbar-right">
           <select
             className="model-select"
             value={providerId}
             onChange={(event) => {
               const next = event.target.value
               if (next !== providerId && (activeSessionId || messages.length > 0)) {
-                // One provider per session: switching starts a fresh thread
-                // (the old conversation stays in the sidebar).
                 setMessages([])
                 setActiveSessionId(null)
                 onActiveSession(null)
@@ -412,12 +559,7 @@ export default function ChatPanel({
             ))}
           </select>
           {selected && selected.models.length > 0 && (
-            <select
-              className="model-select"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-              aria-label="Model"
-            >
+            <select className="model-select" value={model} onChange={(event) => setModel(event.target.value)} aria-label="Model">
               {selected.models.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -425,233 +567,121 @@ export default function ChatPanel({
               ))}
             </select>
           )}
-          <button
-            type="button"
-            className="icon-button"
-            title={planningCollapsed ? 'Show macro-loop tools' : 'Hide macro-loop tools'}
-            onClick={() => setPlanningCollapsed((value) => !value)}
-          >
-            <SparkIcon size={15} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            title="Refresh providers (re-reads loopex.config.json)"
-            onClick={() => void loadProviders()}
-          >
+          <button type="button" className="icon-button" title="Refresh providers" onClick={() => void loadProviders()}>
             ↻
           </button>
-        </div>
-      </header>
-
-      <div className="bridge-bar">
-        <span className="bridge-bar-label">Executor</span>
-        <div className="bridge-target" role="group" aria-label="Bridge target terminal">
-          {TERMINALS.map((t) => (
+          {hasProject && (
             <button
-              key={t.id}
               type="button"
-              className={bridgeTarget === t.id ? 'is-active' : ''}
-              onClick={() => setBridgeTarget(t.id)}
+              className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
+              onClick={onToggleDrawer}
+              title="Show agent terminals"
             >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <label
-          className="bridge-toggle"
-          title="ON: sent text executes immediately. OFF: it waits at the prompt for your Enter."
-        >
-          <input
-            type="checkbox"
-            checked={autoEnter ?? false}
-            disabled={autoEnter === null}
-            onChange={() => void toggleAutoEnter()}
-          />
-          Auto-Enter
-        </label>
-      </div>
-
-      <MacroLoopPanel
-        providers={providers}
-        defaultProviderId={providerId}
-        defaultModel={model}
-        defaultTargetTerminal={bridgeTarget}
-        activeProject={activeProject}
-        collapsed={planningCollapsed}
-        onToggleCollapsed={() => setPlanningCollapsed((value) => !value)}
-      />
-
-      {selected && !selected.available.ok && (
-        <div className="chat-notice">
-          {selected.label} unavailable{selected.available.reason ? `: ${selected.available.reason}` : ''}
-        </div>
-      )}
-      {loadError && <div className="chat-notice">Failed to load providers: {loadError}</div>}
-
-      <div
-        className="chat-messages"
-        ref={scrollRef}
-        onMouseUp={handleSelectionMouseUp}
-        onScroll={() => setSelection(null)}
-      >
-        {messages.length === 0 ? (
-          <div className="chat-empty">
-            <div className="chat-empty-glyph">{'>_'}</div>
-            <div>No messages yet</div>
-            <div className="chat-empty-hint">
-              {providers === null
-                ? 'Loading providers…'
-                : providers.length === 0
-                  ? 'No providers configured — edit loopex.config.json.'
-                  : 'Plan with the selected provider, then send prompts straight into a terminal.'}
-            </div>
-          </div>
-        ) : (
-          messages.map((m) => (
-            <div key={m.id} className={`chat-msg ${m.role} ${m.status}`}>
-              {m.role === 'assistant' && m.status !== 'streaming' ? (
-                <div className="chat-msg-text">
-                  {splitFences(m.text).map((seg, i) =>
-                    seg.type === 'code' ? (
-                      <div className="chat-code" key={i}>
-                        <div className="chat-code-header">
-                          <span>{seg.lang ?? 'code'}</span>
-                          {m.status === 'done' &&
-                            bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
-                        </div>
-                        <pre>{seg.content}</pre>
-                      </div>
-                    ) : (
-                      <span key={i}>{seg.content}</span>
-                    )
-                  )}
-                </div>
-              ) : (
-                <div className="chat-msg-text">{m.text || (m.status === 'streaming' ? '…' : '')}</div>
-              )}
-              {m.role === 'assistant' && m.status === 'done' && (
-                <div className="chat-msg-meta">
-                  {m.meta && (
-                    <span>
-                      {m.meta.provider} · {m.meta.model}
-                      {m.meta.usage && usageLine(m.meta.usage) ? ` · ${usageLine(m.meta.usage)}` : ''}
-                      {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
-                    </span>
-                  )}
-                  {bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      {selection && (
-        <button
-          type="button"
-          className="selection-popover"
-          style={{ left: selection.x, top: selection.y - 34 }}
-          onMouseDown={(event) => event.preventDefault() /* keep the selection alive */}
-          onClick={() => {
-            void sendToTerminal(selection.text, 'selection')
-            setSelection(null)
-            window.getSelection()?.removeAllRanges()
-          }}
-        >
-          Send selection →
-        </button>
-      )}
-
-      {toast && <div className={`bridge-toast ${toast.kind}`}>{toast.text}</div>}
-
-      <div className="chat-composer">
-        {suggestion && (
-          <div className="router-suggestion">
-            <div className="router-suggestion-head">
-              <span className={`tier-badge tier-${suggestion.tier}`}>
-                {suggestion.rank} · {suggestion.tier}
-              </span>
-              {suggestion.classifiedBy === 'heuristic' && <span className="tier-heuristic">heuristic</span>}
-              <span className="router-target">
-                → {suggestion.providerLabel}
-                {suggestion.model ? ` · ${suggestion.model}` : ''}
-              </span>
-              {!suggestion.available && <span className="router-unavailable">unavailable</span>}
-            </div>
-            <div className="router-reason">
-              {suggestion.reason}
-              {suggestion.classifiedBy === 'model' && suggestion.classifierModel
-                ? ` · classified by ${suggestion.classifierModel}`
-                : ''}
-            </div>
-            {suggestion.warning && <div className="router-warning">⚠ {suggestion.warning}</div>}
-            <div className="router-actions">
-              <button
-                type="button"
-                className="router-accept"
-                disabled={!suggestion.available}
-                onClick={acceptSuggestion}
-                title="Switch the selector to this provider/model for your next send"
-              >
-                Accept
-              </button>
-              <button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>
-                Ignore
-              </button>
-            </div>
-          </div>
-        )}
-        <textarea
-          className="chat-input"
-          placeholder={
-            selected?.available.ok
-              ? activeProject
-                ? `Plan work in ${activeProject.name}... (Enter to send, Shift+Enter for newline)`
-                : 'Describe what you want to build... (Enter to send, Shift+Enter for newline)'
-              : 'Select an available provider to start…'
-          }
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void sendPrompt()
-            }
-          }}
-          rows={3}
-          spellCheck={false}
-        />
-        <div className="chat-composer-row">
-          <label
-            className="composer-toggle"
-            title="Prepend a bounded git digest (diff/log/tree) of the working repo to what the provider sees. Persisted."
-          >
-            <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
-            Repo context
-          </label>
-          <button
-            type="button"
-            className="suggest-button"
-            disabled={!draft.trim() || suggesting}
-            onClick={() => void suggestTask()}
-            title="Suggest a provider/model for this task (local classifier; you decide)"
-          >
-            {suggesting ? 'Classifying…' : '✦ Suggest'}
-          </button>
-          {busyRequestId ? (
-            <button type="button" className="send-button" onClick={cancel}>
-              Stop
-            </button>
-          ) : (
-            <button type="button" className="send-button" disabled={!canSend} onClick={() => void sendPrompt()}>
-              <SendIcon size={14} />
-              Send
+              <SparkIcon size={14} />
+              Activity
             </button>
           )}
         </div>
-        <div className="composer-info-row">{composerInfo.join(' · ')}</div>
-      </div>
+      </header>
+
+      {!hasProject ? (
+        <div className="ws-hero">
+          <div className="ws-hero-inner">
+            <h1 className="ws-hero-title">What should we work on?</h1>
+            <p className="ws-hero-sub">Open or create a project from the sidebar to start Codex and Claude.</p>
+            <div className="ws-hero-actions">
+              <button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}>
+                <FolderIcon size={16} />
+                Open Project
+              </button>
+              <button type="button" className="ws-hero-btn" onClick={onCreateProject}>
+                <PlusIcon size={16} />
+                Create Project
+              </button>
+            </div>
+            {activeProject && !activeProject.path && (
+              <div className="ws-hero-note">Selected “{activeProject.name}” has no folder yet — open one to start agents.</div>
+            )}
+          </div>
+        </div>
+      ) : !hasConversation ? (
+        <div className="ws-hero">
+          <div className="ws-hero-inner is-wide">
+            <h1 className="ws-hero-title">What should we build in {activeProject!.name}?</h1>
+            <p className="ws-hero-sub">Type a task — Akorith plans it and drives Codex and Claude for you.</p>
+            {composer}
+            {selected && !selected.available.ok && (
+              <div className="chat-notice">
+                {selected.label} unavailable{selected.available.reason ? `: ${selected.available.reason}` : ''}
+              </div>
+            )}
+            {loadError && <div className="chat-notice">Failed to load providers: {loadError}</div>}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="chat-messages" ref={scrollRef} onMouseUp={handleSelectionMouseUp} onScroll={() => setSelection(null)}>
+            <div className="chat-messages-col">
+              {messages.map((m) => (
+                <div key={m.id} className={`chat-msg ${m.role} ${m.status}`}>
+                  {m.role === 'assistant' && m.status !== 'streaming' ? (
+                    <div className="chat-msg-text">
+                      {splitFences(m.text).map((seg, i) =>
+                        seg.type === 'code' ? (
+                          <div className="chat-code" key={i}>
+                            <div className="chat-code-header">
+                              <span>{seg.lang ?? 'code'}</span>
+                              {m.status === 'done' &&
+                                bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
+                            </div>
+                            <pre>{seg.content}</pre>
+                          </div>
+                        ) : (
+                          <span key={i}>{seg.content}</span>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className="chat-msg-text">{m.text || (m.status === 'streaming' ? '…' : '')}</div>
+                  )}
+                  {m.role === 'assistant' && m.status === 'done' && (
+                    <div className="chat-msg-meta">
+                      {m.meta && (
+                        <span>
+                          {m.meta.provider} · {m.meta.model}
+                          {m.meta.usage && usageLine(m.meta.usage) ? ` · ${usageLine(m.meta.usage)}` : ''}
+                          {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
+                        </span>
+                      )}
+                      {bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {selection && (
+            <button
+              type="button"
+              className="selection-popover"
+              style={{ left: selection.x, top: selection.y - 34 }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                void sendToTerminal(selection.text, 'selection')
+                setSelection(null)
+                window.getSelection()?.removeAllRanges()
+              }}
+            >
+              Send selection →
+            </button>
+          )}
+
+          <div className="composer-dock">{composer}</div>
+        </>
+      )}
+
+      {toast && <div className={`bridge-toast ${toast.kind}`}>{toast.text}</div>}
     </main>
   )
 }

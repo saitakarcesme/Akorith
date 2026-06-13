@@ -137,6 +137,18 @@ electron-vite in strict numbered phases.
       light window `backgroundColor`. Persistent history: `App.tsx` restores last active project
       from `localStorage` (`akorith.lastActiveProjectId`) via existing safe PTY startup; sidebar
       empty-state CTAs. Verified by launch + screenshot (`docs/validation/phase13-ui.png`).
+- [x] **Phase 13.1** — chat-first Codex-style workspace (structural). Layout is now
+      `Sidebar | ChatPanel` (full-width chat-first) + an `AgentDrawer` overlay; `TerminalColumn`
+      is no longer rendered (right onboarding removed; project open/create is sidebar-first, center
+      hero routes back via `onOpenProject`/`onCreateProject`). `:root` flipped to a **dark** Codex
+      workspace with a **near-monochrome accent (no purple)**; the sidebar keeps its light scope
+      (now also overriding surface tokens + inverting the accent). New `AgentDrawer.tsx` hosts the
+      Olympus/Atlantis terminals, **always mounted while a project is active** (toggle = CSS
+      transform, so closing never kills agents); `TerminalPane.onStatus` bubbles agent readiness to
+      a header status chip. ChatPanel: hero empty states + centered conversation column + large
+      integrated dark composer (route/Repo/Auto-Enter/Suggest/Show agents/Send). `MacroLoopPanel`
+      engine unchanged but rendered inside the composer, collapsed by default, compact.
+      Screenshot: `docs/validation/phase13-1-ui.png`.
 
 ## Locked design decisions
 
@@ -212,12 +224,15 @@ electron-vite in strict numbered phases.
   `localStorage` `akorith.providerCollapsed` (absent = collapsed); join the existing
   `akorith.*` localStorage keys (sidebar collapse, terminal split, etc.). Provider groups must stay
   visible-but-collapsed — never removed.
-- **Theme is token-first and light (Phase 13).** Change colors via the `:root` tokens, not
-  per-component literals. The app is a light/neutral workbench with a **white sidebar**
-  (`--sidebar-*` scope). Dark surfaces (right `.terminal-column`, `.chat-code`,
-  `.test-terminal-col`) keep their own **scoped dark token overrides** — do not delete those or the
-  terminals/code blocks go light-on-light. Accent is muted indigo `#6257c9`; keep it restrained
-  (no neon). Provider colors are small chips/tints only.
+- **Theme is token-first (Phase 13.1).** Change colors via the `:root` tokens, not per-component
+  literals. The app is now a **dark Codex-style workspace** with a **light/white sidebar**
+  (`.sidebar` overrides text + surface + accent tokens so nothing dark leaks in). Accent is
+  **near-monochrome (no purple/indigo)**; keep it restrained. Provider colors are tiny dots/chips
+  only — no color blocks. The agent drawer / `.chat-code` / `.test-terminal-col` are dark surfaces.
+- **Chat-first layout (Phase 13.1).** `Sidebar | ChatPanel` + `AgentDrawer` overlay. Terminals are
+  hidden by default in the drawer, which is **always mounted while a project is active** (toggle =
+  CSS transform) — never unmount it or agents die. Project open/create is **sidebar-first**; do not
+  reintroduce a right-side onboarding/terminal column.
 - **Workspace continuity (Phase 13).** Last active project id is persisted to
   `localStorage` `akorith.lastActiveProjectId` and restored on launch; restoring re-starts agents
   **only** via the existing safe PTY startup (logged-in CLI in the project cwd, never destructive),

@@ -5,6 +5,14 @@ import '@xterm/xterm/css/xterm.css'
 import type { PtyCommandKind } from '../../../preload/index.d'
 import { MountainIcon, WaveIcon } from './icons'
 
+type PaneStatus = 'connecting' | 'live' | 'exited'
+type TerminalRole = 'shell' | 'claude' | 'codex'
+
+export interface AgentStatusInfo {
+  status: PaneStatus
+  role: TerminalRole
+}
+
 interface TerminalPaneProps {
   /** PTY session id ("t1", "t2") — routes IPC streams to this pane only. */
   id: string
@@ -12,10 +20,10 @@ interface TerminalPaneProps {
   identity: 'olympus' | 'atlantis'
   cwd: string
   commandKind: Extract<PtyCommandKind, 'codex' | 'claude'>
+  /** Bubble status/role up so the chat can show "Codex ready" without the
+   *  terminal being visible (the pane keeps running inside the hidden drawer). */
+  onStatus?: (info: AgentStatusInfo) => void
 }
-
-type PaneStatus = 'connecting' | 'live' | 'exited'
-type TerminalRole = 'shell' | 'claude' | 'codex'
 
 const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'shell', label: 'Shell' },
@@ -23,11 +31,16 @@ const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'codex', label: 'Codex' }
 ]
 
-export default function TerminalPane({ id, title, identity, cwd, commandKind }: TerminalPaneProps): JSX.Element {
+export default function TerminalPane({ id, title, identity, cwd, commandKind, onStatus }: TerminalPaneProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<PaneStatus>('connecting')
   const [exitCode, setExitCode] = useState<number | null>(null)
   const [role, setRole] = useState<TerminalRole>(commandKind)
+
+  // Report status/role upward whenever they change (decoupled from xterm wiring).
+  useEffect(() => {
+    onStatus?.({ status, role })
+  }, [status, role, onStatus])
 
   useEffect(() => {
     const host = hostRef.current

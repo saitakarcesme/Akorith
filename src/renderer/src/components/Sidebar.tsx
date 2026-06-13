@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppView } from '../App'
 import {
@@ -21,6 +21,8 @@ interface SidebarProps {
   projectVersion: number
   activeSessionId: string | null
   activeProject: ProjectRow | null
+  /** Bumped by the center empty-state "Create Project" button to open the modal. */
+  createSignal?: number
   onSelectProject: (project: ProjectRow | null) => void
   onSelectSession: (sessionId: string, project?: ProjectRow | null) => void
   onNewChat: (providerId: string) => void
@@ -76,6 +78,7 @@ export default function Sidebar({
   projectVersion,
   activeSessionId,
   activeProject,
+  createSignal,
   onSelectProject,
   onSelectSession,
   onNewChat,
@@ -186,6 +189,18 @@ export default function Sidebar({
     setProjectError(null)
     setCreateOpen(true)
   }
+
+  // The center workspace empty-state "Create Project" routes through here so the
+  // sidebar owns the single create flow. Skip the initial render (signal 0).
+  const firstSignal = useRef(true)
+  useEffect(() => {
+    if (firstSignal.current) {
+      firstSignal.current = false
+      return
+    }
+    beginCreateProject()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSignal])
 
   const pickParentDir = async (): Promise<void> => {
     setProjectError(null)
