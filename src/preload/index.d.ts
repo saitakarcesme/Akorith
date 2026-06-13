@@ -326,11 +326,19 @@ export interface TestRunRow {
 
 export type TestRunResponse = { ok: true; run: TestRunRow } | { ok: false; error: string }
 
+export interface TestRepoContext {
+  tree: string
+  samples: { path: string; content: string }[]
+  fileCount: number
+}
+
 export interface TestApi {
   getSettings(): Promise<TestSettings>
   setSourceRepo(dir: string): Promise<TestSettings>
   /** Auto-detect framework/test/install commands for the source repo. */
   detect(sourceRepo: string): Promise<TestDetection | { error: string }>
+  /** Phase 14.1: bounded, read-only repo structure + sample files for the generator. */
+  context(sourceRepo: string): Promise<TestRepoContext | { error: string }>
   /** Snapshot → (install) → run in a fresh ephemeral sandbox; persists the run. */
   run(args: TestRunRequest): Promise<TestRunResponse>
   /** Abort an in-flight run (kills the whole process tree). */
@@ -453,6 +461,13 @@ export type MacroStatus =
 
 export type MacroMode = 'approval' | 'auto'
 
+export interface PermissionOption {
+  value: string
+  label: string
+  tone: 'affirm' | 'deny' | 'neutral'
+  permanent?: boolean
+}
+
 export interface PermissionDetection {
   detected: boolean
   kind: 'numbered_choice' | 'yes_no' | 'press_enter' | 'allow_access' | 'generic_confirm' | 'none'
@@ -461,6 +476,8 @@ export interface PermissionDetection {
   rationale: string
   requiresUserReview: boolean
   matchedText?: string
+  question?: string
+  options?: PermissionOption[]
 }
 
 export interface ExecutorSummary {
@@ -479,6 +496,10 @@ export type AgentSummaryResponse =
   | { ok: true; summary: ExecutorSummary; detection: PermissionDetection; signature: string }
   | { ok: false; error: string; signature?: string }
 
+export type AgentPermissionResponse =
+  | { ok: true; detection: PermissionDetection; alive: boolean }
+  | { ok: false; error: string }
+
 export interface AgentApi {
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
@@ -488,6 +509,8 @@ export interface AgentApi {
     goal?: string
     lastPrompt?: string
   }): Promise<AgentSummaryResponse>
+  /** Phase 14.1: read-only detection of a pending terminal permission/confirm prompt. */
+  detectPermission(terminalId: string): Promise<AgentPermissionResponse>
 }
 
 export interface MacroSessionRow {

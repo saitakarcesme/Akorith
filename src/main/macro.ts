@@ -415,6 +415,17 @@ async function summarizeAgentOutput(args: {
   return { ok: true, summary, detection, signature }
 }
 
+/**
+ * Phase 14.1: sessionless permission detection for the chat workflow. Reads a
+ * read-only snapshot of a terminal and reports any pending confirmation prompt
+ * so the chat UI can surface answer buttons. Never writes anything.
+ */
+function detectAgentPermission(terminalId: string): { ok: true; detection: PermissionDetection; alive: boolean } | { ok: false; error: string } {
+  const alive = ptyManager.isAlive(terminalId)
+  const snap = ptyManager.snapshot(terminalId, SNAPSHOT_CHARS)
+  return { ok: true, detection: detectPermissionPrompt(snap.text), alive }
+}
+
 /** Read-only permission detection over the target terminal's recent output. */
 function detectPermission(sessionId: string): { ok: true; detection: PermissionDetection } | { ok: false; error: string } {
   const s = getMacroSession(sessionId)
@@ -794,6 +805,18 @@ export function registerMacroIpc(): void {
       }
     }
   )
+
+  // Sessionless permission detection for the chat workflow (Phase 14.1). Read-only.
+  ipcMain.handle('agent:detectPermission', (_event, args: { terminalId: string }) => {
+    if (typeof args?.terminalId !== 'string' || !VALID_TERMINAL.test(args.terminalId)) {
+      return { ok: false, error: 'invalid agent:detectPermission payload' }
+    }
+    try {
+      return detectAgentPermission(args.terminalId)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   ipcMain.handle('macro:detectPermission', (_event, args: { sessionId: string }) => {
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {

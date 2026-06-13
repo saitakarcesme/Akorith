@@ -25,13 +25,16 @@ interface SidebarProps {
   onSelectProject: (project: ProjectRow | null) => void
   onSelectSession: (sessionId: string, project?: ProjectRow | null, providerId?: string) => void
   onNewChat: (providerId: string) => void
+  /** Phase 14.1: the top "New chat" action — always opens a fresh general chat. */
+  onNewGeneralChat: () => void
   onHistoryChange: () => void
   onProjectsChange: () => void
 }
 
+// Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
+// above Workspace instead (see below). Workspace stays project-scoped.
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
-  { view: 'general', label: 'Chat', icon: MessageIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Test', icon: FlaskIcon }
 ]
@@ -82,6 +85,7 @@ export default function Sidebar({
   onSelectProject,
   onSelectSession,
   onNewChat,
+  onNewGeneralChat,
   onHistoryChange,
   onProjectsChange
 }: SidebarProps): JSX.Element {
@@ -280,6 +284,15 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-nav" aria-label="Primary">
+        <button
+          type="button"
+          className={`sidebar-newchat ${view === 'general' ? 'is-active' : ''}`}
+          onClick={onNewGeneralChat}
+          title="Start a fresh general chat"
+        >
+          <PlusIcon size={16} />
+          {!sidebarCollapsed && <span>New chat</span>}
+        </button>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon
           return (

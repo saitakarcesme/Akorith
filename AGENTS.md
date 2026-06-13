@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 14 (project/chat
-separation + activity drawer fixes).
+with electron-vite, in strict numbered phases — currently through Phase 14.1 (chat workflow +
+Test Lab reliability fixes).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -709,6 +709,73 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
 - **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
+
+### Chat workflow + Test Lab reliability (Phase 14.1)
+
+Phase 14.1 is a focused fix pass over real workflow bugs found in manual use. No new
+architecture, no signing/notarization, no redesign. Security invariants are unchanged
+(contextIsolation/sandbox/no nodeIntegration, frozen contextBridge, untrusted text via stdin,
+native modules main-only, the single `bridgeSend → PtyManager.write()` write path, Approval Mode
+default, meta calls write no `usage_events`).
+
+- **Sidebar "New chat".** The separate **Chat** nav item is gone. A dedicated **New chat** action
+  sits above **Workspace** (order: New chat · Workspace · Dashboard · Test). Each click calls
+  `App.startNewGeneralChat()` which always opens a *fresh* general chat (`selectHistory(null,
+  'general')`, never loads the latest), with no project, no project title, and the user's current
+  default provider. General chats still appear in Recent Chats as **General chat**. Workspace stays
+  project-scoped. Provider-folder `+` buttons still start a fresh general chat for that provider.
+- **Prominent model switcher.** The two provider/model `<select>`s are wrapped in a pill
+  (`.model-switcher`) with a "MODEL" label in the workspace top bar — clearer selected provider/model,
+  better spacing, still compact. Works in both Workspace and General Chat. Switching provider mid-thread
+  clears the (provider-bound) session as before.
+- **Chat scroll.** The conversation area auto-scrolls to the newest message **only when the user is
+  already near the bottom** (`nearBottomRef`, 120px threshold tracked `onScroll`). Scrolling up to read
+  history is never interrupted. Opening/switching a session resets to the bottom. The composer stays
+  docked at the bottom; the empty state stays centered.
+- **Readable chat + code blocks.** Chat content is 15px / 1.72 line-height with a `72ch` max text
+  width; fenced code/prompt blocks get more padding, a softer border, a rounded raised surface, a
+  13px monospace font, and horizontal scroll for long lines (Phase 14.1 CSS block, appended last).
+- **Lighter dark surfaces.** Workspace base tokens were lifted a notch (`--bg #1a1a1d → #232327`,
+  panel/raised/composer in step) for a more readable dark gray (still Codex-dark, no light theme, no
+  purple). The Test page sandbox output (`TestTerminal` xterm theme + `.test-terminal-col`) moved from
+  near-black `#0b0b10`/`#0e0e13` to a lighter, readable `#1b1b22`.
+- **Terminal permission prompts surfaced in chat.** A new **read-only** `agent:detectPermission`
+  IPC (`window.api.agent.detectPermission(terminalId)`) runs the existing `detectPermissionPrompt`
+  over a terminal snapshot. ChatPanel polls the current bridge target every 4s while a project
+  workspace is open, and renders a compact **permission card** (source agent Olympus/Codex or
+  Atlantis/Claude · the detected question · answer buttons · **Open Activity** · **Dismiss**).
+  `detectPermissionPrompt` now also returns `question` and concrete `options[]` (numbered menus
+  surface one button per option; yes/no → Yes/No; allow-access → Allow once/Deny; press-enter →
+  Press Enter). Answers are sent through the **existing** bridge (`bridge.send → PtyManager.write()`)
+  — no second write path. Permanent "always allow" options are surfaced but never auto-selected;
+  in Approval Mode the card always waits for the user; Auto-Mode safety gates are untouched.
+- **Reliable agent-output summary.** After a bridge send (or a permission answer), the auto-summary
+  no longer fires on one fixed 6s delay — it **polls the target terminal's snapshot until output
+  stabilizes** (unchanged across 2 polls) or a 45s deadline, then summarizes once (deduped by
+  signature). A newer send supersedes an older watcher (`summaryWatch` token). The summary appears
+  in the active chat (project workspace for project work; general chat only if started there). The
+  manual **Summarize output** button still surfaces the "no meaningful output" state. Summarizer
+  calls remain meta calls — no `usage_events`.
+- **Test Lab reliability.** A new read-only `test:context` IPC (`buildRepoContext` in `testlab.ts`)
+  returns a bounded source-file tree + a few small importable sample files. TestPage prepends this to
+  the generation prompt and adds framework-specific rules (real imports of real export names, correct
+  pytest/vitest/jest syntax, ≥3 real executable tests, no network/DB/browser deps, no empty
+  describe/"0 tests"). A **Repair & rerun** button feeds a failing test file + sandbox output back to
+  the model for a corrected file and reruns once in a fresh sandbox (source stays read-only). Framework
+  **detection** was fixed so a JS repo with a bare `tests/` dir (Playwright/Cypress e2e) is no longer
+  mis-detected as pytest — Python detection now requires real Python evidence.
+- **10-run Test Lab validation.** `scripts/testlab-validation.ts` drives the real Test Lab core
+  (context → snapshot → install → run → metrics) against real Desktop projects. 12 real runs were
+  recorded (10 passed, 2 deliberately-brittle failures, both repaired to pass) across pytest, vitest,
+  and jest, plus detection/context checks on three large real repos. See
+  `docs/validation/testlab-10-run-validation.md`. The only GUI substitution is the generator
+  (structure-aware templates instead of the un-drivable headless model CLI); all execution is real.
+- **PDF export preserved.** No change to the Phase 14 PDF flow (saves to Downloads, exact path
+  feedback, Reveal/Open).
+- **Known limitations.** Permission detection is conservative/heuristic over terminal text — it can
+  miss an unusual prompt shape; the card polls every 4s on the current target only. The validation
+  harness can't drive the logged-in model CLI headlessly (templated generation). Packaged macOS
+  builds remain unsigned/not notarized.
 
 ### Project/chat separation + activity drawer fixes (Phase 14)
 

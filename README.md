@@ -28,12 +28,25 @@ Claude, ChatGPT/Codex, or Local models without selecting a project.
 
 ## Workspace vs Chat
 
+- **New chat** sits at the top of the sidebar (above Workspace). Click it any time to start a
+  fresh general chat with your current provider — no project required.
 - **Workspace** is project-scoped. Selecting a project restores that project's latest workspace
   chat if one exists, starts or reuses Olympus/Codex and Atlantis/Claude for that project, and
   enables repo context, macro-loop, bridge, and Activity controls.
 - **Chat** is general model chat. It works without a project, stores conversations separately
   from project workspaces, and does not show or send project context.
 - **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
+- The **provider/model switcher** is a labeled pill in the top bar of every chat.
+
+## Agent permission prompts & output summaries
+
+When Olympus/Codex or Atlantis/Claude pauses on a confirmation in its terminal (`proceed?`,
+`y/n`, a numbered menu, `allow access?`, `press Enter`), Akorith surfaces it as a **permission
+card** right in the chat with answer buttons — you don't have to open the Activity drawer. Your
+answer is sent through the same single bridge path that all chat→terminal text uses. Permanent
+"always allow" options are shown but never auto-selected. After you send work to an agent (or
+answer a prompt), Akorith watches the terminal until it settles and posts a **summary** of what
+the agent did back into the chat; a **Summarize output** button is always available too.
 
 ## Connect your subscriptions
 
@@ -107,6 +120,14 @@ The Test route can generate tests in an isolated sandbox, compute ISAScore for s
 and export the evaluation as a PDF. Exported PDFs are saved to your **Downloads** folder with an
 `akorith-...pdf` filename; Akorith shows the exact saved path and provides **Reveal** and
 **Open** actions.
+
+To make generated tests more likely to actually run and pass, Akorith reads a bounded, read-only
+snapshot of your repo's source structure and a few sample files and feeds them to the model, with
+framework-specific rules (import the real modules, correct pytest/vitest/jest syntax, no
+empty/"0 tests"). If a generated test still fails, a **Repair & rerun** button sends the failing
+file plus the sandbox output back to the model for a corrected version and reruns it once — your
+source repo is never modified. A 12-run validation across pytest, vitest, and jest on real
+projects is recorded in `docs/validation/testlab-10-run-validation.md`.
 
 ## Current limitations
 

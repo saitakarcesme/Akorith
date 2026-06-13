@@ -165,14 +165,29 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
   // ---- Python ----
   const pyproject = read('pyproject.toml')
   const requirements = read('requirements.txt')
+  // A bare `tests/` dir is NOT enough — JS repos (Playwright/Cypress e2e) have one
+  // too. Require actual Python evidence so we don't mis-detect a JS repo as pytest.
+  const hasPyFiles = (dir: string): boolean => {
+    try {
+      return readdirSync(join(sourceRepo, dir)).some((f) => f.endsWith('.py'))
+    } catch {
+      return false
+    }
+  }
+  const pythonEvidence =
+    has('pyproject.toml') || has('requirements.txt') || has('setup.py') || has('setup.cfg') || hasPyFiles('.')
   const looksPytest =
-    has('pytest.ini') ||
-    has('tox.ini') ||
-    /\[tool\.pytest/.test(pyproject) ||
-    /pytest/.test(requirements) ||
-    /pytest/.test(pyproject) ||
-    has('tests') ||
-    has('test')
+    pythonEvidence &&
+    (has('pytest.ini') ||
+      has('tox.ini') ||
+      /\[tool\.pytest/.test(pyproject) ||
+      /pytest/.test(requirements) ||
+      /pytest/.test(pyproject) ||
+      has('tests') ||
+      has('test') ||
+      hasPyFiles('.') ||
+      hasPyFiles('tests') ||
+      hasPyFiles('src'))
   if (looksPytest) {
     const lockfile = has('requirements.txt') ? 'requirements.txt' : has('poetry.lock') ? 'poetry.lock' : ''
     const installCommand = has('requirements.txt')
@@ -197,6 +212,99 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
     suggestedTestPath: 'loopex_generated_test',
     note: 'Could not auto-detect a test framework — enter the test command to run.'
   }
+}
+
+// ---------------------------------------------------------------- repo context
+
+const SOURCE_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.rs', '.go', '.java'
+])
+// Files we never want the generator to "test" directly or treat as source.
+const CONTEXT_SKIP_DIR = new Set([...DENYLIST, 'tests', 'test', '__tests__', 'e2e', 'public', 'assets', 'build', 'docs'])
+
+interface RepoContextFile {
+  path: string
+  bytes: number
+}
+
+export interface RepoContext {
+  tree: string
+  /** A few small, importable source files with their content, for accurate imports. */
+  samples: { path: string; content: string }[]
+  fileCount: number
+}
+
+/** Recursively collect source files (bounded), skipping heavy/irrelevant dirs. */
+function collectSourceFiles(root: string, rel = '', out: RepoContextFile[] = [], depth = 0): RepoContextFile[] {
+  if (depth > 6 || out.length > 400) return out
+  let entries: string[]
+  try {
+    entries = readdirSync(join(root, rel))
+  } catch {
+    return out
+  }
+  for (const name of entries) {
+    if (name.startsWith('.') && name !== '.') continue
+    const childRel = rel ? `${rel}/${name}` : name
+    const full = join(root, childRel)
+    let isDir = false
+    try {
+      isDir = statSync(full).isDirectory()
+    } catch {
+      continue
+    }
+    if (isDir) {
+      if (CONTEXT_SKIP_DIR.has(name)) continue
+      collectSourceFiles(root, childRel, out, depth + 1)
+    } else {
+      const dot = name.lastIndexOf('.')
+      const ext = dot >= 0 ? name.slice(dot) : ''
+      if (!SOURCE_EXTS.has(ext)) continue
+      if (/\.(d\.ts|test\.|spec\.)/.test(name)) continue
+      let bytes = 0
+      try {
+        bytes = statSync(full).size
+      } catch {
+        continue
+      }
+      out.push({ path: childRel, bytes })
+    }
+  }
+  return out
+}
+
+/**
+ * Build a bounded, read-only context describing the repo's source files so the
+ * test generator imports REAL modules with REAL exported names instead of
+ * guessing. Picks the smallest non-trivial source files as concrete samples.
+ */
+export function buildRepoContext(sourceRepo: string, opts: { maxSamples?: number; maxSampleBytes?: number } = {}): RepoContext {
+  const maxSamples = opts.maxSamples ?? 4
+  const maxSampleBytes = opts.maxSampleBytes ?? 6000
+  const files = collectSourceFiles(sourceRepo)
+  const tree = files
+    .map((f) => f.path)
+    .sort()
+    .slice(0, 200)
+    .join('\n')
+
+  // Prefer small but non-trivial files (likely pure utilities → easiest to test).
+  const candidates = files
+    .filter((f) => f.bytes >= 80 && f.bytes <= maxSampleBytes)
+    .sort((a, b) => a.bytes - b.bytes)
+    .slice(0, maxSamples)
+
+  const samples: { path: string; content: string }[] = []
+  for (const f of candidates) {
+    try {
+      let content = readFileSync(join(sourceRepo, f.path), 'utf8')
+      if (content.length > maxSampleBytes) content = content.slice(0, maxSampleBytes) + '\n// … [truncated]'
+      samples.push({ path: f.path, content })
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  return { tree, samples, fileCount: files.length }
 }
 
 // ---------------------------------------------------------------- snapshot

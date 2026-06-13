@@ -86,6 +86,14 @@ export default function App(): JSX.Element {
     [latestSession, selectHistory]
   )
 
+  // Phase 14.1: the sidebar "New chat" action — always opens a FRESH general chat
+  // (never loads the latest), keeping the user's currently selected/default model.
+  const startNewGeneralChat = useCallback((): void => {
+    setView('general')
+    selectHistory(null, 'general')
+    setActiveSessionId(null)
+  }, [selectHistory])
+
   // Phase 13: workspace continuity. On launch, restore the last active project so
   // the app resumes previous work instead of opening empty. Restoring a project
   // re-starts its Codex/Claude terminals through the existing safe PTY startup
@@ -194,6 +202,7 @@ export default function App(): JSX.Element {
         onSelectProject={(project) => void openWorkspaceForProject(project)}
         onSelectSession={(id, project, providerId) => selectSession(id, project, providerId)}
         onNewChat={(providerId) => void openGeneralChat(providerId)}
+        onNewGeneralChat={startNewGeneralChat}
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
       />

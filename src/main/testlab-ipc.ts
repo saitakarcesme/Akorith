@@ -10,12 +10,14 @@ import { join } from 'path'
 import { getTestSettings, setTestSourceRepo, type TestLabSettings } from './config'
 import { createTestRun, listTestRuns, type TestRunRow } from './db'
 import {
+  buildRepoContext,
   detectFramework,
   pruneSandboxes,
   runTests,
   snapshotSource,
   type Detection,
-  type GeneratedFile
+  type GeneratedFile,
+  type RepoContext
 } from './testlab'
 
 const SANDBOX_BASE = join(tmpdir(), 'loopex-testlab')
@@ -154,6 +156,19 @@ export function registerTestIpc(): void {
       return { error: 'source repo not found' }
     }
     return detectFramework(args.sourceRepo)
+  })
+
+  // Phase 14.1: bounded, read-only repo structure + sample files so the test
+  // generator imports real modules with real export names (reliability).
+  ipcMain.handle('test:context', (_event, args: { sourceRepo: string }): RepoContext | { error: string } => {
+    if (typeof args?.sourceRepo !== 'string' || !existsSync(args.sourceRepo)) {
+      return { error: 'source repo not found' }
+    }
+    try {
+      return buildRepoContext(args.sourceRepo)
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle('test:run', (event, args: RunArgs) => handleRun(args, event.sender))

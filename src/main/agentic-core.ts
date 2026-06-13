@@ -63,6 +63,18 @@ export type PermissionKind =
   | 'generic_confirm'
   | 'none'
 
+/** A single selectable answer surfaced to the user in the permission card. */
+export interface PermissionOption {
+  /** Literal token written to the terminal (e.g. "1", "y", "n", "" for Enter). */
+  value: string
+  /** Human label shown on the button. */
+  label: string
+  /** Tone hint for styling: a yes-ish, no-ish, or neutral choice. */
+  tone: 'affirm' | 'deny' | 'neutral'
+  /** A permanent "always allow" option — surfaced but never auto-selected. */
+  permanent?: boolean
+}
+
 export interface PermissionDetection {
   detected: boolean
   kind: PermissionKind
@@ -72,6 +84,10 @@ export interface PermissionDetection {
   rationale: string
   requiresUserReview: boolean
   matchedText?: string
+  /** Phase 14.1: the prompt question line, surfaced in the UI permission card. */
+  question?: string
+  /** Phase 14.1: concrete answer buttons for the UI card (review-gated, never auto). */
+  options?: PermissionOption[]
 }
 
 // Words that make any prompt high-risk and never auto-answerable.
@@ -93,6 +109,13 @@ const NONE: PermissionDetection = {
  * for clear low-risk confirmations; escalates to user review for anything that
  * is destructive, a permanent allow, or otherwise ambiguous.
  */
+/** The most recent non-empty line that looks like the actual question. */
+function questionLine(tail: string): string {
+  const lines = tail.split('\n').map((l) => l.trim()).filter(Boolean)
+  const q = [...lines].reverse().find((l) => /\?|proceed|continue|allow|confirm|permission|approve|press enter/i.test(l))
+  return (q ?? lines[lines.length - 1] ?? '').slice(0, 200)
+}
+
 export function detectPermissionPrompt(snapshot: string): PermissionDetection {
   const clean = stripAnsi(snapshot)
   const tail = clean.split('\n').slice(-25).join('\n')
@@ -111,6 +134,18 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
       (o) => /\b(yes|proceed|approve|allow)\b/i.test(o.label) && !ALWAYS_ALLOW.test(o.label)
     )
     const risk: MacroRiskLevel = destructive ? 'high' : 'medium'
+    const options: PermissionOption[] = numbered.map((o) => ({
+      value: o.num,
+      label: `${o.num}. ${o.label}`,
+      tone: ALWAYS_ALLOW.test(o.label)
+        ? 'neutral'
+        : /\b(yes|proceed|approve|allow)\b/i.test(o.label)
+          ? 'affirm'
+          : /\bno\b|cancel|reject|deny/i.test(o.label)
+            ? 'deny'
+            : 'neutral',
+      permanent: ALWAYS_ALLOW.test(o.label)
+    }))
     return {
       detected: true,
       kind: 'numbered_choice',
@@ -122,7 +157,9 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
       // Numbered menus are always medium+ risk here, so always review unless Auto
       // policy explicitly clears a low-risk case (which this branch never is).
       requiresUserReview: true,
-      matchedText: tail.slice(-200)
+      matchedText: tail.slice(-200),
+      question: questionLine(tail),
+      options
     }
   }
 
@@ -135,7 +172,12 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
       riskLevel: destructive ? 'high' : 'medium',
       rationale: 'Access/permission request — always needs user review.',
       requiresUserReview: true,
-      matchedText: tail.slice(-200)
+      matchedText: tail.slice(-200),
+      question: questionLine(tail),
+      options: [
+        { value: 'y', label: 'Allow once', tone: 'affirm' },
+        { value: 'n', label: 'Deny', tone: 'deny' }
+      ]
     }
   }
 
@@ -151,7 +193,12 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
         ? 'Yes/No prompt near a destructive command — user must confirm.'
         : 'Standard yes/no confirmation.',
       requiresUserReview: risk !== 'low',
-      matchedText: tail.slice(-200)
+      matchedText: tail.slice(-200),
+      question: questionLine(tail),
+      options: [
+        { value: 'y', label: 'Yes', tone: 'affirm' },
+        { value: 'n', label: 'No', tone: 'deny' }
+      ]
     }
   }
 
@@ -164,7 +211,9 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
       riskLevel: 'low',
       rationale: 'Press-Enter continuation prompt.',
       requiresUserReview: false,
-      matchedText: tail.slice(-200)
+      matchedText: tail.slice(-200),
+      question: questionLine(tail),
+      options: [{ value: '', label: 'Press Enter', tone: 'neutral' }]
     }
   }
 

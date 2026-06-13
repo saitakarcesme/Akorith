@@ -183,6 +183,24 @@ electron-vite in strict numbered phases.
       Projects → provider folders (general chats) → scrollable Recent Chats → fixed profile.
       **PDF export:** evaluation reports save to Downloads as `akorith-...pdf`, show exact path,
       and expose Reveal/Open for current and past evaluations.
+- [x] **Phase 14.1** — chat workflow + Test Lab reliability fixes. **Sidebar:** the separate `Chat`
+      nav item is removed; a **New chat** action sits above `Workspace` (order: New chat · Workspace ·
+      Dashboard · Test) and always opens a *fresh* general chat with the default provider.
+      **Model switcher:** provider/model selects wrapped in a labeled pill in the top bar (more
+      visible). **Scroll:** conversation auto-scrolls only when the user is near the bottom
+      (`nearBottomRef`); reading history is never interrupted. **Readability:** 15px chat text,
+      polished code/prompt blocks; workspace dark surfaces and the Test sandbox output lifted a notch
+      lighter. **Permission card:** read-only `agent:detectPermission` IPC + a 4s poll surface a
+      terminal confirmation prompt as answer buttons in chat; answers go through the existing
+      `bridge.send → PtyManager.write()` (no second write path); permanent "always allow" is never
+      auto-selected. **Agent summary:** auto-summary now polls the terminal until output stabilizes
+      (≤45s) before summarizing once into the active chat (meta call, no usage_events). **Test Lab:**
+      new `test:context` (`buildRepoContext`) feeds a real source-file tree + sample files into the
+      generation prompt with framework-specific rules; a **Repair & rerun** button fixes a failing
+      test and reruns once; pytest detection now requires real Python evidence (no more mis-detecting
+      a JS repo with a `tests/` dir). **Validation:** `scripts/testlab-validation.ts` →
+      `docs/validation/testlab-10-run-validation.md` (12 real runs: 10 pass, 2 brittle→repaired,
+      across pytest/vitest/jest). **PDF export unchanged.**
 
 ## Locked design decisions
 

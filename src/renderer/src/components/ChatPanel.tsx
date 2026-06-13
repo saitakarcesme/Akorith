@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatUsage, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import type { ChatUsage, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
@@ -20,8 +20,13 @@ const TERMINALS = [
   { id: 't1', label: 'Atlantis' }
 ] as const
 const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t1: 'Claude' }
-// Bounded delay before auto-summarizing terminal output after a bridge send.
-const AUTO_SUMMARY_DELAY_MS = 6000
+// Bounded auto-summary watcher: first look after this long, then poll until the
+// terminal output stabilizes or the max wait elapses (agents keep streaming).
+const AUTO_SUMMARY_FIRST_DELAY_MS = 3500
+const AUTO_SUMMARY_POLL_MS = 2000
+const AUTO_SUMMARY_MAX_WAIT_MS = 45_000
+// Background permission poll cadence while a project workspace is open.
+const PERMISSION_POLL_MS = 4000
 
 interface ChatPanelProps {
   mode: ChatMode
@@ -127,6 +132,9 @@ export default function ChatPanel({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Phase 14.1: only auto-scroll to the newest message when the user is already
+  // near the bottom — never yank them away while they read older history.
+  const nearBottomRef = useRef(true)
 
   // ---- bridge state: one current target + the persisted auto-Enter setting ----
   const [bridgeTarget, setBridgeTarget] = useState<string>('t1')
@@ -141,9 +149,16 @@ export default function ChatPanel({
   const [suggesting, setSuggesting] = useState(false)
   const [digestEnabled, setDigestEnabled] = useState(false)
   const [summarizingAgent, setSummarizingAgent] = useState(false)
+  // Phase 14.1: a detected terminal permission/confirmation prompt, surfaced as
+  // an actionable card so the user never has to open the Activity drawer.
+  const [pendingPermission, setPendingPermission] = useState<{ detection: PermissionDetection; terminalId: string } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const sentTimer = useRef<ReturnType<typeof setTimeout>>()
   const autoSummaryTimer = useRef<ReturnType<typeof setTimeout>>()
+  // Monotonic token so a newer send/auto-summary watcher cancels an older one.
+  const summaryWatch = useRef(0)
+  // Once answered/dismissed, don't immediately re-surface the same prompt.
+  const dismissedPermSig = useRef<string | null>(null)
   // Dedup: skip re-summarizing unchanged terminal output (no summary spam).
   const lastSummarySig = useRef<string | null>(null)
   const isWorkspace = mode === 'workspace'
@@ -183,6 +198,8 @@ export default function ChatPanel({
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
+    // A fresh session/thread always opens scrolled to the bottom.
+    nearBottomRef.current = true
     if (historySel.sessionId === null) {
       setMessages([])
       setActiveSessionId(null)
@@ -223,8 +240,15 @@ export default function ChatPanel({
 
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
+
+  // Track whether the user is parked near the bottom of the conversation.
+  const handleMessagesScroll = (): void => {
+    const el = scrollRef.current
+    if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    setSelection(null)
+  }
 
   const showToast = (kind: 'ok' | 'error', text: string): void => {
     setToast({ kind, text })
@@ -310,10 +334,115 @@ export default function ChatPanel({
     }
   }
 
+  const permSig = (terminalId: string, d: PermissionDetection): string =>
+    `${terminalId}:${d.question ?? ''}:${d.matchedText ?? ''}`
+
+  /** Read-only check for a pending permission prompt; surfaces the card if new. */
+  const checkPermission = useCallback(
+    async (terminalId: string): Promise<boolean> => {
+      try {
+        const res = await window.api.agent.detectPermission(terminalId)
+        if (!res.ok || !res.detection.detected) {
+          // The prompt is gone — clear any stale card for this terminal.
+          setPendingPermission((cur) => (cur && cur.terminalId === terminalId ? null : cur))
+          return false
+        }
+        const sig = permSig(terminalId, res.detection)
+        if (sig === dismissedPermSig.current) return false
+        setPendingPermission({ detection: res.detection, terminalId })
+        return true
+      } catch {
+        return false
+      }
+    },
+    []
+  )
+
+  /**
+   * Phase 14.1: after sending to an agent, watch the target terminal until its
+   * output stabilizes (or a permission prompt appears, or a bounded deadline),
+   * then summarize once. More reliable than a single fixed delay — Claude/Codex
+   * often keep streaming for a while after the prompt is accepted.
+   */
   const scheduleAutoSummary = (terminalId: string, lastPrompt: string): void => {
     clearTimeout(autoSummaryTimer.current)
-    autoSummaryTimer.current = setTimeout(() => void runAgentSummary(terminalId, { auto: true, lastPrompt }), AUTO_SUMMARY_DELAY_MS)
+    const token = ++summaryWatch.current
+    const deadline = Date.now() + AUTO_SUMMARY_MAX_WAIT_MS
+    let lastLen = -1
+    let stable = 0
+    const tick = async (): Promise<void> => {
+      if (token !== summaryWatch.current) return // superseded by a newer send
+      // Surface a permission prompt as soon as we see one (and keep watching).
+      const hasPrompt = await checkPermission(terminalId)
+      let len = lastLen
+      try {
+        const snap = await window.api.pty.snapshot(terminalId, 8000)
+        len = snap.chars
+      } catch {
+        /* keep previous length */
+      }
+      if (len === lastLen) stable += 1
+      else {
+        stable = 0
+        lastLen = len
+      }
+      const settled = stable >= 2 || Date.now() > deadline
+      if (settled && !hasPrompt) {
+        if (token === summaryWatch.current) void runAgentSummary(terminalId, { auto: true, lastPrompt })
+        return
+      }
+      autoSummaryTimer.current = setTimeout(() => void tick(), AUTO_SUMMARY_POLL_MS)
+    }
+    autoSummaryTimer.current = setTimeout(() => void tick(), AUTO_SUMMARY_FIRST_DELAY_MS)
   }
+
+  /** Answer a detected permission prompt via the single bridge write path. */
+  const answerPermission = async (option: PermissionOption): Promise<void> => {
+    const pending = pendingPermission
+    if (!pending) return
+    dismissedPermSig.current = permSig(pending.terminalId, pending.detection)
+    setPendingPermission(null)
+    const label = TERMINALS.find((t) => t.id === pending.terminalId)?.label ?? pending.terminalId
+    // Permanent "always allow" is surfaced but never sent automatically; here the
+    // user explicitly chose it, which is allowed, but we still gate on the click.
+    const res = await window.api.bridge.send({ text: option.value, targetTerminalId: pending.terminalId, autoEnter: true })
+    if (res.ok) {
+      showToast('ok', `Answered ${label}: ${option.label}`)
+      // Let the agent react, then summarize the result back into chat.
+      scheduleAutoSummary(pending.terminalId, `Answered permission prompt: ${option.label}`)
+    } else {
+      showToast('error', res.error)
+    }
+  }
+
+  const dismissPermission = (): void => {
+    if (pendingPermission) dismissedPermSig.current = permSig(pendingPermission.terminalId, pendingPermission.detection)
+    setPendingPermission(null)
+  }
+
+  // Background permission poll: while a project workspace is open, watch the
+  // current target terminal for a confirmation prompt so the user can answer it
+  // from chat. Read-only (agent:detectPermission) — never writes anything.
+  useEffect(() => {
+    if (!hasProject) {
+      setPendingPermission(null)
+      return
+    }
+    let cancelled = false
+    const id = setInterval(() => {
+      if (!cancelled) void checkPermission(bridgeTarget)
+    }, PERMISSION_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [hasProject, bridgeTarget, checkPermission])
+
+  // Switching project clears any stale permission card and lets prompts re-show.
+  useEffect(() => {
+    setPendingPermission(null)
+    dismissedPermSig.current = null
+  }, [activeProject?.id])
 
   const toggleAutoEnter = async (): Promise<void> => {
     const next = !(autoEnter ?? false)
@@ -492,8 +621,55 @@ export default function ChatPanel({
   // The composer is the central work control, reused in the empty-state hero and
   // (when a conversation exists) docked at the bottom. Macro-loop mode/status live
   // inside it via the compact MacroLoopPanel above the input.
+  const permissionCard = pendingPermission && (() => {
+    const { detection, terminalId } = pendingPermission
+    const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
+    const role = AGENT_ROLE[terminalId] ?? 'Agent'
+    const options: PermissionOption[] =
+      detection.options && detection.options.length > 0
+        ? detection.options
+        : detection.suggestedAction
+          ? [{ value: detection.suggestedAction, label: 'Yes once', tone: 'affirm' }]
+          : [{ value: 'y', label: 'Yes once', tone: 'affirm' }, { value: 'n', label: 'No', tone: 'deny' }]
+    return (
+      <div className={`permission-card risk-${detection.riskLevel}`}>
+        <div className="permission-head">
+          <span className="permission-source">
+            {label} / {role}
+          </span>
+          <span className="permission-tag">waiting for your answer</span>
+          {detection.riskLevel !== 'low' && <span className="permission-risk">{detection.riskLevel} risk</span>}
+        </div>
+        <div className="permission-question">{detection.question || detection.matchedText || 'The agent is asking for confirmation in the terminal.'}</div>
+        <div className="permission-actions">
+          {options.map((opt, i) => (
+            <button
+              key={`${opt.value}-${i}`}
+              type="button"
+              className={`permission-btn tone-${opt.tone} ${opt.permanent ? 'is-permanent' : ''}`}
+              title={opt.permanent ? 'Permanent “always allow” — sent only because you chose it explicitly.' : `Send “${opt.label}” to ${label}`}
+              onClick={() => void answerPermission(opt)}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button type="button" className="permission-btn tone-neutral" onClick={onToggleDrawer}>
+            Open Activity
+          </button>
+          <button type="button" className="permission-dismiss" onClick={dismissPermission} title="Hide — answer later in the terminal">
+            Dismiss
+          </button>
+        </div>
+        {detection.requiresUserReview && (
+          <div className="permission-note">Akorith will not auto-answer this — review the choices above.</div>
+        )}
+      </div>
+    )
+  })()
+
   const composer = (
     <div className="composer">
+      {permissionCard}
       {suggestion && (
         <div className="router-suggestion">
           <div className="router-suggestion-head">
@@ -637,37 +813,40 @@ export default function ChatPanel({
           )}
         </div>
         <div className="ws-topbar-right">
-          <select
-            className="model-select"
-            value={providerId}
-            onChange={(event) => {
-              const next = event.target.value
-              if (next !== providerId && (activeSessionId || messages.length > 0)) {
-                setMessages([])
-                setActiveSessionId(null)
-                onActiveSession(null)
-              }
-              setProviderId(next)
-            }}
-            aria-label="Provider"
-            disabled={!providers?.length}
-          >
-            {!providers?.length && <option value="">No providers</option>}
-            {providers?.map((p) => (
-              <option key={p.id} value={p.id} disabled={!p.available.ok}>
-                {p.available.ok ? p.label : `${p.label} — unavailable`}
-              </option>
-            ))}
-          </select>
-          {selected && selected.models.length > 0 && (
-            <select className="model-select" value={model} onChange={(event) => setModel(event.target.value)} aria-label="Model">
-              {selected.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
+          <div className={`model-switcher ${!selected?.available.ok ? 'is-unavailable' : ''}`} title="Provider and model for this chat">
+            <span className="model-switcher-label">Model</span>
+            <select
+              className="model-select is-provider"
+              value={providerId}
+              onChange={(event) => {
+                const next = event.target.value
+                if (next !== providerId && (activeSessionId || messages.length > 0)) {
+                  setMessages([])
+                  setActiveSessionId(null)
+                  onActiveSession(null)
+                }
+                setProviderId(next)
+              }}
+              aria-label="Provider"
+              disabled={!providers?.length}
+            >
+              {!providers?.length && <option value="">No providers</option>}
+              {providers?.map((p) => (
+                <option key={p.id} value={p.id} disabled={!p.available.ok}>
+                  {p.available.ok ? p.label : `${p.label} — unavailable`}
                 </option>
               ))}
             </select>
-          )}
+            {selected && selected.models.length > 0 && (
+              <select className="model-select" value={model} onChange={(event) => setModel(event.target.value)} aria-label="Model">
+                {selected.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           <button type="button" className="icon-button" title="Refresh providers" onClick={() => void loadProviders()}>
             ↻
           </button>
@@ -723,7 +902,7 @@ export default function ChatPanel({
         </div>
       ) : (
         <>
-          <div className="chat-messages" ref={scrollRef} onMouseUp={handleSelectionMouseUp} onScroll={() => setSelection(null)}>
+          <div className="chat-messages" ref={scrollRef} onMouseUp={handleSelectionMouseUp} onScroll={handleMessagesScroll}>
             <div className="chat-messages-col">
               {messages.map((m) => (
                 <div key={m.id} className={`chat-msg ${m.role} ${m.status} ${m.summary ? 'is-summary' : ''}`}>

@@ -5,6 +5,7 @@ import type {
   ProviderInfo,
   ProjectRow,
   TestDetection,
+  TestRepoContext,
   TestRunRow,
   TestSettings
 } from '../../../preload/index.d'
@@ -106,6 +107,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   // Resolved/overridable run config (seeded by Detect).
   const [detection, setDetection] = useState<TestDetection | null>(null)
+  // Phase 14.1: bounded read-only repo structure + samples, so the generator
+  // imports real modules with real export names instead of guessing.
+  const [repoContext, setRepoContext] = useState<TestRepoContext | null>(null)
   const [framework, setFramework] = useState('')
   const [testCommand, setTestCommand] = useState('')
   const [installCommand, setInstallCommand] = useState('')
@@ -120,6 +124,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [presetFocus, setPresetFocus] = useState('')
 
   const [running, setRunning] = useState(false)
+  const [repairingIdx, setRepairingIdx] = useState<number | null>(null)
   const [phase, setPhase] = useState('')
   const [clearKey, setClearKey] = useState(0)
   const [results, setResults] = useState<ResultItem[]>([])
@@ -227,6 +232,13 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setTestCommand(d.testCommand)
     setInstallCommand(d.installCommand)
     setTestPath(d.suggestedTestPath)
+    // Pull a bounded read-only structure digest so generation imports real files.
+    try {
+      const ctx = await window.api.test.context(sourceRepo.trim())
+      setRepoContext(ctx && !('error' in ctx) ? ctx : null)
+    } catch {
+      setRepoContext(null)
+    }
     return d
   }
 
@@ -253,12 +265,56 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const effectiveTarget = (): string =>
     targetDesc.trim() || presetFocus || 'the most important logic in this repository'
 
+  // Framework-specific rules that keep generated tests runnable (no "0 tests",
+  // correct syntax, real imports). Steers away from the brittle patterns that
+  // produced failing runs in manual testing.
+  const frameworkRules = (): string => {
+    const fw = (framework || '').toLowerCase()
+    if (fw === 'pytest') {
+      return [
+        '- Use plain pytest: `def test_*()` functions with `assert`. Do NOT require pytest plugins, fixtures from conftest, or network access.',
+        '- Import modules exactly as they appear in the structure below (match the real module path and exported names). Do not invent functions.',
+        '- If a module needs a package that may be missing, prefer testing pure-Python modules that have no third-party imports.',
+        '- Include at least 3 real test functions that will actually execute.'
+      ].join('\n')
+    }
+    if (fw === 'vitest' || fw === 'jest') {
+      return [
+        `- Use ${fw} syntax: import { describe, it, expect } from '${fw}' (vitest) — for jest the globals are available, do not import them.`,
+        '- Import the modules under test using the EXACT relative path and exported names shown in the structure below. Verify the export exists before testing it.',
+        '- Only test pure functions/logic that run in Node without a browser, DB, or network. Do not import React components unless the preset is React.',
+        '- Use the correct extension already chosen for the file. Include at least 3 real `it(...)` tests with concrete assertions — never an empty describe block.'
+      ].join('\n')
+    }
+    return [
+      '- Import the modules under test using the EXACT path and exported names shown in the structure below.',
+      '- Write at least 3 real, executable tests with concrete assertions. Avoid placeholders, TODOs, or skipped tests.',
+      '- Do not depend on network access, a running server, or packages that are not already in the repo.'
+    ].join('\n')
+  }
+
+  const buildStructureBlock = (): string => {
+    if (!repoContext) return ''
+    const samples = repoContext.samples
+      .map((s) => `--- FILE: ${s.path} ---\n${s.content}`)
+      .join('\n\n')
+    return (
+      `\nRepository structure (read-only context — these are REAL files; import from them, do not invent names):\n` +
+      `Source files (${repoContext.fileCount} total, truncated):\n${repoContext.tree || '(none found)'}\n` +
+      (samples ? `\nSample source files you can import and test directly:\n${samples}\n` : '')
+    )
+  }
+
   const buildGenPrompt = (): string =>
-    `Write ${framework || 'unit'} tests for this repository.\n\n` +
+    `You are generating an automated test file for an existing repository. First study the repository structure and sample files below, then write tests that import the REAL modules and assert on their REAL behavior.\n\n` +
+    `Framework: ${framework || 'unit'}\n` +
     `Target: ${effectiveTarget()}\n` +
     (presetFocus ? `Emphasis: ${presetFocus}\n` : '') +
-    `\nRespond with ONLY the complete test file content inside a single fenced code block — no prose. ` +
-    `It will be saved as "${testPath}" and run with: ${testCommand}`
+    `\nRules (follow exactly so the tests actually run and pass):\n${frameworkRules()}\n` +
+    buildStructureBlock() +
+    `\nThe file will be saved as "${testPath}" (relative to the repo root) and run with: ${testCommand}\n` +
+    `Make sure imports resolve from that location.\n\n` +
+    `Respond with ONLY the complete test file content inside a single fenced code block — no prose, no explanation.`
 
   /** Generate (local model) → write into a fresh sandbox → run → metrics. */
   const runOne = async (useModel: string): Promise<ResultItem> => {
@@ -355,6 +411,101 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     if (currentRunId.current) window.api.test.stop(currentRunId.current)
     if (currentReqId.current) window.api.chat.cancel(currentReqId.current)
     setPhase('stopping…')
+  }
+
+  const isRepairable = (item: ResultItem): boolean =>
+    Boolean(item.run) &&
+    ['failed', 'error', 'no-tests', 'install-failed'].includes(item.run!.status ?? '') &&
+    Boolean(item.run!.generatedFiles?.length)
+
+  // Phase 14.1 "repair failed test": feed the failing test file + sandbox output
+  // back to the model, ask for a corrected file, then rerun once in a fresh
+  // sandbox. Source repo stays read-only; only the generated test changes.
+  const repairOne = async (idx: number): Promise<void> => {
+    const item = results[idx]
+    const failedRun = item.run
+    if (!failedRun || running || repairingIdx !== null) return
+    const original = failedRun.generatedFiles?.[0]
+    if (!original) return
+
+    setRepairingIdx(idx)
+    setError(null)
+    const reqId = newId()
+    currentReqId.current = reqId
+    setPhase('repairing failing test…')
+    const repairPrompt =
+      `A generated ${failedRun.framework ?? framework} test file failed when run in a sandboxed copy of the repository. ` +
+      `Fix the test file so it runs and passes against the REAL code. Keep it honest — do not weaken assertions just to pass; ` +
+      `correct wrong imports, wrong export names, syntax errors, or unsupported assumptions.\n\n` +
+      `Test command: ${testCommand}\nFile path: ${original.path}\n\n` +
+      `Current failing test file:\n\`\`\`\n${original.content}\n\`\`\`\n\n` +
+      `Sandbox output / failure:\n\`\`\`\n${(failedRun.rawOutput ?? '').slice(-4000)}\n\`\`\`\n` +
+      buildStructureBlock() +
+      `\nRespond with ONLY the corrected, complete test file inside a single fenced code block — no prose.`
+
+    let genText: string
+    let runModel = failedRun.model ?? model
+    let tokens: number | undefined
+    try {
+      const res = await window.api.chat.send({ requestId: reqId, providerId, model: failedRun.model || model || undefined, prompt: repairPrompt })
+      if (!res.ok) {
+        setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, error: `repair failed: ${res.error}` } : r)))
+        return
+      }
+      genText = res.result.text
+      runModel = res.result.model
+      const u = res.result.usage
+      tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
+    } catch (err) {
+      setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, error: err instanceof Error ? err.message : String(err) } : r)))
+      return
+    } finally {
+      currentReqId.current = null
+    }
+
+    const code = extractCode(genText)
+    if (!code) {
+      setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, error: 'repair did not return a fenced code block' } : r)))
+      setRepairingIdx(null)
+      setPhase('')
+      return
+    }
+
+    const runId = newId()
+    currentRunId.current = runId
+    setClearKey((k) => k + 1)
+    setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, pending: true } : r)))
+    setPhase(`re-running repaired ${framework} in sandbox…`)
+    try {
+      const res = await window.api.test.run({
+        runId,
+        sourceRepo: sourceRepo.trim(),
+        targetDesc: `repair: ${effectiveTarget()}`,
+        providerId,
+        model: runModel,
+        framework,
+        testCommand,
+        installCommand: installCommand || undefined,
+        installDeps,
+        files: [{ path: original.path, content: code }],
+        tokens,
+        attempts: (failedRun.attempts ?? 1) + 1,
+        timeoutMs: settings?.timeoutMs
+      })
+      const next: ResultItem = res.ok ? { model: runModel, pending: false, run: res.run } : { model: runModel, pending: false, error: res.error }
+      setResults((prev) => prev.map((r, i) => (i === idx ? next : r)))
+      refreshRecent()
+      if (res.ok) {
+        setSelectedRunIds([res.run.id])
+        setLatestEvaluation(null)
+      }
+    } catch (err) {
+      setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, pending: false, error: err instanceof Error ? err.message : String(err) } : r)))
+    } finally {
+      currentRunId.current = null
+      setRepairingIdx(null)
+      setPhase('')
+    }
   }
 
   const compareModelToggle = (m: string): void => {
@@ -470,6 +621,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               onChange={(e) => {
                 setSourceRepo(e.target.value)
                 setDetection(null)
+                setRepoContext(null)
                 setError(null)
               }}
             >
@@ -643,6 +795,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                     >
                       Evaluate
                     </button>
+                    {isRepairable(r) && (
+                      <button
+                        type="button"
+                        className="test-mini-btn"
+                        disabled={running || repairingIdx !== null}
+                        title="Send the failing test + sandbox output back to the model, then rerun once"
+                        onClick={() => void repairOne(i)}
+                      >
+                        {repairingIdx === i ? 'Repairing…' : 'Repair & rerun'}
+                      </button>
+                    )}
                   </div>
                 )}
                 {r.error && <div className="test-result-body test-result-err">{r.error}</div>}

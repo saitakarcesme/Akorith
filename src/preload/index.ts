@@ -145,6 +145,7 @@ const test = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('test:getSettings'),
   setSourceRepo: (dir: string): Promise<unknown> => ipcRenderer.invoke('test:setSourceRepo', dir),
   detect: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:detect', { sourceRepo }),
+  context: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:context', { sourceRepo }),
   run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:run', args),
   stop: (runId: string): void => {
     ipcRenderer.send('test:stop', { runId })
@@ -188,7 +189,10 @@ const macro = Object.freeze({
 
 const agent = Object.freeze({
   // Phase 13.2: read a terminal snapshot and summarize it into chat (meta call).
-  summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args)
+  summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args),
+  // Phase 14.1: read-only detection of a pending terminal permission/confirm prompt.
+  detectPermission: (terminalId: string): Promise<unknown> =>
+    ipcRenderer.invoke('agent:detectPermission', { terminalId })
 })
 
 const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent })
