@@ -359,7 +359,19 @@ export default function Sidebar({
             {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
             <div className="project-list">
               {projects.length === 0 ? (
-                <div className="sidebar-item is-empty">No project folders yet</div>
+                <div className="sidebar-empty-state">
+                  <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
+                  <div className="sidebar-empty-actions">
+                    <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
+                      <FolderIcon size={14} />
+                      Open Project
+                    </button>
+                    <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
+                      <PlusIcon size={14} />
+                      Create Project
+                    </button>
+                  </div>
+                </div>
               ) : (
                 projects.map((project) => (
                   <button

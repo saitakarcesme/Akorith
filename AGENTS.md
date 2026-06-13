@@ -6,17 +6,17 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 11 (agentic loop +
-final product polish).
+with electron-vite, in strict numbered phases — currently through Phase 13 (Codex-quality
+light UI + persistent workspace history).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
 9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
 9.1.2 workspace polish + app identity · 9.1.3 app identity + sidebar defaults ·
-10 electron-builder packaging + macOS app identity ·
-**11 agentic loop + final product polish** — all done. Remaining: code
-signing/notarization + a built Windows installer (config is in place).
+10 electron-builder packaging + macOS app identity · 11 agentic loop + final product polish ·
+12 full product validation · **13 Codex-quality light UI + persistent history** — all done.
+Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
 
@@ -540,6 +540,46 @@ Verified present in the packaged app's DB schema.
 a visible note, never auto-selects "always allow", never auto-answers medium/high-risk or
 low-confidence prompts, pauses on failures/attention, and Stop always aborts. Planner +
 summarizer are meta calls and never touch the dashboard.
+
+### Codex-quality light UI + persistent history (Phase 13)
+
+Phase 13 is a product-feel phase: a light/neutral "developer workbench" look and workspace
+continuity. No functional invariant changed — same IPC, same single write path, same safety.
+
+**Theme token architecture (the whole change is token-first).** `:root` now defines a *light*
+neutral system: workspace base `--bg` #f4f4f3, panels `--bg-panel` #fff, center chat
+`--bg-chat` #fafafa, dark-neutral text, a restrained muted-indigo accent (`--accent` #6257c9),
+black-alpha `--border-soft`, and `--hover`/`--hover-strong`/`--on-accent` tokens. Two areas keep
+their own **scoped dark token overrides** so they stay dark on the light app:
+`.terminal-column` (the whole right execution subtree — headers, chips, onboarding) and
+`.chat-code` / `.test-terminal-col` (dark code/terminal surfaces carry light text). xterm content
+is themed in JS, independent of CSS. The old lavender `rgba(169,150,255,…)` accent was unified to
+the new indigo `rgba(98,87,201,…)` everywhere (focus rings, tints, selection).
+
+**Light/white sidebar.** `.sidebar` gets its own token scope (`--sidebar-*`): white background,
+dark text, gray icons, a hairline border, calm black-alpha hovers, and a subtle indigo
+active state. Provider colors survive only as small chips/tints, not loud blocks. A polished
+empty state (no projects) shows Open Project / Create Project CTAs reusing the existing flow.
+
+**Persistent workspace history (Part A).** On launch, `App.tsx` restores the last active project
+from `localStorage` `akorith.lastActiveProjectId` (looks it up in `projects.list()`), so the app
+resumes previous work instead of opening empty. Restoring re-starts that project's Codex/Claude
+terminals **only** through the existing safe PTY startup (a logged-in CLI launch in the project
+cwd — never a destructive command) and the panes show visible live/exited status, so the resume
+is never hidden. `akorith.lastActiveSessionId` is also persisted; recent chats stay one click to
+resume. Sidebar collapse, provider-folder collapse (default collapsed), terminal split (clamped
+30–70, null-safe), and display name were already persisted in earlier phases. Projects and recent
+chats are listed recency-first from SQLite.
+
+**Other surfaces.** Light chat bubbles (white assistant card with a hairline border; faint-tint
+user bubble); a filled-accent primary Send button; the BrowserWindow `backgroundColor` is now
+light (`#f4f4f3`) to avoid a dark first-paint flash. Radius system tightened to a consistent
+8/11/14/18. Motion still respects `prefers-reduced-motion`.
+
+**Manual UI inspection (REAL).** The packaged app was launched and screenshotted
+(`docs/validation/phase13-ui.png`): white sidebar with logo/nav/empty-state/recent-chats/profile,
+light planning chat with macro-loop Approval/Auto toggle and filled Send, dark right execution
+column. Menu bar shows "Akorith". Reads as a calm, intentional developer product.
 
 ### Packaging — electron-builder + macOS app identity (Phase 10)
 

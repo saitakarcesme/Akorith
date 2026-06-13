@@ -103,10 +103,16 @@ The macro-loop drives a planner → executor cycle toward a goal you set.
 - Packaged builds are not yet code-signed/notarized for public distribution (Gatekeeper may
   warn on first open on other machines).
 
-## Screenshots / demo
+## Design
 
-_Placeholder — add Workspace, Dashboard, and Test-page screenshots / a short demo clip here
-before publishing._
+Akorith uses a calm, light "developer workbench" interface: a **white left sidebar** for
+projects/history/navigation, a light off-white center planning surface, and a dark right
+execution column (terminals are naturally dark). The accent is a restrained muted indigo — no
+neon, no clutter. The app **resumes your last project on launch** so it never opens empty.
+
+![Akorith workspace](docs/validation/phase13-ui.png)
+
+_More screenshots / a short demo clip can be added before public launch._
 
 ## More
 

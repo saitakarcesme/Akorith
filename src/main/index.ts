@@ -99,7 +99,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     show: false,
-    backgroundColor: '#0b0b10',
+    backgroundColor: '#f4f4f3',
     autoHideMenuBar: true,
     title: 'Akorith',
     ...(icon ? { icon } : {}),

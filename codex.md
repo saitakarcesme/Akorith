@@ -124,6 +124,19 @@ electron-vite in strict numbered phases.
       IPC; `macro.ts` gains `mode` (approval default | auto), `summarizeTurn` (meta call + heuristic
       fallback, no `usage_event`), `respondPermission` (one-time token via bridge), and an
       abortable `runAutoLoop`. Additive macro DB columns. Approval Mode unchanged + default.
+- [x] **Phase 12** — full product validation. Built/tested/AI-reviewed 3 local sample projects
+      (`~/Desktop/akorith-validation/`) using the real `claude`/`codex` CLI paths; report in
+      `docs/validation/full-product-validation.md`. No blocker bugs. Recommendation: ready for
+      private demo, close to public soft launch.
+- [x] **Phase 13** — Codex-quality light UI + persistent history. Token-first redesign in
+      `styles.css`: light/neutral workspace (`--bg` #f4f4f3, chat #fafafa, white panels, dark text,
+      muted-indigo `--accent` #6257c9, black-alpha borders/hover, `--on-accent`). **Light/white
+      sidebar** via scoped `--sidebar-*` tokens. The right execution column (`.terminal-column`),
+      `.chat-code`, and `.test-terminal-col` keep **scoped dark token overrides** so terminals/code
+      stay dark. Old lavender accent unified to indigo. Light chat bubbles, filled Send button,
+      light window `backgroundColor`. Persistent history: `App.tsx` restores last active project
+      from `localStorage` (`akorith.lastActiveProjectId`) via existing safe PTY startup; sidebar
+      empty-state CTAs. Verified by launch + screenshot (`docs/validation/phase13-ui.png`).
 
 ## Locked design decisions
 
@@ -199,6 +212,16 @@ electron-vite in strict numbered phases.
   `localStorage` `akorith.providerCollapsed` (absent = collapsed); join the existing
   `akorith.*` localStorage keys (sidebar collapse, terminal split, etc.). Provider groups must stay
   visible-but-collapsed — never removed.
+- **Theme is token-first and light (Phase 13).** Change colors via the `:root` tokens, not
+  per-component literals. The app is a light/neutral workbench with a **white sidebar**
+  (`--sidebar-*` scope). Dark surfaces (right `.terminal-column`, `.chat-code`,
+  `.test-terminal-col`) keep their own **scoped dark token overrides** — do not delete those or the
+  terminals/code blocks go light-on-light. Accent is muted indigo `#6257c9`; keep it restrained
+  (no neon). Provider colors are small chips/tints only.
+- **Workspace continuity (Phase 13).** Last active project id is persisted to
+  `localStorage` `akorith.lastActiveProjectId` and restored on launch; restoring re-starts agents
+  **only** via the existing safe PTY startup (logged-in CLI in the project cwd, never destructive),
+  visibly. No new auto-run of arbitrary commands on restore.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current
