@@ -11,9 +11,22 @@ import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc } from './macro'
 import { closeDb, initDb, registerDbIpc } from './db'
 
-// Visible app identity is Akorith. Native packaging identity (.icns/.ico,
-// productName) is still Phase 10; this only fixes the dev/runtime name + icon.
+// Visible app identity is Akorith. `app.setName` drives app.name, the
+// "About Akorith"/"Hide Akorith"/"Quit Akorith" menu roles, and userData.
+// NOTE: in dev the macOS *menu-bar bold app name* and the *dock tooltip* are
+// read from the running Electron.app bundle's Info.plist (CFBundleName =
+// "Electron") and cannot be overridden at runtime — that requires a packaged
+// build with productName (Phase 10). Everything else below is fixed here.
 app.setName('Akorith')
+
+/** Make the macOS "About" panel and app-menu roles say Akorith, not Electron. */
+function applyAppIdentity(): void {
+  app.setAboutPanelOptions({
+    applicationName: 'Akorith',
+    applicationVersion: app.getVersion(),
+    credits: 'Akorith — agent orchestration with no API keys.'
+  })
+}
 
 /**
  * Prefer the raster Akorith logo (works with nativeImage for the dock /
@@ -89,6 +102,7 @@ app.whenReady().then(() => {
   registerTestIpc()
   registerEvaluateIpc()
   registerMacroIpc()
+  applyAppIdentity()
   applyDockIcon()
   createWindow()
 

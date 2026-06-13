@@ -865,9 +865,17 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.065);
 }
 
+.profile-button > svg {
+  flex: 0 0 auto;
+}
+
 .profile-button svg:last-child {
   margin-left: auto;
   color: var(--text-faint);
+}
+
+.profile-button:hover svg:last-child {
+  color: var(--text-dim);
 }
 
 .settings-popover {

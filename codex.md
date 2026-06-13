@@ -88,6 +88,16 @@ electron-vite in strict numbered phases.
       IPC, extended `projects:createFolder` accepting a pre-picked `parentPath`); `app.setName`,
       window title, and a raster `assets/akorith-logo.png` dock/window icon replace the Electron
       identity in dev/runtime. Native `.icns`/`.ico` + `package.json` rename stay Phase 10.
+- [x] **Phase 9.1.3** — app identity + sidebar defaults. `package.json` `name`→`akorith`,
+      `productName`→`Akorith`, Akorith `description`; main process adds
+      `app.setAboutPanelOptions({ applicationName:'Akorith' })` alongside the existing
+      `app.setName('Akorith')` + dock icon, so window title, About panel, and About/Hide/Quit menu
+      roles say Akorith. Sidebar provider folders (Claude/ChatGPT/Local) now **default collapsed**,
+      persisted in `localStorage` `akorith.providerCollapsed`. The broken hand-drawn settings gear
+      is replaced with a clean stroked gear and the profile button pins its icons with
+      `flex:0 0 auto`. **Documented limitation:** in dev the macOS menu-bar app name + dock tooltip
+      stay "Electron" (read from Electron.app's `Info.plist` `CFBundleName`; only a packaged build
+      with `productName` fixes them — Phase 10).
 - [ ] **Phase 10** — packaging + full app identity. Scope/checklist:
       - electron-builder installable builds: macOS `.app`/`.dmg` and Windows `.exe`/installer,
         preserving the node-pty (never rebuild) + better-sqlite3 (`electron-rebuild -f -o
@@ -148,9 +158,16 @@ electron-vite in strict numbered phases.
   `projects:pickDirectory`, `projects:createFolder`); the renderer never touches the filesystem,
   name validation + path-traversal guards live in main, and selecting a project with a valid path
   starts Olympus/Atlantis through the existing PTY lifecycle — not a new write path.
-- **App identity in 9.1.2 is dev/runtime only.** `app.setName('Akorith')` + `assets/akorith-logo.png`
-  for the dock/window icon; native `.icns`/`.ico` and the `package.json`/userData rename are
-  deliberately deferred to Phase 10.
+- **App identity is dev/runtime only (9.1.2 + 9.1.3).** `app.setName('Akorith')`,
+  `app.setAboutPanelOptions`, `package.json` `name`/`productName`/`description`, and
+  `assets/akorith-logo.png` for the dock/window icon. The macOS **menu-bar app name** and **dock
+  tooltip** still show "Electron" in dev because they come from Electron.app's `Info.plist`
+  (`CFBundleName`), which no runtime API can change — native `.icns`/`.ico` + a packaged
+  `productName` bundle (Phase 10) is the only fix.
+- **Sidebar local UI state (9.1.3).** Provider folders default collapsed and persist in
+  `localStorage` `akorith.providerCollapsed` (absent = collapsed); join the existing
+  `akorith.*` localStorage keys (sidebar collapse, terminal split, etc.). Provider groups must stay
+  visible-but-collapsed — never removed.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
 ## Rule: keep the docs current

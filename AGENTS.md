@@ -6,15 +6,15 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 9.1.2 (workspace
-polish and app identity fix).
+with electron-vite, in strict numbered phases — currently through Phase 9.1.3 (app
+identity and sidebar defaults).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
 9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
-**9.1.2 workspace polish + app identity** — all done. Pending: 10 packaging +
-`productName` / full native package identity cleanup.
+9.1.2 workspace polish + app identity · **9.1.3 app identity + sidebar defaults** — all
+done. Pending: 10 packaging + full native package identity cleanup.
 
 ## Prerequisites
 
@@ -441,6 +441,39 @@ Phase 9.1.2 is a focused polish/fix pass after 9.1.1; it does not start packagin
   Olympus = Codex, Atlantis = Claude; collapsing the Macro loop still leaves chat + composer
   visible. No second PTY write path, no autopilot, no auto-approval of permission prompts.
 
+### App identity + sidebar defaults (Phase 9.1.3)
+
+Phase 9.1.3 is a focused follow-up after 9.1.2; still no packaging.
+
+- **App identity — what's fixed in dev/runtime.** `package.json` now carries `name: "akorith"`,
+  `productName: "Akorith"`, and an Akorith `description` (the only `letsgetit` string is gone;
+  `name` is not self-imported anywhere, so the build/imports are unaffected — userData is pinned by
+  `app.setName('Akorith')`, not the package name). The main process keeps `app.setName('Akorith')`,
+  adds `app.setAboutPanelOptions({ applicationName: 'Akorith', … })`, sets the BrowserWindow
+  `title: 'Akorith'`, and applies the raster dock icon. Result: the window title, the **About
+  Akorith / Hide Akorith / Quit Akorith** menu roles, the About panel, and the dock *icon* all say
+  Akorith.
+- **App identity — the documented limitation.** Running in **dev** (`npm run dev` launches
+  `node_modules/.../Electron.app`), the macOS **menu-bar bold app name** and the **dock tooltip**
+  are read from that bundle's `Info.plist` (`CFBundleName` = "Electron") and **cannot be changed at
+  runtime** by `app.setName` or any JS API. Overriding those two specific labels requires a
+  **packaged build** whose own `Info.plist` carries `CFBundleName`/`CFBundleDisplayName` = Akorith
+  (electron-builder `productName`) — that is **Phase 10**. This is the only place "Electron" can
+  still appear, and only in dev.
+- **Provider folders default collapsed.** The sidebar's Claude / ChatGPT / Local (Ollama) provider
+  groups now default to collapsed for a cleaner first load. State is per-provider and persists in
+  `localStorage` under `akorith.providerCollapsed` (a provider absent from the map reads as
+  collapsed); clicking a group header expands/collapses it. The colored group cards stay visible
+  when collapsed; Recent chats and project folders are unchanged.
+- **Profile/settings gear icon.** `SettingsIcon` was a tangled hand-drawn path that rendered broken
+  at 16px; it's replaced with a clean standard stroked gear (circle + cog outline). The profile
+  button also pins both its icons with `flex: 0 0 auto` so the gear stays correctly sized, centered,
+  and right-aligned in both expanded and collapsed sidebar states.
+- **No regressions.** Equal Olympus/Atlantis split, lighter center chat, All-projects Open/Create
+  menu + Create Project modal, project activation starting Olympus=Codex / Atlantis=Claude, the
+  right execution column, chat-visible-on-macro-collapse, semi-automatic macro-loop, and the
+  Dashboard/Test routes are all preserved.
+
 ### Phase 10 — packaging + full app identity (planned, NOT yet implemented)
 
 Phase 10 turns Akorith into a distributable, fully-branded app. Checklist:
@@ -449,12 +482,16 @@ Phase 10 turns Akorith into a distributable, fully-branded app. Checklist:
       `.exe`/installer; wire `build`/config without breaking the node-pty (N-API, never rebuild)
       and better-sqlite3 (`electron-rebuild -f -o better-sqlite3`) native-module rules, and keep
       the macOS `fix-spawn-helper` step in the packaged flow.
-- [ ] **Full identity rename** from internal `loopex`/`letsgetit` to Akorith where safe:
-      `package.json` `name`/`productName`/`description`, and a decision on whether to migrate the
-      userData dir + `loopex.config.json` / `loopex.db` filenames (migration vs. leave-as-is).
+- [x] `package.json` `name`/`productName`/`description` set to Akorith in Phase 9.1.3 (the npm
+      `name`/`productName` are in place; electron-builder consumes `productName`). Still TODO:
+      decide whether to migrate the userData dir + `loopex.config.json` / `loopex.db` filenames
+      (migration vs. leave-as-is) and finish any remaining internal `loopex` references.
 - [ ] **Native icon generation** — `.icns` (macOS) and `.ico` (Windows) from `assets/akorith-logo.png`
       (1254×1254 source; downscale to the standard icon sizes), wired into the builder config.
-- [ ] **Final dock / taskbar / Start-menu identity** verified on macOS and Windows.
+- [ ] **Final dock / taskbar / Start-menu identity** verified on macOS and Windows. Note: the dev
+      macOS **menu-bar app name** and **dock tooltip** stay "Electron" until this step — they come
+      from the packaged bundle's `Info.plist` `CFBundleName`/`CFBundleDisplayName` (= `productName`),
+      which `app.setName` cannot override at runtime.
 - [ ] **README for humans** (install + connect-your-CLIs) and AI-facing **`AGENTS.md`** kept current.
 - [ ] **"Akorith stores no credentials / no API keys"** explanation in the README.
 - [ ] One-sentence **user install/connect prompt** (e.g. "Install + log in to `claude`/`codex`,

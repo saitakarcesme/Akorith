@@ -85,7 +85,16 @@ export default function Sidebar({
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
-  const [providerCollapsed, setProviderCollapsed] = useState<Record<string, boolean>>({})
+  // Provider groups default to collapsed for a cleaner first load; explicit
+  // toggles persist per provider id. A provider absent from the map is collapsed.
+  const [providerCollapsed, setProviderCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('akorith.providerCollapsed')
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+    } catch {
+      return {}
+    }
+  })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -123,6 +132,10 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.providerCollapsed', JSON.stringify(providerCollapsed))
+  }, [providerCollapsed])
 
   useEffect(() => {
     localStorage.setItem('akorith.displayName', displayName)
@@ -401,7 +414,7 @@ export default function Sidebar({
 
           {folderIds.map((providerId) => {
             const items = visibleSessions.filter((s) => s.providerId === providerId)
-            const isCollapsed = providerCollapsed[providerId] ?? false
+            const isCollapsed = providerCollapsed[providerId] ?? true
             return (
               <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
                 <div className="sidebar-section-header provider-header">
