@@ -98,19 +98,22 @@ electron-vite in strict numbered phases.
       `flex:0 0 auto`. **Documented limitation:** in dev the macOS menu-bar app name + dock tooltip
       stay "Electron" (read from Electron.app's `Info.plist` `CFBundleName`; only a packaged build
       with `productName` fixes them — Phase 10).
-- [ ] **Phase 10** — packaging + full app identity. Scope/checklist:
-      - electron-builder installable builds: macOS `.app`/`.dmg` and Windows `.exe`/installer,
-        preserving the node-pty (never rebuild) + better-sqlite3 (`electron-rebuild -f -o
-        better-sqlite3`) + macOS `fix-spawn-helper` native-module rules in the packaged flow.
-      - Full rename of internal `loopex`/`letsgetit` → Akorith where safe (`package.json`
-        `name`/`productName`/`description`; decide on userData / `loopex.config.json` / `loopex.db`
-        migration vs. leave-as-is).
-      - Native `.icns` (macOS) + `.ico` (Windows) generated from `assets/akorith-logo.png`
-        (1254×1254 source), wired into the builder.
-      - Final dock / taskbar / Start-menu identity verified on macOS + Windows.
-      - README for humans (install + connect CLIs) + current AGENTS.md; explicit "Akorith stores
-        no credentials / no API keys" note; one-sentence install/connect prompt.
-      - Release checklist + smoke-test checklist run against a packaged build.
+- [x] **Phase 10** — electron-builder packaging + macOS app identity. `electron-builder` 25.x
+      devDep; config in the `package.json` `build` field; scripts `pack`/`pack:mac` (`--dir`),
+      `dist`/`dist:mac` (dmg+zip), `dist:win` (NSIS config). `appId=com.akorith.app`,
+      `productName=Akorith` → packaged `Info.plist` `CFBundleName`/`CFBundleDisplayName`=Akorith,
+      so the **packaged** app shows Akorith in menu bar/Dock/Finder/title (the dev-only "Electron"
+      limitation is now resolved for the built app). Icons in `build/`: `icon.icns` (sips+iconutil),
+      `icon.ico` (256² PNG-backed, no ImageMagick), `icon.png` (1024²). Native modules:
+      `npmRebuild:false` (so electron-builder doesn't rebuild node-pty and fail — postinstall already
+      did better-sqlite3 for Electron ABI; node-pty uses N-API prebuilds) +
+      `asarUnpack` for node-pty/better-sqlite3 (`.node` + executable `spawn-helper` land in
+      `app.asar.unpacked`). `main/index.ts` `ensureCliPath()` prepends Homebrew/user bin dirs to
+      `PATH` so Finder-launched GUI apps resolve `claude`/`codex`/`ollama` (no shell eval; missing
+      CLI still degrades to shell + message). Smoke-tested: `dist/mac-arm64/Akorith.app` launches,
+      identity correct, `loopex.db` created (better-sqlite3 loads). README rewritten for humans;
+      `docs/release-checklist.md` added. Remaining: code signing/notarization + a built Windows
+      installer (config ready).
 
 ## Locked design decisions
 
@@ -158,12 +161,20 @@ electron-vite in strict numbered phases.
   `projects:pickDirectory`, `projects:createFolder`); the renderer never touches the filesystem,
   name validation + path-traversal guards live in main, and selecting a project with a valid path
   starts Olympus/Atlantis through the existing PTY lifecycle — not a new write path.
-- **App identity is dev/runtime only (9.1.2 + 9.1.3).** `app.setName('Akorith')`,
-  `app.setAboutPanelOptions`, `package.json` `name`/`productName`/`description`, and
-  `assets/akorith-logo.png` for the dock/window icon. The macOS **menu-bar app name** and **dock
-  tooltip** still show "Electron" in dev because they come from Electron.app's `Info.plist`
-  (`CFBundleName`), which no runtime API can change — native `.icns`/`.ico` + a packaged
-  `productName` bundle (Phase 10) is the only fix.
+- **App identity is runtime + packaged (9.1.2/9.1.3 + 10).** Runtime: `app.setName('Akorith')`,
+  `app.setAboutPanelOptions`, window `title`, dock icon. Packaged (Phase 10): electron-builder
+  `productName=Akorith`/`appId=com.akorith.app` → the bundle `Info.plist` `CFBundleName` shows
+  Akorith in the menu bar/Dock/Finder. In **dev** the menu-bar/Dock name still reads "Electron"
+  (Electron.app's own `Info.plist`); that is expected and only the packaged build fixes it.
+- **Packaging invariants (Phase 10) — do not break.** electron-builder config lives in
+  `package.json` `build`. Keep `npmRebuild:false` (electron-builder must NOT rebuild node-pty —
+  it would fail; postinstall handles better-sqlite3, node-pty uses N-API prebuilds). Keep
+  `asarUnpack` for node-pty + better-sqlite3 (their `.node` and node-pty's `spawn-helper` must be
+  on disk and executable). Keep `assets/**` in `build.files`. `dist/` is git-ignored; never commit
+  packaged artifacts. Icons live in `build/` (`icon.icns`/`icon.ico`/`icon.png`).
+- **Packaged GUI PATH.** `ensureCliPath()` in `main/index.ts` prepends static well-known bin dirs
+  (Homebrew/user) to `process.env.PATH` so Finder-launched apps resolve `claude`/`codex`/`ollama`.
+  Static dirs only — never spawn a shell or eval to discover PATH.
 - **Sidebar local UI state (9.1.3).** Provider folders default collapsed and persist in
   `localStorage` `akorith.providerCollapsed` (absent = collapsed); join the existing
   `akorith.*` localStorage keys (sidebar collapse, terminal split, etc.). Provider groups must stay

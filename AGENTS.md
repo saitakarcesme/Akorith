@@ -6,15 +6,16 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
 history. Built
-with electron-vite, in strict numbered phases — currently through Phase 9.1.3 (app
-identity and sidebar defaults).
+with electron-vite, in strict numbered phases — currently through Phase 10 (electron-builder
+packaging + Akorith desktop identity).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
 7 isolated test page · 8 evaluate/ISAScore/PDF · 9 semi-automatic macro-loop ·
 9.1 Akorith UI polish + workspace projects · 9.1.1 project-first workspace flow ·
-9.1.2 workspace polish + app identity · **9.1.3 app identity + sidebar defaults** — all
-done. Pending: 10 packaging + full native package identity cleanup.
+9.1.2 workspace polish + app identity · 9.1.3 app identity + sidebar defaults ·
+**10 electron-builder packaging + macOS app identity** — all done. Remaining: code
+signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
 
@@ -474,31 +475,79 @@ Phase 9.1.3 is a focused follow-up after 9.1.2; still no packaging.
   right execution column, chat-visible-on-macro-collapse, semi-automatic macro-loop, and the
   Dashboard/Test routes are all preserved.
 
-### Phase 10 — packaging + full app identity (planned, NOT yet implemented)
+### Packaging — electron-builder + macOS app identity (Phase 10)
 
-Phase 10 turns Akorith into a distributable, fully-branded app. Checklist:
+Phase 10 turns Akorith from a dev Electron app into a packaged desktop app, macOS first.
+Nothing in the runtime architecture or security model changed — packaging is config + assets.
 
-- [ ] **electron-builder** (or equivalent) installable builds — macOS `.app`/`.dmg` and Windows
-      `.exe`/installer; wire `build`/config without breaking the node-pty (N-API, never rebuild)
-      and better-sqlite3 (`electron-rebuild -f -o better-sqlite3`) native-module rules, and keep
-      the macOS `fix-spawn-helper` step in the packaged flow.
-- [x] `package.json` `name`/`productName`/`description` set to Akorith in Phase 9.1.3 (the npm
-      `name`/`productName` are in place; electron-builder consumes `productName`). Still TODO:
-      decide whether to migrate the userData dir + `loopex.config.json` / `loopex.db` filenames
-      (migration vs. leave-as-is) and finish any remaining internal `loopex` references.
-- [ ] **Native icon generation** — `.icns` (macOS) and `.ico` (Windows) from `assets/akorith-logo.png`
-      (1254×1254 source; downscale to the standard icon sizes), wired into the builder config.
-- [ ] **Final dock / taskbar / Start-menu identity** verified on macOS and Windows. Note: the dev
-      macOS **menu-bar app name** and **dock tooltip** stay "Electron" until this step — they come
-      from the packaged bundle's `Info.plist` `CFBundleName`/`CFBundleDisplayName` (= `productName`),
-      which `app.setName` cannot override at runtime.
-- [ ] **README for humans** (install + connect-your-CLIs) and AI-facing **`AGENTS.md`** kept current.
-- [ ] **"Akorith stores no credentials / no API keys"** explanation in the README.
-- [ ] One-sentence **user install/connect prompt** (e.g. "Install + log in to `claude`/`codex`,
-      then open Akorith").
-- [ ] **Release checklist** (version bump, build all targets, sign/notarize decision, artifacts).
-- [ ] **Smoke-test checklist** (terminals spawn, providers detected, chat→bridge send, macro-loop
-      proposal, test-lab run, evaluate/PDF) run against a packaged build.
+**electron-builder.** `electron-builder` 25.x is a devDependency; config lives in the
+`build` field of `package.json`. Scripts: `pack` / `pack:mac` (`electron-builder --dir`,
+fast unpacked `.app`), `dist` / `dist:mac` (installers: macOS `dmg` + `zip`), `dist:win`
+(NSIS config, build on Windows). Each script runs `npm run build` (electron-vite) first, so
+`out/{main,preload,renderer}` exists before packaging. `npm run dev` / `build` / `typecheck`
+are unchanged.
+
+**Identity.** `package.json` carries `name: "akorith"`, `productName: "Akorith"`,
+`description`, `author`. `build.appId = com.akorith.app`, `build.productName = Akorith`. The
+packaged macOS bundle's `Info.plist` therefore has `CFBundleName` / `CFBundleDisplayName` =
+**Akorith** and `CFBundleIdentifier = com.akorith.app` — so the packaged app shows **Akorith**
+in the **menu bar, Dock tooltip, Finder, and window title**, which the dev Electron bundle
+could not. Runtime identity (`app.setName('Akorith')`, `app.setAboutPanelOptions`, window
+`title`, dock icon via `nativeImage`) is still applied and is now consistent with the bundle.
+
+**Icons.** Source is `assets/akorith-logo.png` (1254²). Generated platform icons live in
+`build/` (electron-builder's `buildResources` dir): `build/icon.icns` (macOS, via macOS
+`sips` → `.iconset` → `iconutil`), `build/icon.ico` (Windows, a valid 256² PNG-backed ICO —
+no ImageMagick on the build box, so a single-size ICO was written directly; regenerate
+multi-size with `icon-gen`/ImageMagick when convenient), and `build/icon.png` (1024², Linux
+/ fallback). `mac.icon` / `win.icon` / `linux.icon` point at these. The packaged `.app` uses
+`icon.icns` (Akorith), not the Electron icon.
+
+**Native modules (the load-bearing packaging detail).**
+- `build.npmRebuild = false` — **critical.** electron-builder's default rebuild runs
+  `@electron/rebuild` over *all* native deps, which would try to compile node-pty from the
+  tarball and fail (missing winpty git metadata). We disable it; `postinstall` has already
+  rebuilt better-sqlite3 for Electron's ABI (`electron-rebuild -f -o better-sqlite3`) and
+  node-pty uses its N-API prebuilds as-is. The build log confirms
+  `skipped dependencies rebuild reason=npmRebuild is set to false`.
+- `build.asarUnpack = ['**/node_modules/node-pty/**', '**/node_modules/better-sqlite3/**']`
+  so the `.node` binaries and node-pty's `darwin-*/spawn-helper` live on disk under
+  `Contents/Resources/app.asar.unpacked/...` (verified: `better_sqlite3.node`,
+  `darwin-arm64/pty.node`, and `spawn-helper` present with mode `-rwxr-xr-x` — the
+  `fix-spawn-helper` postinstall +x is preserved into the bundle).
+- `build.files = ['out/**/*', 'assets/**/*', 'package.json']`; electron-builder adds the
+  production `node_modules` automatically. `assets/**` is included so `resolveAppIcon()` /
+  the dock icon can read `assets/akorith-logo.png` from inside the asar at runtime.
+
+**Packaged-app PATH (macOS GUI launch).** A Finder/Dock-launched app inherits a minimal
+`PATH`, so `claude`/`codex`/`ollama` in Homebrew or a user bin dir would be invisible —
+terminals would always fall back to a shell and providers would read unavailable. `main/
+index.ts` `ensureCliPath()` (run first in `whenReady`) **prepends** the well-known install
+dirs that exist (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.npm-global/bin`,
+`~/.bun/bin`, `~/.cargo/bin`, the standard system dirs, …) to `process.env.PATH`. No shell is
+spawned and nothing is eval'd — just static dirs. The existing PATH-based resolution in
+`pty.ts` (`resolveExecutable`) and the providers then works in a packaged build; a still-
+missing CLI degrades exactly as before (shell fallback + clear message; provider unavailable).
+
+**Smoke test (this build).** `CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack:mac` produced
+`dist/mac-arm64/Akorith.app` (ad-hoc/linker-signed arm64, so it launches locally). Verified:
+bundle `Info.plist` name = Akorith / id = com.akorith.app / icon = icon.icns; app launches
+(main + renderer helper processes alive); `~/Library/Application Support/Akorith/loopex.db` is
+created on startup — i.e. **better-sqlite3 loads in the packaged context** (initDb runs every
+launch and would crash on a load failure); node-pty + spawn-helper unpacked and executable.
+GUI interaction (Open/Create Project, terminals, macro-loop) uses the unchanged dev code
+paths and the PATH fix above.
+
+**Known packaging limitations / how to continue.**
+- **Not code-signed/notarized.** The build is ad-hoc signed (runs on the build machine);
+  distributing to other Macs will hit Gatekeeper. Next: an Apple Developer ID + electron-
+  builder `mac.notarize` / `afterSign` notarization.
+- **Windows `.exe` not built here** (config is in place; build on Windows with `dist:win`).
+  Regenerate a multi-resolution `build/icon.ico` there if the single-size ICO looks coarse.
+- **`dist/` is git-ignored** — packaged artifacts are attached to GitHub Releases, not committed.
+- **userData dir is now `…/Akorith/`** (driven by `app.setName`), holding `loopex.db` /
+  `loopex.config.json`. The DB/config *filenames* still say `loopex` — harmless, optional
+  rename later. The internal repo/package history name remains "Loopex/loopex".
 
 ### Test page — isolated local-model test lab (Phase 7)
 

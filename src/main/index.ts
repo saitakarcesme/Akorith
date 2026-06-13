@@ -1,6 +1,7 @@
 import { app, BrowserWindow, nativeImage, shell } from 'electron'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { homedir } from 'os'
+import { delimiter, join } from 'path'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
@@ -13,11 +14,48 @@ import { closeDb, initDb, registerDbIpc } from './db'
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
 // "About Akorith"/"Hide Akorith"/"Quit Akorith" menu roles, and userData.
-// NOTE: in dev the macOS *menu-bar bold app name* and the *dock tooltip* are
-// read from the running Electron.app bundle's Info.plist (CFBundleName =
-// "Electron") and cannot be overridden at runtime — that requires a packaged
-// build with productName (Phase 10). Everything else below is fixed here.
+// NOTE: in *dev* the macOS menu-bar bold app name + dock tooltip still read
+// "Electron" from node_modules' Electron.app Info.plist (CFBundleName), which no
+// runtime API can change. The Phase 10 packaged build carries its own Info.plist
+// (CFBundleName/CFBundleDisplayName = Akorith via electron-builder productName),
+// so the packaged app shows Akorith in the menu bar and dock.
 app.setName('Akorith')
+
+/**
+ * macOS/Linux GUI apps launched from Finder/Dock inherit a minimal PATH
+ * (`/usr/bin:/bin:/usr/sbin:/sbin`), so `claude`/`codex`/`ollama` installed in
+ * Homebrew or a user bin dir are invisible — terminals would always fall back to
+ * a plain shell and providers would read as unavailable. This prepends the
+ * well-known install locations (only those that exist, only if not already on
+ * PATH) so the existing PATH-based resolution in pty.ts / providers works in a
+ * packaged build. No shell is spawned and nothing is eval'd — just static dirs.
+ */
+function ensureCliPath(): void {
+  if (process.platform === 'win32') return
+  const home = homedir()
+  const candidates = [
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    join(home, '.local', 'bin'),
+    join(home, 'bin'),
+    join(home, '.npm-global', 'bin'),
+    join(home, '.bun', 'bin'),
+    join(home, '.deno', 'bin'),
+    join(home, '.cargo', 'bin'),
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ]
+  const current = (process.env['PATH'] ?? '').split(delimiter).filter(Boolean)
+  const seen = new Set(current)
+  const additions = candidates.filter((dir) => !seen.has(dir) && existsSync(dir))
+  if (additions.length > 0) {
+    process.env['PATH'] = [...additions, ...current].join(delimiter)
+  }
+}
 
 /** Make the macOS "About" panel and app-menu roles say Akorith, not Electron. */
 function applyAppIdentity(): void {
@@ -92,6 +130,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  ensureCliPath()
   initDb()
   registerDbIpc()
   registerPtyIpc()

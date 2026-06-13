@@ -1,43 +1,102 @@
-# Loopex
+# Akorith
 
-A desktop workspace that orchestrates coding agents without API keys — planner chat on
-the right, real executor terminals in the center, session history on the left.
+**Akorith orchestrates your logged-in AI coding agents — it does not require API keys.**
 
-Built with Electron + TypeScript + React via electron-vite.
+Akorith is a cross-platform Electron desktop app that drives the coding agents you already
+pay for, through their official command-line tools. You log into those CLIs once in your
+terminal; Akorith runs them locally inside your chosen project. There are no API keys to
+paste and no provider credentials stored by the app.
 
-## Status
-
-- **Phase 1** — static three-region shell (sidebar / two xterm panes / planner chat): done
-- **Phase 2** — real interactive PTY terminals via node-pty: done
-- **Phase 3** — pluggable provider registry (Claude / ChatGPT / Ollama, API-key-free) + working planner chat: done
-- **Phase 4** — chat→terminal bridge (per-block / whole-message / selection sends, target switch, auto-Enter): done — the MVP
-- **Phase 5** — SQLite chat history (real sidebar folders) + usage dashboard (heatmap, daily stacked bars, provider donut): done
-
-See [AGENTS.md](AGENTS.md) for architecture, the provider contract, and how to add a provider.
-
-## Develop
-
-```powershell
-npm install
-npm run dev
+```
+┌────────────┬───────────────────────────┬──────────────────────┐
+│  Sidebar   │   Center planning / chat  │  Execution terminals │
+│ projects   │   provider + macro-loop   │  Olympus  = Codex    │
+│ history    │   chat → terminal bridge  │  Atlantis = Claude   │
+└────────────┴───────────────────────────┴──────────────────────┘
 ```
 
-`npm run typecheck` type-checks main, preload, and renderer.
+## What it supports
 
-### Native modules (node-pty)
+- **Claude** — via the `claude` CLI (your Claude subscription/login).
+- **Codex / ChatGPT** — via the `codex` CLI (your ChatGPT login).
+- **Local models** — via a local **Ollama** server when one is running (optional).
 
-node-pty 1.1.0 ships **N-API prebuilt binaries** (`prebuilds/win32-x64`), which load in
-Electron's main process without an ABI rebuild — verified at runtime; a clean
-`npm install && npm run dev` just works. There is deliberately **no postinstall rebuild**:
-`@electron/rebuild` cannot compile node-pty 1.1.0 from the npm tarball (it lacks winpty's
-git metadata — `GetCommitHash.bat` fails), so wiring it into postinstall would break
-clean installs for zero benefit.
+The center chat talks to whichever of these are installed and logged in; the right side
+hosts two real terminals (**Olympus** runs Codex, **Atlantis** runs Claude) inside the
+project folder you pick.
 
-If a future native module *does* need an Electron ABI rebuild, the escape hatch is wired:
+## Connect your subscriptions
 
-```powershell
-npm run rebuild   # electron-rebuild -f -w node-pty (extend -w as needed)
+> **Install Claude CLI and Codex CLI, log into both in your terminal, then open Akorith and
+> select a project.**
+
+In more detail:
+
+1. **Claude** — install the `claude` CLI and run it once to log in (uses your Claude
+   subscription).
+2. **Codex** — install the `codex` CLI and log in with your ChatGPT account.
+3. **Ollama (optional)** — install [Ollama](https://ollama.com), start it
+   (`http://localhost:11434`), and pull at least one model for local/offline use.
+
+Akorith detects whichever tools are present; any subset works, and a missing tool simply
+shows as unavailable instead of breaking the app.
+
+## Run in development
+
+```bash
+npm install      # also rebuilds better-sqlite3 for Electron + fixes the macOS spawn-helper
+npm run dev       # electron-vite dev server + Electron window
+npm run typecheck # tsc over main, preload, and renderer
 ```
 
-node-pty must stay in `dependencies` (electron-vite's `externalizeDepsPlugin` externalizes
-it from the main bundle) and is only ever imported by the main process.
+> Node.js 22+ recommended (20+ works). macOS (Apple Silicon) and Windows 10 1809+ are
+> supported; Linux is untested.
+
+## Build / package the desktop app
+
+Akorith packages with **electron-builder**. The product identity (name, icon, bundle id)
+is configured under the `build` field in `package.json`.
+
+```bash
+npm run pack:mac   # fast unpacked .app  → dist/mac-arm64/Akorith.app
+npm run dist:mac   # installers (.dmg + .zip) → dist/
+npm run dist:win   # Windows installer config (build on Windows)
+```
+
+The packaged macOS app is named **Akorith** in Finder, the Dock, and the menu bar, and uses
+the Akorith icon. (In `npm run dev` the macOS menu/Dock still read "Electron" — that name
+comes from the dev Electron bundle and only the packaged build can override it.)
+
+## Privacy & security
+
+- **Akorith stores no provider API keys and no AI-provider credentials.** It relies entirely
+  on the logins already held by your `claude` / `codex` CLIs (and your local Ollama).
+- App data is kept **locally** in SQLite (`loopex.db`) and a small JSON config
+  (`loopex.config.json`) in your OS user-data directory — chat history, usage stats, project
+  metadata, and settings only.
+- **Terminal commands run locally** in the project folder you select, on your machine.
+- Electron is locked down: context isolation on, sandbox on, Node integration off, a frozen
+  preload bridge, a strict CSP, and prompts passed to CLIs over **stdin (never as shell
+  arguments)**. There is a single programmatic path that can type into a terminal.
+
+## Current limitations
+
+- **No full autopilot** — the macro-loop is semi-automatic: you approve or edit every step
+  before it is sent to a terminal.
+- **No automatic terminal-output parsing** — you paste or summarize executor results yourself.
+- **No automatic permission-prompt approval** — Akorith never auto-answers `yes`/`1`/etc.
+  in a terminal.
+- **Ollama is optional** and may be absent; local-model features degrade gracefully.
+- Packaged builds are not yet code-signed/notarized for public distribution (Gatekeeper may
+  warn on first open on other machines).
+
+## Screenshots / demo
+
+_Placeholder — add Workspace, Dashboard, and Test-page screenshots / a short demo clip here
+before publishing._
+
+## More
+
+- [AGENTS.md](AGENTS.md) — architecture, provider contract, packaging notes (AI/agent handoff).
+- [codex.md](codex.md) — shorter "how we work + where we are" companion.
+- [docs/release-checklist.md](docs/release-checklist.md) — build / launch / publish checklist.
