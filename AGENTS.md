@@ -670,10 +670,13 @@ Phase 13.2 polishes the chat-first workspace and adds **terminal-output → chat
 - **Sidebar brand = text only.** Removed the `<AkorithMark>` logo from the sidebar header;
   expanded shows "Akorith" + "Agent orchestration", collapsed shows a compact "A". The dock/app
   icon is separate.
-- **New app icon.** `~/Downloads/newakorithlogo.png` (black/gray/white A-mark, 1254²) was found
-  and used: copied to `assets/akorith-logo.png` (the dock/window icon source) and regenerated
-  `build/icon.icns` / `build/icon.ico` / `build/icon.png` (sips + iconutil; 256px PNG-backed ICO).
-  The packaged bundle uses the new `icon.icns`.
+- **New app icon.** Latest: `~/Downloads/akorithlogolatest.png` (purple/green marble gradient with
+  a white `Ak` mark, 1254²) was found and used — copied (resized to 1024²) to
+  `assets/akorith-logo.png` (the dock/window icon source) and `build/icon.png`, and regenerated
+  `build/icon.icns` (sips → `.iconset` → iconutil, 16–1024px) and `build/icon.ico` (sips +
+  a dependency-free Node packer → multi-size 16–256 PNG-backed ICO). The packaged bundle uses the
+  new `icon.icns`; the text-only sidebar/header brand mark and the SVG favicon are intentionally
+  left unchanged. (Earlier icon was the black/gray/white A-mark.)
 
 **Manual UI inspection (REAL).** Packaged app launched + screenshotted
 (`docs/validation/phase13-2-ui.png`) in the project-active state: text-only "Akorith" brand,
@@ -971,13 +974,13 @@ in the **menu bar, Dock tooltip, Finder, and window title**, which the dev Elect
 could not. Runtime identity (`app.setName('Akorith')`, `app.setAboutPanelOptions`, window
 `title`, dock icon via `nativeImage`) is still applied and is now consistent with the bundle.
 
-**Icons.** Source is `assets/akorith-logo.png` (1254²). Generated platform icons live in
-`build/` (electron-builder's `buildResources` dir): `build/icon.icns` (macOS, via macOS
-`sips` → `.iconset` → `iconutil`), `build/icon.ico` (Windows, a valid 256² PNG-backed ICO —
-no ImageMagick on the build box, so a single-size ICO was written directly; regenerate
-multi-size with `icon-gen`/ImageMagick when convenient), and `build/icon.png` (1024², Linux
-/ fallback). `mac.icon` / `win.icon` / `linux.icon` point at these. The packaged `.app` uses
-`icon.icns` (Akorith), not the Electron icon.
+**Icons.** Source is `assets/akorith-logo.png` (1024², the purple/green marble `Ak` logo).
+Generated platform icons live in `build/` (electron-builder's `buildResources` dir):
+`build/icon.icns` (macOS, via macOS `sips` → `.iconset` → `iconutil`, 16–1024px), `build/icon.ico`
+(Windows, a valid multi-size PNG-backed ICO — 16/24/32/48/64/128/256 — packed by a small
+dependency-free Node script since there is no ImageMagick on the build box), and `build/icon.png`
+(1024², Linux / fallback). `mac.icon` / `win.icon` / `linux.icon` point at these. The packaged
+`.app` uses `icon.icns` (Akorith), not the Electron icon.
 
 **Native modules (the load-bearing packaging detail).**
 - `build.npmRebuild = false` — **critical.** electron-builder's default rebuild runs
