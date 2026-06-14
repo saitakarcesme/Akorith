@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 14.3 (sidebar cleanup
-+ bridge auto-enter fix).
+with electron-vite, in strict numbered phases — currently through Phase 14.4 (chat scroll
+reliability + sidebar project polish).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -709,6 +709,54 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
 - **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
+
+### Chat scroll reliability + sidebar project polish (Phase 14.4)
+
+Phase 14.4 is a focused usability bugfix pass over the latest manual testing. No new architecture,
+no signing/notarization, no redesign. All invariants unchanged (contextIsolation/sandbox/no
+nodeIntegration, frozen contextBridge, untrusted text via stdin, native modules main-only, the
+single `bridgeSend → PtyManager.write()` write path, Approval Mode default, meta calls write no
+`usage_events`, Workspace/General separation, per-project PTY reuse).
+
+- **Chat scroll trap (the headline bug) — root cause.** Across phases, `.chat-messages` accumulated
+  two rules that together made the scroll container `display:flex; flex-direction:column;
+  justify-content:center; overflow-y:auto`. A flex container that **centers** its content along the
+  scroll axis cannot scroll to the *start* once the content overflows — the top is laid out above
+  the scrollable range and clipped. So whenever a chat was tall enough (especially with a large
+  code/prompt block), everything **above** that block became unreachable. It looked restore-specific
+  only because restored chats are long. **Fix:** `.chat-messages` is now `display:block`; the inner
+  `.chat-messages-col` centers itself horizontally with `margin: 0 auto` and flows top→bottom, so the
+  full history scrolls. Added `overflow-anchor: none` (so explicit scroll-to-bottom is never fought
+  by scroll anchoring), larger bottom padding (last turn clears the docked composer), and hard
+  bounds on code blocks (`.chat-code`/`pre`: `max-width:100%`, `overflow-x:auto`, `overflow-y:hidden`)
+  so a long line scrolls the block horizontally and never blocks vertical page scroll. Auto-scroll
+  behavior is unchanged: it only snaps to bottom when the user is already near the bottom
+  (`nearBottomRef`), and a restored chat opens at the bottom but scrolls fully up.
+- **Project `⋯` menu now opens.** It was rendered `position:absolute` inside the Projects list, which
+  is `overflow-y:auto` — so it was clipped/hidden. It now renders **fixed-position**, anchored to the
+  clicked button's `getBoundingClientRect()` (stored as `{ id, top, right }`), escaping the list's
+  clip. Closes on backdrop click and on **Escape**. Items: **Rename**, **Reveal in Finder**, and
+  **Remove from Akorith** (unchanged DB-only removal + the "does not delete files from disk" confirm;
+  removing the active project falls back to a clean no-project Workspace).
+- **Reveal in Finder.** New read-only IPC `projects:reveal` → `getProject(id)` + `shell
+  .showItemInFolder(project.path)`; preload `projects.reveal`. Disabled in the menu when the project
+  has no path. No write/exec surface.
+- **Projects list is a folder list, not cards.** Each row (`.project-row`) is `FolderIcon` + name +
+  muted path — the avatar/letter block is gone. Active project = subtle gray fill, hover is subtle,
+  comfortable row height, `⋯` reveals on hover/active/open. The Projects header keeps its collapse
+  arrow, folder icon, count badge, and `+` menu; the list still shows only real projects (no
+  `All projects` row).
+- **Global UI scale.** `mainWindow.webContents.setZoomFactor(1.1)` is applied on every
+  `did-finish-load` (so it survives reloads). One uniform ~10% enlargement of every font/control/
+  spacing — the layout viewport reflows, so nothing is clipped — chosen over scattering per-component
+  font-size bumps. Sidebar fixed width scales with it (intended).
+- **Validation.** `docs/validation/chat-scroll-validation.md` documents the repro and the manual
+  scroll/menu/scale checks. All existing verify scripts still pass (`verify-macro-loop`,
+  `verify-testlab`, `verify-agentic-loop`, `verify-conversation-context`, `verify-bridge-autoenter`).
+- **Known limitations.** The UI scale is a single fixed factor (1.1), not a user preference; an open
+  project menu does not reposition if the list is scrolled underneath it (the full-screen backdrop
+  intercepts first, so it closes on interaction); Reveal in Finder is macOS Finder / OS file manager
+  via Electron `shell` and is a no-op for path-less projects (menu item disabled).
 
 ### Sidebar cleanup + bridge auto-enter fix (Phase 14.3)
 

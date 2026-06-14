@@ -5,7 +5,7 @@
 // TODO(phase 6): the router reads usage_events to pick providers by
 //                cost/volume. One row per assistant send, from SendResult.usage.
 
-import { app, dialog, ipcMain } from 'electron'
+import { app, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
 import { basename, isAbsolute, join, resolve, sep } from 'path'
 import { mkdirSync, statSync } from 'fs'
@@ -1478,5 +1478,17 @@ export function registerDbIpc(): void {
   ipcMain.handle('projects:delete', (_event, args: { projectId: string }) => {
     if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) return false
     return deleteProject(args.projectId)
+  })
+
+  // Phase 14.4: reveal a project's folder in Finder/Explorer. Read-only OS
+  // action on the stored path — never writes, never runs a command.
+  ipcMain.handle('projects:reveal', (_event, args: { projectId: string }) => {
+    if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) {
+      return { ok: false, error: 'invalid projects:reveal payload' }
+    }
+    const project = getProject(args.projectId)
+    if (!project?.path) return { ok: false, error: 'project has no folder on disk' }
+    shell.showItemInFolder(project.path)
+    return { ok: true }
   })
 }

@@ -40,11 +40,11 @@ Claude, ChatGPT/Codex, or Local models without selecting a project.
 
 ## Managing projects and chats
 
-- **Remove a project:** hover a project in the sidebar and open its `⋯` menu → **Remove from
-  Akorith** (or **Rename**). Removing a project takes it — and its workspace chats — out of
-  Akorith's list. **It does not delete the folder or any files on disk;** re-add it any time with
-  **Open Project**. If you remove the project you're currently in, Akorith returns to a clean
-  no-project Workspace.
+- **Project menu:** hover a project in the sidebar and open its `⋯` menu → **Rename**, **Reveal in
+  Finder** (opens the project's folder), or **Remove from Akorith**. Removing a project takes it —
+  and its workspace chats — out of Akorith's list. **It does not delete the folder or any files on
+  disk;** re-add it any time with **Open Project**. If you remove the project you're currently in,
+  Akorith returns to a clean no-project Workspace. The menu closes on Escape or an outside click.
 - **Delete a chat:** hover an entry under **Recent Chats** and click **Delete** (click again to
   confirm). This removes that conversation; deleting the chat you're in opens a clean new chat.
 

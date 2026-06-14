@@ -197,6 +197,8 @@ export interface ProjectsApi {
   update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
   /** Phase 14.3: remove a project from Akorith. DB-only; never deletes disk files. */
   remove(projectId: string): Promise<boolean>
+  /** Phase 14.4: reveal the project's folder in Finder/Explorer (read-only). */
+  reveal(projectId: string): Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 // ---- usage (dashboard; TODO(phase 6): router reads the same data) ----

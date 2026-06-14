@@ -122,7 +122,10 @@ const projects = Object.freeze({
     ipcRenderer.invoke('projects:update', { projectId, patch }),
   /** Phase 14.3: remove a project from Akorith (DB only; never deletes disk files). */
   remove: (projectId: string): Promise<unknown> =>
-    ipcRenderer.invoke('projects:delete', { projectId })
+    ipcRenderer.invoke('projects:delete', { projectId }),
+  /** Phase 14.4: reveal the project's folder in Finder/Explorer (read-only). */
+  reveal: (projectId: string): Promise<unknown> =>
+    ipcRenderer.invoke('projects:reveal', { projectId })
 })
 
 const usage = Object.freeze({

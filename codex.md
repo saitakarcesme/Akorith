@@ -238,6 +238,24 @@ electron-vite in strict numbered phases.
       (it is the lone `svg:last-child`) and dimmed; collapsed-mode CSS now re-centers it and matches
       the nav-item sizing. **Verification:** `scripts/verify-bridge-autoenter.ts`.
 
+- [x] **Phase 14.4** — chat scroll reliability + sidebar project polish. **Chat scroll (root
+      cause):** two stacked rules made `.chat-messages` a `flex-direction: column` +
+      `justify-content: center` scroll container; when content was taller than the viewport (a large
+      code/prompt block) vertical centering pushed the **top out of the scrollable range**, so older
+      messages above the block were unreachable. Fix: `.chat-messages` is now `display: block`
+      (the inner column self-centers with `margin: 0 auto`), `overflow-anchor: none`, extra bottom
+      padding so the last turn clears the docked composer, and code blocks are bounded
+      (`max-width: 100%`, `overflow-x: auto`/`overflow-y: hidden`) so a long line never blocks
+      vertical scroll. Restore still lands at the bottom and scrolls fully up. **Project menu:** the
+      `⋯` menu was clipped by the list's `overflow-y: auto`; it now renders **fixed-position**
+      anchored to the button rect (`getBoundingClientRect`), closes on backdrop click / **Escape**,
+      and adds **Reveal in Finder** (new read-only `projects:reveal` → `shell.showItemInFolder`) next
+      to Rename · Remove from Akorith. **Project list visual:** rows are a clean folder list now —
+      `FolderIcon` + name + muted path, no avatar/letter card; active = subtle gray, hover subtle,
+      `.project-row`. **UI scale:** `webContents.setZoomFactor(1.1)` on `did-finish-load` enlarges the
+      whole UI ~10% uniformly (layout reflows, nothing clipped) — one central knob instead of
+      per-component font bumps. **Validation:** `docs/validation/chat-scroll-validation.md`.
+
 ## Locked design decisions
 
 - **No API keys, ever** — subscriptions via CLIs, or local Ollama. Never fabricate costs;

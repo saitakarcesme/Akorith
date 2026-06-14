@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppView } from '../App'
 import {
@@ -111,8 +111,10 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
-  // Phase 14.3: per-project overflow menu + inline rename + remove confirmation.
-  const [projectRowMenu, setProjectRowMenu] = useState<string | null>(null)
+  // Phase 14.3/14.4: per-project overflow menu + inline rename + remove confirm.
+  // The menu is rendered fixed-position (anchored to the clicked button's rect)
+  // so the Projects list's own `overflow-y: auto` cannot clip it.
+  const [projectRowMenu, setProjectRowMenu] = useState<{ id: string; top: number; right: number } | null>(null)
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameProjectValue, setRenameProjectValue] = useState('')
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
@@ -160,6 +162,17 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.displayName', displayName)
   }, [displayName])
+
+  // Close the project actions menu on Escape (outside-click is handled by its
+  // backdrop). Also re-close if the list scrolls so it never floats detached.
+  useEffect(() => {
+    if (!projectRowMenu) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setProjectRowMenu(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [projectRowMenu])
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const recentSessions = sessions
@@ -276,6 +289,23 @@ export default function Sidebar({
     setProjectRowMenu(null)
     setRenamingProjectId(project.id)
     setRenameProjectValue(project.name)
+  }
+
+  const revealProject = async (project: ProjectRow): Promise<void> => {
+    setProjectRowMenu(null)
+    const res = await window.api.projects.reveal(project.id)
+    if (!res.ok) setProjectError(res.error)
+  }
+
+  // Open the per-row actions menu, anchored under the clicked button. Fixed
+  // positioning keeps it out of the Projects list's scroll/overflow clip.
+  const toggleProjectRowMenu = (projectId: string, event: ReactMouseEvent): void => {
+    event.stopPropagation()
+    setProjectRowMenu((current) => {
+      if (current?.id === projectId) return null
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+      return { id: projectId, top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }
+    })
   }
 
   const commitProjectRename = async (project: ProjectRow): Promise<void> => {
@@ -450,10 +480,12 @@ export default function Sidebar({
                       </div>
                     ) : (
                       // Phase 14.3: only real projects here — the "All projects" row was removed.
+                      // Phase 14.4: a clean folder-list row (folder icon + name +
+                      // muted path) — no avatar/letter card. Active = subtle gray.
                       projects.map((project) => (
                         <div
                           key={project.id}
-                          className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
+                          className={`project-row ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''} ${projectRowMenu?.id === project.id ? 'is-menu-open' : ''}`}
                           title={project.path ?? project.name}
                           role="button"
                           tabIndex={0}
@@ -466,7 +498,9 @@ export default function Sidebar({
                             }
                           }}
                         >
-                          <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
+                          <span className="project-row-ico">
+                            <FolderIcon size={15} />
+                          </span>
                           <span className="project-text">
                             {renamingProjectId === project.id ? (
                               <input
@@ -484,60 +518,60 @@ export default function Sidebar({
                             ) : (
                               <>
                                 <span>{project.name}</span>
-                                <em>{project.path || 'No path associated'}</em>
+                                {project.path && <em>{project.path}</em>}
                               </>
                             )}
                           </span>
-                          <span className="project-item-actions">
-                            <button
-                              type="button"
-                              className="project-overflow"
-                              title="Project actions"
-                              aria-haspopup="menu"
-                              aria-expanded={projectRowMenu === project.id}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setProjectRowMenu((id) => (id === project.id ? null : project.id))
-                              }}
-                            >
-                              ⋯
-                            </button>
-                            {projectRowMenu === project.id && (
-                              <>
-                                <div
-                                  className="popover-backdrop"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
+                          <button
+                            type="button"
+                            className="project-overflow"
+                            title="Project actions"
+                            aria-haspopup="menu"
+                            aria-expanded={projectRowMenu?.id === project.id}
+                            onClick={(event) => toggleProjectRowMenu(project.id, event)}
+                          >
+                            ⋯
+                          </button>
+                          {projectRowMenu?.id === project.id && (
+                            <>
+                              <div
+                                className="popover-backdrop"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setProjectRowMenu(null)
+                                }}
+                              />
+                              <div
+                                className="project-menu project-row-menu"
+                                role="menu"
+                                style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
+                                  <span>Rename</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={!project.path}
+                                  onClick={() => void revealProject(project)}
+                                >
+                                  <span>Reveal in Finder</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="is-danger"
+                                  onClick={() => {
                                     setProjectRowMenu(null)
+                                    setConfirmRemoveProject(project)
                                   }}
-                                />
-                                <div className="project-menu project-row-menu" role="menu">
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      beginRenameProject(project)
-                                    }}
-                                  >
-                                    <span>Rename</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    className="is-danger"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      setProjectRowMenu(null)
-                                      setConfirmRemoveProject(project)
-                                    }}
-                                  >
-                                    <span>Remove from Akorith</span>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </span>
+                                >
+                                  <span>Remove from Akorith</span>
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ))
                     )}

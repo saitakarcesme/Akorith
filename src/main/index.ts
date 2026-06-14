@@ -115,6 +115,15 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Phase 14.4: nudge the whole UI up one comfortable notch. A single zoom
+  // factor scales every font/control/spacing uniformly (the layout viewport
+  // reflows, so nothing is clipped) — cleaner than per-component font bumps.
+  // Re-applied on each load so it survives reloads/HMR.
+  const UI_ZOOM = 1.1
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.setZoomFactor(UI_ZOOM)
+  })
+
   // Any external links open in the default browser, never inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)

@@ -4094,3 +4094,138 @@ textarea:focus-visible {
   border-color: rgba(223, 111, 104, 0.5);
   background: rgba(223, 111, 104, 0.1);
 }
+
+/* ============================================================
+   Phase 14.4 — chat scroll reliability + sidebar project polish
+   ============================================================ */
+
+/* --- Chat scroll fix (Item 1) ---
+   Two earlier rules combined to make .chat-messages a centered flex column
+   that also scrolls: `flex-direction: column` (legacy bubble layout) +
+   `justify-content: center`. When the content is taller than the viewport
+   (e.g. a large code/prompt block), vertical centering pushes the TOP of the
+   content out of the scrollable range — it gets clipped and is unreachable,
+   so older messages above a big block can never be scrolled to.
+   Make the scroller a plain block box: the inner column centers itself with
+   `margin: 0 auto`, content flows top→bottom, and the whole history scrolls. */
+.chat-messages {
+  display: block;
+  /* generous bottom padding so the last turn clears the docked composer */
+  padding: 30px 32px 28px;
+  overflow-x: hidden;
+  /* never let a child's scroll anchoring fight an explicit scroll-to-bottom */
+  overflow-anchor: none;
+}
+
+.chat-messages-col {
+  /* centered, fixed reading width; height is intrinsic so the parent scrolls */
+  margin: 0 auto;
+  min-height: 0;
+}
+
+/* A long line inside a code block scrolls the block horizontally only; it must
+   never grow the message column (which would block vertical page scroll). */
+.chat-msg {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-msg-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg .chat-code {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chat-msg .chat-code pre {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* --- Projects list: clean folder list, not avatar cards (Item 4) --- */
+.project-row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 8px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-row:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+/* Active project: subtle gray fill (not the loud accent card). */
+.project-row.is-active {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.project-row-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+
+.project-row.is-active .project-row-ico {
+  color: var(--text-dim);
+}
+
+/* Overflow (⋯) button stays out of the way until the row is hovered/active or
+   its menu is open. */
+.project-row .project-overflow {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.project-row:hover .project-overflow,
+.project-row.is-active .project-overflow,
+.project-row.is-menu-open .project-overflow {
+  opacity: 1;
+}
+
+.project-row .project-overflow:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* Fixed-position row menu (anchored in JS) — escapes the list's overflow clip. */
+.project-row-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 196px;
+}
+
+.project-menu button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
