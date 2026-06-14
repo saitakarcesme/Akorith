@@ -119,7 +119,10 @@ const projects = Object.freeze({
   createFolder: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:createFolder', args),
   pickDirectory: (): Promise<unknown> => ipcRenderer.invoke('projects:pickDirectory'),
   update: (projectId: string, patch: unknown): Promise<unknown> =>
-    ipcRenderer.invoke('projects:update', { projectId, patch })
+    ipcRenderer.invoke('projects:update', { projectId, patch }),
+  /** Phase 14.3: remove a project from Akorith (DB only; never deletes disk files). */
+  remove: (projectId: string): Promise<unknown> =>
+    ipcRenderer.invoke('projects:delete', { projectId })
 })
 
 const usage = Object.freeze({

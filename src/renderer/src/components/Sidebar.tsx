@@ -111,6 +111,11 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  // Phase 14.3: per-project overflow menu + inline rename + remove confirmation.
+  const [projectRowMenu, setProjectRowMenu] = useState<string | null>(null)
+  const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
+  const [renameProjectValue, setRenameProjectValue] = useState('')
+  const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newParent, setNewParent] = useState<string | null>(null)
@@ -267,6 +272,35 @@ export default function Sidebar({
     onSelectSession(session.id, session.projectId ? projectById.get(session.projectId) ?? null : null, session.providerId)
   }
 
+  const beginRenameProject = (project: ProjectRow): void => {
+    setProjectRowMenu(null)
+    setRenamingProjectId(project.id)
+    setRenameProjectValue(project.name)
+  }
+
+  const commitProjectRename = async (project: ProjectRow): Promise<void> => {
+    const name = renameProjectValue.trim()
+    setRenamingProjectId(null)
+    if (name && name !== project.name) {
+      await window.api.projects.update(project.id, { name })
+      await refreshProjects()
+      onProjectsChange()
+    }
+  }
+
+  // Phase 14.3: remove a project from Akorith's local list. This never deletes
+  // the folder on disk. If the removed project is active, fall back to a clean
+  // no-project Workspace; its (now-deleted) workspace chats leave Recent chats.
+  const removeProject = async (project: ProjectRow): Promise<void> => {
+    setConfirmRemoveProject(null)
+    setProjectRowMenu(null)
+    await window.api.projects.remove(project.id)
+    if (activeProject?.id === project.id) onSelectProject(null)
+    await refreshProjects()
+    onProjectsChange()
+    onHistoryChange()
+  }
+
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
       <div className="sidebar-brand">
@@ -415,36 +449,97 @@ export default function Sidebar({
                         </div>
                       </div>
                     ) : (
-                      <>
-                        <button
-                          type="button"
-                          className={`project-item is-all ${view === 'workspace' && !activeProject ? 'is-active' : ''}`}
-                          onClick={() => onSelectProject(null)}
-                          title="All projects"
+                      // Phase 14.3: only real projects here — the "All projects" row was removed.
+                      projects.map((project) => (
+                        <div
+                          key={project.id}
+                          className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
+                          title={project.path ?? project.name}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => renamingProjectId !== project.id && onSelectProject(project)}
+                          onKeyDown={(event) => {
+                            if (renamingProjectId === project.id) return
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              onSelectProject(project)
+                            }
+                          }}
                         >
-                          <span className="project-avatar">
-                            <FolderIcon size={14} />
-                          </span>
+                          <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
                           <span className="project-text">
-                            <span>All projects</span>
+                            {renamingProjectId === project.id ? (
+                              <input
+                                className="sidebar-rename-input"
+                                value={renameProjectValue}
+                                autoFocus
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => setRenameProjectValue(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') void commitProjectRename(project)
+                                  if (event.key === 'Escape') setRenamingProjectId(null)
+                                }}
+                                onBlur={() => void commitProjectRename(project)}
+                              />
+                            ) : (
+                              <>
+                                <span>{project.name}</span>
+                                <em>{project.path || 'No path associated'}</em>
+                              </>
+                            )}
                           </span>
-                        </button>
-                        {projects.map((project) => (
-                          <button
-                            type="button"
-                            key={project.id}
-                            className={`project-item ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''}`}
-                            onClick={() => onSelectProject(project)}
-                            title={project.path ?? project.name}
-                          >
-                            <span className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</span>
-                            <span className="project-text">
-                              <span>{project.name}</span>
-                              <em>{project.path || 'No path associated'}</em>
-                            </span>
-                          </button>
-                        ))}
-                      </>
+                          <span className="project-item-actions">
+                            <button
+                              type="button"
+                              className="project-overflow"
+                              title="Project actions"
+                              aria-haspopup="menu"
+                              aria-expanded={projectRowMenu === project.id}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setProjectRowMenu((id) => (id === project.id ? null : project.id))
+                              }}
+                            >
+                              ⋯
+                            </button>
+                            {projectRowMenu === project.id && (
+                              <>
+                                <div
+                                  className="popover-backdrop"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setProjectRowMenu(null)
+                                  }}
+                                />
+                                <div className="project-menu project-row-menu" role="menu">
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      beginRenameProject(project)
+                                    }}
+                                  >
+                                    <span>Rename</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="is-danger"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setProjectRowMenu(null)
+                                      setConfirmRemoveProject(project)
+                                    }}
+                                  >
+                                    <span>Remove from Akorith</span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      ))
                     )}
                   </div>
                   {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
@@ -566,11 +661,18 @@ export default function Sidebar({
                   const provider = labelOf(session.providerId)
                   const project = session.projectId ? projectById.get(session.projectId) : null
                   return (
-                    <button
-                      type="button"
+                    <div
                       className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
                       key={session.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => selectSession(session)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          selectSession(session)
+                        }
+                      }}
                       title={session.title}
                     >
                       <span className="recent-chat-text">
@@ -579,7 +681,34 @@ export default function Sidebar({
                           {project ? `Workspace · ${project.name}` : 'General chat'} · {provider} · {formatDate(session.updatedAt)}
                         </em>
                       </span>
-                    </button>
+                      <span className="sidebar-item-actions">
+                        {confirmDeleteId === session.id ? (
+                          <button
+                            type="button"
+                            className="is-danger"
+                            title="Click again to delete this chat"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void deleteSession(session)
+                            }}
+                          >
+                            Delete?
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            title="Delete chat"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setConfirmDeleteId(session.id)
+                              setTimeout(() => setConfirmDeleteId((id) => (id === session.id ? null : id)), 2500)
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </span>
+                    </div>
                   )
                 })
               )}
@@ -611,6 +740,36 @@ export default function Sidebar({
           {!sidebarCollapsed && <SettingsIcon size={16} />}
         </button>
       </div>
+
+      {confirmRemoveProject && (
+        <div className="modal-overlay" onClick={() => setConfirmRemoveProject(null)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Remove project"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-title">Remove “{confirmRemoveProject.name}”?</div>
+            <p className="modal-subtitle">
+              This removes the project from Akorith. It does not delete files from disk. The project’s workspace
+              chats are also removed from Akorith.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="modal-cancel" onClick={() => setConfirmRemoveProject(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-confirm is-danger"
+                onClick={() => void removeProject(confirmRemoveProject)}
+              >
+                Remove from Akorith
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {createOpen && (
         <div className="modal-overlay" onClick={() => projectBusy === null && setCreateOpen(false)}>

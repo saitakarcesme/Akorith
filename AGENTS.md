@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 14.2 (conversation
-memory + context reliability).
+with electron-vite, in strict numbered phases — currently through Phase 14.3 (sidebar cleanup
++ bridge auto-enter fix).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -709,6 +709,53 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
 - **Small UI.** Recent-chat leading provider dots removed; collapsed sidebar profile centered;
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
+
+### Sidebar cleanup + bridge auto-enter fix (Phase 14.3)
+
+Phase 14.3 is a focused bugfix/usability pass over the latest manual screenshots. No new
+architecture, no signing/notarization, no redesign. Security invariants are unchanged
+(contextIsolation/sandbox/no nodeIntegration, frozen contextBridge, untrusted text via stdin,
+native modules main-only, the single `bridgeSend → PtyManager.write()` write path, Approval Mode
+default, meta calls write no `usage_events`, Workspace/General separation, per-project PTY reuse).
+
+- **Auto-Enter bridge fix (the headline bug).** `Send to Atlantis/Olympus` pasted the prompt but,
+  even with Auto-Enter ON, did not submit it. Root cause: `encodeForPty` appended the submit `\r`
+  to the **same** write as the bracketed paste; the `claude`/`codex` TUIs treat that trailing `\r`
+  as part of the paste and never run it. **Fix:** the pure encoding moved to an electron-free
+  `src/main/bridge-core.ts` (`encodeForPty`, `SUBMIT_KEY = '\r'`, `planBridgeWrites`). `bridgeSend`
+  now writes the paste, then — only when Auto-Enter is ON — writes the Enter as a **separate**
+  keystroke after `SUBMIT_DELAY_MS` (90 ms), so it lands as a discrete submit once the paste has
+  settled. Both writes still go through `PtyManager.write()` — **no second write path**. Auto-Enter
+  OFF writes the paste only (manual Enter preserved); the Enter is never fused onto the paste and is
+  never double-sent. This covers every send: message-level `Send to …` buttons, the composer
+  send-to-agent flow, the macro-loop approval send (`macro.ts`, `autoEnter: true`), and the
+  permission-answer send. Unit-checked by `scripts/verify-bridge-autoenter.ts`.
+- **Remove projects from Akorith.** Each project row gains a `⋯` overflow menu with **Rename** and
+  **Remove from Akorith**. `projects:delete` → `deleteProject(id)` deletes the project row and its
+  workspace chats (messages cascade) from the local DB inside one transaction — it **never** touches
+  the folder on disk. A confirmation modal says so verbatim ("This removes the project from Akorith.
+  It does not delete files from disk."). If the removed project is active, the UI falls back to a
+  clean no-project Workspace (`onSelectProject(null)`); unrelated project PTY sessions are left alone
+  (bounded eviction handles them). Rename uses the existing `projects:update`.
+- **Delete recent chats.** Each Recent-chats entry gains a two-click **Delete** (reusing
+  `history:delete`; messages cascade). Deleting the active chat opens a clean new chat / clean state.
+  The Recent row became a `div role="button"` so the delete control isn't an invalid nested button.
+- **Projects list cleanup.** The `All projects` row inside the Projects folder is removed; the list
+  now shows only real opened/created projects. The folder header, the `+` Open/Create menu, and the
+  empty-state Open/Create actions all remain, so opening/creating projects is unchanged.
+- **Collapsed sidebar profile.** When collapsed, the bottom profile button holds a single icon,
+  which (as `svg:last-child`) inherited `margin-left:auto` + the dim `--text-faint`, so it looked
+  shoved right and broken. Collapsed-mode CSS now zeroes that margin, restores `color: inherit`, and
+  sizes the button (44×42, radius 11) to match the collapsed nav items. Clicking still opens
+  settings; the expanded profile area is unchanged.
+- **DB/IPC/preload surface.** New `deleteProject(projectId)` + `projects:delete` IPC; preload adds
+  `projects.remove(projectId)` (typed in `index.d.ts`). No schema migration needed (the existing
+  `sessions.project_id` FK already isolates per-project chats).
+- **Known limitations.** Project removal is DB-only and irreversible from the UI (the disk folder is
+  intentionally never deleted; re-add via Open Project). Recent-chat delete removes the whole session
+  (messages cascade) rather than only hiding it. The deferred Auto-Enter uses a fixed 90 ms delay
+  (not adaptive to TUI readiness); a removed active project's agent PTYs stay alive until normal
+  recency eviction rather than being force-killed.
 
 ### Conversation memory + context reliability (Phase 14.2)
 

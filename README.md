@@ -38,6 +38,24 @@ Claude, ChatGPT/Codex, or Local models without selecting a project.
 - **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
 - The **provider/model switcher** is a labeled pill in the top bar of every chat.
 
+## Managing projects and chats
+
+- **Remove a project:** hover a project in the sidebar and open its `⋯` menu → **Remove from
+  Akorith** (or **Rename**). Removing a project takes it — and its workspace chats — out of
+  Akorith's list. **It does not delete the folder or any files on disk;** re-add it any time with
+  **Open Project**. If you remove the project you're currently in, Akorith returns to a clean
+  no-project Workspace.
+- **Delete a chat:** hover an entry under **Recent Chats** and click **Delete** (click again to
+  confirm). This removes that conversation; deleting the chat you're in opens a clean new chat.
+
+## Sending prompts to the agents (Auto-Enter)
+
+In a Workspace chat, each assistant message has a **Send to Atlantis** / **Send to Olympus**
+button that drops the text into that agent's terminal through Akorith's single bridge path. The
+**Auto-Enter** toggle (under the composer) controls submission: **ON** pastes the prompt and
+presses Enter for you so the agent runs it immediately; **OFF** pastes the prompt and leaves the
+cursor so you can review and press Enter yourself.
+
 ## Conversation memory
 
 Each chat is a real, continuous conversation: when you send a message, Akorith sends the

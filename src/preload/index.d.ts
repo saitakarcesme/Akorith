@@ -195,6 +195,8 @@ export interface ProjectsApi {
   /** Pick a parent directory for the Create Project modal (main-process dialog). */
   pickDirectory(): Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error: string }>
   update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
+  /** Phase 14.3: remove a project from Akorith. DB-only; never deletes disk files. */
+  remove(projectId: string): Promise<boolean>
 }
 
 // ---- usage (dashboard; TODO(phase 6): router reads the same data) ----

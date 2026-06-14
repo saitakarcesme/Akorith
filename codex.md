@@ -219,6 +219,25 @@ electron-vite in strict numbered phases.
       **Validation:** `scripts/verify-conversation-context.ts` + `scripts/memory-behavioral-check.ts`
       (4/4 against the real `claude` CLI) → `docs/validation/conversation-memory-validation.md`.
 
+- [x] **Phase 14.3** — sidebar cleanup + bridge auto-enter fix. **Auto-Enter:** `Send to
+      Atlantis/Olympus` previously appended `\r` to the same chunk as the bracketed paste; the
+      claude/codex TUIs swallow that `\r`, so the prompt pasted but never submitted. Encoding now
+      lives in electron-free `src/main/bridge-core.ts` (`encodeForPty`, `planBridgeWrites`,
+      `SUBMIT_KEY`); `bridgeSend` writes the paste, then writes the Enter as a **separate** keystroke
+      after `SUBMIT_DELAY_MS` (90ms) — still only through `PtyManager.write()` (no second write path).
+      Auto-Enter OFF writes the paste only (manual Enter preserved). Covers message-level send,
+      composer send-to-agent, macro-loop approval send, and permission-answer send.
+      **Projects:** each project row has a `⋯` overflow menu (Rename · **Remove from Akorith**).
+      `projects:delete` → `deleteProject(id)` removes the project row + its workspace chats from the
+      DB **only** (folder on disk untouched); a confirmation modal states this. Removing the active
+      project falls back to a clean no-project Workspace. **Recent chats:** each entry has a
+      two-click **Delete** (`history:delete`, messages cascade); deleting the active chat opens a
+      clean state. **Projects list:** the `All projects` row is removed — the list shows only real
+      projects; the folder header, `+` menu, and empty-state Open/Create remain.
+      **Collapsed sidebar:** the bottom profile icon was being shoved right by `margin-left:auto`
+      (it is the lone `svg:last-child`) and dimmed; collapsed-mode CSS now re-centers it and matches
+      the nav-item sizing. **Verification:** `scripts/verify-bridge-autoenter.ts`.
+
 ## Locked design decisions
 
 - **No API keys, ever** — subscriptions via CLIs, or local Ollama. Never fabricate costs;

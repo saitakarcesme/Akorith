@@ -596,6 +596,18 @@ textarea:focus-visible {
   background: var(--accent-strong);
 }
 
+/* Phase 14.3: destructive confirm (Remove from Akorith). */
+.modal-confirm.is-danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.modal-confirm.is-danger:hover:not(:disabled) {
+  background: #cf5a53;
+  border-color: #cf5a53;
+}
+
 .modal-actions button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -812,6 +824,65 @@ textarea:focus-visible {
   gap: 1px;
 }
 
+/* The label column grows so row actions sit flush right (Phase 14.3). */
+.project-text,
+.recent-chat-text {
+  flex: 1 1 auto;
+}
+
+/* ---------- Phase 14.3: project + recent-chat row actions ---------- */
+
+.project-item-actions {
+  position: relative;
+  display: none;
+  flex: 0 0 auto;
+}
+
+.project-item:hover .project-item-actions,
+.project-item-actions:has(.project-menu) {
+  display: flex;
+}
+
+.project-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.project-overflow:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* The per-row menu anchors to the overflow button, opening below it. */
+.project-row-menu {
+  min-width: 184px;
+}
+
+.project-menu button.is-danger {
+  color: var(--danger);
+}
+
+.project-menu button.is-danger:hover {
+  color: #fff;
+  background: var(--danger);
+}
+
+/* Recent-chat delete affordance reuses .sidebar-item-actions; reveal on hover. */
+.recent-chat:hover .sidebar-item-actions {
+  display: flex;
+}
+
 .project-text span,
 .recent-chat-text span,
 .profile-button strong {
@@ -1008,11 +1079,26 @@ textarea:focus-visible {
 }
 
 .sidebar.is-collapsed .profile-button {
-  width: 42px;
+  width: 44px;
   height: 42px;
   flex: 0 0 auto;
   justify-content: center;
+  gap: 0;
   padding: 0;
+  border-radius: 11px;
+  background: transparent;
+}
+
+/* The collapsed button has a single icon (UserIcon). It is also svg:last-child,
+   so the expanded rule below would shove it right with margin-left:auto and dim
+   it. Re-center it and restore a legible color so it matches the nav items. */
+.sidebar.is-collapsed .profile-button svg {
+  margin-left: 0;
+  color: inherit;
+}
+
+.sidebar.is-collapsed .profile-button:hover {
+  background: var(--hover);
 }
 
 .profile-button:hover {

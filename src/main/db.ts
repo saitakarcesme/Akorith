@@ -464,6 +464,25 @@ export function updateProject(
   return updated ? toProject(updated) : null
 }
 
+/**
+ * Phase 14.3: remove a project from Akorith's local list. This deletes the
+ * project row and its workspace chats (messages cascade) — it NEVER touches the
+ * folder on disk. Returns false for an unknown/invalid id.
+ */
+export function deleteProject(projectId: string): boolean {
+  if (!VALID_ID.test(projectId)) return false
+  const d = must()
+  if (!d.prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId)) return false
+  const tx = d.transaction((id: string) => {
+    // Remove this project's workspace chats first so they do not linger as
+    // orphaned general chats (the FK is ON DELETE SET NULL). Messages cascade.
+    d.prepare('DELETE FROM sessions WHERE project_id = ?').run(id)
+    d.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  })
+  tx(projectId)
+  return true
+}
+
 // ---- aggregations for the dashboard (and TODO(phase 6): the router) ----
 
 export interface ProviderUsageSummary {
@@ -1453,4 +1472,11 @@ export function registerDbIpc(): void {
       return updateProject(args.projectId, patch)
     }
   )
+
+  // Phase 14.3: remove a project from Akorith. Deletes the project + its
+  // workspace chats from the local DB only; the folder on disk is untouched.
+  ipcMain.handle('projects:delete', (_event, args: { projectId: string }) => {
+    if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) return false
+    return deleteProject(args.projectId)
+  })
 }

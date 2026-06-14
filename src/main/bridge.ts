@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron'
 import { ptyManager } from './pty'
 import { getBridgeSettings, setBridgeAutoEnter, type BridgeSettings } from './config'
+import { planBridgeWrites } from './bridge-core'
 
 const TERMINAL_LABELS: Record<string, string> = {
   t1: 'Atlantis',
@@ -14,10 +15,16 @@ const TERMINAL_LABELS: Record<string, string> = {
 const VALID_ID = /^[a-z0-9-]{1,32}$/
 const MAX_TEXT_CHARS = 200_000
 
+// How long to wait after writing the paste before sending the submit Enter.
+// The paste must be fully ingested first; otherwise the Enter races the paste
+// and is dropped. Small enough to feel instant, large enough for the TUI's
+// event loop to drain the paste. Exposed for tests.
+export const SUBMIT_DELAY_MS = 90
+
 export interface BridgeSendArgs {
   text: string
   targetTerminalId: string
-  /** true → append Enter so the CLI executes immediately. */
+  /** true → submit the prompt automatically (Enter) after pasting. */
   autoEnter: boolean
 }
 
@@ -28,30 +35,29 @@ export type BridgeSendResponse = { ok: true } | { ok: false; error: string }
  *
  * Callable by the UI (via bridge:send IPC) and by non-human callers.
  * Phase 9: the semi-automatic macro-loop calls this directly after approval.
+ *
+ * Auto-Enter semantics (Phase 14.3):
+ * - ON  → write the paste, then write a SEPARATE Enter so the CLI runs it.
+ * - OFF → write the paste only; the user presses Enter themselves.
+ * Both writes go through ptyManager.write() — still the single write path.
  */
 export function bridgeSend({ text, targetTerminalId, autoEnter }: BridgeSendArgs): BridgeSendResponse {
   const label = TERMINAL_LABELS[targetTerminalId] ?? targetTerminalId
   if (!ptyManager.isAlive(targetTerminalId)) {
     return { ok: false, error: `${label} has no live shell` }
   }
-  ptyManager.write(targetTerminalId, encodeForPty(text, autoEnter))
+  // planBridgeWrites returns [paste] or [paste, Enter]. The paste goes now; the
+  // Enter (Auto-Enter ON only) is deferred so it arrives as its own keystroke
+  // once the paste has settled — fixing "pasted but not submitted" without ever
+  // fusing the \r onto the paste or double-submitting.
+  const [paste, submit] = planBridgeWrites(text, autoEnter)
+  ptyManager.write(targetTerminalId, paste)
+  if (submit !== undefined) {
+    setTimeout(() => {
+      if (ptyManager.isAlive(targetTerminalId)) ptyManager.write(targetTerminalId, submit)
+    }, SUBMIT_DELAY_MS)
+  }
   return { ok: true }
-}
-
-/**
- * Make text land at an interactive prompt the way a terminal paste would:
- * - Enter is a carriage return (\r) under ConPTY — appended only with autoEnter.
- * - Multi-line text is wrapped in bracketed-paste markers (ESC[200~ … ESC[201~)
- *   with inner newlines normalized to \r (mirroring xterm.js paste), so TUI
- *   CLIs like `claude`/`codex` take it as one paste instead of executing each
- *   line. The auto-Enter \r goes after the closing marker.
- */
-function encodeForPty(text: string, autoEnter: boolean): string {
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\n+$/, '')
-  const body = normalized.includes('\n')
-    ? `\x1b[200~${normalized.replace(/\n/g, '\r')}\x1b[201~`
-    : normalized
-  return autoEnter ? `${body}\r` : body
 }
 
 export function registerBridgeIpc(): void {
