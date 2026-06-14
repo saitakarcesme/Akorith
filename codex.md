@@ -322,10 +322,13 @@ electron-vite in strict numbered phases.
   it would fail; postinstall handles better-sqlite3, node-pty uses N-API prebuilds). Keep
   `asarUnpack` for node-pty + better-sqlite3 (their `.node` and node-pty's `spawn-helper` must be
   on disk and executable). Keep `assets/**` in `build.files`. `dist/` is git-ignored; never commit
-  packaged artifacts. Icons live in `build/` (`icon.icns`/`icon.ico`/`icon.png`), generated from
-  `assets/akorith-logo.png` (the purple/green marble `Ak` logo) via macOS `sips`/`iconutil` plus a
-  small dependency-free Node packer for the multi-size `.ico`. The text-only sidebar/header brand
-  mark and the SVG favicon are intentionally separate and left as-is.
+  packaged artifacts. Icons live in `build/` (`icon.icns`/`icon.ico`/`icon.png`). The macOS-native
+  rounded look (rounded-square body, ~100px padding, transparent corners, subtle contact shadow) is
+  composed from the source logo by a Swift/CoreGraphics step, and that same rounded 1024² master is
+  written to `assets/akorith-logo.png` (the runtime dock icon — `app.dock.setIcon` overrides the
+  bundle icon while running, so it must be rounded too) before `sips`/`iconutil` generate the full
+  iconset → `.icns` and a dependency-free Node packer writes the multi-size `.ico`. The text-only
+  sidebar/header brand mark and the SVG favicon are intentionally separate and left as-is.
 - **Packaged GUI PATH.** `ensureCliPath()` in `main/index.ts` prepends static well-known bin dirs
   (Homebrew/user) to `process.env.PATH` so Finder-launched apps resolve `claude`/`codex`/`ollama`.
   Static dirs only — never spawn a shell or eval to discover PATH.

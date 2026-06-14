@@ -670,13 +670,20 @@ Phase 13.2 polishes the chat-first workspace and adds **terminal-output → chat
 - **Sidebar brand = text only.** Removed the `<AkorithMark>` logo from the sidebar header;
   expanded shows "Akorith" + "Agent orchestration", collapsed shows a compact "A". The dock/app
   icon is separate.
-- **New app icon.** Latest: `~/Downloads/akorithlogolatest.png` (purple/green marble gradient with
-  a white `Ak` mark, 1254²) was found and used — copied (resized to 1024²) to
-  `assets/akorith-logo.png` (the dock/window icon source) and `build/icon.png`, and regenerated
-  `build/icon.icns` (sips → `.iconset` → iconutil, 16–1024px) and `build/icon.ico` (sips +
-  a dependency-free Node packer → multi-size 16–256 PNG-backed ICO). The packaged bundle uses the
-  new `icon.icns`; the text-only sidebar/header brand mark and the SVG favicon are intentionally
-  left unchanged. (Earlier icon was the black/gray/white A-mark.)
+- **New app icon (native macOS composition).** Source: `~/Downloads/akorithlogolatest.png`
+  (purple/green marble gradient with a white `Ak` mark, 1254²). The raw square was making the Dock
+  icon look un-native, so a Swift/CoreGraphics step (`/tmp/mkicon.swift`, AppKit + `CGContext`)
+  composes a proper macOS icon: a 1024² canvas, the logo clipped into a rounded "body" (~824² inset
+  ≈100px, corner radius ≈0.2247·body), transparent outer corners, and a subtle baked contact shadow.
+  That rounded master is written to `assets/akorith-logo.png` (the runtime dock/window icon — note
+  `app.dock.setIcon` overrides the bundle icon while running, so this MUST be the rounded version)
+  and `build/icon.png`, and regenerated into `build/icon.icns` (sips → full `.iconset` 16–1024px →
+  iconutil) and `build/icon.ico` (sips + a dependency-free Node packer → multi-size 16–256 PNG-backed
+  ICO). The packaged bundle uses the new rounded `icon.icns`; the text-only sidebar/header brand mark
+  and the SVG favicon are intentionally left unchanged. To regenerate: run the Swift composer on the
+  source, then the `sips`/`iconutil` iconset steps. macOS caches Dock/Finder icons aggressively —
+  after replacing the app, refresh with `touch dist/mac-arm64/Akorith.app && killall Dock Finder`
+  (or re-login) if the old square lingers.
 
 **Manual UI inspection (REAL).** Packaged app launched + screenshotted
 (`docs/validation/phase13-2-ui.png`) in the project-active state: text-only "Akorith" brand,
