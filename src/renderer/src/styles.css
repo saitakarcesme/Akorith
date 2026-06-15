@@ -4325,6 +4325,30 @@ textarea:focus-visible {
   cursor: default;
 }
 
+/* Phase 14.9: keep sidebar folder rows on the same compact rhythm. */
+.sidebar-fixed-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-fixed-groups .sidebar-section {
+  padding: 0;
+}
+
+.sidebar-fixed-groups .sidebar-section-header {
+  min-height: 32px;
+  padding: 3px 4px;
+}
+
+.sidebar-fixed-groups .sidebar-fold {
+  gap: 6px;
+}
+
+.sidebar-fixed-groups .sidebar-count {
+  margin-left: 0;
+}
+
 /* --- Readability bump: slightly larger text without scaling the whole window --- */
 body {
   font-size: 14px;
