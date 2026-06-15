@@ -9,6 +9,7 @@ import type { ProjectRow, SessionRow } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
 export type AppView = ChatMode | 'dashboard' | 'test'
+export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
 export interface HistorySelection {
@@ -22,6 +23,13 @@ export type AgentStatusMap = Partial<Record<'t1' | 't2', AgentStatusInfo>>
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    try {
+      return localStorage.getItem('akorith.theme') === 'light' ? 'light' : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
   const [historyVersion, setHistoryVersion] = useState(0)
   const [projectVersion, setProjectVersion] = useState(0)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -143,6 +151,14 @@ export default function App(): JSX.Element {
     }
   }, [activeSessionId])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('akorith.theme', theme)
+    } catch {
+      /* ignore */
+    }
+  }, [theme])
+
   const handleNavigate = useCallback(
     (nextView: AppView): void => {
       if (nextView === 'general') {
@@ -190,9 +206,11 @@ export default function App(): JSX.Element {
   const requestCreateProject = useCallback(() => setCreateSignal((n) => n + 1), [])
 
   return (
-    <div className="app">
+    <div className="app" data-theme={theme}>
       <Sidebar
         view={view}
+        theme={theme}
+        onThemeChange={setTheme}
         onNavigate={handleNavigate}
         historyVersion={historyVersion}
         projectVersion={projectVersion}

@@ -1180,6 +1180,21 @@ validated `evaluate:*` IPC. A single reusable template covers both modes:
 valid; evaluation falls back to scanning the retained sandbox for generated test-like files and
 otherwise reports that the generated code excerpt is unavailable.
 
+## Phase 15 - Theme Toggle
+
+Akorith now has a persisted Light/Dark theme selector in the sidebar profile Settings popover.
+The renderer owns the selected theme in `App.tsx`, stores it in `localStorage` as
+`akorith.theme`, and applies it through `<div className="app" data-theme="...">`.
+
+Theme rules are token-first. Light mode keeps the navigation white and lifts workspace grays to
+soft, readable product surfaces. Dark mode makes the former white navigation a dark gray surface
+and pushes the workspace grays toward black, while preserving contrast for text, controls, recent
+chats, copyable code blocks, and popovers. The sidebar no longer hardcodes light-only surface
+tokens; it inherits `--sidebar-*` variables from the selected app theme.
+
+Terminals and agent activity surfaces remain intentionally dark-scoped. Do not route terminal
+colors through the user theme unless Phase 15.x explicitly asks for terminal theming.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).

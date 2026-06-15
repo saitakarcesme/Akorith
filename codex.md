@@ -376,6 +376,18 @@ electron-vite in strict numbered phases.
   visibly. No new auto-run of arbitrary commands on restore.
 - A session belongs to **one** provider; switching provider starts a new session context.
 
+## Phase 15 - Theme Toggle
+
+`App.tsx` owns `akorith.theme` (`dark` or `light`) in `localStorage` and applies it as
+`data-theme` on `.app`; Sidebar Settings exposes the segmented Light/Dark control. Light mode keeps
+the navigation white and uses lifted grays for the workspace. Dark mode makes the former white
+navigation dark gray and pushes workspace gray surfaces toward black while preserving readable text
+and controls.
+
+Keep future theme changes token-first through `--bg-*`, `--text-*`, `--sidebar-*`, and code-block
+variables. Terminals and agent activity scopes remain intentionally dark unless a later Phase 15.x
+changes that.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

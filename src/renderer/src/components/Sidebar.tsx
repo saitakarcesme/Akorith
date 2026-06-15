@@ -1,6 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
-import type { AppView } from '../App'
+import type { AppTheme, AppView } from '../App'
 import {
   ChartIcon,
   ChevronIcon,
@@ -15,6 +15,8 @@ import {
 
 interface SidebarProps {
   view: AppView
+  theme: AppTheme
+  onThemeChange: (theme: AppTheme) => void
   onNavigate: (view: AppView) => void
   historyVersion: number
   projectVersion: number
@@ -76,6 +78,8 @@ function formatDate(ts: number): string {
 
 export default function Sidebar({
   view,
+  theme,
+  onThemeChange,
   onNavigate,
   historyVersion,
   projectVersion,
@@ -759,7 +763,25 @@ export default function Sidebar({
               <span>Display name</span>
               <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
             </label>
-            <div className="settings-note">Theme: Akorith dark</div>
+            <div className="settings-field">
+              <span>Theme</span>
+              <div className="theme-toggle" role="group" aria-label="Theme">
+                <button
+                  type="button"
+                  className={theme === 'light' ? 'is-active' : ''}
+                  onClick={() => onThemeChange('light')}
+                >
+                  Light
+                </button>
+                <button
+                  type="button"
+                  className={theme === 'dark' ? 'is-active' : ''}
+                  onClick={() => onThemeChange('dark')}
+                >
+                  Dark
+                </button>
+              </div>
+            </div>
             <div className="settings-note">Package identity cleanup remains Phase 10.</div>
           </div>
         )}

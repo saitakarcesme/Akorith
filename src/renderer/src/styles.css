@@ -156,6 +156,110 @@ textarea:focus-visible {
   height: 100%;
 }
 
+.app[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #101012;
+  --bg-panel: #18181d;
+  --bg-raised: #222228;
+  --bg-soft: #141418;
+  --bg-input: #202026;
+  --bg-chat: #101012;
+  --bg-chat-raised: #18181d;
+  --bg-composer: #1d1d23;
+  --bubble-user: #26262c;
+  --bubble-user-text: #f0f0f2;
+  --bubble-assistant: transparent;
+  --bubble-assistant-text: #ececef;
+  --sidebar-bg: #2b2b2f;
+  --sidebar-bg-2: #222226;
+  --sidebar-panel: #303035;
+  --sidebar-raised: #38383d;
+  --sidebar-soft: #29292e;
+  --sidebar-input: #25252a;
+  --sidebar-text: #f2f2f4;
+  --sidebar-text-dim: #c2c2c8;
+  --sidebar-text-faint: #8e8e98;
+  --sidebar-icon: #c2c2c8;
+  --sidebar-border: rgba(255, 255, 255, 0.10);
+  --sidebar-border-strong: rgba(255, 255, 255, 0.14);
+  --sidebar-hover: rgba(255, 255, 255, 0.07);
+  --sidebar-hover-strong: rgba(255, 255, 255, 0.11);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.13);
+  --sidebar-active-text: #ffffff;
+  --sidebar-accent: #f2f2f4;
+  --sidebar-on-accent: #1c1c20;
+  --sidebar-focus-ring: rgba(255, 255, 255, 0.34);
+  --text: #ececee;
+  --text-dim: #a7a7ae;
+  --text-faint: #73737c;
+  --on-accent: #17171a;
+  --border: #2b2b31;
+  --border-soft: rgba(255, 255, 255, 0.09);
+  --hover: rgba(255, 255, 255, 0.055);
+  --hover-strong: rgba(255, 255, 255, 0.10);
+  --accent: #ededf0;
+  --accent-strong: #ffffff;
+  --accent-dim: rgba(255, 255, 255, 0.11);
+  --focus-ring: rgba(255, 255, 255, 0.32);
+  --code-bg: #303039;
+  --code-border: rgba(255, 255, 255, 0.16);
+  --code-copy-bg: rgba(255, 255, 255, 0.10);
+  --code-copy-hover-bg: rgba(255, 255, 255, 0.18);
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+.app[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f2f3f5;
+  --bg-panel: #ffffff;
+  --bg-raised: #f7f7f8;
+  --bg-soft: #eceef1;
+  --bg-input: #ffffff;
+  --bg-chat: #f7f8fa;
+  --bg-chat-raised: #ffffff;
+  --bg-composer: #ffffff;
+  --bubble-user: #e8eaf0;
+  --bubble-user-text: #191a1d;
+  --bubble-assistant: transparent;
+  --bubble-assistant-text: #202124;
+  --sidebar-bg: #ffffff;
+  --sidebar-bg-2: #f7f7f8;
+  --sidebar-panel: #ffffff;
+  --sidebar-raised: #f0f1f3;
+  --sidebar-soft: #f6f7f8;
+  --sidebar-input: #ffffff;
+  --sidebar-text: #17181b;
+  --sidebar-text-dim: #5e626b;
+  --sidebar-text-faint: #9296a1;
+  --sidebar-icon: #656a73;
+  --sidebar-border: rgba(17, 24, 39, 0.09);
+  --sidebar-border-strong: rgba(17, 24, 39, 0.13);
+  --sidebar-hover: rgba(17, 24, 39, 0.045);
+  --sidebar-hover-strong: rgba(17, 24, 39, 0.075);
+  --sidebar-active-bg: rgba(17, 24, 39, 0.075);
+  --sidebar-active-text: #101114;
+  --sidebar-accent: #202124;
+  --sidebar-on-accent: #ffffff;
+  --sidebar-focus-ring: rgba(17, 24, 39, 0.26);
+  --text: #202124;
+  --text-dim: #676b73;
+  --text-faint: #9296a1;
+  --on-accent: #ffffff;
+  --border: #dfe2e7;
+  --border-soft: rgba(17, 24, 39, 0.10);
+  --hover: rgba(17, 24, 39, 0.045);
+  --hover-strong: rgba(17, 24, 39, 0.075);
+  --accent: #202124;
+  --accent-strong: #111214;
+  --accent-dim: rgba(17, 24, 39, 0.08);
+  --focus-ring: rgba(17, 24, 39, 0.26);
+  --code-bg: #f0f1f5;
+  --code-border: rgba(17, 24, 39, 0.12);
+  --code-copy-bg: rgba(17, 24, 39, 0.06);
+  --code-copy-hover-bg: rgba(17, 24, 39, 0.10);
+  --shadow-soft: 0 18px 48px rgba(17, 24, 39, 0.12);
+}
+
 /* ---------- left sidebar ---------- */
 
 .sidebar {
@@ -168,24 +272,20 @@ textarea:focus-visible {
      dark workspace tokens never leak in — dark text + gray icons on white. */
   --text: var(--sidebar-text);
   --text-dim: var(--sidebar-text-dim);
-  --text-faint: #97959f;
+  --text-faint: var(--sidebar-text-faint);
   --hover: var(--sidebar-hover);
-  --hover-strong: rgba(0, 0, 0, 0.07);
+  --hover-strong: var(--sidebar-hover-strong);
   --accent-dim: var(--sidebar-active-bg);
   --accent-strong: var(--sidebar-active-text);
   --border-soft: var(--sidebar-border);
-  --border: rgba(0, 0, 0, 0.10);
-  /* Light surface tokens so every sidebar control/popover stays light (the dark
-     global surfaces must not leak into the white sidebar). */
-  --bg-panel: #ffffff;
-  --bg-raised: #f0f0ef;
-  --bg-soft: #f5f5f4;
-  --bg-input: #ffffff;
-  /* Invert the accent on the light sidebar: a dark primary CTA reads on white,
-     and the focus ring must be dark, not the workspace's white ring. */
-  --accent: #1d1d1f;
-  --on-accent: #ffffff;
-  --focus-ring: rgba(0, 0, 0, 0.28);
+  --border: var(--sidebar-border-strong);
+  --bg-panel: var(--sidebar-panel);
+  --bg-raised: var(--sidebar-raised);
+  --bg-soft: var(--sidebar-soft);
+  --bg-input: var(--sidebar-input);
+  --accent: var(--sidebar-accent);
+  --on-accent: var(--sidebar-on-accent);
+  --focus-ring: var(--sidebar-focus-ring);
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
@@ -1168,6 +1268,44 @@ textarea:focus-visible {
   font-size: 11px;
 }
 
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.theme-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.theme-toggle button {
+  min-height: 28px;
+  padding: 5px 8px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.theme-toggle button:hover {
+  color: var(--text);
+}
+
+.theme-toggle button.is-active {
+  color: var(--accent-strong);
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
 .settings-note {
   color: var(--text-faint);
   font-size: 11px;
@@ -1681,7 +1819,7 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--code-copy-bg);
   border: 1px solid var(--border-soft);
   border-radius: 7px;
   cursor: pointer;
@@ -1691,20 +1829,15 @@ textarea:focus-visible {
 .copy-button:hover,
 .copy-button.is-copied {
   color: var(--accent-strong);
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.32);
+  background: var(--code-copy-hover-bg);
+  border-color: var(--code-border);
 }
 
 .chat-code {
   margin: 8px 0;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--code-border);
   border-radius: var(--radius-sm);
-  --bg-input: #3b3b43;
-  --text: #f4f4f7;
-  --text-dim: #c4c4cc;
-  --text-faint: #9d9da8;
-  --border-soft: rgba(255, 255, 255, 0.16);
-  background: #303039;
+  background: var(--code-bg);
   color: var(--text);
   overflow: hidden;
 }
