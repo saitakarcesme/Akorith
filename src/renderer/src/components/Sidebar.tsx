@@ -10,7 +10,8 @@ import {
   PanelsIcon,
   PlusIcon,
   SettingsIcon,
-  UserIcon
+  UserIcon,
+  AkorithMark
 } from './icons'
 
 interface SidebarProps {
@@ -336,7 +337,7 @@ export default function Sidebar({
       <div className="sidebar-brand">
         <div className="brand-lockup" title="Akorith">
           {sidebarCollapsed ? (
-            <div className="brand-name brand-name-compact">A</div>
+            <AkorithMark size={38} className="brand-mark" />
           ) : (
             <div>
               <div className="brand-name">Akorith</div>

@@ -208,6 +208,12 @@ textarea:focus-visible {
   justify-content: center;
 }
 
+.sidebar.is-collapsed .brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
 .sidebar-brand {
   display: flex;
   align-items: center;
@@ -633,6 +639,8 @@ textarea:focus-visible {
 .sidebar-item.is-session {
   cursor: pointer;
   justify-content: space-between;
+  position: relative;
+  padding-right: 64px;
 }
 
 .sidebar-item.is-session:hover {
@@ -652,13 +660,23 @@ textarea:focus-visible {
 }
 
 .sidebar-item-actions {
-  display: none;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  display: flex;
   gap: 2px;
   flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
-.sidebar-item.is-session:hover .sidebar-item-actions {
-  display: flex;
+.sidebar-item.is-session:hover .sidebar-item-actions,
+.sidebar-item.is-session:focus-within .sidebar-item-actions,
+.recent-chat:hover .sidebar-item-actions,
+.recent-chat:focus-within .sidebar-item-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .sidebar-item-actions button {
@@ -766,8 +784,10 @@ textarea:focus-visible {
 }
 
 .recent-chat {
+  position: relative;
   gap: 7px;
   padding: 5px 7px;
+  padding-right: 62px;
   border-radius: 10px;
   background: var(--hover);
 }
@@ -876,11 +896,6 @@ textarea:focus-visible {
 .project-menu button.is-danger:hover {
   color: #fff;
   background: var(--danger);
-}
-
-/* Recent-chat delete affordance reuses .sidebar-item-actions; reveal on hover. */
-.recent-chat:hover .sidebar-item-actions {
-  display: flex;
 }
 
 .project-text span,
@@ -2158,6 +2173,45 @@ textarea:focus-visible {
 .chat-msg-text {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-msg.assistant .chat-msg-text {
+  white-space: normal;
+}
+
+.chat-prose {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-prose p {
+  margin: 0;
+}
+
+.chat-prose ol,
+.chat-prose ul {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.chat-prose li + li {
+  margin-top: 6px;
+}
+
+.chat-prose strong {
+  font-weight: 720;
+  color: var(--text);
+}
+
+.chat-prose code {
+  padding: 1px 5px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
 }
 
 /* Clean, subtle chat bubbles on the light workbench. The assistant message is a

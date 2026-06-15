@@ -256,6 +256,22 @@ electron-vite in strict numbered phases.
       whole UI ~10% uniformly (layout reflows, nothing clipped) — one central knob instead of
       per-component font bumps. **Validation:** `docs/validation/chat-scroll-validation.md`.
 
+- [x] **Phase 14.5** - UI changes + Windows icon / local-provider fixes. Windows packaged builds
+      now include `build/icon.ico`, prefer it for the BrowserWindow icon, and the runnable unpacked
+      exe/shortcuts can be stamped to show the Akorith icon. Local/Ollama availability now falls
+      back from `localhost` to `127.0.0.1`; the user config can point directly at loopback. Claude
+      dashboard usage no longer counts `cache_read_input_tokens` as fresh prompt tokens, preventing
+      tiny messages from showing huge token totals. Select dropdown options are readable on Windows
+      native popups, and the app font/readability pass slightly enlarges chat, controls, sidebar,
+      code, and terminal text. **Validation:** `npm run typecheck`.
+
+- [x] **Phase 14.6** - sidebar + chat polish. Recent chat and provider-folder row actions now
+      overlay the row instead of entering layout on hover, so rows underneath no longer shift. The
+      fresh general-chat empty state greets the local display name (`Welcome back, Ibrahim`). The
+      collapsed sidebar shows the Akorith mark instead of a plain `A`. Assistant messages render
+      lightweight Markdown-style prose (`**bold**`, inline code, ordered/unordered lists) so model
+      output looks cleaner without changing provider behavior. **Validation:** `npm run typecheck`.
+
 ## Locked design decisions
 
 - **No API keys, ever** — subscriptions via CLIs, or local Ollama. Never fabricate costs;

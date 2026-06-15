@@ -110,6 +110,93 @@ function storageBoolean(key: string, fallback: boolean): boolean {
   }
 }
 
+function storageString(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+function renderInlineMarkdown(text: string, keyPrefix: string): JSX.Element[] {
+  const nodes: JSX.Element[] = []
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
+  let last = 0
+  let index = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text))) {
+    if (match.index > last) nodes.push(<span key={`${keyPrefix}-t-${index++}`}>{text.slice(last, match.index)}</span>)
+    const token = match[0]
+    if (token.startsWith('**')) {
+      nodes.push(<strong key={`${keyPrefix}-b-${index++}`}>{token.slice(2, -2)}</strong>)
+    } else {
+      nodes.push(<code key={`${keyPrefix}-c-${index++}`}>{token.slice(1, -1)}</code>)
+    }
+    last = match.index + token.length
+  }
+  if (last < text.length) nodes.push(<span key={`${keyPrefix}-t-${index++}`}>{text.slice(last)}</span>)
+  return nodes
+}
+
+function renderProse(text: string, keyPrefix: string): JSX.Element {
+  const blocks: JSX.Element[] = []
+  let paragraph: string[] = []
+  let list: { type: 'ol' | 'ul'; items: string[] } | null = null
+
+  const flushParagraph = (): void => {
+    if (paragraph.length === 0) return
+    const value = paragraph.join(' ').trim()
+    if (value) {
+      blocks.push(<p key={`${keyPrefix}-p-${blocks.length}`}>{renderInlineMarkdown(value, `${keyPrefix}-p-${blocks.length}`)}</p>)
+    }
+    paragraph = []
+  }
+
+  const flushList = (): void => {
+    if (!list) return
+    const Tag = list.type
+    const items = list.items
+    blocks.push(
+      <Tag key={`${keyPrefix}-${list.type}-${blocks.length}`}>
+        {items.map((item, index) => (
+          <li key={`${keyPrefix}-${list!.type}-${blocks.length}-${index}`}>
+            {renderInlineMarkdown(item, `${keyPrefix}-${list!.type}-${blocks.length}-${index}`)}
+          </li>
+        ))}
+      </Tag>
+    )
+    list = null
+  }
+
+  for (const rawLine of text.replace(/\r\n/g, '\n').split('\n')) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushParagraph()
+      flushList()
+      continue
+    }
+
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/)
+    const unordered = line.match(/^[-*]\s+(.+)$/)
+    if (ordered || unordered) {
+      flushParagraph()
+      const type = ordered ? 'ol' : 'ul'
+      if (!list || list.type !== type) flushList()
+      if (!list) list = { type, items: [] }
+      list.items.push((ordered?.[1] ?? unordered?.[1] ?? '').trim())
+      continue
+    }
+
+    flushList()
+    paragraph.push(line)
+  }
+
+  flushParagraph()
+  flushList()
+
+  return <div className="chat-prose" key={keyPrefix}>{blocks.length ? blocks : renderInlineMarkdown(text, keyPrefix)}</div>
+}
+
 export default function ChatPanel({
   mode,
   historySel,
@@ -134,6 +221,7 @@ export default function ChatPanel({
   // Phase 14.2: live memory/context stats for the indicator near the composer.
   const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
+  const [displayName] = useState(() => storageString('akorith.displayName', 'Ibrahim').trim() || 'Ibrahim')
   const scrollRef = useRef<HTMLDivElement>(null)
   // Phase 14.1: only auto-scroll to the newest message when the user is already
   // near the bottom — never yank them away while they read older history.
@@ -977,9 +1065,9 @@ export default function ChatPanel({
       ) : !hasConversation ? (
         <div className="ws-hero">
           <div className="ws-hero-inner is-wide">
-            <h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : 'Ask a model directly'}</h1>
+            <h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : `Welcome back, ${displayName}`}</h1>
             <p className="ws-hero-sub">
-              {hasProject ? 'Type a task — Akorith plans it and drives Codex and Claude for you.' : 'General chats are separate from project workspaces and do not use project context.'}
+              {hasProject ? 'Type a task — Akorith plans it and drives Codex and Claude for you.' : 'Pick a model and start a fresh conversation.'}
             </p>
             {composer}
             {selected && !selected.available.ok && (
@@ -1015,9 +1103,7 @@ export default function ChatPanel({
                             </div>
                             <pre>{seg.content}</pre>
                           </div>
-                        ) : (
-                          <span key={i}>{seg.content}</span>
-                        )
+                        ) : renderProse(seg.content, `${m.id}-text-${i}`)
                       )}
                     </div>
                   ) : (

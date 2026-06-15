@@ -720,6 +720,39 @@ Dashboard colors/heatmap, drawer resize/collapse, and conversation spacing are c
   composer focus / dashboard colors / GitHub-style heatmap / centered chat column were settled in
   13.2 and retained.
 
+### UI, Windows icon, local-provider, and chat polish (Phases 14.5-14.6)
+
+Phases 14.5 and 14.6 are focused manual-feedback polish passes. No architecture or security
+invariants changed: contextIsolation/sandbox/no nodeIntegration stay on, the contextBridge stays
+frozen and validated, prompts still go to CLIs over stdin, the single `bridgeSend -> PtyManager.write`
+path remains the only programmatic terminal write path, and provider sends still persist exactly one
+normal-chat `usage_event`.
+
+- **Windows icon fix (14.5).** `build/icon.ico` is included in packaged files and Windows resolves
+  the BrowserWindow icon from it before falling back to PNG/SVG. Local unpacked builds can be
+  stamped with the same `.ico`, so the exe, shortcuts, and taskbar show Akorith instead of the
+  generic Electron icon.
+- **Local/Ollama reliability (14.5).** The Local provider keeps the configured base URL but, for the
+  default `http://localhost:11434`, retries `http://127.0.0.1:11434` when probing `/api/tags`. This
+  covers Windows localhost resolution oddities while preserving custom base URLs.
+- **Claude token accounting (14.5).** Claude cache reads are no longer counted as fresh prompt
+  tokens. `promptTokens` now uses `input_tokens + cache_creation_input_tokens`, excluding
+  `cache_read_input_tokens`, so tiny follow-up questions do not inflate the dashboard by tens of
+  thousands of tokens.
+- **Readability/UI fixes (14.5).** Native select popup options are forced to dark text on a white
+  option background, and the app gets a small readability bump for chat, controls, sidebar, code,
+  and terminal text.
+- **Sidebar hover stability (14.6).** Recent-chat/provider row actions are absolute overlays with
+  reserved row padding and opacity transitions, so hovering a row no longer changes text width or
+  pushes neighboring content around.
+- **Personalized empty chat (14.6).** Fresh general chats greet the local profile name
+  (`Welcome back, Ibrahim`) and keep the project workspace empty state unchanged.
+- **Collapsed brand (14.6).** The collapsed sidebar shows the inline Akorith mark instead of a
+  plain letter.
+- **Assistant message presentation (14.6).** Assistant text segments now render lightweight
+  Markdown-style prose: paragraphs, ordered/unordered lists, `**bold**`, and inline code. This
+  improves the visual quality of model output without changing model prompts or provider behavior.
+
 ### Chat scroll reliability + sidebar project polish (Phase 14.4)
 
 Phase 14.4 is a focused usability bugfix pass over the latest manual testing. No new architecture,
