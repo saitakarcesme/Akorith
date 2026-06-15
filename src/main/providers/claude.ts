@@ -88,8 +88,11 @@ export class ClaudeProvider implements Provider {
     if (!streamedText && text) onToken(text)
 
     const usage = result.usage ?? {}
-    const promptTokens =
-      (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+    // Claude can report very large cache_read_input_tokens for tiny follow-up
+    // prompts. Those are context cache hits, not fresh prompt tokens spent by
+    // this message, so keep the dashboard/send badge focused on billable new
+    // input plus any newly-created cache.
+    const promptTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0)
 
     return {
       text,

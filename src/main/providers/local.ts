@@ -10,6 +10,7 @@ import type {
 } from './types'
 
 const DEFAULT_BASE_URL = 'http://localhost:11434'
+const LOOPBACK_FALLBACK = 'http://127.0.0.1:11434'
 
 export class LocalProvider implements Provider {
   readonly id = 'local'
@@ -21,19 +22,35 @@ export class LocalProvider implements Provider {
     this.baseUrl = (entry.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '')
   }
 
+  private baseUrls(): string[] {
+    return this.baseUrl === DEFAULT_BASE_URL ? [this.baseUrl, LOOPBACK_FALLBACK] : [this.baseUrl]
+  }
+
+  private async fetchTags(timeoutMs: number): Promise<Response> {
+    let lastError: unknown
+    for (const baseUrl of this.baseUrls()) {
+      try {
+        const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
+        if (res.ok) return res
+        lastError = new Error(`Ollama responded with HTTP ${res.status} at ${baseUrl}`)
+      } catch (err) {
+        lastError = err
+      }
+    }
+    throw lastError
+  }
+
   async isAvailable(): Promise<ProviderAvailability> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/tags`, { signal: AbortSignal.timeout(2_000) })
-      if (res.ok) return { ok: true }
-      return { ok: false, reason: `Ollama responded with HTTP ${res.status}` }
+      await this.fetchTags(2_000)
+      return { ok: true }
     } catch {
       return { ok: false, reason: `Ollama not reachable at ${this.baseUrl}` }
     }
   }
 
   async listModels(): Promise<string[]> {
-    const res = await fetch(`${this.baseUrl}/api/tags`, { signal: AbortSignal.timeout(5_000) })
-    if (!res.ok) return []
+    const res = await this.fetchTags(5_000)
     const body = (await res.json()) as { models?: { name?: string }[] }
     return (body.models ?? []).map((m) => m.name).filter((n): n is string => typeof n === 'string')
   }

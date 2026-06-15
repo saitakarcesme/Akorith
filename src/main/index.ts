@@ -72,10 +72,18 @@ function applyAppIdentity(): void {
  */
 function resolveAppIcon(): string | undefined {
   const base = app.getAppPath()
-  for (const rel of [
-    ['assets', 'akorith-logo.png'],
-    ['assets', 'akorith-icon.svg']
-  ]) {
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          ['build', 'icon.ico'],
+          ['assets', 'akorith-logo.png'],
+          ['assets', 'akorith-icon.svg']
+        ]
+      : [
+          ['assets', 'akorith-logo.png'],
+          ['assets', 'akorith-icon.svg']
+        ]
+  for (const rel of candidates) {
     const iconPath = join(base, ...rel)
     if (existsSync(iconPath)) return iconPath
   }

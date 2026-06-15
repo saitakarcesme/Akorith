@@ -1527,6 +1527,19 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
+.model-select option,
+.macro-field select option,
+.test-field select option {
+  color: #1f2026;
+  background: #ffffff;
+}
+
+.model-select option:disabled,
+.macro-field select option:disabled,
+.test-field select option:disabled {
+  color: #8a8d96;
+}
+
 .model-select:focus {
   outline: none;
   border-color: var(--accent);
@@ -4228,4 +4241,51 @@ textarea:focus-visible {
 .project-menu button[disabled] {
   opacity: 0.45;
   cursor: default;
+}
+
+/* --- Readability bump: slightly larger text without scaling the whole window --- */
+body {
+  font-size: 14px;
+}
+
+.sidebar,
+.chat-panel,
+.composer-input,
+.model-select,
+.macro-panel,
+.test-page,
+.terminal-column {
+  font-size: 14px;
+}
+
+.chat-msg {
+  font-size: 16px;
+}
+
+.chat-msg.user {
+  font-size: 15.5px;
+}
+
+.chat-msg-meta,
+.composer-meta,
+.sidebar-muted,
+.recent-meta,
+.project-path,
+.macro-help,
+.macro-hint,
+.test-hint {
+  font-size: 12px;
+}
+
+.chat-msg .chat-code pre,
+.terminal-pane {
+  font-size: 13.5px;
+}
+
+.ws-hero-title {
+  font-size: 30px;
+}
+
+.ws-hero-sub {
+  font-size: 15px;
 }
