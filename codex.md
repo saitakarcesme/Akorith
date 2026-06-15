@@ -272,6 +272,14 @@ electron-vite in strict numbered phases.
       lightweight Markdown-style prose (`**bold**`, inline code, ordered/unordered lists) so model
       output looks cleaner without changing provider behavior. **Validation:** `npm run typecheck`.
 
+- [x] **Phase 14.7** - logo, sidebar scroll, and copyable output polish. The collapsed sidebar now
+      uses the current PNG Akorith app icon (`src/renderer/public/akorith-logo.png`) instead of the
+      older inline mark. The lower sidebar scroll region now starts at Projects and includes provider
+      folders plus Recent Chats as one continuous scroll area above the fixed profile. Fenced
+      assistant blocks always show a **Copy** action in both General Chat and Workspace; Workspace
+      still keeps its Send-to-agent action. Copyable/code blocks are lighter and larger for better
+      readability. **Validation:** `npm run typecheck`.
+
 ## Locked design decisions
 
 - **No API keys, ever** — subscriptions via CLIs, or local Ollama. Never fabricate costs;

@@ -232,6 +232,7 @@ export default function ChatPanel({
   const [autoEnter, setAutoEnter] = useState<boolean | null>(null) // null until loaded
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [sentKey, setSentKey] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
   const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', true))
 
@@ -753,6 +754,26 @@ export default function ChatPanel({
     </button>
   )
 
+  const copyButton = (text: string, key: string): JSX.Element => (
+    <button
+      type="button"
+      className={`copy-button ${copiedKey === key ? 'is-copied' : ''}`}
+      title="Copy this block"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopiedKey(key)
+          setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1600)
+          showToast('ok', 'Copied')
+        } catch (err) {
+          showToast('error', err instanceof Error ? err.message : 'Copy failed')
+        }
+      }}
+    >
+      {copiedKey === key ? 'Copied' : 'Copy'}
+    </button>
+  )
+
   const hasConversation = messages.length > 0
   const summary = agentSummary(agentStatus)
 
@@ -1098,8 +1119,11 @@ export default function ChatPanel({
                           <div className="chat-code" key={i}>
                             <div className="chat-code-header">
                               <span>{seg.lang ?? 'code'}</span>
-                              {hasProject && m.status === 'done' &&
-                                bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
+                              <span className="chat-code-actions">
+                                {copyButton(seg.content, `${m.id}-copy-${i}`)}
+                                {hasProject && m.status === 'done' &&
+                                  bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
+                              </span>
                             </div>
                             <pre>{seg.content}</pre>
                           </div>

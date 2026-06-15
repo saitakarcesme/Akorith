@@ -753,6 +753,23 @@ normal-chat `usage_event`.
   Markdown-style prose: paragraphs, ordered/unordered lists, `**bold**`, and inline code. This
   improves the visual quality of model output without changing model prompts or provider behavior.
 
+### Logo, sidebar scroll, and copyable output polish (Phase 14.7)
+
+Phase 14.7 is another manual-feedback UI polish pass. No architecture/security invariants changed.
+
+- **Collapsed logo uses the current app icon.** The renderer now ships
+  `src/renderer/public/akorith-logo.png` copied from `assets/akorith-logo.png`, and collapsed
+  sidebar branding renders that PNG instead of the older inline SVG mark.
+- **Sidebar scroll scope.** `.sidebar-scroll` is the single scroll container for everything from
+  Projects through provider folders and Recent Chats. The profile/settings area stays fixed at the
+  bottom. Project lists and Recent Chats no longer own separate nested scroll containers.
+- **Copyable output in General Chat.** Fenced assistant blocks now always render a **Copy** button.
+  Workspace chats still also show the existing Send-to-agent button, so project workflows keep the
+  bridge affordance while general chats gain a direct copy path.
+- **Lighter copy/code boxes.** Fenced blocks use a lighter dark surface, larger monospace text, a
+  more readable header, and grouped action buttons. This is presentation-only; provider prompts and
+  model behavior are unchanged.
+
 ### Chat scroll reliability + sidebar project polish (Phase 14.4)
 
 Phase 14.4 is a focused usability bugfix pass over the latest manual testing. No new architecture,
