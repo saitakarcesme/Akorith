@@ -94,6 +94,7 @@ export interface PermissionDetection {
 const DESTRUCTIVE = /\b(rm\s+-rf|rm\s+-r|sudo|force[- ]?push|push\s+--force|--force|delete|drop\s+(table|database)|truncate|format\s+disk|wipe|overwrite|reset\s+--hard|chmod\s+777|mkfs)\b|curl[^\n]*\|\s*(sh|bash)/i
 // "Permanent allow" options must never be auto-selected this phase.
 const ALWAYS_ALLOW = /\b(always\s+allow|don'?t\s+ask\s+again|remember\s+this|allow\s+all|yes,?\s+and\s+always)\b/i
+const TRUST_WORKSPACE = /\btrust\b[\s\S]{0,140}\b(folder|directory|workspace|repo|repository|files)\b|\b(folder|directory|workspace|repo|repository|files)\b[\s\S]{0,140}\btrust\b/i
 
 const NONE: PermissionDetection = {
   detected: false,
@@ -112,7 +113,7 @@ const NONE: PermissionDetection = {
 /** The most recent non-empty line that looks like the actual question. */
 function questionLine(tail: string): string {
   const lines = tail.split('\n').map((l) => l.trim()).filter(Boolean)
-  const q = [...lines].reverse().find((l) => /\?|proceed|continue|allow|confirm|permission|approve|press enter/i.test(l))
+  const q = [...lines].reverse().find((l) => /\?|proceed|continue|allow|confirm|permission|approve|trust|press enter/i.test(l))
   return (q ?? lines[lines.length - 1] ?? '').slice(0, 200)
 }
 
@@ -122,6 +123,7 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
   const lower = tail.toLowerCase()
   const destructive = DESTRUCTIVE.test(tail)
   const permanentOption = ALWAYS_ALLOW.test(tail)
+  const workspaceTrust = TRUST_WORKSPACE.test(tail)
 
   // Numbered choice menus, e.g. "1. Yes  2. Yes, and always allow  3. No".
   const numbered = [...tail.matchAll(/^\s*(\d+)[).]\s*(.+)$/gm)].map((m) => ({
@@ -160,6 +162,23 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
       matchedText: tail.slice(-200),
       question: questionLine(tail),
       options
+    }
+  }
+
+  // Codex-style "trust this folder/workspace/repo" prompts are access decisions.
+  // Surface them through the permission UI/policy instead of answering inside
+  // terminal startup, because the exact safe keystroke depends on the TUI.
+  if (workspaceTrust) {
+    return {
+      detected: true,
+      kind: 'allow_access',
+      suggestedAction: '',
+      riskLevel: destructive ? 'high' : 'medium',
+      rationale: 'Workspace trust request — review it in Activity before continuing.',
+      requiresUserReview: true,
+      matchedText: tail.slice(-200),
+      question: questionLine(tail),
+      options: []
     }
   }
 

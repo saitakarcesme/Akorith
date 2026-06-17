@@ -3,15 +3,17 @@
 // sandbox lifecycle (create under OS temp, prune to keepLastN), streams live
 // output, and persists each run to test_runs for Phase 8 to consume.
 
-import { ipcMain, type WebContents } from 'electron'
-import { existsSync, mkdirSync } from 'fs'
+import { app, ipcMain, type WebContents } from 'electron'
+import { spawn } from 'child_process'
+import { existsSync, mkdirSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { isAbsolute, join, relative, resolve } from 'path'
 import { getTestSettings, setTestSourceRepo, type TestLabSettings } from './config'
 import { createTestRun, listTestRuns, type TestRunRow } from './db'
 import {
   buildRepoContext,
   detectFramework,
+  parseGitHubRepoUrl,
   pruneSandboxes,
   runTests,
   snapshotSource,
@@ -25,6 +27,7 @@ const VALID_RUN_ID = /^[\w-]{1,64}$/
 const MAX_FILES = 20
 const MAX_FILE_BYTES = 500_000
 const MAX_TOTAL_BYTES = 2_000_000
+const GIT_CLONE_TIMEOUT_MS = 120_000
 
 // Active runs, keyed by runId, so test:stop can abort the whole process tree.
 const activeRuns = new Map<string, AbortController>()
@@ -46,6 +49,88 @@ interface RunArgs {
 }
 
 type RunResponse = { ok: true; run: TestRunRow } | { ok: false; error: string }
+type ResolveSourceResponse =
+  | { ok: true; path: string; label: string; cloned: boolean }
+  | { ok: false; error: string }
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function githubCloneDir(owner: string, repo: string): string {
+  const base = join(app.getPath('userData'), 'testlab-github-repos')
+  return join(base, `${owner}__${repo}`)
+}
+
+function isInside(parent: string, child: string): boolean {
+  const rel = relative(resolve(parent), resolve(child))
+  return Boolean(rel) && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function runGit(args: string[], cwd?: string): Promise<{ code: number | null; output: string }> {
+  return new Promise((resolveDone) => {
+    const child = spawn('git', args, {
+      cwd,
+      shell: false,
+      windowsHide: true,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+    })
+    let output = ''
+    const capture = (b: Buffer): void => {
+      if (output.length < 8000) output += b.toString('utf8')
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }, GIT_CLONE_TIMEOUT_MS)
+    child.stdout.on('data', capture)
+    child.stderr.on('data', capture)
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      resolveDone({ code: null, output: err.message })
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolveDone({ code, output })
+    })
+  })
+}
+
+async function resolveSourceRepo(input: string): Promise<ResolveSourceResponse> {
+  const trimmed = input.trim()
+  const gh = parseGitHubRepoUrl(trimmed)
+  if (!gh) {
+    if (!trimmed || !existsSync(trimmed) || !isDirectory(trimmed)) {
+      return { ok: false, error: 'source repo not found' }
+    }
+    return { ok: true, path: trimmed, label: trimmed, cloned: false }
+  }
+
+  const base = join(app.getPath('userData'), 'testlab-github-repos')
+  const target = githubCloneDir(gh.owner, gh.repo)
+  if (!isInside(base, target)) return { ok: false, error: 'invalid GitHub repo cache path' }
+  mkdirSync(base, { recursive: true })
+
+  if (existsSync(join(target, '.git')) && isDirectory(target)) {
+    return { ok: true, path: target, label: gh.label, cloned: false }
+  }
+  if (existsSync(target)) {
+    rmSync(target, { recursive: true, force: true })
+  }
+
+  const res = await runGit(['clone', '--depth', '1', gh.cloneUrl, target])
+  if (res.code !== 0) {
+    return { ok: false, error: `git clone failed for ${gh.label}: ${res.output.trim() || `exit ${res.code}`}` }
+  }
+  return { ok: true, path: target, label: gh.label, cloned: true }
+}
 
 function validFiles(files: unknown): files is GeneratedFile[] {
   if (!Array.isArray(files) || files.length === 0 || files.length > MAX_FILES) return false
@@ -149,6 +234,13 @@ export function registerTestIpc(): void {
   ipcMain.handle('test:setSourceRepo', (_event, dir: unknown): TestLabSettings => {
     if (typeof dir !== 'string') return getTestSettings()
     return setTestSourceRepo(dir.slice(0, 1_000))
+  })
+
+  ipcMain.handle('test:resolveSource', async (_event, args: { source: string }): Promise<ResolveSourceResponse> => {
+    if (typeof args?.source !== 'string' || args.source.length > 1_000) {
+      return { ok: false, error: 'invalid source repo' }
+    }
+    return resolveSourceRepo(args.source)
   })
 
   ipcMain.handle('test:detect', async (_event, args: { sourceRepo: string }): Promise<Detection | { error: string }> => {

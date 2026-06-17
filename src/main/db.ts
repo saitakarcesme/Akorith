@@ -415,6 +415,24 @@ export function getProject(projectId: string): ProjectRow | null {
   return row ? toProject(row) : null
 }
 
+export function getSessionProjectContext(sessionId: string): { projectName: string; projectPath: string } | null {
+  if (!VALID_ID.test(sessionId)) return null
+  const row = must()
+    .prepare(
+      `SELECT p.name, p.path
+       FROM sessions s
+       JOIN projects p ON p.id = s.project_id
+       WHERE s.id = ?`
+    )
+    .get(sessionId) as { name: string; path: string | null } | undefined
+  const projectPath = cleanProjectPath(row?.path)
+  if (!row || !projectPath) return null
+  return {
+    projectName: row.name.trim().slice(0, MAX_PROJECT_NAME) || projectNameFromPath(projectPath),
+    projectPath
+  }
+}
+
 function findProjectByPath(path: string): ProjectRow | null {
   const row = must().prepare('SELECT * FROM projects WHERE path = ? ORDER BY updated_at DESC LIMIT 1').get(path) as
     | Record<string, unknown>

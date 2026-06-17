@@ -883,14 +883,15 @@ textarea:focus-visible {
 .recent-chat {
   position: relative;
   gap: 7px;
-  padding: 5px 7px;
-  padding-right: 62px;
-  border-radius: 10px;
-  background: var(--hover);
+  min-height: 26px;
+  padding: 3px 7px;
+  padding-right: 48px;
+  border-radius: 7px;
+  background: transparent;
 }
 
 .recent-chat + .recent-chat {
-  margin-top: 6px;
+  margin-top: 1px;
 }
 
 .recent-section {
@@ -901,6 +902,31 @@ textarea:focus-visible {
 .recent-list {
   min-height: 0;
   padding-right: 2px;
+}
+
+.recent-chat .recent-chat-text {
+  gap: 0;
+}
+
+.recent-chat .recent-chat-text em {
+  display: none !important;
+}
+
+.recent-section .recent-chat {
+  min-height: 26px;
+  padding: 4px 6px;
+  background: transparent !important;
+  border-radius: 7px;
+}
+
+.recent-section .recent-chat:hover,
+.recent-section .recent-chat.is-active {
+  background: var(--hover) !important;
+}
+
+.recent-section .recent-chat-text span {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .project-item:hover,
@@ -1875,9 +1901,19 @@ textarea:focus-visible {
   white-space: pre;
 }
 
-.chat-msg-meta .bridge-button {
-  float: right;
-  margin-left: 8px;
+.chat-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.chat-msg-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .selection-popover {
@@ -2004,6 +2040,29 @@ textarea:focus-visible {
 
 .macro-field > span {
   text-transform: uppercase;
+}
+
+.macro-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.macro-copy-btn {
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  cursor: pointer;
+  text-transform: none;
+}
+
+.macro-copy-btn:hover {
+  color: var(--accent-strong);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 .macro-field textarea,
@@ -2333,6 +2392,21 @@ textarea:focus-visible {
 .chat-msg-text {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-image-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chat-image-strip img {
+  width: 132px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
 }
 
 .chat-msg.assistant .chat-msg-text {
@@ -3653,6 +3727,48 @@ textarea:focus-visible {
   border-radius: var(--radius-lg);
   transition: border-color var(--fast), background-color var(--fast);
 }
+
+.composer-file-input {
+  display: none;
+}
+
+.composer-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.composer-image {
+  position: relative;
+  width: 76px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+}
+
+.composer-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.composer-image button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.58);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
 /* Subtle Codex-like focus: a soft gray border + faint background lift, no glow/ring. */
 .composer-box:focus-within {
   border-color: rgba(255, 255, 255, 0.20);
@@ -4530,4 +4646,22 @@ body {
 
 .ws-hero-sub {
   font-size: 15px;
+}
+
+/* Recent chats intentionally mirror Codex's quiet title-only list. */
+.recent-section .recent-chat {
+  min-height: 26px;
+  padding: 4px 6px;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.recent-section .recent-chat:hover,
+.recent-section .recent-chat.is-active {
+  background: var(--hover) !important;
+}
+
+.recent-section .recent-chat-text em {
+  display: none !important;
 }

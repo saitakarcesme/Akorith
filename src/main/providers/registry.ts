@@ -11,6 +11,7 @@ import {
   addMessage,
   getContextSummary,
   getSessionMessages,
+  getSessionProjectContext,
   recordUsageEvent,
   sessionExists,
   setContextSummary
@@ -46,6 +47,9 @@ const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
 const VALID_ID = /^[a-z0-9-]{1,32}$/
 const VALID_MODEL = /^[\w.:/-]{1,64}$/
 const MAX_PROMPT_CHARS = 200_000
+const MAX_CHAT_IMAGES = 4
+const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
+const VALID_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider {
   const modulePath = isAbsolute(entry.module!) ? entry.module! : join(app.getPath('userData'), entry.module!)
@@ -132,6 +136,9 @@ interface ChatSendArgs {
   sessionId?: string
   /** False for General Chat so repo context cannot leak out of project workspaces. */
   includeDigest?: boolean
+  /** Renderer hint for project chats; main derives trusted context from the session's stored project. */
+  workspaceContext?: { projectName: string; projectPath: string }
+  images?: { name: string; mimeType: string; dataBase64: string }[]
 }
 
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
@@ -176,6 +183,24 @@ async function ensureOlderSummary(
   return cached.summary // fall back to a stale summary if we have one
 }
 
+function validImages(images: unknown): images is NonNullable<ChatSendArgs['images']> {
+  if (images === undefined) return true
+  if (!Array.isArray(images) || images.length > MAX_CHAT_IMAGES) return false
+  return images.every((image) =>
+    image &&
+    typeof image === 'object' &&
+    typeof image.name === 'string' &&
+    image.name.length > 0 &&
+    image.name.length <= 200 &&
+    typeof image.mimeType === 'string' &&
+    VALID_IMAGE_MIME.has(image.mimeType) &&
+    typeof image.dataBase64 === 'string' &&
+    image.dataBase64.length > 0 &&
+    image.dataBase64.length <= MAX_CHAT_IMAGE_BASE64_CHARS &&
+    /^[A-Za-z0-9+/=]+$/.test(image.dataBase64)
+  )
+}
+
 export function registerChatIpc(): void {
   ipcMain.handle('chat:providers', () => describeProviders())
 
@@ -190,7 +215,15 @@ export function registerChatIpc(): void {
       args.prompt.length > MAX_PROMPT_CHARS ||
       (args.model !== undefined && (typeof args.model !== 'string' || !VALID_MODEL.test(args.model))) ||
       (args.sessionId !== undefined && (typeof args.sessionId !== 'string' || !/^[\w-]{1,64}$/.test(args.sessionId))) ||
-      (args.includeDigest !== undefined && typeof args.includeDigest !== 'boolean')
+      (args.includeDigest !== undefined && typeof args.includeDigest !== 'boolean') ||
+      (args.workspaceContext !== undefined &&
+        (!args.workspaceContext ||
+          typeof args.workspaceContext !== 'object' ||
+          typeof args.workspaceContext.projectName !== 'string' ||
+          args.workspaceContext.projectName.length > 200 ||
+          typeof args.workspaceContext.projectPath !== 'string' ||
+          args.workspaceContext.projectPath.length > 1_000)) ||
+      !validImages(args.images)
     ) {
       return { ok: false, error: 'invalid chat:send payload' }
     }
@@ -204,6 +237,7 @@ export function registerChatIpc(): void {
     // usage_event can never be skipped by a UI path. DB trouble must not block
     // the chat itself.
     const sessionId = args.sessionId && sessionExists(args.sessionId) ? args.sessionId : undefined
+    const workspaceContext = args.includeDigest === true && sessionId ? getSessionProjectContext(sessionId) : null
 
     // Phase 14.2 conversation memory: load the session's PRIOR messages BEFORE
     // persisting the new one, so the provider actually receives the conversation
@@ -233,8 +267,12 @@ export function registerChatIpc(): void {
       // digest failure never blocks the send.
       let digest: string | null = null
       try {
-        if (args.includeDigest !== false && getDigestSettings().enabled) {
-          digest = await buildDigest()
+        const digestSettings = getDigestSettings()
+        if (args.includeDigest === true && digestSettings.enabled) {
+          digest = await buildDigest({
+            ...digestSettings,
+            workingDir: workspaceContext?.projectPath || digestSettings.workingDir
+          })
         }
       } catch (err) {
         console.error('[registry] repo digest failed — sending without context:', err)
@@ -247,11 +285,19 @@ export function registerChatIpc(): void {
         summary = await ensureOlderSummary(sessionId, prior, args.providerId, args.model, controller.signal)
       }
 
-      const built = renderProviderPrompt({ priorMessages: prior, currentPrompt: args.prompt, summary, digest })
+      const built = renderProviderPrompt({
+        priorMessages: prior,
+        currentPrompt: args.images?.length
+          ? `${args.prompt}\n\nAttached images: ${args.images.map((image) => image.name).join(', ')}`
+          : args.prompt,
+        summary,
+        digest,
+        workspace: workspaceContext
+      })
       const promptForProvider = built.prompt
       const result = await provider.send(
         promptForProvider,
-        { model: args.model, signal: controller.signal },
+        { model: args.model, signal: controller.signal, images: args.images },
         (token) => {
           if (!sender.isDestroyed()) {
             sender.send('chat:token', { requestId: args.requestId, token })

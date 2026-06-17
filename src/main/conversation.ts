@@ -13,6 +13,11 @@ export interface ConvMessage {
   content: string
 }
 
+export interface WorkspaceContext {
+  projectName: string
+  projectPath: string
+}
+
 export interface ContextPolicy {
   /** Max recent messages kept verbatim in the prompt. */
   recentVerbatim: number
@@ -86,6 +91,8 @@ export interface ProviderPromptInput {
   summary?: string | null
   /** Optional repo digest (Workspace only) — read-only context, not instructions. */
   digest?: string | null
+  /** Current Akorith project scope (Workspace only). */
+  workspace?: WorkspaceContext | null
   policy?: ContextPolicy
 }
 
@@ -100,7 +107,25 @@ export interface BuiltProviderPrompt {
   usedSummary: boolean
   /** Whether the repo digest was included. */
   usedDigest: boolean
+  /** Whether the Akorith workspace context was included. */
+  usedWorkspace: boolean
   approxChars: number
+}
+
+function cleanContextValue(value: string, max: number): string {
+  return value.replace(/[\0\r\n]+/g, ' ').trim().slice(0, max)
+}
+
+function renderWorkspaceContext(ctx?: WorkspaceContext | null): string {
+  if (!ctx?.projectPath?.trim()) return ''
+  const name = cleanContextValue(ctx.projectName || 'Untitled project', 160)
+  const path = cleanContextValue(ctx.projectPath, 1000)
+  return (
+    `## Workspace context\n` +
+    `_Current Akorith project scope. The latest user message is about this project unless they say otherwise._\n\n` +
+    `Project: ${name}\n` +
+    `Working directory: ${path}`
+  )
 }
 
 /**
@@ -111,19 +136,24 @@ export interface BuiltProviderPrompt {
  */
 export function renderProviderPrompt(input: ProviderPromptInput): BuiltProviderPrompt {
   const policy = input.policy ?? DEFAULT_CONTEXT_POLICY
+  const workspace = renderWorkspaceContext(input.workspace)
+  const workspaceBlock = workspace ? `${workspace}\n\n---\n\n` : ''
+  const usedWorkspace = workspaceBlock.length > 0
   const digestBlock = input.digest && input.digest.trim() ? `${input.digest.trim()}\n\n---\n\n` : ''
   const usedDigest = digestBlock.length > 0
+  const contextPrefix = `${workspaceBlock}${digestBlock}`
 
   const window = selectContextWindow(input.priorMessages, policy)
   const hasHistory = input.priorMessages.length > 0
   if (!hasHistory) {
     return {
-      prompt: `${digestBlock}${input.currentPrompt}`,
+      prompt: `${contextPrefix}${input.currentPrompt}`,
       includedVerbatim: 0,
       summarizedCount: 0,
       usedSummary: false,
       usedDigest,
-      approxChars: input.currentPrompt.length
+      usedWorkspace,
+      approxChars: contextPrefix.length + input.currentPrompt.length
     }
   }
 
@@ -137,13 +167,14 @@ export function renderProviderPrompt(input: ProviderPromptInput): BuiltProviderP
   if (window.verbatim.length > 0) parts.push(`Recent conversation:\n${renderTranscript(window.verbatim)}`)
   parts.push(`Latest user message to answer now:\n${input.currentPrompt}`)
 
-  const prompt = `${digestBlock}${parts.join('\n\n')}`
+  const prompt = `${contextPrefix}${parts.join('\n\n')}`
   return {
     prompt,
     includedVerbatim: window.verbatim.length,
     summarizedCount,
     usedSummary,
     usedDigest,
+    usedWorkspace,
     approxChars: prompt.length
   }
 }

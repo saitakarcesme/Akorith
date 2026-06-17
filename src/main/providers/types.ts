@@ -28,6 +28,11 @@ export interface SendResult {
 export interface SendOptions {
   model?: string
   signal?: AbortSignal
+  images?: {
+    name: string
+    mimeType: string
+    dataBase64: string
+  }[]
 }
 
 export interface Provider {
@@ -45,6 +50,14 @@ export interface ProviderConfigEntry {
   enabled: boolean
   /** Local provider: Ollama base URL. */
   baseUrl?: string
+  /** Local provider: start `ollama serve` when the loopback server is down. */
+  autoStart?: boolean
+  /** Local provider: when auto-starting, bind Ollama for LAN clients. */
+  exposeLan?: boolean
+  /** Local provider: scan the local private subnet for a reachable Ollama server. */
+  lanDiscovery?: boolean
+  /** Local provider: optional OLLAMA_HOST override, e.g. "0.0.0.0:11434". */
+  ollamaHost?: string
   /** Override the provider's model list. */
   models?: string[]
   /** Advanced: path to an external module exporting a Provider factory. */

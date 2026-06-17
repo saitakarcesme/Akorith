@@ -124,7 +124,7 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
     chatgpt: { enabled: true },
-    local: { enabled: true, baseUrl: 'http://localhost:11434' }
+    local: { enabled: true, baseUrl: 'http://localhost:11434', autoStart: true, exposeLan: true, lanDiscovery: true }
   },
   bridge: { autoEnter: false },
   router: DEFAULT_ROUTER,

@@ -698,6 +698,7 @@ export default function Sidebar({
                 recentSessions.map((session) => {
                   const provider = labelOf(session.providerId)
                   const project = session.projectId ? projectById.get(session.projectId) : null
+                  const meta = `${project ? `Workspace · ${project.name}` : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
                   return (
                     <div
                       className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
@@ -711,13 +712,10 @@ export default function Sidebar({
                           selectSession(session)
                         }
                       }}
-                      title={session.title}
+                      title={`${session.title} — ${meta}`}
                     >
                       <span className="recent-chat-text">
                         <span>{session.title}</span>
-                        <em>
-                          {project ? `Workspace · ${project.name}` : 'General chat'} · {provider} · {formatDate(session.updatedAt)}
-                        </em>
                       </span>
                       <span className="sidebar-item-actions">
                         {confirmDeleteId === session.id ? (

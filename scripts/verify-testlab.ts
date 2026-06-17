@@ -5,11 +5,11 @@
 // untouched), a real bounded run with metric parsing, timeout process-tree
 // kill, user abort, and sandbox pruning.
 
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { execFileSync } from 'child_process'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { detectFramework, snapshotSource, runTests, parseMetrics, pruneSandboxes } from '../src/main/testlab.ts'
+import { detectFramework, snapshotSource, runTests, parseMetrics, pruneSandboxes, parseGitHubRepoUrl } from '../src/main/testlab.ts'
 
 let pass = 0
 let fail = 0
@@ -25,6 +25,8 @@ function check(name: string, cond: boolean, detail = ''): void {
 
 const sink = (): void => {} // discard streamed output in tests
 const tmpBase = mkdtempSync(join(tmpdir(), 'loopex-verify-'))
+const longRunningNode = 'node -e "setTimeout(()=>{}, 30000)"'
+const gitStatus = (cwd: string): string => execFileSync('git', ['status', '--porcelain'], { cwd }).toString()
 
 async function main(): Promise<void> {
   // --- 1. parseMetrics ---
@@ -50,6 +52,15 @@ async function main(): Promise<void> {
   check('npm ci chosen from lockfile', jsDet.installCommand === 'npm ci', jsDet.installCommand)
   check('ts test path suggested', jsDet.suggestedTestPath.endsWith('.ts'), jsDet.suggestedTestPath)
 
+  const fallbackRepo = join(tmpBase, 'fallback-jsrepo')
+  mkdirSync(fallbackRepo, { recursive: true })
+  writeFileSync(join(fallbackRepo, 'package.json'), JSON.stringify({ dependencies: { next: '^14.0.0', react: '^18.0.0' } }))
+  writeFileSync(join(fallbackRepo, 'tsconfig.json'), '{}')
+  const fallbackDet = await detectFramework(fallbackRepo)
+  check('JS repo fallback uses vitest', fallbackDet.framework === 'vitest', fallbackDet.framework)
+  check('fallback command avoids prompt', fallbackDet.testCommand === 'npx --yes vitest run --config akorith.vitest.config.mjs', fallbackDet.testCommand)
+  check('UI fallback suggests tsx test', fallbackDet.suggestedTestPath.endsWith('.tsx'), fallbackDet.suggestedTestPath)
+
   const pyRepo = join(tmpBase, 'pyrepo')
   mkdirSync(join(pyRepo, 'tests'), { recursive: true })
   writeFileSync(join(pyRepo, 'requirements.txt'), 'pytest\n')
@@ -57,14 +68,20 @@ async function main(): Promise<void> {
   check('pytest detected', pyDet.framework === 'pytest', pyDet.framework)
   check('pip install chosen', /pip install -r requirements.txt/.test(pyDet.installCommand), pyDet.installCommand)
 
+  const gh = parseGitHubRepoUrl('https://github.com/openai/codex.git')
+  check('GitHub HTTPS URL parsed', gh?.cloneUrl === 'https://github.com/openai/codex.git', JSON.stringify(gh))
+  const ghPlain = parseGitHubRepoUrl('github.com/openai/codex')
+  check('GitHub plain URL parsed', ghPlain?.label === 'openai/codex', JSON.stringify(ghPlain))
+  check('non-GitHub URL rejected', parseGitHubRepoUrl('https://example.com/openai/codex') === null)
+
   // --- 3. snapshot leaves SOURCE untouched (against the real repo) ---
   console.log('\nsnapshotSource (source read-only):')
   const repoRoot = process.cwd()
-  const before = execSync('git status --porcelain', { cwd: repoRoot }).toString()
+  const before = gitStatus(repoRoot)
   const snapBox = join(tmpBase, 'snap')
   mkdirSync(snapBox, { recursive: true })
   const snap = await snapshotSource(repoRoot, snapBox)
-  const after = execSync('git status --porcelain', { cwd: repoRoot }).toString()
+  const after = gitStatus(repoRoot)
   check('snapshot copied tracked files (git mode)', snap.mode === 'git' && snap.files > 10, JSON.stringify(snap))
   check('sandbox has a copied file', existsSync(join(snapBox, 'package.json')))
   check('SOURCE git status unchanged by snapshot', before === after)
@@ -114,7 +131,7 @@ async function main(): Promise<void> {
     sandbox: tBox,
     framework: 'unknown',
     files: [],
-    testCommand: 'sleep 30',
+    testCommand: longRunningNode,
     installDeps: false,
     timeoutMs: 2_000,
     signal: new AbortController().signal,
@@ -134,7 +151,7 @@ async function main(): Promise<void> {
     sandbox: aBox,
     framework: 'unknown',
     files: [],
-    testCommand: 'sleep 30',
+    testCommand: longRunningNode,
     installDeps: false,
     timeoutMs: 60_000,
     signal: aCtrl.signal,
@@ -151,8 +168,8 @@ async function main(): Promise<void> {
     await new Promise((r) => setTimeout(r, 15))
   }
   pruneSandboxes(pBase, 2)
-  const remaining = execSync(`ls -1 ${pBase} | wc -l`).toString().trim()
-  check('prune keeps last N (2)', remaining === '2', remaining)
+  const remaining = readdirSync(pBase).length
+  check('prune keeps last N (2)', remaining === 2, String(remaining))
 }
 
 async function unsafePathRejected(): Promise<boolean> {

@@ -29,6 +29,13 @@ import { dirname, isAbsolute, join, normalize } from 'path'
 
 export type Framework = 'pytest' | 'jest' | 'vitest' | 'npm-test' | 'unknown'
 
+export interface GitHubRepoRef {
+  owner: string
+  repo: string
+  cloneUrl: string
+  label: string
+}
+
 export interface Detection {
   framework: Framework
   testCommand: string
@@ -96,6 +103,41 @@ const DENYLIST = new Set([
 ])
 
 const RAW_OUTPUT_CAP = 60_000
+const AKORITH_VITEST_CONFIG = 'akorith.vitest.config.mjs'
+
+export function parseGitHubRepoUrl(input: string): GitHubRepoRef | null {
+  const raw = input.trim()
+  if (!raw || /[\0\r\n]/.test(raw)) return null
+
+  const ssh = raw.match(/^git@github\.com:([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?$/)
+  if (ssh) {
+    return {
+      owner: ssh[1],
+      repo: ssh[2],
+      cloneUrl: `https://github.com/${ssh[1]}/${ssh[2]}.git`,
+      label: `${ssh[1]}/${ssh[2]}`
+    }
+  }
+
+  const candidate = raw.startsWith('github.com/') ? `https://${raw}` : raw
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'github.com') return null
+  const [owner, repoPart] = url.pathname.split('/').filter(Boolean)
+  if (!owner || !repoPart) return null
+  const repo = repoPart.replace(/\.git$/i, '')
+  if (!/^[A-Za-z0-9-]+$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(repo)) return null
+  return {
+    owner,
+    repo,
+    cloneUrl: `https://github.com/${owner}/${repo}.git`,
+    label: `${owner}/${repo}`
+  }
+}
 
 interface ExecResult {
   code: number | null
@@ -159,6 +201,16 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
     }
     if (pkg.scripts?.test && !/no test specified/i.test(pkg.scripts.test)) {
       return { framework: 'npm-test', testCommand: 'npm test', installCommand: install, lockfile, suggestedTestPath }
+    }
+
+    const hasUiDeps = Boolean(deps.react || deps.next || deps.vite || deps['@vitejs/plugin-react'])
+    return {
+      framework: 'vitest',
+      testCommand: `npx --yes vitest run --config ${AKORITH_VITEST_CONFIG}`,
+      installCommand: install || 'npm install',
+      lockfile,
+      suggestedTestPath: `akorith.generated.test.${isTs ? (hasUiDeps ? 'tsx' : 'ts') : 'js'}`,
+      note: 'No existing test runner was detected; using a temporary Vitest fallback.'
     }
   }
 
@@ -463,6 +515,30 @@ export async function runTests(input: RunInput): Promise<RunMetrics> {
     mkdirSync(dirname(dest), { recursive: true })
     writeFileSync(dest, f.content, 'utf8')
     input.onOutput(`\x1b[90m[loopex] wrote ${f.path}\x1b[0m\r\n`)
+  }
+
+  if ((input.framework || '').toLowerCase() === 'vitest' && input.testCommand.includes(AKORITH_VITEST_CONFIG)) {
+    const configPath = join(input.sandbox, AKORITH_VITEST_CONFIG)
+    if (!existsSync(configPath)) {
+      writeFileSync(
+        configPath,
+        [
+          "import { defineConfig } from 'vitest/config'",
+          "import { fileURLToPath } from 'node:url'",
+          "import { dirname, resolve } from 'node:path'",
+          '',
+          'const root = dirname(fileURLToPath(import.meta.url))',
+          '',
+          'export default defineConfig({',
+          "  resolve: { alias: { '@': root, '~': root } },",
+          "  test: { environment: 'node', globals: false }",
+          '})',
+          ''
+        ].join('\n'),
+        'utf8'
+      )
+      input.onOutput(`\x1b[90m[loopex] wrote ${AKORITH_VITEST_CONFIG}\x1b[0m\r\n`)
+    }
   }
 
   // 2. Install dependencies (failure is its own status, not a test failure).

@@ -95,6 +95,13 @@ In more detail:
 Akorith detects whichever tools are present; any subset works, and a missing tool simply
 shows as unavailable instead of breaking the app.
 
+Akorith also tries to auto-start `ollama serve` when the default local provider
+(`http://localhost:11434`) is down. By default it starts Ollama with LAN binding
+(`OLLAMA_HOST=0.0.0.0:11434`) and, on another machine such as a MacBook, scans the
+private LAN for a reachable Ollama `/api/tags` endpoint when localhost is unavailable.
+That lets a MacBook use the models exposed from a running Windows host PC. If Ollama was
+already running localhost-only on the host, restart Ollama/Akorith once so it can bind to LAN.
+
 ## Run in development
 
 ```bash
@@ -147,18 +154,29 @@ The macro-loop drives a planner → executor cycle toward a goal you set.
 
 ## Test Lab and PDF reports
 
-The Test route can generate tests in an isolated sandbox, compute ISAScore for selected runs,
-and export the evaluation as a PDF. Exported PDFs are saved to your **Downloads** folder with an
-`akorith-...pdf` filename; Akorith shows the exact saved path and provides **Reveal** and
-**Open** actions.
+The Test route is intentionally simple: pick a local repo or paste a GitHub repo URL, pick the kind
+of test you want (debug, security, core unit logic, edge cases, or UI behavior), let Local/Ollama
+generate and run tests in an isolated sandbox, then score selected runs with Claude or ChatGPT to
+produce ISAScore. GitHub URLs are cloned into Akorith's local managed cache before testing.
+Exported PDFs are saved to your **Downloads** folder with an `akorith-...pdf` filename; Akorith
+shows the exact saved path and provides **Reveal** and **Open** actions.
 
 To make generated tests more likely to actually run and pass, Akorith reads a bounded, read-only
-snapshot of your repo's source structure and a few sample files and feeds them to the model, with
+snapshot of your repo's source structure and a few sample files and feeds them to the local model, with
 framework-specific rules (import the real modules, correct pytest/vitest/jest syntax, no
 empty/"0 tests"). If a generated test still fails, a **Repair & rerun** button sends the failing
-file plus the sandbox output back to the model for a corrected version and reruns it once — your
+file plus the sandbox output back to the local model for a corrected version and reruns it once — your
 source repo is never modified. A 12-run validation across pytest, vitest, and jest on real
-projects is recorded in `docs/validation/testlab-10-run-validation.md`.
+projects is recorded in `docs/validation/testlab-10-run-validation.md`. For JS/TS repos without an
+existing runner, Akorith uses a temporary Vitest fallback and writes a sandbox-only config that
+resolves `@/` imports to the repo root.
+
+## Image chat
+
+The chat composer accepts PNG, JPEG, WebP, and GIF attachments. Local/Ollama receives the image
+bytes for multimodal local models, so you can discuss screenshots or photos with a vision-capable
+model. Claude/Codex CLI providers currently receive text-only attachment names because their
+Akorith provider bridge is stdin text.
 
 ## Current limitations
 

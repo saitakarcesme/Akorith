@@ -59,6 +59,13 @@ const access = detectPermissionPrompt('Akorith requires permission to allow acce
 assert.equal(access.detected, true)
 assert.equal(access.requiresUserReview, true)
 
+const trustWorkspace = detectPermissionPrompt('Do you trust the files in this workspace? Press Enter to continue')
+assert.equal(trustWorkspace.detected, true, 'workspace trust prompt detected')
+assert.equal(trustWorkspace.kind, 'allow_access')
+assert.equal(trustWorkspace.riskLevel, 'medium')
+assert.equal(trustWorkspace.requiresUserReview, true, 'workspace trust requires review')
+assert.equal(trustWorkspace.suggestedAction, '', 'workspace trust has no auto-answer')
+
 assert.equal(detectPermissionPrompt('just some normal build output\nDone in 2s').detected, false)
 
 // ---------- low/medium/high policy decisions ----------
@@ -72,6 +79,7 @@ assert.equal(decidePermissionPolicy({ mode: 'auto', detection: yn, confidence: 0
 // Auto mode: medium/high risk -> always pause.
 assert.equal(decidePermissionPolicy({ mode: 'auto', detection: numbered, confidence: 0.99 }).decision, 'pause_for_user')
 assert.equal(decidePermissionPolicy({ mode: 'auto', detection: destructive, confidence: 0.99 }).decision, 'pause_for_user')
+assert.equal(decidePermissionPolicy({ mode: 'auto', detection: trustWorkspace, confidence: 0.99 }).decision, 'pause_for_user')
 // No prompt -> ignore.
 assert.equal(
   decidePermissionPolicy({ mode: 'auto', detection: detectPermissionPrompt('nothing here'), confidence: 1 }).decision,

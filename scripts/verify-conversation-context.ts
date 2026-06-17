@@ -57,6 +57,19 @@ const mk = (role: ConvMessage['role'], content: string): ConvMessage => ({ role,
   assert.equal(built.usedDigest, true)
 }
 
+// ---------- fresh workspace session: project scope is included ----------
+{
+  const built = renderProviderPrompt({
+    priorMessages: [],
+    currentPrompt: 'what should we change?',
+    workspace: { projectName: 'Akorith', projectPath: 'C:/Users/me/project' }
+  })
+  assert.match(built.prompt, /## Workspace context/, 'workspace context is included')
+  assert.match(built.prompt, /Project: Akorith/, 'project name is included')
+  assert.match(built.prompt, /Working directory: C:\/Users\/me\/project/, 'project path is included')
+  assert.equal(built.usedWorkspace, true)
+}
+
 // ---------- ongoing session: prior turns are actually sent (THE BUG FIX) ----------
 {
   const prior = [mk('user', 'Remember: my favorite color is green.'), mk('assistant', 'Got it — green.')]

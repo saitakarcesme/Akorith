@@ -100,6 +100,7 @@ export default function MacroLoopPanel({
   const [resultSummary, setResultSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<MacroSessionRow[]>([])
+  const [copiedPrompt, setCopiedPrompt] = useState(false)
   // Loop mode for the create form (before a session exists). Default Approval.
   const [formMode, setFormMode] = useState<MacroMode>('approval')
   const [summarizing, setSummarizing] = useState(false)
@@ -268,6 +269,17 @@ export default function MacroLoopPanel({
       editedProposal: proposalDraft
     })
     applyResponse(res)
+  }
+
+  const copyProposal = async (): Promise<void> => {
+    if (!proposalDraft.trim()) return
+    try {
+      await navigator.clipboard.writeText(proposalDraft)
+      setCopiedPrompt(true)
+      setTimeout(() => setCopiedPrompt(false), 1500)
+    } catch {
+      setError('Copy failed.')
+    }
   }
 
   const skip = async (): Promise<void> => {
@@ -505,7 +517,12 @@ export default function MacroLoopPanel({
             </div>
           )}
           <label className="macro-field">
-            <span>Approved executor prompt</span>
+            <span className="macro-field-head">
+              <span>Approved executor prompt</span>
+              <button type="button" className="macro-copy-btn" onClick={() => void copyProposal()}>
+                {copiedPrompt ? 'Copied' : 'Copy'}
+              </button>
+            </span>
             <textarea value={proposalDraft} rows={6} onChange={(e) => setProposalDraft(e.target.value)} />
           </label>
           {turn.expectedResult && <div className="macro-expected">Expected: {turn.expectedResult}</div>}

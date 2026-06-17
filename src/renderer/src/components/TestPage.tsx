@@ -23,6 +23,19 @@ interface ResultItem {
   error?: string
 }
 
+interface RunConfig {
+  framework: string
+  testCommand: string
+  installCommand: string
+  testPath: string
+}
+
+interface DetectionResult {
+  detection: TestDetection
+  context: TestRepoContext | null
+  sourceRepo: string
+}
+
 function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -54,34 +67,38 @@ function statusColor(status: string | null | undefined): string {
 
 const SCORE_DIMS: IsaDimensionName[] = ['tests', 'speed', 'tokens', 'quality']
 
-// Phase 13.3 Test Lab presets. Framework presets fix the command/path; focus
-// presets (empty command) auto-detect and steer the generation prompt instead.
+// Focus presets only. The runner/path still come from repo detection so the
+// normal flow stays: repo -> test kind -> Local LLM -> optional ISAScore judge.
 interface TestPreset {
   id: string
   label: string
-  framework?: string
-  testCommand?: string
-  testPath?: string
   focus?: string
 }
 const PRESETS: TestPreset[] = [
-  { id: 'auto', label: 'Auto-detect' },
-  { id: 'vitest', label: 'Vitest', framework: 'vitest', testCommand: 'npx vitest run', testPath: 'akorith.generated.test.ts' },
-  { id: 'jest', label: 'Jest', framework: 'jest', testCommand: 'npx jest', testPath: 'akorith.generated.test.js' },
-  { id: 'pytest', label: 'pytest', framework: 'pytest', testCommand: 'python3 -m pytest -q', testPath: 'test_akorith_generated.py' },
   {
-    id: 'react',
-    label: 'React component tests',
-    framework: 'vitest',
-    testCommand: 'npx vitest run',
-    testPath: 'akorith.generated.test.tsx',
-    focus: 'React component rendering and interaction tests (Testing Library style).'
+    id: 'debug',
+    label: 'Debug regression',
+    focus: 'Find likely regressions and fragile logic; write focused tests that reproduce bugs or edge-case failures.'
   },
-  { id: 'unit', label: 'Utility/unit tests', focus: 'Pure utility/unit tests for the core logic.' },
   {
     id: 'security',
-    label: 'Security-focused tests',
-    focus: 'Security edge cases: input validation, injection, XSS, path traversal, unsafe parsing.'
+    label: 'Security holes',
+    focus: 'Probe security-sensitive behavior: validation, injection, path traversal, unsafe parsing, permissions, and trust boundaries.'
+  },
+  {
+    id: 'unit',
+    label: 'Core unit logic',
+    focus: 'Cover pure utility and domain logic with small deterministic unit tests.'
+  },
+  {
+    id: 'edge',
+    label: 'Edge cases',
+    focus: 'Stress boundary values, empty inputs, malformed data, and unusual state transitions.'
+  },
+  {
+    id: 'ui',
+    label: 'UI behavior',
+    focus: 'For React/UI repos, test visible behavior, state changes, and user interactions without brittle snapshots.'
   }
 ]
 
@@ -116,12 +133,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [installDeps, setInstallDeps] = useState(true)
   const [testPath, setTestPath] = useState('')
 
-  const [targetDesc, setTargetDesc] = useState('')
-  const [comparison, setComparison] = useState(false)
-  const [compareModels, setCompareModels] = useState<string[]>([])
-  // Phase 13.3: simple preset-driven flow; advanced fields are collapsed.
-  const [preset, setPreset] = useState('auto')
-  const [presetFocus, setPresetFocus] = useState('')
+  const [preset, setPreset] = useState('debug')
+  const [presetFocus, setPresetFocus] = useState(PRESETS[0]?.focus ?? '')
 
   const [running, setRunning] = useState(false)
   const [repairingIdx, setRepairingIdx] = useState<number | null>(null)
@@ -130,10 +143,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [results, setResults] = useState<ResultItem[]>([])
   const [recent, setRecent] = useState<TestRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null)
 
   // Phase 8: evaluate persisted test_runs without re-running them.
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([])
-  const [includeQuality, setIncludeQuality] = useState(false)
   const [judgeProviderId, setJudgeProviderId] = useState('')
   const [judgeModel, setJudgeModel] = useState('')
   const [evaluating, setEvaluating] = useState(false)
@@ -146,8 +159,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const currentRunId = useRef<string | null>(null)
   const currentReqId = useRef<string | null>(null)
 
-  const selected = providers.find((p) => p.id === providerId)
-  const judgeProviders = providers.filter((p) => p.available.ok && p.kind.includes('chat'))
+  const localProvider = providers.find((p) => p.id === 'local')
+  const selected = localProvider
+  const judgeProviders = providers.filter((p) => p.available.ok && p.kind.includes('chat') && (p.id === 'claude' || p.id === 'chatgpt'))
   const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
   const projectOptions = projects.filter((project) => Boolean(project.path))
   const selectedProjectPath = projectOptions.find((project) => project.path === sourceRepo)?.path ?? ''
@@ -167,8 +181,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       .then((list) => {
         setProviders(list)
         setProviderId((cur) => {
-          if (list.some((p) => p.id === cur && p.available.ok)) return cur
-          return list.find((p) => p.available.ok)?.id ?? ''
+          if (cur === 'local' && list.some((p) => p.id === 'local' && p.available.ok)) return cur
+          return list.find((p) => p.id === 'local' && p.available.ok)?.id ?? 'local'
         })
       })
       .catch(() => setProviders([]))
@@ -176,8 +190,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setSettings(s)
       setInstallDeps(s.installDeps)
       setSourceRepo((cur) => cur || s.sourceRepo)
-      // Prefer the configured default provider when it is available.
-      setProviderId((cur) => cur || s.defaultProviderId)
+      setProviderId((cur) => cur || 'local')
     })
     void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
     refreshRecent()
@@ -201,12 +214,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setModel((cur) => (selected && selected.models.includes(cur) ? cur : (selected?.models[0] ?? '')))
   }, [selected])
 
-  // Pick a sensible but overridable judge default. Prefer a subscription model
-  // when available, but any chat-capable registry provider can be selected.
+  // Pick a sensible but overridable judge default. ISAScore quality judging is
+  // intentionally subscription-only here: Claude first, then ChatGPT.
   useEffect(() => {
     setJudgeProviderId((cur) => {
       if (judgeProviders.some((p) => p.id === cur)) return cur
-      return judgeProviders.find((p) => p.id === 'claude')?.id ?? judgeProviders.find((p) => p.id === 'chatgpt')?.id ?? judgeProviders[0]?.id ?? ''
+      return (
+        judgeProviders.find((p) => p.id === 'claude')?.id ||
+        judgeProviders.find((p) => p.id === 'chatgpt')?.id ||
+        judgeProviders[0]?.id ||
+        ''
+      )
     })
   }, [providers])
 
@@ -214,14 +232,33 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setJudgeModel((cur) => (judgeSelected && judgeSelected.models.includes(cur) ? cur : (judgeSelected?.models[0] ?? '')))
   }, [judgeSelected])
 
-  const detect = async (): Promise<TestDetection | null> => {
-    setError(null)
-    if (!sourceRepo.trim()) {
+  const prepareSourceRepo = async (): Promise<string | null> => {
+    const input = sourceRepo.trim()
+    if (!input) {
       setError('Pick a source repo first.')
       return null
     }
-    await window.api.test.setSourceRepo(sourceRepo.trim())
-    const d = await window.api.test.detect(sourceRepo.trim())
+    const resolved = await window.api.test.resolveSource(input)
+    if (!resolved.ok) {
+      setError(resolved.error)
+      setSourceNotice(null)
+      return null
+    }
+    if (resolved.path !== input) {
+      setSourceRepo(resolved.path)
+      setSourceNotice(`${resolved.cloned ? 'Cloned' : 'Using cached clone'} ${resolved.label}`)
+    } else {
+      setSourceNotice(null)
+    }
+    return resolved.path
+  }
+
+  const detect = async (): Promise<DetectionResult | null> => {
+    setError(null)
+    const repoPath = await prepareSourceRepo()
+    if (!repoPath) return null
+    await window.api.test.setSourceRepo(repoPath)
+    const d = await window.api.test.detect(repoPath)
     if ('error' in d) {
       setError(d.error)
       setDetection(null)
@@ -234,42 +271,38 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setTestPath(d.suggestedTestPath)
     // Pull a bounded read-only structure digest so generation imports real files.
     try {
-      const ctx = await window.api.test.context(sourceRepo.trim())
-      setRepoContext(ctx && !('error' in ctx) ? ctx : null)
+      const ctx = await window.api.test.context(repoPath)
+      const nextContext = ctx && !('error' in ctx) ? ctx : null
+      setRepoContext(nextContext)
+      if (!d.testCommand.trim()) {
+        setError('Auto-detect could not choose a runner. Check the runner details.')
+      }
+      return { detection: d, context: nextContext, sourceRepo: repoPath }
     } catch {
       setRepoContext(null)
     }
-    return d
+    if (!d.testCommand.trim()) {
+      setError('Auto-detect could not choose a runner. Check the runner details.')
+    }
+    return { detection: d, context: null, sourceRepo: repoPath }
   }
 
-  // Apply a preset: fill framework/command/path defaults + a generation focus.
-  // Presets without their own command auto-detect from the repo.
+  // Apply the requested test focus. Repo detection owns framework/command/path.
   const applyPreset = async (id: string): Promise<void> => {
     setPreset(id)
     const p = PRESETS.find((x) => x.id === id)
-    if (!p || id === 'auto') {
-      setPresetFocus('')
-      if (sourceRepo.trim()) await detect()
-      return
-    }
-    // Detect first when a repo is selected so lockfile-aware install defaults
-    // stay accurate; then overlay the explicit preset command/path.
+    setPresetFocus(p?.focus ?? '')
     if (sourceRepo.trim()) await detect()
-    if (p.framework) setFramework(p.framework)
-    if (p.testCommand) setTestCommand(p.testCommand)
-    if (p.testPath) setTestPath(p.testPath)
-    setPresetFocus(p.focus ?? '')
+    setError(null)
   }
 
-  // Optional instruction; falls back to the preset focus, then a sane default.
-  const effectiveTarget = (): string =>
-    targetDesc.trim() || presetFocus || 'the most important logic in this repository'
+  const effectiveTarget = (): string => presetFocus || 'the most important logic in this repository'
 
   // Framework-specific rules that keep generated tests runnable (no "0 tests",
   // correct syntax, real imports). Steers away from the brittle patterns that
   // produced failing runs in manual testing.
-  const frameworkRules = (): string => {
-    const fw = (framework || '').toLowerCase()
+  const frameworkRules = (runFramework = framework): string => {
+    const fw = (runFramework || '').toLowerCase()
     if (fw === 'pytest') {
       return [
         '- Use plain pytest: `def test_*()` functions with `assert`. Do NOT require pytest plugins, fixtures from conftest, or network access.',
@@ -281,7 +314,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     if (fw === 'vitest' || fw === 'jest') {
       return [
         `- Use ${fw} syntax: import { describe, it, expect } from '${fw}' (vitest) — for jest the globals are available, do not import them.`,
-        '- Import the modules under test using the EXACT relative path and exported names shown in the structure below. Verify the export exists before testing it.',
+        '- Import modules using paths that resolve from the generated test file. Prefer relative imports such as `./lib/example` or `./src/example`; if the repo uses `@/`, Akorith fallback Vitest resolves `@` to the repo root.',
+        '- Use the exact exported names shown in the structure/samples below. Verify the export exists before testing it.',
         '- Only test pure functions/logic that run in Node without a browser, DB, or network. Do not import React components unless the preset is React.',
         '- Use the correct extension already chosen for the file. Include at least 3 real `it(...)` tests with concrete assertions — never an empty describe block.'
       ].join('\n')
@@ -293,31 +327,36 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     ].join('\n')
   }
 
-  const buildStructureBlock = (): string => {
-    if (!repoContext) return ''
-    const samples = repoContext.samples
+  const buildStructureBlock = (context = repoContext): string => {
+    if (!context) return ''
+    const samples = context.samples
       .map((s) => `--- FILE: ${s.path} ---\n${s.content}`)
       .join('\n\n')
     return (
       `\nRepository structure (read-only context — these are REAL files; import from them, do not invent names):\n` +
-      `Source files (${repoContext.fileCount} total, truncated):\n${repoContext.tree || '(none found)'}\n` +
+      `Source files (${context.fileCount} total, truncated):\n${context.tree || '(none found)'}\n` +
       (samples ? `\nSample source files you can import and test directly:\n${samples}\n` : '')
     )
   }
 
-  const buildGenPrompt = (): string =>
+  const buildGenPrompt = (config: RunConfig, context = repoContext): string =>
     `You are generating an automated test file for an existing repository. First study the repository structure and sample files below, then write tests that import the REAL modules and assert on their REAL behavior.\n\n` +
-    `Framework: ${framework || 'unit'}\n` +
+    `Framework: ${config.framework || 'unit'}\n` +
     `Target: ${effectiveTarget()}\n` +
     (presetFocus ? `Emphasis: ${presetFocus}\n` : '') +
-    `\nRules (follow exactly so the tests actually run and pass):\n${frameworkRules()}\n` +
-    buildStructureBlock() +
-    `\nThe file will be saved as "${testPath}" (relative to the repo root) and run with: ${testCommand}\n` +
+    `\nRules (follow exactly so the tests actually run and pass):\n${frameworkRules(config.framework)}\n` +
+    buildStructureBlock(context) +
+    `\nThe file will be saved as "${config.testPath}" (relative to the repo root) and run with: ${config.testCommand}\n` +
     `Make sure imports resolve from that location.\n\n` +
     `Respond with ONLY the complete test file content inside a single fenced code block — no prose, no explanation.`
 
   /** Generate (local model) → write into a fresh sandbox → run → metrics. */
-  const runOne = async (useModel: string): Promise<ResultItem> => {
+  const runOne = async (
+    useModel: string,
+    config: RunConfig,
+    context: TestRepoContext | null,
+    sourcePath: string
+  ): Promise<ResultItem> => {
     const reqId = newId()
     currentReqId.current = reqId
     setPhase(`generating tests with ${useModel || providerId}…`)
@@ -325,7 +364,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     let tokens: number | undefined
     let runModel = useModel
     try {
-      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildGenPrompt() })
+      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildGenPrompt(config, context) })
       if (!res.ok) return { model: useModel, pending: false, error: res.error }
       genText = res.result.text
       runModel = res.result.model
@@ -342,19 +381,19 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
     const runId = newId()
     currentRunId.current = runId
-    setPhase(`running ${framework} in sandbox…`)
+    setPhase(`running ${config.framework} in sandbox…`)
     try {
       const res = await window.api.test.run({
         runId,
-        sourceRepo: sourceRepo.trim(),
+        sourceRepo: sourcePath,
         targetDesc: effectiveTarget(),
         providerId,
         model: runModel,
-        framework,
-        testCommand,
-        installCommand: installCommand || undefined,
+        framework: config.framework,
+        testCommand: config.testCommand,
+        installCommand: config.installCommand || undefined,
         installDeps,
-        files: [{ path: testPath, content: code }],
+        files: [{ path: config.testPath, content: code }],
         tokens,
         attempts: 1,
         timeoutMs: settings?.timeoutMs
@@ -371,28 +410,52 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const canRun =
     !running &&
     Boolean(sourceRepo.trim()) &&
-    Boolean(testCommand.trim()) &&
-    Boolean(testPath.trim()) &&
     Boolean(selected?.available.ok)
 
   const handleRun = async (): Promise<void> => {
     setError(null)
     if (!canRun) {
       if (!sourceRepo.trim()) setError('Pick a source repo.')
-      else if (!testCommand.trim()) setError('Choose a preset (or run Detect) to set the test command.')
-      else if (!testPath.trim()) setError('Set a test file path in Advanced.')
-      else if (!selected?.available.ok) setError('Pick an available provider.')
+      else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to generate tests.')
       return
     }
 
-    const models = comparison && compareModels.length >= 2 ? compareModels : [model]
+    const preparedSource = await prepareSourceRepo()
+    if (!preparedSource) return
+
+    let sourcePath = preparedSource
+    let runConfig: RunConfig = { framework, testCommand, installCommand, testPath }
+    let context = repoContext
+    if (!runConfig.framework.trim() || !runConfig.testCommand.trim() || !runConfig.testPath.trim() || !context) {
+      setPhase('detecting repo test runner…')
+      const detected = await detect()
+      if (!detected) {
+        setPhase('')
+        return
+      }
+      sourcePath = detected.sourceRepo
+      runConfig = {
+        framework: detected.detection.framework,
+        testCommand: detected.detection.testCommand,
+        installCommand: detected.detection.installCommand,
+        testPath: detected.detection.suggestedTestPath
+      }
+      context = detected.context
+    }
+    if (!runConfig.testCommand.trim() || !runConfig.testPath.trim()) {
+      setPhase('')
+      setError('Akorith could not detect a runnable test command for this repo. Open Runner details and set the command/path.')
+      return
+    }
+
+    const models = [model]
     setRunning(true)
     setClearKey((k) => k + 1)
     setResults(models.map((m) => ({ model: m, pending: true })))
     const completed: ResultItem[] = []
 
     for (let i = 0; i < models.length; i++) {
-      const item = await runOne(models[i])
+      const item = await runOne(models[i], runConfig, context, sourcePath)
       completed.push(item)
       setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
     }
@@ -479,7 +542,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     try {
       const res = await window.api.test.run({
         runId,
-        sourceRepo: sourceRepo.trim(),
+        sourceRepo: failedRun.sourceRepo || sourceRepo.trim(),
         targetDesc: `repair: ${effectiveTarget()}`,
         providerId,
         model: runModel,
@@ -508,10 +571,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     }
   }
 
-  const compareModelToggle = (m: string): void => {
-    setCompareModels((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]))
-  }
-
   const metric = (run: TestRunRow): string => {
     const p = run.passed ?? 0
     const f = run.failed ?? 0
@@ -525,23 +584,27 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setLatestEvaluation(null)
   }
 
-  const runEvaluation = async (runIds = selectedRunIds): Promise<void> => {
+  const runEvaluation = async (
+    runIds = selectedRunIds,
+    opts: { includeQuality?: boolean } = {}
+  ): Promise<void> => {
+    const wantsQuality = opts.includeQuality ?? true
     setEvalError(null)
     if (runIds.length === 0) {
       setEvalError('Select at least one finished run.')
       return
     }
-    if (includeQuality && !judgeProviderId) {
-      setEvalError('Pick an available judge provider, or turn off quality.')
+    if (wantsQuality && !judgeProviderId) {
+      setEvalError('Pick Claude or ChatGPT to score this run.')
       return
     }
     setEvaluating(true)
     try {
       const res = await window.api.evaluate.run({
         testRunIds: runIds,
-        includeQuality,
-        judgeProviderId: includeQuality ? judgeProviderId : undefined,
-        judgeModel: includeQuality ? judgeModel || undefined : undefined
+        includeQuality: wantsQuality,
+        judgeProviderId: wantsQuality ? judgeProviderId : undefined,
+        judgeModel: wantsQuality ? judgeModel || undefined : undefined
       })
       if (!res.ok) {
         setEvalError(res.error)
@@ -622,10 +685,11 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 setSourceRepo(e.target.value)
                 setDetection(null)
                 setRepoContext(null)
+                setSourceNotice(null)
                 setError(null)
               }}
             >
-              <option value="">Custom path</option>
+              <option value="">GitHub URL or custom path</option>
               {projectOptions.map((project) => (
                 <option key={project.id} value={project.path ?? ''}>
                   {project.name}
@@ -637,15 +701,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <input
               type="text"
               value={sourceRepo}
-              placeholder="/path/to/repo"
-              onChange={(e) => setSourceRepo(e.target.value)}
+              placeholder="Local path or https://github.com/owner/repo"
+              onChange={(e) => {
+                setSourceRepo(e.target.value)
+                setSourceNotice(null)
+              }}
               spellCheck={false}
             />
             <button type="button" className="test-btn" onClick={() => void detect()}>
-              Detect
+              Auto-detect
             </button>
           </div>
         </label>
+
+        {sourceNotice && <div className="test-detected">{sourceNotice}</div>}
 
         {detection && (
           <div className="test-detected">
@@ -655,10 +724,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           </div>
         )}
 
-        {/* Simple flow: preset + provider/model + optional instruction. */}
+        {/* Simple flow: repo + test kind + Local model. */}
         <div className="test-grid">
           <label className="test-field">
-            <span>Preset</span>
+            <span>Test type</span>
             <select value={preset} onChange={(e) => void applyPreset(e.target.value)}>
               {PRESETS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -667,45 +736,26 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               ))}
             </select>
           </label>
-          <label className="test-field">
-            <span>Provider</span>
-            <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
-              {providers.length === 0 && <option value="">No providers</option>}
-              {providers.map((p) => (
-                <option key={p.id} value={p.id} disabled={!p.available.ok}>
-                  {p.available.ok ? p.label : `${p.label} — unavailable`}
-                </option>
-              ))}
-            </select>
-          </label>
+          {selected && selected.models.length > 0 && (
+            <label className="test-field">
+              <span>Local model</span>
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                {selected.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
-        {selected && selected.models.length > 0 && !comparison && (
-          <label className="test-field">
-            <span>Model</span>
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              {selected.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
+        {selected && !selected.available.ok && (
+          <div className="test-error">Local (Ollama) is unavailable. Akorith will auto-start it when possible.</div>
         )}
 
-        <label className="test-field">
-          <span>Optional instruction</span>
-          <textarea
-            value={targetDesc}
-            onChange={(e) => setTargetDesc(e.target.value)}
-            rows={2}
-            placeholder={presetFocus || 'Leave blank to use the preset, or describe what to test…'}
-            spellCheck={false}
-          />
-        </label>
-
-        {/* Advanced: framework / commands / comparison (auto-filled by preset/detect). */}
+        {/* Advanced: auto-filled runner details, only needed when detection misses. */}
         <details className="test-advanced">
-          <summary>Advanced</summary>
+          <summary>Runner details</summary>
           <div className="test-grid">
             <label className="test-field">
               <span>Framework</span>
@@ -730,24 +780,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               Install deps in sandbox
             </label>
           </div>
-          <label className="test-toggle">
-            <input type="checkbox" checked={comparison} onChange={() => setComparison((v) => !v)} />
-            Compare multiple models (each in its own sandbox)
-          </label>
-          {comparison && (
-            <div className="test-compare-models">
-              {selected && selected.models.length > 0 ? (
-                selected.models.map((m) => (
-                  <label key={m} className="test-compare-model">
-                    <input type="checkbox" checked={compareModels.includes(m)} onChange={() => compareModelToggle(m)} />
-                    {m}
-                  </label>
-                ))
-              ) : (
-                <span className="test-hint">Selected provider exposes no model list to compare.</span>
-              )}
-            </div>
-          )}
         </details>
 
         <div className="test-actions">
@@ -757,7 +789,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              {comparison ? 'Generate & compare' : 'Generate & run'}
+              Generate tests
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -820,7 +852,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   setLatestEvaluation(null)
                 }}
               >
-                Use comparison set
+                Use these runs
               </button>
             )}
           </div>
@@ -839,24 +871,18 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <button
               type="button"
               className="test-btn is-primary"
-              disabled={evaluating || selectedRunIds.length === 0 || (includeQuality && !judgeProviderId)}
+              disabled={evaluating || selectedRunIds.length === 0 || !judgeProviderId}
               onClick={() => void runEvaluation()}
             >
-              {evaluating ? 'Evaluating…' : 'Compute ISAScore'}
+              {evaluating ? 'Scoring…' : 'Score with Claude / ChatGPT'}
             </button>
           </div>
 
-          <label className="test-toggle">
-            <input type="checkbox" checked={includeQuality} onChange={() => setIncludeQuality((v) => !v)} />
-            Include LLM quality
-          </label>
-
-          {includeQuality && (
-            <div className="test-grid">
+          <div className="test-grid">
               <label className="test-field">
-                <span>Judge provider</span>
+                <span>Score provider</span>
                 <select value={judgeProviderId} onChange={(e) => setJudgeProviderId(e.target.value)}>
-                  {judgeProviders.length === 0 && <option value="">No available chat providers</option>}
+                  {judgeProviders.length === 0 && <option value="">No available Claude / ChatGPT</option>}
                   {judgeProviders.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -866,7 +892,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               </label>
               {judgeSelected && judgeSelected.models.length > 0 && (
                 <label className="test-field">
-                  <span>Judge model</span>
+                  <span>Score model</span>
                   <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
                     {judgeSelected.models.map((m) => (
                       <option key={m} value={m}>
@@ -877,7 +903,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 </label>
               )}
             </div>
-          )}
 
           {evalError && <div className="test-error">{evalError}</div>}
           {pdfNotice && <div className={`pdf-notice ${pdfNotice.kind}`}>{pdfNotice.text}</div>}

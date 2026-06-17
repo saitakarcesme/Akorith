@@ -17,9 +17,9 @@ const MAX_TEXT_CHARS = 200_000
 
 // How long to wait after writing the paste before sending the submit Enter.
 // The paste must be fully ingested first; otherwise the Enter races the paste
-// and is dropped. Small enough to feel instant, large enough for the TUI's
-// event loop to drain the paste. Exposed for tests.
-export const SUBMIT_DELAY_MS = 90
+// and is dropped. Codex/Claude TUIs can need a beat after bracketed paste
+// finishes, especially for long prompts. Exposed for tests.
+export const SUBMIT_DELAY_MS = 220
 
 export interface BridgeSendArgs {
   text: string

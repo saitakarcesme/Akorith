@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import MacroLoopPanel from './MacroLoopPanel'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
@@ -9,9 +9,14 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   status: 'streaming' | 'done' | 'error'
+  images?: ChatImageAttachment[]
   meta?: { provider: string; model: string; usage?: ChatUsage }
   /** Phase 13.2: a terminal-output summary card (source = agent label). */
   summary?: { source: string; needsAttention: boolean }
+}
+
+interface ComposerImage extends ChatImageAttachment {
+  previewUrl: string
 }
 
 // Olympus = Codex (t2), Atlantis = Claude (t1).
@@ -53,7 +58,7 @@ function agentSummary(status: AgentStatusMap): { label: string; tone: 'ready' | 
   if (vals.every((v) => !v)) return { label: 'Agents starting…', tone: 'starting' }
   const live = vals.filter((v) => v?.status === 'live').length
   const anyShellFallback = vals.some((v) => v && v.status === 'live' && v.role === 'shell')
-  if (live === 2) return { label: anyShellFallback ? 'Agents ready (shell fallback)' : 'Codex & Claude ready', tone: anyShellFallback ? 'warn' : 'ready' }
+  if (live === 2) return { label: anyShellFallback ? 'Agents running (shell fallback)' : 'Codex & Claude running', tone: anyShellFallback ? 'warn' : 'ready' }
   if (vals.some((v) => v?.status === 'exited')) return { label: 'An agent exited', tone: 'warn' }
   return { label: 'Agents starting…', tone: 'starting' }
 }
@@ -215,6 +220,7 @@ export default function ChatPanel({
   const [model, setModel] = useState<string>('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [attachedImages, setAttachedImages] = useState<ComposerImage[]>([])
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -234,6 +240,7 @@ export default function ChatPanel({
   const [sentKey, setSentKey] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
+  const selectionRef = useRef<SelectionPopover | null>(null)
   const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', true))
 
   // ---- Phase 6: suggest-only router + opt-in repo context ----
@@ -245,6 +252,7 @@ export default function ChatPanel({
   // an actionable card so the user never has to open the Activity drawer.
   const [pendingPermission, setPendingPermission] = useState<{ detection: PermissionDetection; terminalId: string } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const sentTimer = useRef<ReturnType<typeof setTimeout>>()
   const autoSummaryTimer = useRef<ReturnType<typeof setTimeout>>()
   // Monotonic token so a newer send/auto-summary watcher cancels an older one.
@@ -354,11 +362,15 @@ export default function ChatPanel({
     if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
 
+  useEffect(() => {
+    selectionRef.current = selection
+  }, [selection])
+
   // Track whether the user is parked near the bottom of the conversation.
   const handleMessagesScroll = (): void => {
     const el = scrollRef.current
     if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-    setSelection(null)
+    if (selectionRef.current) setSelection(null)
   }
 
   const showToast = (kind: 'ok' | 'error', text: string): void => {
@@ -373,6 +385,12 @@ export default function ChatPanel({
   const sendToTerminal = async (text: string, sourceKey: string): Promise<void> => {
     if (autoEnter === null) return // settings not loaded yet
     const label = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
+    let baselineChars: number | null = null
+    try {
+      baselineChars = (await window.api.pty.snapshot(bridgeTarget, 8000)).chars
+    } catch {
+      baselineChars = null
+    }
     const res = await window.api.bridge.send({ text, targetTerminalId: bridgeTarget, autoEnter })
     if (res.ok) {
       setSentKey(sourceKey)
@@ -381,7 +399,7 @@ export default function ChatPanel({
       showToast('ok', `Sent to ${label}${autoEnter ? ' (running)' : ''}`)
       // Phase 13.2: after a bounded delay, read what the agent did and summarize
       // it back into chat (once, deduped). Manual button also available.
-      scheduleAutoSummary(bridgeTarget, text)
+      scheduleAutoSummary(bridgeTarget, text, baselineChars)
     } else {
       showToast('error', res.error)
     }
@@ -479,12 +497,13 @@ export default function ChatPanel({
    * then summarize once. More reliable than a single fixed delay — Claude/Codex
    * often keep streaming for a while after the prompt is accepted.
    */
-  const scheduleAutoSummary = (terminalId: string, lastPrompt: string): void => {
+  const scheduleAutoSummary = (terminalId: string, lastPrompt: string, baselineChars: number | null = null): void => {
     clearTimeout(autoSummaryTimer.current)
     const token = ++summaryWatch.current
     const deadline = Date.now() + AUTO_SUMMARY_MAX_WAIT_MS
     let lastLen = -1
     let stable = 0
+    let sawNewOutput = baselineChars === null
     const tick = async (): Promise<void> => {
       if (token !== summaryWatch.current) return // superseded by a newer send
       // Surface a permission prompt as soon as we see one (and keep watching).
@@ -496,12 +515,19 @@ export default function ChatPanel({
       } catch {
         /* keep previous length */
       }
+      if (baselineChars !== null && len > baselineChars + 4) sawNewOutput = true
       if (len === lastLen) stable += 1
       else {
         stable = 0
         lastLen = len
       }
-      const settled = stable >= 2 || Date.now() > deadline
+      const timedOut = Date.now() > deadline
+      if (!sawNewOutput && timedOut && !hasPrompt) {
+        const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
+        showToast('error', `${label} did not produce new output after send; check the prompt or press Enter in Activity.`)
+        return
+      }
+      const settled = sawNewOutput && (stable >= 2 || timedOut)
       if (settled && !hasPrompt) {
         if (token === summaryWatch.current) void runAgentSummary(terminalId, { auto: true, lastPrompt })
         return
@@ -629,9 +655,48 @@ export default function ChatPanel({
     )
   }
 
+  const readImageFile = (file: File): Promise<ComposerImage> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}`))
+      reader.onload = () => {
+        const value = typeof reader.result === 'string' ? reader.result : ''
+        const comma = value.indexOf(',')
+        if (comma < 0) {
+          reject(new Error(`Could not read ${file.name}`))
+          return
+        }
+        resolve({
+          name: file.name,
+          mimeType: file.type,
+          dataBase64: value.slice(comma + 1),
+          previewUrl: value
+        })
+      }
+      reader.readAsDataURL(file)
+    })
+
+  const addImageFiles = async (files: FileList | null): Promise<void> => {
+    if (!files?.length) return
+    const accepted = [...files].filter((file) => /^image\/(png|jpeg|webp|gif)$/.test(file.type) && file.size <= 6_000_000)
+    if (accepted.length === 0) {
+      showToast('error', 'Attach PNG, JPEG, WebP, or GIF images under 6 MB')
+      return
+    }
+    try {
+      const next = await Promise.all(accepted.slice(0, 4).map(readImageFile))
+      setAttachedImages((current) => [...current, ...next].slice(0, 4))
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+  }
+
   const sendPrompt = async (): Promise<void> => {
-    const prompt = draft.trim()
-    if (!prompt || busyRequestId || !selected?.available.ok) return
+    const prompt = draft.trim() || (attachedImages.length ? 'Please analyze the attached image.' : '')
+    const images = attachedImages.map(({ previewUrl: _previewUrl, ...image }) => image)
+    if ((!prompt && images.length === 0) || busyRequestId || !selected?.available.ok) return
 
     // A session belongs to one provider: create it on the first message.
     let sessionId = activeSessionId
@@ -650,10 +715,11 @@ export default function ChatPanel({
     const requestId = newId()
     const assistantId = newId()
     setDraft('')
+    setAttachedImages([])
     setBusyRequestId(requestId)
     setMessages((prev) => [
       ...prev,
-      { id: newId(), role: 'user', text: prompt, status: 'done' },
+      { id: newId(), role: 'user', text: prompt, status: 'done', images },
       {
         id: assistantId,
         role: 'assistant',
@@ -673,7 +739,11 @@ export default function ChatPanel({
         model: model || undefined,
         prompt,
         sessionId: sessionId ?? undefined,
-        includeDigest: hasProject
+        includeDigest: hasProject,
+        workspaceContext: hasProject && activeProject?.path
+          ? { projectName: activeProject.name, projectPath: activeProject.path }
+          : undefined,
+        images
       })
       if (response.ok) {
         patchMessage(assistantId, {
@@ -727,7 +797,7 @@ export default function ChatPanel({
     }
   }
 
-  const canSend = Boolean(draft.trim()) && !busyRequestId && Boolean(selected?.available.ok)
+  const canSend = (Boolean(draft.trim()) || attachedImages.length > 0) && !busyRequestId && Boolean(selected?.available.ok)
 
   const bridgeLabel = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
   const lastUsage = useMemo(
@@ -825,9 +895,11 @@ export default function ChatPanel({
     const options: PermissionOption[] =
       detection.options && detection.options.length > 0
         ? detection.options
-        : detection.suggestedAction
+        : detection.suggestedAction !== ''
           ? [{ value: detection.suggestedAction, label: 'Yes once', tone: 'affirm' }]
-          : [{ value: 'y', label: 'Yes once', tone: 'affirm' }, { value: 'n', label: 'No', tone: 'deny' }]
+          : detection.requiresUserReview
+            ? []
+            : [{ value: 'y', label: 'Yes once', tone: 'affirm' }, { value: 'n', label: 'No', tone: 'deny' }]
     return (
       <div className={`permission-card risk-${detection.riskLevel}`}>
         <div className="permission-head">
@@ -904,6 +976,22 @@ export default function ChatPanel({
         />
       )}
       <div className="composer-box">
+        {attachedImages.length > 0 && (
+          <div className="composer-images">
+            {attachedImages.map((image, index) => (
+              <div className="composer-image" key={`${image.name}-${index}`}>
+                <img src={image.previewUrl} alt={image.name} title={image.name} />
+                <button
+                  type="button"
+                  title={`Remove ${image.name}`}
+                  onClick={() => setAttachedImages((current) => current.filter((_, i) => i !== index))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           className="composer-input"
           placeholder={
@@ -928,6 +1016,24 @@ export default function ChatPanel({
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              className="composer-file-input"
+              onChange={(event) => void addImageFiles(event.target.files)}
+            />
+            <button
+              type="button"
+              className="composer-chip"
+              disabled={busyRequestId !== null || attachedImages.length >= 4}
+              onClick={() => imageInputRef.current?.click()}
+              title="Attach image"
+            >
+              <PlusIcon size={13} />
+              Image
+            </button>
             {hasProject && (
               <div className="route-seg" role="group" aria-label="Target agent">
                 {TERMINALS.map((t) => (
@@ -1112,6 +1218,18 @@ export default function ChatPanel({
                       <em>agent output summary</em>
                     </div>
                   )}
+                  {m.images && m.images.length > 0 && (
+                    <div className="chat-image-strip">
+                      {m.images.map((image, index) => (
+                        <img
+                          key={`${m.id}-image-${index}`}
+                          src={`data:${image.mimeType};base64,${image.dataBase64}`}
+                          alt={image.name}
+                          title={image.name}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {m.role === 'assistant' && m.status !== 'streaming' ? (
                     <div className="chat-msg-text">
                       {splitFences(m.text).map((seg, i) =>
@@ -1133,16 +1251,19 @@ export default function ChatPanel({
                   ) : (
                     <div className="chat-msg-text">{m.text || (m.status === 'streaming' ? '…' : '')}</div>
                   )}
-                  {m.role === 'assistant' && m.status === 'done' && !m.summary && (
+                  {m.role === 'assistant' && Boolean(m.text.trim()) && !m.summary && (
                     <div className="chat-msg-meta">
-                      {m.meta && (
+                      {m.status === 'done' && m.meta && (
                         <span>
                           {m.meta.provider} · {m.meta.model}
                           {m.meta.usage && usageLine(m.meta.usage) ? ` · ${usageLine(m.meta.usage)}` : ''}
                           {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
                         </span>
                       )}
-                      {hasProject && bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
+                      <span className="chat-msg-actions">
+                        {copyButton(m.text, `${m.id}-copy-all`)}
+                        {hasProject && m.status === 'done' && bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
+                      </span>
                     </div>
                   )}
                 </div>

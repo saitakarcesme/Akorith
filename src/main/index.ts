@@ -2,6 +2,7 @@ import { app, BrowserWindow, nativeImage, shell } from 'electron'
 import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
+import { pathToFileURL } from 'url'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
@@ -99,8 +100,93 @@ function applyDockIcon(): void {
   if (!image.isEmpty()) app.dock.setIcon(image)
 }
 
+function createSplashWindow(): BrowserWindow | null {
+  const logoPath = join(app.getAppPath(), 'assets', 'akorith-logo.png')
+  const logoUrl = existsSync(logoPath) ? pathToFileURL(logoPath).toString() : ''
+  const splash = new BrowserWindow({
+    width: 360,
+    height: 260,
+    show: false,
+    frame: false,
+    resizable: false,
+    movable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#241235',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  })
+
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 28%, rgba(99, 235, 168, 0.78), transparent 28%),
+        radial-gradient(circle at 76% 22%, rgba(165, 91, 255, 0.72), transparent 30%),
+        radial-gradient(circle at 34% 82%, rgba(47, 186, 133, 0.64), transparent 33%),
+        conic-gradient(from 130deg at 50% 50%, #201033, #57349a, #1f8e79, #7d3fb4, #201033);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: absolute;
+      inset: -35%;
+      background:
+        repeating-radial-gradient(ellipse at 48% 52%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 10px),
+        conic-gradient(from 35deg, transparent, rgba(13, 224, 157, 0.24), transparent, rgba(177, 96, 255, 0.3), transparent);
+      mix-blend-mode: screen;
+      filter: blur(8px) saturate(1.35);
+      transform: rotate(-8deg) scale(1.08);
+    }
+
+    body::after {
+      filter: blur(15px) saturate(1.2);
+      opacity: 0.72;
+      transform: rotate(13deg) scale(1.18);
+    }
+
+    .mark {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    img {
+      width: 86px;
+      height: 86px;
+      object-fit: contain;
+      border-radius: 22px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="mark">${logoUrl ? `<img src="${logoUrl}" alt="" />` : ''}</div>
+</body>
+</html>`
+
+  splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined)
+  splash.once('ready-to-show', () => splash.show())
+  return splash
+}
+
 function createWindow(): void {
   const icon = resolveAppIcon()
+  const splashWindow = createSplashWindow()
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -121,6 +207,15 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      setTimeout(() => {
+        if (!splashWindow.isDestroyed()) splashWindow.close()
+      }, 450)
+    }
+  })
+
+  mainWindow.on('closed', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
   })
 
   // Phase 14.4: nudge the whole UI up one comfortable notch. A single zoom

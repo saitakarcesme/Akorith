@@ -69,6 +69,12 @@ export interface ChatSendResult {
 
 export type ChatSendResponse = { ok: true; result: ChatSendResult } | { ok: false; error: string }
 
+export interface ChatImageAttachment {
+  name: string
+  mimeType: string
+  dataBase64: string
+}
+
 export interface ChatSendRequest {
   requestId: string
   providerId: string
@@ -78,6 +84,9 @@ export interface ChatSendRequest {
   sessionId?: string
   /** False for General Chat; project workspace sends keep the existing opt-in repo digest behavior. */
   includeDigest?: boolean
+  /** Workspace project scope; only project chats pass this. */
+  workspaceContext?: { projectName: string; projectPath: string }
+  images?: ChatImageAttachment[]
 }
 
 /** Phase 14.2: what conversation context a session would send (memory indicator). */
@@ -350,9 +359,15 @@ export interface TestRepoContext {
   fileCount: number
 }
 
+export type TestResolveSourceResponse =
+  | { ok: true; path: string; label: string; cloned: boolean }
+  | { ok: false; error: string }
+
 export interface TestApi {
   getSettings(): Promise<TestSettings>
   setSourceRepo(dir: string): Promise<TestSettings>
+  /** Accept a local repo path or a GitHub repo URL and return a local path for Test Lab. */
+  resolveSource(source: string): Promise<TestResolveSourceResponse>
   /** Auto-detect framework/test/install commands for the source repo. */
   detect(sourceRepo: string): Promise<TestDetection | { error: string }>
   /** Phase 14.1: bounded, read-only repo structure + sample files for the generator. */

@@ -167,9 +167,9 @@ electron-vite in strict numbered phases.
       `PtyManager.create` reuses live sessions for the same cwd/command (no kill+respawn),
       `TerminalPane` detaches (not kill) on unmount and replays the snapshot on re-attach; bounded
       to 3 recent projects; single write path unchanged. **Terminal restore bar** for collapsed
-      Olympus/Atlantis. **Test Lab simple mode**: project/repo selector + preset dropdown
-      (auto-detect/vitest/jest/pytest/react/unit/security) auto-fills framework+command+path plus
-      detected install command, optional instruction, advanced fields collapsed. **Macro loop**:
+      Olympus/Atlantis. **Test Lab simple mode**: project/repo selector + test-type dropdown,
+      Local/Ollama generation, auto-detected runner details collapsed, and Claude/ChatGPT scoring
+      as the explicit ISAScore step. **Macro loop**:
       "Repo context" + help line, advanced settings collapsed, "Plan with loop" / "Start Auto
       loop", Stop visible. **Small UI**: recent-chat dots removed, collapsed profile centered.
 - [x] **Phase 14** — project/chat separation and activity fixes. **Navigation:** `Workspace`
@@ -279,6 +279,19 @@ electron-vite in strict numbered phases.
       assistant blocks always show a **Copy** action in both General Chat and Workspace; Workspace
       still keeps its Send-to-agent action. Copyable/code blocks are lighter and larger for better
       readability. **Validation:** `npm run typecheck`.
+- [x] **Phase 15** - theme toggle. Persisted Light/Dark selector in Sidebar Settings via
+      `akorith.theme`, `data-theme` on `.app`, and token-first `--sidebar-*` / workspace colors.
+      Terminals and agent activity remain intentionally dark-scoped.
+- [x] **Phase 15.1** - local-provider/workspace-context reliability. Local/Ollama auto-start +
+      optional LAN bind, main-trusted session project context for Workspace prompts/digest,
+      medium-risk Codex workspace-trust detection, safer permission-card fallback actions, Test Lab
+      preset/ISAScore polish, and Windows-safe verifier updates. **Validation:** `npm run
+      typecheck`, `npm run build`, `scripts/verify-{bridge-autoenter,agentic-loop,conversation-context,testlab}.ts`.
+- [x] **Phase 16** - GitHub Test Lab, LAN Ollama discovery, and image chat attachments. Test Lab
+      accepts GitHub repo URLs and clones them into a managed cache; fallback Vitest writes a
+      sandbox alias config for `@/` imports; Local/Ollama can scan the private LAN for a host PC's
+      exposed models; chat supports image attachments, with real pixels sent to Ollama multimodal
+      models. **Validation:** `npm run typecheck`, `npm run build`, `scripts/verify-testlab.ts`.
 
 ## Locked design decisions
 
@@ -387,6 +400,60 @@ and controls.
 Keep future theme changes token-first through `--bg-*`, `--text-*`, `--sidebar-*`, and code-block
 variables. Terminals and agent activity scopes remain intentionally dark unless a later Phase 15.x
 changes that.
+
+## Phase 15.1 - Local Provider + Workspace Context Reliability
+
+Local/Ollama can auto-start `ollama serve` for loopback configs (`autoStart`, default true).
+`exposeLan` binds auto-started Ollama to `0.0.0.0:11434`, while remote `baseUrl`s are only probed.
+Config values are sanitized, `localhost` still falls back to `127.0.0.1`, and Windows common
+install paths such as `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` are checked when Electron's PATH
+cannot see `ollama`.
+
+Workspace provider prompts now include project scope from the persisted session's stored project,
+not from renderer-supplied path data. `chat:send` derives this with `getSessionProjectContext()`;
+repo digest for Workspace chats uses that validated project path, preserving General Chat
+separation and preventing spoofed IPC from digesting arbitrary folders.
+
+Codex-style trust-folder/workspace prompts are detected as medium-risk access prompts in
+`agentic-core.ts` and require review. Do not answer them in PTY startup; any response must go
+through the permission UI / Auto Mode policy and the existing `bridgeSend -> PtyManager.write()`
+path.
+
+Test Lab is intentionally narrow: choose repo, choose test type, generate tests with Local/Ollama,
+then score selected runs with Claude or ChatGPT to produce ISAScore. Repo input accepts local paths
+or GitHub repo URLs; GitHub URLs clone into the managed `testlab-github-repos` cache and then use
+the same read-only snapshot/sandbox path. JS/TS repos with `package.json` but no runner fall back
+to `npx --yes vitest run` instead of blocking as unknown. Runner details stay in a collapsed escape
+hatch; multi-model comparison and quality toggles are out of the primary flow. The Test Lab
+verifier is Windows-safe (`node -e` timeout fixture, `execFileSync` git status, `readdirSync`
+prune count).
+
+Claude visible token usage uses direct `input_tokens` only; cache creation/read counters stay in
+the raw provider payload, but no longer inflate the UI badge. Recent chats are title-only,
+assistant responses have a whole-message copy action while streaming/done, chat scrolling avoids
+per-scroll React state churn, and startup shows a small Akorith splash over the purple/green
+marbled background.
+
+## Phase 16 - GitHub Test Lab + LAN Ollama + Image Chat
+
+The screenshot failure was an import-resolution failure, not a failed assertion: fallback Vitest
+had no alias config for `@/lib/slugs`, so no tests executed. Fallback JS/TS detection now uses
+`npx --yes vitest run --config akorith.vitest.config.mjs`, and `runTests()` writes that config into
+the sandbox with `@`/`~` mapped to the repo root.
+
+Test Lab repo input accepts local paths or GitHub repo URLs (`https://github.com/owner/repo`,
+`github.com/owner/repo`, `git@github.com:owner/repo.git`). Main validates GitHub-only refs, clones
+with `git clone --depth 1` into `userData/testlab-github-repos`, then uses the existing read-only
+snapshot/sandbox flow.
+
+Local/Ollama defaults now enable LAN binding and discovery. Host Akorith auto-starts Ollama with
+`OLLAMA_HOST=0.0.0.0:11434`; client Akorith instances scan private IPv4 `/24` LANs for `/api/tags`
+when localhost is unavailable. If the host Ollama was already running localhost-only, restart
+Ollama/Akorith once so it can bind to LAN.
+
+Chat composer image attachments support up to four PNG/JPEG/WebP/GIF files. Local/Ollama receives
+base64 image bytes for multimodal models; Claude/Codex CLI providers receive only attachment-name
+text because their current provider bridge is stdin text.
 
 ## Rule: keep the docs current
 
