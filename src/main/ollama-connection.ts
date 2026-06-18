@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { hostname, networkInterfaces } from 'os'
 import {
   getLocalProviderSettings,
   normalizeBaseUrl,
@@ -14,6 +15,20 @@ type OllamaSettingsResponse =
   | { ok: true; settings: LocalProviderSettings }
   | { ok: false; error: string; settings: LocalProviderSettings }
 
+export interface OllamaEndpointSuggestion {
+  label: string
+  baseUrl: string
+  address: string
+  kind: 'local' | 'lan' | 'vpn' | 'other'
+  recommended: boolean
+}
+
+export interface OllamaShareInfo {
+  hostName: string
+  port: number
+  endpoints: OllamaEndpointSuggestion[]
+}
+
 function validBaseUrl(value: unknown): string | null {
   const normalized = normalizeBaseUrl(value, '')
   return normalized || null
@@ -26,6 +41,61 @@ function boolPatch(value: unknown): boolean | undefined {
 function endpointFromArgs(args: unknown): string | null {
   if (!args || typeof args !== 'object') return null
   return validBaseUrl((args as { baseUrl?: unknown }).baseUrl)
+}
+
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
+  const [a, b] = parts
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+}
+
+function isVpnLikeIpv4(ip: string): boolean {
+  const parts = ip.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
+  const [a, b] = parts
+  // 100.64.0.0/10 is commonly used by Tailscale and other CGNAT-style private overlays.
+  return a === 100 && b >= 64 && b <= 127
+}
+
+function endpointKind(address: string): OllamaEndpointSuggestion['kind'] {
+  if (address === '127.0.0.1') return 'local'
+  if (isVpnLikeIpv4(address)) return 'vpn'
+  if (isPrivateIpv4(address)) return 'lan'
+  return 'other'
+}
+
+function endpointLabel(kind: OllamaEndpointSuggestion['kind'], address: string): string {
+  if (kind === 'local') return 'This device only'
+  if (kind === 'vpn') return `VPN / Tailscale (${address})`
+  if (kind === 'lan') return `Same Wi-Fi / LAN (${address})`
+  return `Network adapter (${address})`
+}
+
+function shareInfo(): OllamaShareInfo {
+  const port = 11434
+  const addresses = new Set<string>(['127.0.0.1'])
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family !== 'IPv4' || entry.internal) continue
+      if (entry.address.startsWith('169.254.')) continue
+      addresses.add(entry.address)
+    }
+  }
+  const rank = { vpn: 0, lan: 1, other: 2, local: 3 } satisfies Record<OllamaEndpointSuggestion['kind'], number>
+  const endpoints = [...addresses]
+    .map((address): OllamaEndpointSuggestion => {
+      const kind = endpointKind(address)
+      return {
+        label: endpointLabel(kind, address),
+        baseUrl: `http://${address}:${port}`,
+        address,
+        kind,
+        recommended: kind === 'vpn' || kind === 'lan'
+      }
+    })
+    .sort((a, b) => rank[a.kind] - rank[b.kind] || a.address.localeCompare(b.address))
+  return { hostName: hostname(), port, endpoints }
 }
 
 async function testOllamaEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult> {
@@ -42,6 +112,8 @@ async function testOllamaEndpoint(baseUrl: string): Promise<OllamaConnectionTest
 
 export function registerOllamaConnectionIpc(): void {
   ipcMain.handle('ollama:getSettings', (): LocalProviderSettings => getLocalProviderSettings())
+
+  ipcMain.handle('ollama:getShareInfo', (): OllamaShareInfo => shareInfo())
 
   ipcMain.handle('ollama:testEndpoint', async (_event, args: unknown): Promise<OllamaConnectionTestResult> => {
     const baseUrl = endpointFromArgs(args) ?? getLocalProviderSettings().baseUrl

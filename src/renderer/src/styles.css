@@ -1384,6 +1384,107 @@ textarea:focus-visible {
   opacity: 0.58;
 }
 
+.ollama-share-box {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.ollama-share-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.ollama-share-title em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ollama-endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ollama-endpoint-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--bg-raised);
+}
+
+.ollama-endpoint-card.is-vpn {
+  border-color: rgba(125, 211, 252, 0.42);
+}
+
+.ollama-endpoint-card.is-lan {
+  border-color: rgba(154, 143, 224, 0.46);
+}
+
+.ollama-endpoint-main,
+.ollama-copy-btn {
+  min-width: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.ollama-endpoint-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.ollama-endpoint-main span,
+.ollama-endpoint-main em {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ollama-endpoint-main span {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.ollama-endpoint-main em {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.ollama-copy-btn {
+  padding: 0 9px;
+  color: var(--text-dim);
+  border-left: 1px solid var(--border-soft);
+  font-size: 11px;
+}
+
+.ollama-endpoint-main:hover,
+.ollama-copy-btn:hover {
+  background: var(--hover);
+}
+
 .ollama-status {
   color: var(--text-faint);
   font-size: 11px;

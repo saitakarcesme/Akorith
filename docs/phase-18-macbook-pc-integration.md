@@ -19,6 +19,8 @@ ollama serve
 
 If Akorith starts Ollama on the PC, keep **Expose local Ollama on LAN** enabled in Settings. Akorith sets `OLLAMA_HOST=0.0.0.0:11434` for its auto-started server.
 
+Phase 18.1 adds a friendlier path: open Settings on the PC and use **This machine** under **Ollama endpoint**. Akorith lists ready-made local, LAN, and VPN/Tailscale-style endpoints. Copy the LAN or VPN endpoint and use it on the MacBook.
+
 For different networks, keep Ollama bound privately and publish it through your VPN/tunnel tool. The MacBook needs an endpoint like:
 
 ```text
@@ -30,7 +32,7 @@ https://your-protected-tunnel.example.com
 
 1. Open Akorith.
 2. Open Settings from the profile button.
-3. Set **Ollama endpoint** to the PC endpoint.
+3. Paste the PC endpoint from the PC's **This machine** list into **Ollama endpoint**.
 4. Click **Test**. Akorith calls `/api/tags` and reports the model count.
 5. Click **Save**. The Local (Ollama) provider now uses the PC-hosted models.
 

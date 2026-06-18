@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { OllamaConnectionSettings, ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
+import type { OllamaConnectionSettings, OllamaEndpointSuggestion, OllamaShareInfo, ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
   ChartIcon,
@@ -148,6 +148,7 @@ export default function Sidebar({
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
   const [ollamaSettings, setOllamaSettings] = useState<OllamaConnectionSettings | null>(null)
   const [ollamaEndpoint, setOllamaEndpoint] = useState('')
+  const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
   const [ollamaBusy, setOllamaBusy] = useState<'test' | 'save' | null>(null)
   const [ollamaStatus, setOllamaStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
 
@@ -169,6 +170,10 @@ export default function Sidebar({
         setOllamaSettings(null)
         setOllamaEndpoint('http://localhost:11434')
       })
+    window.api.ollama
+      .getShareInfo()
+      .then(setOllamaShare)
+      .catch(() => setOllamaShare(null))
   }, [])
 
   useEffect(() => {
@@ -265,6 +270,21 @@ export default function Sidebar({
     setOllamaSettings((settings) => (settings ? { ...settings, [key]: value } : settings))
   }
 
+  const useOllamaEndpoint = (endpoint: OllamaEndpointSuggestion): void => {
+    setOllamaEndpoint(endpoint.baseUrl)
+    setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
+  }
+
+  const copyOllamaEndpoint = async (endpoint: OllamaEndpointSuggestion): Promise<void> => {
+    setOllamaEndpoint(endpoint.baseUrl)
+    try {
+      await navigator.clipboard.writeText(endpoint.baseUrl)
+      setOllamaStatus({ kind: 'ok', text: `Copied ${shortEndpointLabel(endpoint.baseUrl)}` })
+    } catch {
+      setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
+    }
+  }
+
   // Close the project actions menu on Escape (outside-click is handled by its
   // backdrop). Also re-close if the list scrolls so it never floats detached.
   useEffect(() => {
@@ -288,6 +308,7 @@ export default function Sidebar({
   ]
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
   const localProvider = providers.find((provider) => provider.id === 'local')
+  const shareEndpoints = ollamaShare?.endpoints ?? []
 
   const refreshProjects = async (): Promise<void> => {
     const list = await window.api.projects.list()
@@ -904,6 +925,27 @@ export default function Sidebar({
                   {ollamaBusy === 'save' ? 'Saving...' : 'Save'}
                 </button>
               </div>
+              {shareEndpoints.length > 0 && (
+                <div className="ollama-share-box">
+                  <div className="ollama-share-title">
+                    <span>This machine</span>
+                    {ollamaShare?.hostName && <em>{ollamaShare.hostName}</em>}
+                  </div>
+                  <div className="ollama-endpoint-list">
+                    {shareEndpoints.map((endpoint) => (
+                      <div className={`ollama-endpoint-card is-${endpoint.kind}`} key={endpoint.baseUrl}>
+                        <button type="button" className="ollama-endpoint-main" onClick={() => useOllamaEndpoint(endpoint)}>
+                          <span>{endpoint.label}</span>
+                          <em>{endpoint.baseUrl}</em>
+                        </button>
+                        <button type="button" className="ollama-copy-btn" onClick={() => void copyOllamaEndpoint(endpoint)}>
+                          Copy
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {ollamaStatus && <div className={`ollama-status is-${ollamaStatus.kind}`}>{ollamaStatus.text}</div>}
               {localProvider && !localProvider.available.ok && <div className="ollama-status is-error">{localProvider.available.reason}</div>}
             </div>

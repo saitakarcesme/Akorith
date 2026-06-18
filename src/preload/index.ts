@@ -217,6 +217,7 @@ const settings = Object.freeze({
 
 const ollama = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('ollama:getSettings'),
+  getShareInfo: (): Promise<unknown> => ipcRenderer.invoke('ollama:getShareInfo'),
   setSettings: (args: unknown): Promise<unknown> => ipcRenderer.invoke('ollama:setSettings', args),
   testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl })
 })

@@ -664,8 +664,23 @@ export type OllamaSettingsResponse =
   | { ok: true; settings: OllamaConnectionSettings }
   | { ok: false; error: string; settings: OllamaConnectionSettings }
 
+export interface OllamaEndpointSuggestion {
+  label: string
+  baseUrl: string
+  address: string
+  kind: 'local' | 'lan' | 'vpn' | 'other'
+  recommended: boolean
+}
+
+export interface OllamaShareInfo {
+  hostName: string
+  port: number
+  endpoints: OllamaEndpointSuggestion[]
+}
+
 export interface OllamaApi {
   getSettings(): Promise<OllamaConnectionSettings>
+  getShareInfo(): Promise<OllamaShareInfo>
   setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
   testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
 }
