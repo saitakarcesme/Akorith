@@ -36,6 +36,15 @@ export function PanelsIcon(props: IconProps): JSX.Element {
   )
 }
 
+export function CloseIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </IconShell>
+  )
+}
+
 export function ChartIcon(props: IconProps): JSX.Element {
   return (
     <IconShell {...props}>

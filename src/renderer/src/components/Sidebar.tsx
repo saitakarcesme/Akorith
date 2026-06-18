@@ -4,6 +4,7 @@ import type { AppTheme, AppView } from '../App'
 import {
   ChartIcon,
   ChevronIcon,
+  CloseIcon,
   FlaskIcon,
   FolderIcon,
   MessageIcon,
@@ -183,6 +184,11 @@ export default function Sidebar({
   useEffect(() => {
     if (!settingsOpen) return
     loadOllamaSettings()
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setSettingsOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen, loadOllamaSettings])
 
   useEffect(() => {
@@ -874,9 +880,27 @@ export default function Sidebar({
       )}
 
       <div className="sidebar-profile">
-        {settingsOpen && !sidebarCollapsed && (
-          <div className="settings-popover">
-            <div className="settings-title">Settings</div>
+        {settingsOpen && (
+          <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="settings-popover"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-header">
+              <div className="settings-title">Settings</div>
+              <button
+                type="button"
+                className="settings-close"
+                onClick={() => setSettingsOpen(false)}
+                aria-label="Close settings"
+                title="Close"
+              >
+                <CloseIcon size={16} />
+              </button>
+            </div>
             <label>
               <span>Display name</span>
               <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
@@ -978,6 +1002,7 @@ export default function Sidebar({
               </div>
             )}
             <div className="settings-note">Package identity cleanup remains Phase 10.</div>
+          </div>
           </div>
         )}
         <button type="button" className="profile-button" onClick={() => setSettingsOpen((value) => !value)} title="Settings">
