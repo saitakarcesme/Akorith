@@ -157,6 +157,8 @@ export default function App(): JSX.Element {
     } catch {
       /* ignore */
     }
+    // Mirror to config so the next launch's splash paints the matching background.
+    void window.api.settings.setTheme(theme)
   }, [theme])
 
   const handleNavigate = useCallback(

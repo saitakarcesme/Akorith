@@ -208,6 +208,13 @@ const agent = Object.freeze({
     ipcRenderer.invoke('agent:detectPermission', { terminalId })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent })
+// App-level settings mirrored to config (currently the UI theme, so the
+// startup splash can match the selected light/dark background).
+const settings = Object.freeze({
+  getTheme: (): Promise<unknown> => ipcRenderer.invoke('settings:getTheme'),
+  setTheme: (theme: 'dark' | 'light'): Promise<unknown> => ipcRenderer.invoke('settings:setTheme', theme)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, settings })
 
 contextBridge.exposeInMainWorld('api', api)

@@ -1,8 +1,8 @@
-import { app, BrowserWindow, nativeImage, shell } from 'electron'
-import { existsSync } from 'fs'
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
+import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { pathToFileURL } from 'url'
+import { getTheme, setTheme, type AppTheme } from './config'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
 import { registerBridgeIpc } from './bridge'
@@ -102,17 +102,36 @@ function applyDockIcon(): void {
 
 function createSplashWindow(): BrowserWindow | null {
   const logoPath = join(app.getAppPath(), 'assets', 'akorith-logo.png')
-  const logoUrl = existsSync(logoPath) ? pathToFileURL(logoPath).toString() : ''
+  // Inline the PNG as base64 so it renders inside the splash. The splash loads a
+  // data: URL document with an opaque origin, and Electron blocks loading a
+  // file:// resource from there — a file:// <img> just showed a broken placeholder.
+  let logoUrl = ''
+  if (existsSync(logoPath)) {
+    try {
+      logoUrl = `data:image/png;base64,${readFileSync(logoPath).toString('base64')}`
+    } catch {
+      logoUrl = ''
+    }
+  }
+  // Codex-style splash: a calm, solid screen with just the centered Akorith mark.
+  // The background follows the selected theme (mirrored to config for the splash,
+  // since the renderer's localStorage doesn't exist yet at this point).
+  const theme: AppTheme = getTheme()
+  const bg = theme === 'light' ? '#f2f3f5' : '#101012'
+  const ring = theme === 'light' ? 'rgba(15, 17, 21, 0.08)' : 'rgba(255, 255, 255, 0.08)'
+  const shadow =
+    theme === 'light' ? '0 18px 50px rgba(15, 17, 21, 0.14)' : '0 18px 50px rgba(0, 0, 0, 0.55)'
+
   const splash = new BrowserWindow({
-    width: 360,
-    height: 260,
+    width: 420,
+    height: 300,
     show: false,
     frame: false,
     resizable: false,
     movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    backgroundColor: '#241235',
+    backgroundColor: bg,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -131,31 +150,8 @@ function createSplashWindow(): BrowserWindow | null {
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background:
-        radial-gradient(circle at 18% 28%, rgba(99, 235, 168, 0.78), transparent 28%),
-        radial-gradient(circle at 76% 22%, rgba(165, 91, 255, 0.72), transparent 30%),
-        radial-gradient(circle at 34% 82%, rgba(47, 186, 133, 0.64), transparent 33%),
-        conic-gradient(from 130deg at 50% 50%, #201033, #57349a, #1f8e79, #7d3fb4, #201033);
+      background: ${bg};
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    body::before,
-    body::after {
-      content: "";
-      position: absolute;
-      inset: -35%;
-      background:
-        repeating-radial-gradient(ellipse at 48% 52%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 10px),
-        conic-gradient(from 35deg, transparent, rgba(13, 224, 157, 0.24), transparent, rgba(177, 96, 255, 0.3), transparent);
-      mix-blend-mode: screen;
-      filter: blur(8px) saturate(1.35);
-      transform: rotate(-8deg) scale(1.08);
-    }
-
-    body::after {
-      filter: blur(15px) saturate(1.2);
-      opacity: 0.72;
-      transform: rotate(13deg) scale(1.18);
     }
 
     .mark {
@@ -166,11 +162,24 @@ function createSplashWindow(): BrowserWindow | null {
     }
 
     img {
-      width: 86px;
-      height: 86px;
+      width: 96px;
+      height: 96px;
       object-fit: contain;
-      border-radius: 22px;
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.2);
+      border-radius: 24px;
+      box-shadow: ${shadow}, 0 0 0 1px ${ring};
+      animation:
+        rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both,
+        breathe 2600ms ease-in-out 600ms infinite;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.035); }
     }
   </style>
 </head>
@@ -187,13 +196,16 @@ function createSplashWindow(): BrowserWindow | null {
 function createWindow(): void {
   const icon = resolveAppIcon()
   const splashWindow = createSplashWindow()
+  // Paint the main window in the selected theme's base color so there's no
+  // bright flash between the splash and the rendered UI.
+  const mainBg = getTheme() === 'light' ? '#f2f3f5' : '#101012'
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
     minHeight: 600,
     show: false,
-    backgroundColor: '#f4f4f3',
+    backgroundColor: mainBg,
     autoHideMenuBar: true,
     title: 'Akorith',
     ...(icon ? { icon } : {}),
@@ -205,13 +217,21 @@ function createWindow(): void {
     }
   })
 
+  // Keep the splash up for a guaranteed minimum so it's actually seen, even when
+  // the renderer is ready almost instantly. Reveal the main window only once it's
+  // ready AND that minimum has elapsed — so there's never a blank gap.
+  const MIN_SPLASH_MS = 1500
+  const splashShownAt = Date.now()
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      setTimeout(() => {
-        if (!splashWindow.isDestroyed()) splashWindow.close()
-      }, 450)
-    }
+    const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - splashShownAt))
+    setTimeout(() => {
+      mainWindow.show()
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        setTimeout(() => {
+          if (!splashWindow.isDestroyed()) splashWindow.close()
+        }, 220)
+      }
+    }, wait)
   })
 
   mainWindow.on('closed', () => {
@@ -241,6 +261,15 @@ function createWindow(): void {
   }
 }
 
+// Theme is owned by the renderer, but mirrored to config so the next launch's
+// splash can paint the matching background before any renderer exists.
+function registerSettingsIpc(): void {
+  ipcMain.handle('settings:getTheme', (): AppTheme => getTheme())
+  ipcMain.handle('settings:setTheme', (_event, theme: unknown): AppTheme =>
+    setTheme(theme === 'light' ? 'light' : 'dark')
+  )
+}
+
 app.whenReady().then(() => {
   ensureCliPath()
   initDb()
@@ -253,6 +282,7 @@ app.whenReady().then(() => {
   registerTestIpc()
   registerEvaluateIpc()
   registerMacroIpc()
+  registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()
   createWindow()

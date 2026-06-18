@@ -637,6 +637,16 @@ export interface MacroApi {
   list(limit?: number): Promise<MacroSessionRow[]>
 }
 
+// ---- app settings (Phase 15: theme mirrored for the startup splash) ----
+
+export type AppTheme = 'dark' | 'light'
+
+export interface SettingsApi {
+  getTheme(): Promise<AppTheme>
+  /** Persist the selected theme to loopex.config.json (read by the next splash). */
+  setTheme(theme: AppTheme): Promise<AppTheme>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -650,6 +660,7 @@ export interface PreloadApi {
   evaluate: EvaluateApi
   macro: MacroApi
   agent: AgentApi
+  settings: SettingsApi
 }
 
 declare global {

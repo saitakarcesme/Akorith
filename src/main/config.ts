@@ -12,6 +12,11 @@ export interface BridgeSettings {
   autoEnter: boolean
 }
 
+/** UI color theme (Phase 15). Mirrored here so the main-process splash window
+ *  can paint the matching background before the renderer (and its localStorage)
+ *  exists. Default 'dark'. */
+export type AppTheme = 'dark' | 'light'
+
 /** Difficulty tiers for the suggest-only router (Phase 6). */
 export type RouterTier = 'Asker' | 'Albay' | 'General'
 
@@ -83,6 +88,8 @@ export interface LoopexConfig {
   digest?: Partial<DigestSettings>
   test?: Partial<TestLabSettings>
   isascore?: Partial<IsaScoreSettings>
+  /** Last theme selected in the renderer; read by the splash at startup. */
+  theme?: AppTheme
 }
 
 export const DEFAULT_TEST: TestLabSettings = {
@@ -164,6 +171,20 @@ export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
   config.bridge = { ...config.bridge, autoEnter }
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return { autoEnter }
+}
+
+// ---- theme (Phase 15; mirrored for the startup splash) ----
+
+export function getTheme(): AppTheme {
+  return loadConfig().theme === 'light' ? 'light' : 'dark'
+}
+
+export function setTheme(theme: AppTheme): AppTheme {
+  const next: AppTheme = theme === 'light' ? 'light' : 'dark'
+  const config = loadConfig()
+  config.theme = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
 }
 
 // ---- router + digest settings (Phase 6) ----
