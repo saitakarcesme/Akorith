@@ -12,6 +12,7 @@ import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
 import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc } from './macro'
+import { registerOllamaConnectionIpc } from './ollama-connection'
 import { closeDb, initDb, registerDbIpc } from './db'
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
@@ -290,6 +291,7 @@ app.whenReady().then(() => {
   registerTestIpc()
   registerEvaluateIpc()
   registerMacroIpc()
+  registerOllamaConnectionIpc()
   registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()

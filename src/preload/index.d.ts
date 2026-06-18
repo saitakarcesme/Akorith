@@ -647,6 +647,29 @@ export interface SettingsApi {
   setTheme(theme: AppTheme): Promise<AppTheme>
 }
 
+export interface OllamaConnectionSettings {
+  enabled: boolean
+  baseUrl: string
+  autoStart: boolean
+  exposeLan: boolean
+  lanDiscovery: boolean
+  ollamaHost?: string
+}
+
+export type OllamaConnectionTestResult =
+  | { ok: true; baseUrl: string; models: string[]; modelCount: number }
+  | { ok: false; baseUrl: string; error: string }
+
+export type OllamaSettingsResponse =
+  | { ok: true; settings: OllamaConnectionSettings }
+  | { ok: false; error: string; settings: OllamaConnectionSettings }
+
+export interface OllamaApi {
+  getSettings(): Promise<OllamaConnectionSettings>
+  setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
+  testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -661,6 +684,7 @@ export interface PreloadApi {
   macro: MacroApi
   agent: AgentApi
   settings: SettingsApi
+  ollama: OllamaApi
 }
 
 declare global {

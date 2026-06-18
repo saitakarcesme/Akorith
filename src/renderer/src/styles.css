@@ -1280,6 +1280,10 @@ textarea:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+.sidebar:not(.is-collapsed) .settings-popover {
+  min-width: min(360px, calc(100vw - 32px));
+}
+
 .settings-title {
   font-size: 12px;
   font-weight: 700;
@@ -1300,6 +1304,15 @@ textarea:focus-visible {
   gap: 6px;
   color: var(--text-dim);
   font-size: 11px;
+}
+
+.settings-field.is-stacked {
+  gap: 8px;
+}
+
+.settings-divider {
+  height: 1px;
+  background: var(--border-soft);
 }
 
 .theme-toggle {
@@ -1336,6 +1349,74 @@ textarea:focus-visible {
   color: var(--text-faint);
   font-size: 11px;
   line-height: 1.35;
+}
+
+.ollama-endpoint-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.ollama-endpoint-row button,
+.ollama-action-row button {
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ollama-action-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ollama-action-row button.is-primary {
+  color: var(--on-accent);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.ollama-action-row button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.ollama-status {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ollama-status.is-ok {
+  color: var(--success);
+}
+
+.ollama-status.is-error {
+  color: var(--danger);
+}
+
+.settings-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-popover .settings-checks label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.settings-popover .settings-checks input {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
 }
 
 .sidebar-toast {

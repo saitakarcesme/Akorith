@@ -215,6 +215,12 @@ const settings = Object.freeze({
   setTheme: (theme: 'dark' | 'light'): Promise<unknown> => ipcRenderer.invoke('settings:setTheme', theme)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, settings })
+const ollama = Object.freeze({
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('ollama:getSettings'),
+  setSettings: (args: unknown): Promise<unknown> => ipcRenderer.invoke('ollama:setSettings', args),
+  testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl })
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, settings, ollama })
 
 contextBridge.exposeInMainWorld('api', api)
