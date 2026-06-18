@@ -2,9 +2,10 @@ import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { getTheme, setTheme, type AppTheme } from './config'
+import { getTheme, loadConfig, setTheme, type AppTheme } from './config'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
+import { warmLocalProvider } from './providers/local'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
@@ -270,8 +271,15 @@ function registerSettingsIpc(): void {
   )
 }
 
+function warmLocalProviderAtStartup(): void {
+  const entry = loadConfig().providers.local
+  if (!entry?.enabled || entry.autoStart === false) return
+  warmLocalProvider(entry)
+}
+
 app.whenReady().then(() => {
   ensureCliPath()
+  warmLocalProviderAtStartup()
   initDb()
   registerDbIpc()
   registerPtyIpc()

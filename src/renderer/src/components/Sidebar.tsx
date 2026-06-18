@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
@@ -72,6 +72,14 @@ function providerShortLabel(id: string, label: string): string {
   return label.slice(0, 2)
 }
 
+function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
+  return providers.some((provider) =>
+    provider.id === 'local' &&
+    !provider.available.ok &&
+    /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? '')
+  )
+}
+
 function formatDate(ts: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts))
 }
@@ -130,12 +138,22 @@ export default function Sidebar({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
 
-  useEffect(() => {
+  const loadProviders = useCallback(() => {
     window.api.chat
       .listProviders()
       .then(setProviders)
       .catch(() => setProviders([]))
   }, [])
+
+  useEffect(() => {
+    loadProviders()
+  }, [loadProviders])
+
+  useEffect(() => {
+    if (!hasLocalAutoStarting(providers)) return
+    const timer = window.setTimeout(loadProviders, 3000)
+    return () => window.clearTimeout(timer)
+  }, [providers, loadProviders])
 
   useEffect(() => {
     window.api.history

@@ -33,6 +33,18 @@ const AUTO_SUMMARY_MAX_WAIT_MS = 45_000
 // Background permission poll cadence while a project workspace is open.
 const PERMISSION_POLL_MS = 4000
 
+function isLocalAutoStarting(provider?: ProviderInfo): boolean {
+  return Boolean(
+    provider?.id === 'local' &&
+      !provider.available.ok &&
+      /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? '')
+  )
+}
+
+function hasLocalAutoStarting(providers: ProviderInfo[] | null): boolean {
+  return providers?.some(isLocalAutoStarting) ?? false
+}
+
 interface ChatPanelProps {
   mode: ChatMode
   /** Sidebar instruction: load a session or start a fresh thread. */
@@ -271,7 +283,8 @@ export default function ChatPanel({
       setProviders(list)
       // Keep the current selection when still valid; else pick the first available.
       setProviderId((current) => {
-        if (list.some((p) => p.id === current && p.available.ok)) return current
+        const currentProvider = list.find((p) => p.id === current)
+        if (currentProvider?.available.ok || isLocalAutoStarting(currentProvider)) return current
         return list.find((p) => p.available.ok)?.id ?? ''
       })
     } catch (err) {
@@ -290,6 +303,12 @@ export default function ChatPanel({
       clearTimeout(autoSummaryTimer.current)
     }
   }, [loadProviders])
+
+  useEffect(() => {
+    if (!hasLocalAutoStarting(providers)) return
+    const timer = window.setTimeout(() => void loadProviders(), 3000)
+    return () => window.clearTimeout(timer)
+  }, [providers, loadProviders])
 
   useEffect(() => {
     localStorage.setItem('akorith.planningToolsCollapsed', String(planningCollapsed))

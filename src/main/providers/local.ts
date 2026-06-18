@@ -15,11 +15,13 @@ import type {
 
 const DEFAULT_BASE_URL = 'http://localhost:11434'
 const LOOPBACK_FALLBACK = 'http://127.0.0.1:11434'
-const OLLAMA_START_TIMEOUT_MS = 10_000
+const OLLAMA_START_TIMEOUT_MS = 20_000
+const OLLAMA_START_RETRY_MS = 30_000
 const LAN_PROBE_TIMEOUT_MS = 350
 const LAN_PROBE_CONCURRENCY = 32
 
 let startedOllamaServe = false
+let lastOllamaStartAttemptAt = 0
 
 function cleanBaseUrl(value: unknown): string {
   if (typeof value !== 'string') return DEFAULT_BASE_URL
@@ -190,7 +192,8 @@ export class LocalProvider implements Provider {
   }
 
   private startLocalServer(): boolean {
-    if (startedOllamaServe || !this.autoStart || !isLoopback(this.baseUrl)) return false
+    if (!this.autoStart || !isLoopback(this.baseUrl)) return false
+    if (startedOllamaServe && Date.now() - lastOllamaStartAttemptAt < OLLAMA_START_RETRY_MS) return true
     const executable = resolveOllamaExecutable()
     if (!executable) return false
 
@@ -208,6 +211,7 @@ export class LocalProvider implements Provider {
       })
       child.unref()
       startedOllamaServe = true
+      lastOllamaStartAttemptAt = Date.now()
       child.once('exit', () => {
         startedOllamaServe = false
       })
@@ -255,9 +259,17 @@ export class LocalProvider implements Provider {
       await this.ensureReachable(2_000, true)
       return { ok: true }
     } catch {
-      const auto = this.autoStart && isLoopback(this.baseUrl) ? '; Akorith tried to auto-start it' : ''
+      const auto = this.autoStart && isLoopback(this.baseUrl)
+        ? startedOllamaServe
+          ? '; Akorith is starting Ollama'
+          : '; Akorith tried to auto-start it'
+        : ''
       return { ok: false, reason: `Ollama not reachable at ${this.baseUrl}${auto}` }
     }
+  }
+
+  async warmUp(): Promise<void> {
+    await this.ensureReachable(1_500, true)
   }
 
   async listModels(): Promise<string[]> {
@@ -338,6 +350,13 @@ export class LocalProvider implements Provider {
       raw: done ?? undefined
     }
   }
+}
+
+export function warmLocalProvider(entry: ProviderConfigEntry): void {
+  const provider = new LocalProvider(entry)
+  void provider.warmUp().catch((err) => {
+    console.error('[local] Ollama auto-start failed:', err)
+  })
 }
 
 interface OllamaChunk {

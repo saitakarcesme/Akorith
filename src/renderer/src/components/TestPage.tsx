@@ -67,6 +67,14 @@ function statusColor(status: string | null | undefined): string {
 
 const SCORE_DIMS: IsaDimensionName[] = ['tests', 'speed', 'tokens', 'quality']
 
+function isLocalAutoStarting(provider?: ProviderInfo): boolean {
+  return Boolean(
+    provider?.id === 'local' &&
+      !provider.available.ok &&
+      /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? '')
+  )
+}
+
 // Focus presets only. The runner/path still come from repo detection so the
 // normal flow stays: repo -> test kind -> Local LLM -> optional ISAScore judge.
 interface TestPreset {
@@ -174,18 +182,22 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     void window.api.evaluate.list(12).then(setEvaluations).catch(() => setEvaluations([]))
   }, [])
 
+  const refreshProviders = useCallback(async () => {
+    try {
+      const list = await window.api.chat.listProviders()
+      setProviders(list)
+      setProviderId((cur) => {
+        if (cur === 'local' && list.some((p) => p.id === 'local' && (p.available.ok || isLocalAutoStarting(p)))) return cur
+        return list.find((p) => p.id === 'local' && p.available.ok)?.id ?? 'local'
+      })
+    } catch {
+      setProviders([])
+    }
+  }, [])
+
   // Initial load (providers, settings, history).
   useEffect(() => {
-    void window.api.chat
-      .listProviders()
-      .then((list) => {
-        setProviders(list)
-        setProviderId((cur) => {
-          if (cur === 'local' && list.some((p) => p.id === 'local' && p.available.ok)) return cur
-          return list.find((p) => p.id === 'local' && p.available.ok)?.id ?? 'local'
-        })
-      })
-      .catch(() => setProviders([]))
+    void refreshProviders()
     void window.api.test.getSettings().then((s) => {
       setSettings(s)
       setInstallDeps(s.installDeps)
@@ -195,7 +207,13 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
     refreshRecent()
     refreshEvaluations()
-  }, [refreshRecent, refreshEvaluations])
+  }, [refreshRecent, refreshEvaluations, refreshProviders])
+
+  useEffect(() => {
+    if (!isLocalAutoStarting(localProvider)) return
+    const timer = window.setTimeout(() => void refreshProviders(), 3000)
+    return () => window.clearTimeout(timer)
+  }, [localProvider, refreshProviders])
 
   useEffect(() => {
     if (!active) return
