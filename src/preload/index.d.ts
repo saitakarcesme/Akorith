@@ -591,6 +591,9 @@ export interface MacroTurnRow {
   terminalSnapshotMeta: string | null
   autoAction: string | null
   resultStatus: string | null
+  criticScore: number | null
+  criticVerdict: string | null
+  criticReview: string | null
 }
 
 export interface MacroState {

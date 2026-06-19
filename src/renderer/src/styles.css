@@ -2497,6 +2497,34 @@ textarea:focus-visible {
   gap: 5px;
 }
 
+.macro-critic-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.macro-critic-badge.is-advanced,
+.macro-critic-badge.is-complete {
+  background: rgba(34, 197, 94, 0.16);
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+.macro-critic-badge.is-stalled {
+  background: rgba(234, 179, 8, 0.16);
+  color: #a16207;
+  border-color: rgba(234, 179, 8, 0.35);
+}
+.macro-critic-badge.is-regressed {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
 .macro-autolog {
   font-size: 11px;
   color: var(--text-dim);

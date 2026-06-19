@@ -517,7 +517,17 @@ DB, or provider access — so `scripts/verify-agentic-loop.ts` exercises them di
   ignore`. Approval Mode **never** auto-answers; Auto Mode auto-sends only low-risk, one-time,
   high-confidence (≥0.6) confirmations.
 - `evaluateAutoOutcome(...)` → `continue | complete | stop | pause` (max iterations, good-enough
-  threshold, repeated failures, needs-attention, low confidence).
+  threshold, repeated failures, needs-attention, low confidence). **Phase 19:** accepts an
+  optional `critic` — when present its measured `progressScore` replaces the planner's predicted
+  `doneScore`, a `regressed` verdict or `escalate` recommendation pauses, and a critic-confirmed
+  goal completes the loop. Legacy (no-critic) behavior is unchanged.
+- **Phase 19 critic/verifier** (`buildCriticPrompt` / `parseCriticReview` / `heuristicCritic` /
+  `renderCriticText`): grades the *actual* result against the goal → `{ progressScore 0..100,
+  verdict advanced|stalled|regressed|complete, goalMet, gaps[], recommendation
+  continue|refine|done|escalate, rationale, confidence, source }`. Deterministic heuristic
+  fallback (derives a grade from the summary + prior scores, detecting regression). Unit-checked
+  by `scripts/verify-critic-loop.ts`. This closes the loop: plan → act → summarize → **grade** →
+  re-plan, with the latest gaps fed into the next `buildPlannerPrompt`.
 
 **Terminal snapshot API (read-only).** `PtyManager` keeps a bounded ring buffer per session
 (`MAX_BUFFER_CHARS = 120k`, sliced on each `onData`). `ptyManager.snapshot(id, maxChars)` and
@@ -533,13 +543,16 @@ path.
   — the **same single write path**, never arbitrary commands.
 - `runAutoLoop` (abortable via `activeLoops`; Stop wins at every await): propose → auto-send
   proposal (bridge) → `waitForOutput` (bounded poll, never spins) → summarize → permission
-  policy (auto-answer low-risk one-time, else pause) → `evaluateAutoOutcome`. Planner `high`
-  risk pauses. Every automatic action is appended to the session's `auto_actions` audit log.
+  policy (auto-answer low-risk one-time, else pause) → **`criticTurn` (Phase 19, grades the real
+  result, meta call + heuristic fallback)** → `evaluateAutoOutcome` (fed the critic). Planner
+  `high` risk pauses. Every automatic action is appended to the session's `auto_actions` audit
+  log. `criticTurn` also runs in approval mode's `summarize` so users see the measured grade.
 - The renderer polls `macro:get` (~1.5s) while a loop is active; it does not drive the loop.
 
 **Persistence (additive, safe `ensureColumn` migrations).** `macro_sessions`: `mode`,
 `auto_actions` (JSON), `pause_reason`. `macro_turns`: `summarizer_confidence`,
-`permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`.
+`permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`,
+and **Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON).
 Verified present in the packaged app's DB schema.
 
 **Safety summary.** Default is Approval Mode (unchanged Phase 9 flow). Auto Mode is opt-in with

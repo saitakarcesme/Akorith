@@ -412,6 +412,8 @@ export interface AutoStopInput {
   doneScore?: number | null
   threshold: number
   summary?: ExecutorSummary | null
+  /** Phase 19: measured result grade. Takes precedence over the predicted doneScore. */
+  critic?: CriticReview | null
 }
 
 export type AutoOutcome =
@@ -422,10 +424,29 @@ export type AutoOutcome =
 
 const CONTINUE_CONFIDENCE_MIN = 0.4
 
-/** Cautious gate evaluated after each Auto-Mode turn is summarized. */
+/** Cautious gate evaluated after each Auto-Mode turn is summarized and graded. */
 export function evaluateAutoOutcome(input: AutoStopInput): AutoOutcome {
-  if (typeof input.doneScore === 'number' && input.doneScore >= input.threshold) {
-    return { action: 'complete', reason: 'good_enough_threshold_reached' }
+  const critic = input.critic ?? null
+  // Phase 19: the critic grades the ACTUAL result against the goal, so prefer it
+  // over the planner's pre-execution prediction (doneScore) when deciding.
+  if (critic) {
+    if (critic.recommendation === 'escalate') {
+      return { action: 'pause', reason: 'critic_escalated' }
+    }
+    if (critic.verdict === 'regressed') {
+      return { action: 'pause', reason: 'critic_detected_regression' }
+    }
+    if ((critic.goalMet || critic.verdict === 'complete') && critic.progressScore >= input.threshold) {
+      return { action: 'complete', reason: 'critic_goal_met' }
+    }
+  }
+  const effectiveScore =
+    critic && Number.isFinite(critic.progressScore) ? critic.progressScore : input.doneScore
+  if (typeof effectiveScore === 'number' && effectiveScore >= input.threshold) {
+    return {
+      action: 'complete',
+      reason: critic ? 'critic_threshold_reached' : 'good_enough_threshold_reached'
+    }
   }
   if (input.iteration >= input.maxIterations) {
     return { action: 'stop', reason: 'max_iterations' }
@@ -440,6 +461,175 @@ export function evaluateAutoOutcome(input: AutoStopInput): AutoOutcome {
     }
   }
   return { action: 'continue' }
+}
+
+// ---------- Phase 19: critic / verifier (closed-loop evaluation) ----------
+//
+// The summarizer says WHAT happened; the critic judges HOW WELL it advanced the
+// goal. Its measured progressScore replaces the planner's pre-execution guess in
+// the stop/continue gate, and its gaps/recommendation feed the next planner turn
+// — closing the plan → act → observe → evaluate → re-plan loop. Pure + headless:
+// it is a meta call in macro.ts with a deterministic heuristic fallback here.
+
+/** How the latest result moved the goal forward. */
+export type CriticVerdict = 'advanced' | 'stalled' | 'regressed' | 'complete'
+/** What the loop should do next, per the critic. */
+export type CriticRecommendation = 'continue' | 'refine' | 'done' | 'escalate'
+
+export interface CriticReview {
+  /** 0..100 measured progress toward the goal based on the ACTUAL result. */
+  progressScore: number
+  verdict: CriticVerdict
+  /** True only when the critic judges the goal fully satisfied. */
+  goalMet: boolean
+  /** Concrete gaps still standing between the result and the goal. */
+  gaps: string[]
+  recommendation: CriticRecommendation
+  rationale: string
+  confidence: number // 0..1
+  source: 'model' | 'heuristic'
+}
+
+export interface CriticInput {
+  goal: string
+  lastPrompt: string
+  summary: ExecutorSummary
+  snapshot: string
+  turnIndex: number
+  threshold: number
+  /** Progress scores of prior turns, oldest→newest, to detect regression/stall. */
+  priorScores: number[]
+}
+
+export function buildCriticPrompt(input: CriticInput): string {
+  const prior =
+    input.priorScores.length > 0
+      ? input.priorScores.map((n, i) => `turn ${i + 1}: ${n}/100`).join(', ')
+      : 'none yet'
+  return `You are Akorith's macro-loop critic. Judge how well the executor's LATEST result advanced the goal. This is an internal orchestration call — do NOT perform or propose new work, only evaluate what already happened.
+
+Goal:
+${input.goal}
+
+Prompt sent to the executor (turn ${input.turnIndex}):
+${input.lastPrompt}
+
+Summarizer's read of what the executor did:
+"""
+${renderSummaryText(input.summary)}
+"""
+
+Recent terminal output (may be truncated):
+"""
+${input.snapshot}
+"""
+
+Prior progress scores: ${prior}
+Good-enough threshold: ${input.threshold}/100
+
+Grade strictly against the goal, not effort. Reward verified, complete progress; penalize failures, regressions, and unverified claims.
+
+Return ONLY JSON in this schema (no prose):
+{
+  "progress_score": 0,
+  "verdict": "advanced" | "stalled" | "regressed" | "complete",
+  "goal_met": false,
+  "gaps": ["concrete remaining gap", "..."],
+  "recommendation": "continue" | "refine" | "done" | "escalate",
+  "rationale": "one or two concise sentences",
+  "confidence": 0.0
+}
+- progress_score is 0..100 total progress toward the goal AFTER this turn (not the delta).
+- verdict "regressed" if this turn made things worse; "complete" only if the goal is fully met.
+- recommendation "escalate" if a human must intervene (repeated failure, destructive/ambiguous state).
+- confidence is 0..1 in your own judgement given the available output.`
+}
+
+function verdict(value: unknown): CriticVerdict {
+  return value === 'advanced' || value === 'stalled' || value === 'regressed' || value === 'complete'
+    ? value
+    : 'stalled'
+}
+
+function recommendation(value: unknown): CriticRecommendation {
+  return value === 'continue' || value === 'refine' || value === 'done' || value === 'escalate'
+    ? value
+    : 'continue'
+}
+
+function clampScore100(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.min(100, Math.max(0, Math.round(value)))
+}
+
+/** Parse a model critic response; returns null if it is not usable JSON. */
+export function parseCriticReview(text: string): CriticReview | null {
+  try {
+    const p = extractJson(text) as Record<string, unknown>
+    const v = verdict(p.verdict)
+    return {
+      progressScore: clampScore100(p.progress_score),
+      verdict: v,
+      goalMet: p.goal_met === true || v === 'complete',
+      gaps: strArray(p.gaps),
+      recommendation: recommendation(p.recommendation),
+      rationale: typeof p.rationale === 'string' ? p.rationale.trim() : '',
+      confidence: clamp01(p.confidence),
+      source: 'model'
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Deterministic fallback when the critic provider call fails or returns junk.
+ * Derives a grade from the summarizer's structured read plus prior scores so the
+ * loop still has a usable progress signal and can detect regression.
+ */
+export function heuristicCritic(summary: ExecutorSummary, priorScores: number[]): CriticReview {
+  const prevBest = priorScores.length ? Math.max(...priorScores) : 0
+  const hasFailures = summary.failures.length > 0
+  const passed = summary.testsRun != null && /pass|succe/i.test(summary.testsRun)
+  const progressed = summary.changedFiles.length > 0 || summary.commandsRun.length > 0
+
+  let progressScore: number
+  let v: CriticVerdict
+  if (hasFailures) {
+    // A failure after earlier progress reads as a regression.
+    progressScore = Math.max(0, Math.min(prevBest, 40) - 10)
+    v = prevBest > progressScore + 5 ? 'regressed' : 'stalled'
+  } else if (passed) {
+    progressScore = Math.max(prevBest, 80)
+    v = 'advanced'
+  } else if (progressed) {
+    progressScore = Math.max(prevBest, 50)
+    v = prevBest >= progressScore ? 'stalled' : 'advanced'
+  } else {
+    progressScore = Math.max(prevBest, 20)
+    v = 'stalled'
+  }
+
+  const goalMet = passed && !summary.needsUserAttention
+  return {
+    progressScore,
+    verdict: goalMet ? 'complete' : v,
+    goalMet,
+    gaps: hasFailures ? summary.failures.slice(0, 3) : progressed ? ['Verify the change satisfies the goal.'] : ['No concrete progress detected yet.'],
+    recommendation: hasFailures ? 'refine' : goalMet ? 'done' : 'continue',
+    rationale: `Heuristic grade from the result summary (${v}); model critic was unavailable.`,
+    confidence: 0.3,
+    source: 'heuristic'
+  }
+}
+
+/** One-line human summary persisted alongside the turn. */
+export function renderCriticText(c: CriticReview): string {
+  const parts: string[] = [`Critic: ${c.progressScore}/100 · ${c.verdict} · ${c.recommendation}`]
+  if (c.rationale) parts.push(c.rationale)
+  if (c.gaps.length) parts.push(`Gaps: ${c.gaps.slice(0, 3).join(' | ')}`)
+  parts.push(`(${c.source}, confidence ${Math.round(c.confidence * 100)}%)`)
+  return parts.join('\n')
 }
 
 /** One-line human summary string persisted into macro_turns.executor_result_summary. */

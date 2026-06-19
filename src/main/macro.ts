@@ -35,13 +35,18 @@ import {
 } from './macro-core'
 import {
   boundSnapshot,
+  buildCriticPrompt,
   buildSummarizerPrompt,
   decidePermissionPolicy,
   detectPermissionPrompt,
   evaluateAutoOutcome,
+  heuristicCritic,
   heuristicSummary,
+  parseCriticReview,
   parseSummaryJson,
+  renderCriticText,
   renderSummaryText,
+  type CriticReview,
   type ExecutorSummary,
   type PermissionDetection
 } from './agentic-core'
@@ -55,6 +60,7 @@ const MAX_SUMMARY_CHARS = 80_000
 const MAX_PROMPT_CHARS = 200_000
 const PROPOSE_TIMEOUT_MS = 600_000
 const SUMMARIZE_TIMEOUT_MS = 120_000
+const CRITIC_TIMEOUT_MS = 120_000
 const SNAPSHOT_CHARS = 8000
 // Auto-Mode polling: bounded, never spins the CPU.
 const POLL_INTERVAL_MS = 1200
@@ -138,7 +144,7 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
     iteration: s.turns.length + 1,
     maxIterations: s.session.maxIterations,
     goodEnoughThreshold: s.session.goodEnoughThreshold,
-    turns: s.turns,
+    turns: s.turns.map((t) => ({ ...t, criticGaps: turnCriticGaps(t) })),
     repoDigest: digest
   })
 
@@ -367,13 +373,93 @@ async function summarizeTurn(
   return { summary, detection }
 }
 
+/** Extract the persisted critic gaps for a turn (best-effort JSON parse). */
+function turnCriticGaps(turn: MacroSessionWithTurns['turns'][number]): string[] {
+  if (!turn.criticReview) return []
+  try {
+    const parsed = JSON.parse(turn.criticReview) as { gaps?: unknown }
+    return Array.isArray(parsed.gaps) ? parsed.gaps.filter((g): g is string => typeof g === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Prior turns' critic scores, oldest→newest, for regression/stall detection. */
+function priorCriticScores(turns: MacroSessionWithTurns['turns'], exceptTurnId: string): number[] {
+  return turns
+    .filter((t) => t.id !== exceptTurnId && typeof t.criticScore === 'number')
+    .map((t) => t.criticScore as number)
+}
+
+/**
+ * Phase 19: grade the ACTUAL result of a turn against the goal. Runs after the
+ * summarizer as a meta call (no usage_event) with a deterministic heuristic
+ * fallback, and persists the measured grade so both the stop/continue gate and
+ * the next planner turn can use it. Read-only over the terminal.
+ */
+async function criticTurn(
+  sessionId: string,
+  turnId: string,
+  summary: ExecutorSummary,
+  signal?: AbortSignal
+): Promise<CriticReview> {
+  const s = requireState(sessionId)
+  const turn = s.turns.find((t) => t.id === turnId)
+  if (!turn) throw new Error('macro turn not found')
+
+  const snap = ptyManager.snapshot(s.session.targetTerminal, SNAPSHOT_CHARS + 4000)
+  const bounded = boundSnapshot(snap.text, SNAPSHOT_CHARS, 200)
+  const priorScores = priorCriticScores(s.turns, turnId)
+
+  let review: CriticReview
+  try {
+    const prompt = buildCriticPrompt({
+      goal: s.session.goal,
+      lastPrompt: turn.sentPrompt ?? turn.editedProposal ?? turn.proposal ?? '',
+      summary,
+      snapshot: bounded.text,
+      turnIndex: turn.turnIndex,
+      threshold: s.session.goodEnoughThreshold,
+      priorScores
+    })
+    const signals = [AbortSignal.timeout(CRITIC_TIMEOUT_MS)]
+    if (signal) signals.push(signal)
+    const result = await sendMetaPrompt(
+      s.session.plannerProvider,
+      s.session.plannerModel ?? undefined,
+      prompt,
+      AbortSignal.any(signals)
+    )
+    review = parseCriticReview(result.text) ?? heuristicCritic(summary, priorScores)
+  } catch {
+    review = heuristicCritic(summary, priorScores)
+  }
+
+  // Fold the critic grade into the turn's visible summary so both modes show it.
+  const baseSummary = turn.executorResultSummary ?? renderSummaryText(summary)
+  updateMacroTurn(turnId, {
+    criticScore: review.progressScore,
+    criticVerdict: review.verdict,
+    criticReview: JSON.stringify(review),
+    executorResultSummary: `${baseSummary}\n\n${renderCriticText(review)}`,
+    resultStatus:
+      review.verdict === 'regressed' || review.recommendation === 'escalate' ? 'needs_attention' : turn.resultStatus
+  })
+  return review
+}
+
 /** Approval-Mode helper: fill the turn summary from the terminal for user review. */
 async function summarize(sessionId: string, turnId: string): Promise<MacroResponse & { summaryText?: string }> {
   const { summary, detection } = await summarizeTurn(sessionId, turnId)
+  // Phase 19: grade the result too, so approval-mode users see measured progress.
+  const review = await criticTurn(sessionId, turnId, summary)
   return {
     ok: true,
     state: requireState(sessionId),
-    summaryText: renderSummaryText(summary) + (detection.detected ? `\n\nPermission prompt detected: ${detection.rationale}` : '')
+    summaryText:
+      renderSummaryText(summary) +
+      `\n\n${renderCriticText(review)}` +
+      (detection.detected ? `\n\nPermission prompt detected: ${detection.rationale}` : '')
   }
 }
 
@@ -613,6 +699,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         }
       }
       updateMacroTurn(turn.id, { status: 'completed' })
+      // 6.5 Critic: grade the ACTUAL result against the goal (meta call). This
+      //     measured score — not the planner's prediction — drives the gate and
+      //     feeds the next plan, closing the loop.
+      const review = await criticTurn(sessionId, turn.id, summary, signal)
+      if (stopped()) break
       // 7. Decide continue / complete / stop / pause.
       const now = requireState(sessionId)
       const outcome = evaluateAutoOutcome({
@@ -621,10 +712,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         consecutiveFailures: countTrailingFailures(now),
         doneScore: turn.goodEnoughScore,
         threshold: now.session.goodEnoughThreshold,
-        summary
+        summary,
+        critic: review
       })
       if (outcome.action === 'complete') {
-        finishAuto(sessionId, 'completed', outcome.reason, turn.goodEnoughScore)
+        finishAuto(sessionId, 'completed', outcome.reason, review.progressScore)
         break
       }
       if (outcome.action === 'stop') {

@@ -164,6 +164,10 @@ export function initDb(): void {
   ensureColumn('macro_turns', 'terminal_snapshot_meta', 'TEXT')
   ensureColumn('macro_turns', 'auto_action', 'TEXT')
   ensureColumn('macro_turns', 'result_status', 'TEXT')
+  // Phase 19 closed-loop critic columns (measured grade of the actual result).
+  ensureColumn('macro_turns', 'critic_score', 'REAL')
+  ensureColumn('macro_turns', 'critic_verdict', 'TEXT')
+  ensureColumn('macro_turns', 'critic_review', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -886,6 +890,11 @@ export interface MacroTurnRow {
   terminalSnapshotMeta: string | null
   autoAction: string | null
   resultStatus: string | null
+  /** Phase 19 critic: measured grade of the actual result. */
+  criticScore: number | null
+  criticVerdict: string | null
+  /** JSON-serialized CriticReview. */
+  criticReview: string | null
 }
 
 export interface MacroSessionWithTurns {
@@ -935,7 +944,10 @@ const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
   permissionDetection: (r.permission_detection as string | null) ?? null,
   terminalSnapshotMeta: (r.terminal_snapshot_meta as string | null) ?? null,
   autoAction: (r.auto_action as string | null) ?? null,
-  resultStatus: (r.result_status as string | null) ?? null
+  resultStatus: (r.result_status as string | null) ?? null,
+  criticScore: (r.critic_score as number | null) ?? null,
+  criticVerdict: (r.critic_verdict as string | null) ?? null,
+  criticReview: (r.critic_review as string | null) ?? null
 })
 
 function touchMacroSession(sessionId: string, status?: MacroStatus): void {
@@ -1112,7 +1124,10 @@ export function createMacroTurn(input: {
     permissionDetection: null,
     terminalSnapshotMeta: null,
     autoAction: null,
-    resultStatus: null
+    resultStatus: null,
+    criticScore: null,
+    criticVerdict: null,
+    criticReview: null
   }
   must()
     .prepare(
@@ -1174,6 +1189,9 @@ export function updateMacroTurn(
       | 'terminalSnapshotMeta'
       | 'autoAction'
       | 'resultStatus'
+      | 'criticScore'
+      | 'criticVerdict'
+      | 'criticReview'
     >
   >
 ): MacroTurnRow | null {
@@ -1191,7 +1209,7 @@ export function updateMacroTurn(
            planner_rationale = ?, expected_result = ?, confidence_score = ?, good_enough_score = ?,
            risk_level = ?, provider_used = ?, model_used = ?, error = ?,
            summarizer_confidence = ?, permission_detection = ?, terminal_snapshot_meta = ?,
-           auto_action = ?, result_status = ?
+           auto_action = ?, result_status = ?, critic_score = ?, critic_verdict = ?, critic_review = ?
        WHERE id = ?`
     )
     .run(
@@ -1213,6 +1231,9 @@ export function updateMacroTurn(
       next.terminalSnapshotMeta,
       next.autoAction,
       next.resultStatus,
+      next.criticScore,
+      next.criticVerdict,
+      next.criticReview,
       turnId
     )
   touchMacroSession(row.sessionId)

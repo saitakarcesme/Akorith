@@ -606,7 +606,14 @@ export default function MacroLoopPanel({
 
       {turn?.executorResultSummary && session?.status !== 'awaiting_executor_result' && (
         <div className="macro-summary-readout">
-          <div className="macro-title small">Latest summary</div>
+          <div className="macro-title small">
+            Latest summary
+            {turn.criticScore != null && (
+              <span className={`macro-critic-badge is-${turn.criticVerdict ?? 'stalled'}`}>
+                critic {turn.criticScore}/100 · {turn.criticVerdict ?? 'graded'}
+              </span>
+            )}
+          </div>
           <pre>{turn.executorResultSummary}</pre>
         </div>
       )}
