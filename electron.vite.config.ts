@@ -1,5 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
-import react from '@vitejs/plugin-react'
+// SWC handles the React/TSX transform instead of esbuild — faster, and avoids
+// esbuild's transform worker hanging in restricted/sandboxed build environments.
+import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   main: {
