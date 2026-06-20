@@ -57,6 +57,8 @@ interface ChatPanelProps {
   /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
+  /** Phase 20: open a specific (freshly-scaffolded) project row by value. */
+  onOpenProjectRow?: (project: ProjectRow) => void
   /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
@@ -223,6 +225,7 @@ export default function ChatPanel({
   onToggleDrawer,
   onOpenProject,
   onCreateProject,
+  onOpenProjectRow,
   onHistoryChange,
   onActiveSession
 }: ChatPanelProps): JSX.Element {
@@ -992,6 +995,7 @@ export default function ChatPanel({
           activeProject={activeProject}
           collapsed={planningCollapsed}
           onToggleCollapsed={() => setPlanningCollapsed((value) => !value)}
+          onOpenProject={onOpenProjectRow}
         />
       )}
       <div className="composer-box">

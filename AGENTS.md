@@ -562,8 +562,11 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
 - `workspace:createProject` IPC (`window.api.macro.createWorkspaceProject`): generates an
   everyday-dev idea (meta call + deterministic fallback), scaffolds a unique dir under
   `~/Documents/Akorith Projects`, `git init`s it, and binds an **auto-mode + auto-commit** macro
-  session. It does NOT start the loop — the renderer opens the project (so the executor terminal
-  runs in that cwd) then calls `macro:startAuto`.
+  session. It does NOT start the loop itself.
+- **One-click (Phase 20.1)**: `MacroLoopPanel`'s "Build autonomously" button runs the whole
+  sequence — `createWorkspaceProject` → `onOpenProject(project)` (threaded App→ChatPanel→panel;
+  switches the active project so the executor terminal boots in the workspace cwd) → short boot
+  delay → `macro:startAuto`. No manual steps.
 - In `runAutoLoop`: after the critic, `maybeAutoCommit` commits the turn's work as the next
   `Phase N`; a metered meta-call **token budget** (`token_budget`, accumulated into `tokens_used`
   by `recordMetaUsage` on every planner/critic/summarizer call; `0` = unlimited) stops the loop

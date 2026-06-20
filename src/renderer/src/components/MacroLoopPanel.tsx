@@ -57,6 +57,8 @@ interface MacroLoopPanelProps {
   activeProject: ProjectRow | null
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** Phase 20: open a freshly-scaffolded project so its executor terminal boots. */
+  onOpenProject?: (project: ProjectRow) => void
 }
 
 function latestActionableTurn(state: MacroState | null): MacroTurnRow | null {
@@ -85,7 +87,8 @@ export default function MacroLoopPanel({
   defaultTargetTerminal,
   activeProject,
   collapsed,
-  onToggleCollapsed
+  onToggleCollapsed,
+  onOpenProject
 }: MacroLoopPanelProps): JSX.Element {
   const chatProviders = useMemo(() => (providers ?? []).filter((p) => p.available.ok && p.kind.includes('chat')), [providers])
   const [goal, setGoal] = useState('')
@@ -220,9 +223,12 @@ export default function MacroLoopPanel({
     await propose(created.state.session.id)
   }
 
-  // Phase 20: generate an everyday-dev idea, scaffold it as its own git repo,
-  // and load the bound auto-commit session so "Start Auto loop" can run it.
-  const scaffoldProject = async (): Promise<void> => {
+  // Phase 20 one-click: generate an everyday-dev idea, scaffold it as its own git
+  // repo, OPEN the project (so the executor terminal boots in that cwd), then
+  // start the auto-commit loop — no manual steps. The loop's first action is a
+  // planner meta call, which gives the terminal time to launch its agent CLI
+  // before any prompt is sent; a short delay adds margin.
+  const buildAutonomously = async (): Promise<void> => {
     if (!plannerProvider || scaffolding) return
     setError(null)
     setScaffolding(true)
@@ -245,6 +251,13 @@ export default function MacroLoopPanel({
       setGoal(res.state.session.goal)
       setWorkspaceInfo({ name: res.idea.name, dir: res.workspaceDir })
       refreshHistory()
+      // Open the new project: switches active project → executor terminal spawns
+      // in the workspace dir and launches its agent CLI.
+      onOpenProject?.(res.project)
+      // Let the agent terminal boot before the loop starts sending prompts.
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+      const started = await window.api.macro.startAuto(res.state.session.id)
+      applyResponse(started)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -441,12 +454,11 @@ export default function MacroLoopPanel({
 
       {(!session || session.status === 'completed' || session.status === 'stopped') && (
         <details className="macro-workspace">
-          <summary>✨ Autonomous project (scaffold &amp; loop-commit)</summary>
+          <summary>✨ Autonomous project (one-click scaffold, build &amp; loop-commit)</summary>
           <div className="macro-help">
-            Generates an everyday-dev idea, scaffolds it as its own git repo, and binds an
-            auto-commit loop that commits every change as <code>Phase N: …</code> until the token
-            budget is spent. After scaffolding, open the new project so the executor terminal runs
-            in it, then press Start Auto loop.
+            One click: generates an everyday-dev idea, scaffolds it as its own git repo, opens the
+            project so the executor agent runs inside it, and starts a loop that commits every
+            change as <code>Phase N: …</code> until the token budget is spent.
           </div>
           <label className="macro-field">
             <span>Idea theme (optional)</span>
@@ -471,16 +483,16 @@ export default function MacroLoopPanel({
           </label>
           <button
             type="button"
-            className="macro-btn"
+            className="macro-btn is-primary"
             disabled={!plannerProvider || scaffolding || isBusy}
-            onClick={() => void scaffoldProject()}
+            onClick={() => void buildAutonomously()}
           >
-            {scaffolding ? 'Scaffolding…' : 'Generate idea & scaffold project'}
+            {scaffolding ? 'Scaffolding & starting…' : '✨ Build autonomously (one-click)'}
           </button>
           {workspaceInfo && (
             <div className="macro-auto-note">
-              Created <strong>{workspaceInfo.name}</strong> at <code>{workspaceInfo.dir}</code>. Open
-              this project so the executor terminal runs inside it, then press Start Auto loop.
+              Building <strong>{workspaceInfo.name}</strong> at <code>{workspaceInfo.dir}</code> —
+              the loop is running and will commit each change as <code>Phase N</code>.
             </div>
           )}
         </details>

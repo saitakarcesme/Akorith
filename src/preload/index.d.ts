@@ -628,16 +628,6 @@ export interface ProjectIdea {
   firstGoal: string
 }
 
-export interface WorkspaceProjectRow {
-  id: string
-  name: string
-  path: string | null
-  color: string | null
-  icon: string | null
-  createdAt: number
-  updatedAt: number
-}
-
 export interface WorkspaceCreateRequest {
   seed?: string
   basePath?: string
@@ -650,7 +640,7 @@ export interface WorkspaceCreateRequest {
 }
 
 export type WorkspaceCreateResponse =
-  | { ok: true; idea: ProjectIdea; project: WorkspaceProjectRow; state: MacroState; workspaceDir: string }
+  | { ok: true; idea: ProjectIdea; project: ProjectRow; state: MacroState; workspaceDir: string }
   | { ok: false; error: string }
 
 export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }

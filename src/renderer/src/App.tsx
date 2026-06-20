@@ -238,6 +238,10 @@ export default function App(): JSX.Element {
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
+          onOpenProjectRow={(project) => {
+            bumpProjects()
+            void openWorkspaceForProject(project)
+          }}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
         />
