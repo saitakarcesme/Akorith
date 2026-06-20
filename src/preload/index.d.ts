@@ -566,6 +566,11 @@ export interface MacroSessionRow {
   mode: MacroMode
   autoActions: string | null
   pauseReason: string | null
+  /** Phase 20 autonomous workspace loop. */
+  workspaceDir: string | null
+  autoCommit: boolean
+  tokenBudget: number
+  tokensUsed: number
 }
 
 export interface MacroTurnRow {
@@ -610,7 +615,43 @@ export interface MacroCreateRequest {
   goodEnoughThreshold: number
   includeRepoDigest: boolean
   mode?: MacroMode
+  /** Phase 20: bind the loop to a git workspace and auto-commit each phase. */
+  workspaceDir?: string | null
+  autoCommit?: boolean
+  tokenBudget?: number
 }
+
+export interface ProjectIdea {
+  name: string
+  slug: string
+  summary: string
+  firstGoal: string
+}
+
+export interface WorkspaceProjectRow {
+  id: string
+  name: string
+  path: string | null
+  color: string | null
+  icon: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface WorkspaceCreateRequest {
+  seed?: string
+  basePath?: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations?: number
+  goodEnoughThreshold?: number
+  tokenBudget?: number
+}
+
+export type WorkspaceCreateResponse =
+  | { ok: true; idea: ProjectIdea; project: WorkspaceProjectRow; state: MacroState; workspaceDir: string }
+  | { ok: false; error: string }
 
 export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
 export type MacroSummarizeResponse =
@@ -620,6 +661,8 @@ export type PermissionDetectResponse = { ok: true; detection: PermissionDetectio
 
 export interface MacroApi {
   createSession(args: MacroCreateRequest): Promise<MacroResponse>
+  /** Phase 20: scaffold an everyday-dev project and bind an auto-commit loop to it. */
+  createWorkspaceProject(args: WorkspaceCreateRequest): Promise<WorkspaceCreateResponse>
   propose(sessionId: string): Promise<MacroResponse>
   approve(args: { sessionId: string; turnId: string; editedProposal?: string }): Promise<MacroResponse>
   recordResult(args: { sessionId: string; turnId: string; summary: string }): Promise<MacroResponse>

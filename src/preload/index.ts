@@ -185,6 +185,8 @@ const evaluate = Object.freeze({
 
 const macro = Object.freeze({
   createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
+  // Phase 20: scaffold an everyday-dev project + bind an auto-commit loop to it.
+  createWorkspaceProject: (args: unknown): Promise<unknown> => ipcRenderer.invoke('workspace:createProject', args),
   propose: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:propose', { sessionId }),
   approve: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:approve', args),
   recordResult: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:recordResult', args),

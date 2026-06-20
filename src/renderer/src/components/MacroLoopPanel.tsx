@@ -104,6 +104,11 @@ export default function MacroLoopPanel({
   // Loop mode for the create form (before a session exists). Default Approval.
   const [formMode, setFormMode] = useState<MacroMode>('approval')
   const [summarizing, setSummarizing] = useState(false)
+  // Phase 20: autonomous workspace-project creation (idea seed + token budget).
+  const [workspaceSeed, setWorkspaceSeed] = useState('')
+  const [tokenBudget, setTokenBudget] = useState(0)
+  const [scaffolding, setScaffolding] = useState(false)
+  const [workspaceInfo, setWorkspaceInfo] = useState<{ name: string; dir: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const session = state?.session ?? null
@@ -213,6 +218,38 @@ export default function MacroLoopPanel({
       return
     }
     await propose(created.state.session.id)
+  }
+
+  // Phase 20: generate an everyday-dev idea, scaffold it as its own git repo,
+  // and load the bound auto-commit session so "Start Auto loop" can run it.
+  const scaffoldProject = async (): Promise<void> => {
+    if (!plannerProvider || scaffolding) return
+    setError(null)
+    setScaffolding(true)
+    setWorkspaceInfo(null)
+    try {
+      const res = await window.api.macro.createWorkspaceProject({
+        seed: workspaceSeed.trim() || undefined,
+        plannerProvider,
+        plannerModel: plannerModel || undefined,
+        targetTerminal,
+        maxIterations,
+        goodEnoughThreshold,
+        tokenBudget: tokenBudget > 0 ? tokenBudget : undefined
+      })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setState(res.state)
+      setGoal(res.state.session.goal)
+      setWorkspaceInfo({ name: res.idea.name, dir: res.workspaceDir })
+      refreshHistory()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setScaffolding(false)
+    }
   }
 
   // Auto Mode: kick (or resume) the cautious loop in the main process.
@@ -400,6 +437,53 @@ export default function MacroLoopPanel({
           Auto Mode can send follow-up prompts to agents and auto-answer only low-risk one-time
           confirmations. Medium/high-risk prompts pause for you. Stop remains available.
         </div>
+      )}
+
+      {(!session || session.status === 'completed' || session.status === 'stopped') && (
+        <details className="macro-workspace">
+          <summary>✨ Autonomous project (scaffold &amp; loop-commit)</summary>
+          <div className="macro-help">
+            Generates an everyday-dev idea, scaffolds it as its own git repo, and binds an
+            auto-commit loop that commits every change as <code>Phase N: …</code> until the token
+            budget is spent. After scaffolding, open the new project so the executor terminal runs
+            in it, then press Start Auto loop.
+          </div>
+          <label className="macro-field">
+            <span>Idea theme (optional)</span>
+            <input
+              type="text"
+              value={workspaceSeed}
+              disabled={scaffolding || isBusy}
+              placeholder="e.g. a CLI for tidying markdown — or leave blank to surprise me"
+              onChange={(e) => setWorkspaceSeed(e.target.value)}
+            />
+          </label>
+          <label className="macro-field">
+            <span>Token budget (0 = until max iterations)</span>
+            <input
+              type="number"
+              min={0}
+              step={1000}
+              value={tokenBudget}
+              disabled={scaffolding || isBusy}
+              onChange={(e) => setTokenBudget(Math.max(0, Number(e.target.value)))}
+            />
+          </label>
+          <button
+            type="button"
+            className="macro-btn"
+            disabled={!plannerProvider || scaffolding || isBusy}
+            onClick={() => void scaffoldProject()}
+          >
+            {scaffolding ? 'Scaffolding…' : 'Generate idea & scaffold project'}
+          </button>
+          {workspaceInfo && (
+            <div className="macro-auto-note">
+              Created <strong>{workspaceInfo.name}</strong> at <code>{workspaceInfo.dir}</code>. Open
+              this project so the executor terminal runs inside it, then press Start Auto loop.
+            </div>
+          )}
+        </details>
       )}
 
       <label className="macro-field">
@@ -615,6 +699,18 @@ export default function MacroLoopPanel({
             )}
           </div>
           <pre>{turn.executorResultSummary}</pre>
+        </div>
+      )}
+
+      {session?.workspaceDir && (
+        <div className="macro-help">
+          Workspace: <code>{session.workspaceDir}</code>
+          {session.autoCommit && ' · auto-commits Phase N'}
+          {session.tokenBudget > 0
+            ? ` · tokens ${session.tokensUsed}/${session.tokenBudget}`
+            : session.tokensUsed > 0
+              ? ` · ${session.tokensUsed} planner tokens used`
+              : ''}
         </div>
       )}
 

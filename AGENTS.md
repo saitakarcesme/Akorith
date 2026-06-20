@@ -549,8 +549,30 @@ path.
   log. `criticTurn` also runs in approval mode's `summarize` so users see the measured grade.
 - The renderer polls `macro:get` (~1.5s) while a loop is active; it does not drive the loop.
 
+**Phase 20 — autonomous workspace loop (loop-commit projects), `workspace.ts`.** Turns the loop
+into a "scaffold a project → build it → commit every change as `Phase N: <change>` → stop on
+budget" pipeline. `workspace.ts` is self-contained (only node builtins; git runs `shell:false`
+with the commit message via `-F -` over stdin, so a headline can never reach a shell) and is
+headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a temp repo):
+- Pure: `parseHighestPhase` / `buildPhaseCommitMessage` / `deriveHeadline` / `slugify` /
+  `buildIdeaPrompt` / `parseProjectIdea`.
+- Git IO: `initWorkspace` (mkdir + `git init` + README + "Phase 0: scaffold project"),
+  `nextPhaseNumber` (highest `Phase N` in the log + 1, so numbering survives restarts),
+  `commitPhase` (stage-all → no-op if nothing changed → commit "Phase N: <headline>").
+- `workspace:createProject` IPC (`window.api.macro.createWorkspaceProject`): generates an
+  everyday-dev idea (meta call + deterministic fallback), scaffolds a unique dir under
+  `~/Documents/Akorith Projects`, `git init`s it, and binds an **auto-mode + auto-commit** macro
+  session. It does NOT start the loop — the renderer opens the project (so the executor terminal
+  runs in that cwd) then calls `macro:startAuto`.
+- In `runAutoLoop`: after the critic, `maybeAutoCommit` commits the turn's work as the next
+  `Phase N`; a metered meta-call **token budget** (`token_budget`, accumulated into `tokens_used`
+  by `recordMetaUsage` on every planner/critic/summarizer call; `0` = unlimited) stops the loop
+  with `token_budget_reached`. Only the loop's own meta calls are metered — the external executor
+  agent's tokens are not visible to Akorith.
+
 **Persistence (additive, safe `ensureColumn` migrations).** `macro_sessions`: `mode`,
-`auto_actions` (JSON), `pause_reason`. `macro_turns`: `summarizer_confidence`,
+`auto_actions` (JSON), `pause_reason`, and **Phase 20** `workspace_dir`, `auto_commit`,
+`token_budget`, `tokens_used`. `macro_turns`: `summarizer_confidence`,
 `permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`,
 and **Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON).
 Verified present in the packaged app's DB schema.

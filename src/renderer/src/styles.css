@@ -4389,6 +4389,32 @@ textarea:focus-visible {
   content: '▾ ';
 }
 
+/* Phase 20: autonomous workspace-project card. */
+.macro-workspace {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.macro-workspace > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.macro-workspace > summary::-webkit-details-marker {
+  display: none;
+}
+.macro-workspace code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  word-break: break-all;
+}
+
 /* Repo-context help line under the macro toggle. */
 .macro-help {
   font-size: 10.5px;

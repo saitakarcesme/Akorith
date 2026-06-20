@@ -9,7 +9,9 @@
 // through bridgeSend() -> PtyManager.write(). No second write path. Planner and
 // summarizer calls are meta calls (sendMetaPrompt) and write no usage_events.
 
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
+import { existsSync } from 'fs'
+import { isAbsolute, join } from 'path'
 import { bridgeSend } from './bridge'
 import { getBridgeSettings } from './config'
 import { buildDigest } from './digest'
@@ -17,6 +19,7 @@ import { ptyManager } from './pty'
 import {
   addMessage,
   createMacroSession,
+  createProject,
   createMacroTurn,
   getMacroSession,
   getMacroState,
@@ -25,9 +28,20 @@ import {
   updateMacroSession,
   updateMacroTurn,
   type MacroMode,
-  type MacroSessionWithTurns
+  type MacroSessionRow,
+  type MacroSessionWithTurns,
+  type ProjectRow
 } from './db'
 import { sendMetaPrompt } from './providers/registry'
+import {
+  buildIdeaPrompt,
+  commitPhase,
+  deriveHeadline,
+  initWorkspace,
+  parseProjectIdea,
+  slugify,
+  type ProjectIdea
+} from './workspace'
 import {
   buildPlannerPrompt,
   maxIterationsReached,
@@ -77,6 +91,22 @@ const activeProposals = new Map<string, AbortController>()
 // Active Auto-Mode loops, keyed by session id, so Stop can abort them.
 const activeLoops = new Map<string, AbortController>()
 
+// Phase 20: accumulate metered meta-call tokens onto the session so a token
+// budget ("till the tokens are gone") can stop the loop. Only the loop's own
+// planner/critic/summarizer calls are metered — the external executor agent's
+// usage is not visible to Akorith.
+function recordMetaUsage(sessionId: string, usage: { promptTokens?: number; completionTokens?: number }): void {
+  const tokens = (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0)
+  if (tokens <= 0) return
+  const s = getMacroSession(sessionId)
+  if (!s) return
+  updateMacroSession(sessionId, { tokensUsed: s.tokensUsed + tokens })
+}
+
+function tokenBudgetExceeded(s: MacroSessionRow): boolean {
+  return s.tokenBudget > 0 && s.tokensUsed >= s.tokenBudget
+}
+
 function state(sessionId: string): MacroSessionWithTurns | undefined {
   return getMacroState(sessionId) ?? undefined
 }
@@ -105,6 +135,9 @@ async function createSession(args: {
   goodEnoughThreshold: number
   includeRepoDigest: boolean
   mode?: MacroMode
+  workspaceDir?: string | null
+  autoCommit?: boolean
+  tokenBudget?: number
 }): Promise<MacroResponse> {
   const session = createMacroSession({
     goal: cleanText(args.goal, MAX_GOAL_CHARS),
@@ -114,7 +147,10 @@ async function createSession(args: {
     maxIterations: clampInt(args.maxIterations, 5, 1, 50),
     goodEnoughThreshold: clampInt(args.goodEnoughThreshold, 85, 1, 100),
     includeRepoDigest: args.includeRepoDigest,
-    mode: args.mode === 'auto' ? 'auto' : 'approval'
+    mode: args.mode === 'auto' ? 'auto' : 'approval',
+    workspaceDir: args.workspaceDir || null,
+    autoCommit: args.autoCommit ?? false,
+    tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000)
   })
   return { ok: true, state: requireState(session.id) }
 }
@@ -156,6 +192,7 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
     if (extraSignal) signals.push(extraSignal)
     const signal = AbortSignal.any(signals)
     const result = await sendMetaPrompt(s.session.plannerProvider, s.session.plannerModel ?? undefined, prompt, signal)
+    recordMetaUsage(sessionId, result.usage)
     const current = requireState(sessionId)
     if (current.session.status === 'stopped') return { ok: true, state: current }
 
@@ -347,6 +384,7 @@ async function summarizeTurn(
       prompt,
       AbortSignal.any(signals)
     )
+    recordMetaUsage(sessionId, result.usage)
     summary = parseSummaryJson(result.text) ?? heuristicSummary(snap.text)
   } catch {
     summary = heuristicSummary(snap.text)
@@ -430,6 +468,7 @@ async function criticTurn(
       prompt,
       AbortSignal.any(signals)
     )
+    recordMetaUsage(sessionId, result.usage)
     review = parseCriticReview(result.text) ?? heuristicCritic(summary, priorScores)
   } catch {
     review = heuristicCritic(summary, priorScores)
@@ -446,6 +485,37 @@ async function criticTurn(
       review.verdict === 'regressed' || review.recommendation === 'escalate' ? 'needs_attention' : turn.resultStatus
   })
   return review
+}
+
+/**
+ * Phase 20: commit this turn's work to the session's workspace as the next
+ * "Phase N: <change>". Loop-driven and deterministic — staging + the message
+ * (via stdin) come from Akorith, never from the executor agent. No-ops cleanly
+ * when auto-commit is off, there is no workspace, or nothing changed.
+ */
+async function maybeAutoCommit(
+  sessionId: string,
+  turnId: string,
+  summaryStatus: string | null,
+  criticRationale: string | null,
+  criticVerdict: string | null
+): Promise<void> {
+  const s = getMacroSession(sessionId)
+  if (!s || !s.autoCommit || !s.workspaceDir) return
+  const headline = deriveHeadline({ criticRationale, criticVerdict, summaryStatus, goal: s.goal })
+  try {
+    const res = await commitPhase(s.workspaceDir, headline)
+    if (res.committed) {
+      logAutoAction(sessionId, { type: 'auto_commit', phase: res.phase, message: res.message })
+      updateMacroTurn(turnId, {
+        autoAction: JSON.stringify({ type: 'auto_commit', phase: res.phase, message: res.message, at: Date.now() })
+      })
+    } else {
+      logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: res.reason })
+    }
+  } catch (err) {
+    logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 /** Approval-Mode helper: fill the turn summary from the terminal for user review. */
@@ -653,6 +723,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         finishAuto(sessionId, 'stopped', 'max_iterations')
         break
       }
+      // Phase 20: stop when the metered meta-call token budget is spent.
+      if (tokenBudgetExceeded(s.session)) {
+        finishAuto(sessionId, 'stopped', 'token_budget_reached')
+        break
+      }
 
       // 1. Propose the next executor step (meta call).
       updateMacroSession(sessionId, { status: 'auto_running', pauseReason: null })
@@ -704,6 +779,9 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       //     feeds the next plan, closing the loop.
       const review = await criticTurn(sessionId, turn.id, summary, signal)
       if (stopped()) break
+      // 6.7 Auto-commit this turn's work as "Phase N: <change>" (loop-driven git).
+      await maybeAutoCommit(sessionId, turn.id, summary.currentStatus, review.rationale, review.verdict)
+      if (stopped()) break
       // 7. Decide continue / complete / stop / pause.
       const now = requireState(sessionId)
       const outcome = evaluateAutoOutcome({
@@ -747,6 +825,99 @@ function startAuto(sessionId: string): MacroResponse {
   return { ok: true, state: requireState(sessionId) }
 }
 
+// ---------- Phase 20: autonomous workspace project creation ----------
+
+interface WorkspaceCreateArgs {
+  seed?: string
+  basePath?: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations?: number
+  goodEnoughThreshold?: number
+  tokenBudget?: number
+}
+
+type WorkspaceCreateResponse =
+  | { ok: true; idea: ProjectIdea; project: ProjectRow; state: MacroSessionWithTurns; workspaceDir: string }
+  | { ok: false; error: string }
+
+/** Deterministic idea when the model call fails or returns unusable JSON. */
+function fallbackIdea(seed?: string): ProjectIdea {
+  const name = seed?.trim() ? seed.trim().slice(0, 60) : 'Dev Notes CLI'
+  return {
+    name,
+    slug: slugify(name),
+    summary: 'A small everyday-developer tool (auto-scaffolded because idea generation did not return usable JSON).',
+    firstGoal:
+      'In this empty git repository, create a minimal runnable project skeleton (README, an entry file, and a smoke test) for a small useful CLI tool, then report exactly what you created.'
+  }
+}
+
+/**
+ * Generate an everyday-dev idea, scaffold it as its own git repo, and bind a
+ * fresh auto-mode + auto-commit macro session to it. Does NOT start the loop —
+ * the renderer first starts the executor terminal in `workspaceDir`, then calls
+ * macro:startAuto. The build then commits each change as "Phase N: <change>".
+ */
+async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<WorkspaceCreateResponse> {
+  // 1. Generate an everyday-dev idea (meta call) with a deterministic fallback.
+  let idea: ProjectIdea
+  try {
+    const res = await sendMetaPrompt(
+      args.plannerProvider,
+      args.plannerModel || undefined,
+      buildIdeaPrompt(args.seed),
+      AbortSignal.timeout(PROPOSE_TIMEOUT_MS)
+    )
+    idea = parseProjectIdea(res.text) ?? fallbackIdea(args.seed)
+  } catch {
+    idea = fallbackIdea(args.seed)
+  }
+
+  // 2. Resolve a unique, safe workspace directory under the base path.
+  const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
+  let dir = join(base, idea.slug)
+  for (let n = 2; existsSync(dir) && n <= 50; n++) dir = join(base, `${idea.slug}-${n}`)
+
+  // 3. Scaffold: mkdir + git init + README + "Phase 0: scaffold project".
+  const init = await initWorkspace(dir, idea)
+  if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
+
+  // 4. Persist a sidebar project row + an auto-mode macro session bound to it.
+  const project = createProject({ name: idea.name, path: dir })
+  const session = createMacroSession({
+    goal: cleanText(idea.firstGoal, MAX_GOAL_CHARS),
+    plannerProvider: args.plannerProvider,
+    plannerModel: args.plannerModel || undefined,
+    targetTerminal: args.targetTerminal,
+    maxIterations: clampInt(args.maxIterations ?? 30, 30, 1, 200),
+    goodEnoughThreshold: clampInt(args.goodEnoughThreshold ?? 90, 90, 1, 100),
+    includeRepoDigest: true,
+    mode: 'auto',
+    workspaceDir: dir,
+    autoCommit: true,
+    tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000)
+  })
+  return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
+}
+
+function validWorkspacePayload(args: unknown): args is WorkspaceCreateArgs {
+  const a = args as Record<string, unknown>
+  return (
+    typeof a?.plannerProvider === 'string' &&
+    VALID_PROVIDER.test(a.plannerProvider) &&
+    (a.plannerModel === undefined || (typeof a.plannerModel === 'string' && VALID_MODEL.test(a.plannerModel))) &&
+    typeof a.targetTerminal === 'string' &&
+    VALID_TERMINAL.test(a.targetTerminal) &&
+    (a.seed === undefined || (typeof a.seed === 'string' && a.seed.length <= 2_000)) &&
+    (a.basePath === undefined || (typeof a.basePath === 'string' && a.basePath.length <= 2_000)) &&
+    (a.maxIterations === undefined || typeof a.maxIterations === 'number') &&
+    (a.goodEnoughThreshold === undefined || typeof a.goodEnoughThreshold === 'number') &&
+    (a.tokenBudget === undefined || typeof a.tokenBudget === 'number')
+  )
+}
+
 function validCreatePayload(args: unknown): args is Parameters<typeof createSession>[0] {
   const a = args as Record<string, unknown>
   return (
@@ -761,7 +932,10 @@ function validCreatePayload(args: unknown): args is Parameters<typeof createSess
     typeof a.maxIterations === 'number' &&
     typeof a.goodEnoughThreshold === 'number' &&
     typeof a.includeRepoDigest === 'boolean' &&
-    (a.mode === undefined || a.mode === 'approval' || a.mode === 'auto')
+    (a.mode === undefined || a.mode === 'approval' || a.mode === 'auto') &&
+    (a.workspaceDir === undefined || a.workspaceDir === null || (typeof a.workspaceDir === 'string' && a.workspaceDir.length <= 2_000)) &&
+    (a.autoCommit === undefined || typeof a.autoCommit === 'boolean') &&
+    (a.tokenBudget === undefined || typeof a.tokenBudget === 'number')
   )
 }
 
@@ -770,6 +944,17 @@ export function registerMacroIpc(): void {
     if (!validCreatePayload(args)) return { ok: false, error: 'invalid macro:createSession payload' }
     try {
       return await createSession(args)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // Phase 20: generate an everyday-dev idea, scaffold it as its own git repo,
+  // and bind an auto-mode + auto-commit macro session to it (does not start it).
+  ipcMain.handle('workspace:createProject', async (_event, args): Promise<WorkspaceCreateResponse> => {
+    if (!validWorkspacePayload(args)) return { ok: false, error: 'invalid workspace:createProject payload' }
+    try {
+      return await createWorkspaceProject(args)
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }

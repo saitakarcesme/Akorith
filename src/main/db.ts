@@ -168,6 +168,12 @@ export function initDb(): void {
   ensureColumn('macro_turns', 'critic_score', 'REAL')
   ensureColumn('macro_turns', 'critic_verdict', 'TEXT')
   ensureColumn('macro_turns', 'critic_review', 'TEXT')
+  // Phase 20 autonomous workspace loop: per-session build dir, auto-commit flag,
+  // and a metered meta-call token budget ("till the tokens are gone").
+  ensureColumn('macro_sessions', 'workspace_dir', 'TEXT')
+  ensureColumn('macro_sessions', 'auto_commit', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'token_budget', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'tokens_used', 'INTEGER NOT NULL DEFAULT 0')
 }
 
 export function closeDb(): void {
@@ -864,6 +870,12 @@ export interface MacroSessionRow {
   /** JSON audit trail of automatic actions (sends, auto-answers, pauses). */
   autoActions: string | null
   pauseReason: string | null
+  /** Phase 20 autonomous workspace loop. */
+  workspaceDir: string | null
+  autoCommit: boolean
+  /** Metered meta-call token budget; 0 = unlimited. */
+  tokenBudget: number
+  tokensUsed: number
 }
 
 export interface MacroTurnRow {
@@ -919,7 +931,11 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   stopReason: (r.stop_reason as string | null) ?? null,
   mode: (r.mode as MacroMode | null) === 'auto' ? 'auto' : 'approval',
   autoActions: (r.auto_actions as string | null) ?? null,
-  pauseReason: (r.pause_reason as string | null) ?? null
+  pauseReason: (r.pause_reason as string | null) ?? null,
+  workspaceDir: (r.workspace_dir as string | null) ?? null,
+  autoCommit: r.auto_commit === 1,
+  tokenBudget: (r.token_budget as number | null) ?? 0,
+  tokensUsed: (r.tokens_used as number | null) ?? 0
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -967,6 +983,9 @@ export function createMacroSession(input: {
   goodEnoughThreshold: number
   includeRepoDigest: boolean
   mode?: MacroMode
+  workspaceDir?: string | null
+  autoCommit?: boolean
+  tokenBudget?: number
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -986,15 +1005,19 @@ export function createMacroSession(input: {
     stopReason: null,
     mode: input.mode === 'auto' ? 'auto' : 'approval',
     autoActions: null,
-    pauseReason: null
+    pauseReason: null,
+    workspaceDir: input.workspaceDir ?? null,
+    autoCommit: input.autoCommit ?? false,
+    tokenBudget: Math.max(0, Math.floor(input.tokenBudget ?? 0)),
+    tokensUsed: 0
   }
   must()
     .prepare(
       `INSERT INTO macro_sessions
        (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
         max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason,
-        mode, auto_actions, pause_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -1013,7 +1036,11 @@ export function createMacroSession(input: {
       row.stopReason,
       row.mode,
       row.autoActions,
-      row.pauseReason
+      row.pauseReason,
+      row.workspaceDir,
+      row.autoCommit ? 1 : 0,
+      row.tokenBudget,
+      row.tokensUsed
     )
   return row
 }
@@ -1021,7 +1048,17 @@ export function createMacroSession(input: {
 export function updateMacroSession(
   sessionId: string,
   patch: Partial<
-    Pick<MacroSessionRow, 'status' | 'repoDigestSnapshot' | 'finalScore' | 'stopReason' | 'mode' | 'autoActions' | 'pauseReason'>
+    Pick<
+      MacroSessionRow,
+      | 'status'
+      | 'repoDigestSnapshot'
+      | 'finalScore'
+      | 'stopReason'
+      | 'mode'
+      | 'autoActions'
+      | 'pauseReason'
+      | 'tokensUsed'
+    >
   >
 ): MacroSessionRow | null {
   if (!VALID_ID.test(sessionId)) return null
@@ -1034,13 +1071,14 @@ export function updateMacroSession(
     stopReason: patch.stopReason ?? current.stopReason,
     mode: patch.mode ?? current.mode,
     autoActions: patch.autoActions !== undefined ? patch.autoActions : current.autoActions,
-    pauseReason: patch.pauseReason !== undefined ? patch.pauseReason : current.pauseReason
+    pauseReason: patch.pauseReason !== undefined ? patch.pauseReason : current.pauseReason,
+    tokensUsed: patch.tokensUsed ?? current.tokensUsed
   }
   must()
     .prepare(
       `UPDATE macro_sessions
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
-           mode = ?, auto_actions = ?, pause_reason = ?
+           mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?
        WHERE id = ?`
     )
     .run(
@@ -1052,6 +1090,7 @@ export function updateMacroSession(
       next.mode,
       next.autoActions,
       next.pauseReason,
+      next.tokensUsed,
       sessionId
     )
   return getMacroSession(sessionId)
