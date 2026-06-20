@@ -7,6 +7,7 @@ import {
   CloseIcon,
   FlaskIcon,
   FolderIcon,
+  LoopIcon,
   MessageIcon,
   PanelsIcon,
   PlusIcon,
@@ -38,6 +39,7 @@ interface SidebarProps {
 // above Workspace instead (see below). Workspace stays project-scoped.
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
+  { view: 'loops', label: 'Loop', icon: LoopIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Test', icon: FlaskIcon }
 ]

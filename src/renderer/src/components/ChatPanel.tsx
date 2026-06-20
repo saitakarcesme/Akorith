@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
-import MacroLoopPanel from './MacroLoopPanel'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
 
 interface ChatMessage {
@@ -57,8 +56,6 @@ interface ChatPanelProps {
   /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
-  /** Phase 20: open a specific (freshly-scaffolded) project row by value. */
-  onOpenProjectRow?: (project: ProjectRow) => void
   /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
@@ -225,7 +222,6 @@ export default function ChatPanel({
   onToggleDrawer,
   onOpenProject,
   onCreateProject,
-  onOpenProjectRow,
   onHistoryChange,
   onActiveSession
 }: ChatPanelProps): JSX.Element {
@@ -256,7 +252,6 @@ export default function ChatPanel({
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<SelectionPopover | null>(null)
   const selectionRef = useRef<SelectionPopover | null>(null)
-  const [planningCollapsed, setPlanningCollapsed] = useState(() => storageBoolean('akorith.planningToolsCollapsed', true))
 
   // ---- Phase 6: suggest-only router + opt-in repo context ----
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
@@ -312,10 +307,6 @@ export default function ChatPanel({
     const timer = window.setTimeout(() => void loadProviders(), 3000)
     return () => window.clearTimeout(timer)
   }, [providers, loadProviders])
-
-  useEffect(() => {
-    localStorage.setItem('akorith.planningToolsCollapsed', String(planningCollapsed))
-  }, [planningCollapsed])
 
   // Read-only memory stats for the composer indicator (no model call). Each
   // session is independent, so this only ever reflects the active session.
@@ -908,8 +899,8 @@ export default function ChatPanel({
   )
 
   // The composer is the central work control, reused in the empty-state hero and
-  // (when a conversation exists) docked at the bottom. Macro-loop mode/status live
-  // inside it via the compact MacroLoopPanel above the input.
+  // (when a conversation exists) docked at the bottom. The autonomous loop now
+  // lives in its own top-level Loop section (LoopsPage), not above the composer.
   const permissionCard = pendingPermission && (() => {
     const { detection, terminalId } = pendingPermission
     const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
@@ -985,18 +976,6 @@ export default function ChatPanel({
             </button>
           </div>
         </div>
-      )}
-      {hasProject && activeProject && (
-        <MacroLoopPanel
-          providers={providers}
-          defaultProviderId={providerId}
-          defaultModel={model}
-          defaultTargetTerminal={bridgeTarget}
-          activeProject={activeProject}
-          collapsed={planningCollapsed}
-          onToggleCollapsed={() => setPlanningCollapsed((value) => !value)}
-          onOpenProject={onOpenProjectRow}
-        />
       )}
       <div className="composer-box">
         {attachedImages.length > 0 && (

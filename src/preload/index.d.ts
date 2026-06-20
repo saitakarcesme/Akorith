@@ -571,6 +571,8 @@ export interface MacroSessionRow {
   autoCommit: boolean
   tokenBudget: number
   tokensUsed: number
+  /** Phase 21: plain-language loop label. */
+  title: string | null
 }
 
 export interface MacroTurnRow {

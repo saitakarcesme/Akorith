@@ -563,10 +563,18 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   everyday-dev idea (meta call + deterministic fallback), scaffolds a unique dir under
   `~/Documents/Akorith Projects`, `git init`s it, and binds an **auto-mode + auto-commit** macro
   session. It does NOT start the loop itself.
-- **One-click (Phase 20.1)**: `MacroLoopPanel`'s "Build autonomously" button runs the whole
-  sequence — `createWorkspaceProject` → `onOpenProject(project)` (threaded App→ChatPanel→panel;
-  switches the active project so the executor terminal boots in the workspace cwd) → short boot
-  delay → `macro:startAuto`. No manual steps.
+- **One-click (Phase 20.1)**: ran the whole create→open→start sequence from a single button.
+  Superseded by the dedicated Loop section in Phase 21.
+- **Loop section (Phase 21, `LoopsPage.tsx`).** The autonomous loop is now a first-class
+  top-level view (`AppView 'loops'`, sidebar "Loop" item), **removed from above the chatbox**
+  (the old `MacroLoopPanel` is deleted). Deliberately non-technical: a card grid of existing
+  loops + a "＋" card; the create flow is a single short description ("a sentence or two"),
+  persisted as `macro_sessions.title` and shown on the card. Creating a loop auto-picks the first
+  available provider, calls `createWorkspaceProject`, starts a **headless** executor terminal in
+  the workspace cwd (`pty.setActiveProject(projectKey)` + `pty.create('t1::<key>', {cwd,
+  commandKind:'claude'})` — no visible terminal UI), then `macro:startAuto`. The detail page shows
+  a live timer, the saved changes (auto-commit log → "Phase N: …"), and Pause/Resume — all
+  framed in plain language; the macro/critic/token machinery stays hidden.
 - In `runAutoLoop`: after the critic, `maybeAutoCommit` commits the turn's work as the next
   `Phase N`; a metered meta-call **token budget** (`token_budget`, accumulated into `tokens_used`
   by `recordMetaUsage` on every planner/critic/summarizer call; `0` = unlimited) stops the loop
@@ -575,7 +583,7 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
 
 **Persistence (additive, safe `ensureColumn` migrations).** `macro_sessions`: `mode`,
 `auto_actions` (JSON), `pause_reason`, and **Phase 20** `workspace_dir`, `auto_commit`,
-`token_budget`, `tokens_used`. `macro_turns`: `summarizer_confidence`,
+`token_budget`, `tokens_used`, and **Phase 21** `title`. `macro_turns`: `summarizer_confidence`,
 `permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`,
 and **Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON).
 Verified present in the packaged app's DB schema.

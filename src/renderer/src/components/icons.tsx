@@ -67,6 +67,17 @@ export function FlaskIcon(props: IconProps): JSX.Element {
   )
 }
 
+export function LoopIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M4 9a8 8 0 0 1 13.6-3.6L20 8" />
+      <path d="M20 4v4h-4" />
+      <path d="M20 15a8 8 0 0 1-13.6 3.6L4 16" />
+      <path d="M4 20v-4h4" />
+    </IconShell>
+  )
+}
+
 export function FolderIcon(props: IconProps): JSX.Element {
   return (
     <IconShell {...props}>

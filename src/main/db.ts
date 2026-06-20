@@ -174,6 +174,8 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'auto_commit', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('macro_sessions', 'token_budget', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('macro_sessions', 'tokens_used', 'INTEGER NOT NULL DEFAULT 0')
+  // Phase 21 Loop section: a plain-language label for the loop card.
+  ensureColumn('macro_sessions', 'title', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -876,6 +878,8 @@ export interface MacroSessionRow {
   /** Metered meta-call token budget; 0 = unlimited. */
   tokenBudget: number
   tokensUsed: number
+  /** Phase 21: plain-language label shown on the loop card. */
+  title: string | null
 }
 
 export interface MacroTurnRow {
@@ -935,7 +939,8 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   workspaceDir: (r.workspace_dir as string | null) ?? null,
   autoCommit: r.auto_commit === 1,
   tokenBudget: (r.token_budget as number | null) ?? 0,
-  tokensUsed: (r.tokens_used as number | null) ?? 0
+  tokensUsed: (r.tokens_used as number | null) ?? 0,
+  title: (r.title as string | null) ?? null
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -986,6 +991,7 @@ export function createMacroSession(input: {
   workspaceDir?: string | null
   autoCommit?: boolean
   tokenBudget?: number
+  title?: string | null
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -1009,15 +1015,16 @@ export function createMacroSession(input: {
     workspaceDir: input.workspaceDir ?? null,
     autoCommit: input.autoCommit ?? false,
     tokenBudget: Math.max(0, Math.floor(input.tokenBudget ?? 0)),
-    tokensUsed: 0
+    tokensUsed: 0,
+    title: input.title ?? null
   }
   must()
     .prepare(
       `INSERT INTO macro_sessions
        (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
         max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason,
-        mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used, title)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -1040,7 +1047,8 @@ export function createMacroSession(input: {
       row.workspaceDir,
       row.autoCommit ? 1 : 0,
       row.tokenBudget,
-      row.tokensUsed
+      row.tokensUsed,
+      row.title
     )
   return row
 }

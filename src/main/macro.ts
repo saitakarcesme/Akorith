@@ -897,7 +897,9 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     mode: 'auto',
     workspaceDir: dir,
     autoCommit: true,
-    tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000)
+    tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000),
+    // Phase 21: show the user's own words on the loop card (fallback to the idea name).
+    title: (args.seed?.trim() || idea.name).slice(0, 200)
   })
   return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
 }

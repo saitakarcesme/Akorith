@@ -4,11 +4,12 @@ import AgentDrawer from './components/AgentDrawer'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import TestPage from './components/TestPage'
+import LoopsPage from './components/LoopsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -238,10 +239,6 @@ export default function App(): JSX.Element {
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
-          onOpenProjectRow={(project) => {
-            bumpProjects()
-            void openWorkspaceForProject(project)
-          }}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
         />
@@ -258,6 +255,10 @@ export default function App(): JSX.Element {
           interrupted by navigating to the Workspace or Dashboard. */}
       <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
         <TestPage active={view === 'test'} activeProject={activeProject} />
+      </div>
+      {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
+      <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
+        <LoopsPage active={view === 'loops'} />
       </div>
       {view === 'dashboard' && <Dashboard />}
     </div>
