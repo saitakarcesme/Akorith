@@ -147,6 +147,80 @@ export function initDb(): void {
       error                   TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_macro_turns_session ON macro_turns(session_id, turn_index);
+    CREATE TABLE IF NOT EXISTS loop_targets (
+      id          TEXT PRIMARY KEY,
+      loop_id     TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      kind        TEXT NOT NULL,
+      ref         TEXT,
+      label       TEXT,
+      metadata    TEXT,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_loop_targets_loop ON loop_targets(loop_id);
+    CREATE TABLE IF NOT EXISTS loop_runs (
+      id                 TEXT PRIMARY KEY,
+      loop_id            TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      run_index          INTEGER NOT NULL,
+      started_at         INTEGER NOT NULL,
+      ended_at           INTEGER,
+      status             TEXT NOT NULL,
+      provider_id        TEXT,
+      model              TEXT,
+      summary            TEXT,
+      actions_taken      TEXT,
+      files_changed      TEXT,
+      commands_executed  TEXT,
+      test_build_results TEXT,
+      commits_created    TEXT,
+      next_suggested_step TEXT,
+      error              TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_loop_runs_loop ON loop_runs(loop_id, run_index);
+    CREATE TABLE IF NOT EXISTS loop_events (
+      id          TEXT PRIMARY KEY,
+      loop_id     TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      run_id      TEXT REFERENCES loop_runs(id) ON DELETE SET NULL,
+      ts          INTEGER NOT NULL,
+      type        TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      severity    TEXT NOT NULL DEFAULT 'info',
+      metadata    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_loop_events_loop ON loop_events(loop_id, ts);
+    CREATE TABLE IF NOT EXISTS loop_templates (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      type        TEXT NOT NULL,
+      description TEXT,
+      prompt      TEXT NOT NULL,
+      settings    TEXT,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS loop_artifacts (
+      id          TEXT PRIMARY KEY,
+      loop_id     TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      run_id      TEXT REFERENCES loop_runs(id) ON DELETE SET NULL,
+      kind        TEXT NOT NULL,
+      path        TEXT,
+      title       TEXT,
+      content     TEXT,
+      metadata    TEXT,
+      created_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_loop_artifacts_loop ON loop_artifacts(loop_id, created_at);
+    CREATE TABLE IF NOT EXISTS loop_reports (
+      id          TEXT PRIMARY KEY,
+      loop_id     TEXT NOT NULL REFERENCES macro_sessions(id) ON DELETE CASCADE,
+      run_id      TEXT REFERENCES loop_runs(id) ON DELETE SET NULL,
+      kind        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      summary     TEXT,
+      content     TEXT,
+      created_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_loop_reports_loop ON loop_reports(loop_id, created_at);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
@@ -183,6 +257,25 @@ export function initDb(): void {
   // Loop systems: remember the user's loop intent and optional cadence.
   ensureColumn('macro_sessions', 'loop_intent', 'TEXT')
   ensureColumn('macro_sessions', 'cadence_minutes', 'INTEGER NOT NULL DEFAULT 0')
+  // Phase 23.2 Loop Operations Center: durable product-level metadata for
+  // schedules, targets, autonomy/safety, reports, commit behavior, and archives.
+  ensureColumn('macro_sessions', 'loop_type', 'TEXT')
+  ensureColumn('macro_sessions', 'target_type', 'TEXT')
+  ensureColumn('macro_sessions', 'target_ref', 'TEXT')
+  ensureColumn('macro_sessions', 'schedule_kind', 'TEXT')
+  ensureColumn('macro_sessions', 'schedule_detail', 'TEXT')
+  ensureColumn('macro_sessions', 'next_run_at', 'INTEGER')
+  ensureColumn('macro_sessions', 'stop_condition', 'TEXT')
+  ensureColumn('macro_sessions', 'max_runs', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'max_commits', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'run_count', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'commit_behavior', 'TEXT')
+  ensureColumn('macro_sessions', 'push_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('macro_sessions', 'test_commands', 'TEXT')
+  ensureColumn('macro_sessions', 'report_format', 'TEXT')
+  ensureColumn('macro_sessions', 'safety_level', 'TEXT')
+  ensureColumn('macro_sessions', 'latest_result', 'TEXT')
+  ensureColumn('macro_sessions', 'archived_at', 'INTEGER')
 }
 
 export function closeDb(): void {
@@ -892,6 +985,24 @@ export interface MacroSessionRow {
   /** Monitoring/build cadence metadata for the Loop section. */
   loopIntent: string | null
   cadenceMinutes: number
+  /** Phase 23.2 Loop Operations Center metadata. */
+  loopType: string | null
+  targetType: string | null
+  targetRef: string | null
+  scheduleKind: string | null
+  scheduleDetail: string | null
+  nextRunAt: number | null
+  stopCondition: string | null
+  maxRuns: number
+  maxCommits: number
+  runCount: number
+  commitBehavior: string | null
+  pushEnabled: boolean
+  testCommands: string | null
+  reportFormat: string | null
+  safetyLevel: string | null
+  latestResult: string | null
+  archivedAt: number | null
 }
 
 export interface MacroTurnRow {
@@ -957,7 +1068,24 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   title: (r.title as string | null) ?? null,
   pendingSteering: (r.pending_steering as string | null) ?? null,
   loopIntent: (r.loop_intent as string | null) ?? null,
-  cadenceMinutes: (r.cadence_minutes as number | null) ?? 0
+  cadenceMinutes: (r.cadence_minutes as number | null) ?? 0,
+  loopType: (r.loop_type as string | null) ?? null,
+  targetType: (r.target_type as string | null) ?? null,
+  targetRef: (r.target_ref as string | null) ?? null,
+  scheduleKind: (r.schedule_kind as string | null) ?? null,
+  scheduleDetail: (r.schedule_detail as string | null) ?? null,
+  nextRunAt: (r.next_run_at as number | null) ?? null,
+  stopCondition: (r.stop_condition as string | null) ?? null,
+  maxRuns: (r.max_runs as number | null) ?? 0,
+  maxCommits: (r.max_commits as number | null) ?? 0,
+  runCount: (r.run_count as number | null) ?? 0,
+  commitBehavior: (r.commit_behavior as string | null) ?? null,
+  pushEnabled: r.push_enabled === 1,
+  testCommands: (r.test_commands as string | null) ?? null,
+  reportFormat: (r.report_format as string | null) ?? null,
+  safetyLevel: (r.safety_level as string | null) ?? null,
+  latestResult: (r.latest_result as string | null) ?? null,
+  archivedAt: (r.archived_at as number | null) ?? null
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -1012,6 +1140,21 @@ export function createMacroSession(input: {
   title?: string | null
   loopIntent?: string | null
   cadenceMinutes?: number
+  loopType?: string | null
+  targetType?: string | null
+  targetRef?: string | null
+  scheduleKind?: string | null
+  scheduleDetail?: string | null
+  nextRunAt?: number | null
+  stopCondition?: string | null
+  maxRuns?: number
+  maxCommits?: number
+  commitBehavior?: string | null
+  pushEnabled?: boolean
+  testCommands?: string | null
+  reportFormat?: string | null
+  safetyLevel?: string | null
+  latestResult?: string | null
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -1039,7 +1182,24 @@ export function createMacroSession(input: {
     title: input.title ?? null,
     pendingSteering: null,
     loopIntent: input.loopIntent ?? null,
-    cadenceMinutes: Math.max(0, Math.floor(input.cadenceMinutes ?? 0))
+    cadenceMinutes: Math.max(0, Math.floor(input.cadenceMinutes ?? 0)),
+    loopType: input.loopType ?? input.loopIntent ?? null,
+    targetType: input.targetType ?? (input.workspaceDir ? 'project' : null),
+    targetRef: input.targetRef ?? input.workspaceDir ?? null,
+    scheduleKind: input.scheduleKind ?? (input.cadenceMinutes && input.cadenceMinutes > 0 ? 'recurring' : 'continuous'),
+    scheduleDetail: input.scheduleDetail ?? null,
+    nextRunAt: input.nextRunAt ?? null,
+    stopCondition: input.stopCondition ?? null,
+    maxRuns: Math.max(0, Math.floor(input.maxRuns ?? 0)),
+    maxCommits: Math.max(0, Math.floor(input.maxCommits ?? 0)),
+    runCount: 0,
+    commitBehavior: input.commitBehavior ?? (input.autoCommit ? 'commit' : 'none'),
+    pushEnabled: input.pushEnabled ?? false,
+    testCommands: input.testCommands ?? null,
+    reportFormat: input.reportFormat ?? 'summary',
+    safetyLevel: input.safetyLevel ?? 'balanced',
+    latestResult: input.latestResult ?? null,
+    archivedAt: null
   }
   must()
     .prepare(
@@ -1047,8 +1207,10 @@ export function createMacroSession(input: {
        (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
         max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason,
         mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used, title,
-        loop_intent, cadence_minutes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        loop_intent, cadence_minutes, loop_type, target_type, target_ref, schedule_kind, schedule_detail,
+        next_run_at, stop_condition, max_runs, max_commits, run_count, commit_behavior, push_enabled,
+        test_commands, report_format, safety_level, latest_result, archived_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -1074,7 +1236,24 @@ export function createMacroSession(input: {
       row.tokensUsed,
       row.title,
       row.loopIntent,
-      row.cadenceMinutes
+      row.cadenceMinutes,
+      row.loopType,
+      row.targetType,
+      row.targetRef,
+      row.scheduleKind,
+      row.scheduleDetail,
+      row.nextRunAt,
+      row.stopCondition,
+      row.maxRuns,
+      row.maxCommits,
+      row.runCount,
+      row.commitBehavior,
+      row.pushEnabled ? 1 : 0,
+      row.testCommands,
+      row.reportFormat,
+      row.safetyLevel,
+      row.latestResult,
+      row.archivedAt
     )
   return row
 }
@@ -1096,6 +1275,10 @@ export function updateMacroSession(
       | 'plannerProvider'
       | 'plannerModel'
       | 'targetTerminal'
+      | 'nextRunAt'
+      | 'runCount'
+      | 'latestResult'
+      | 'archivedAt'
     >
   >
 ): MacroSessionRow | null {
@@ -1114,14 +1297,19 @@ export function updateMacroSession(
     pendingSteering: patch.pendingSteering !== undefined ? patch.pendingSteering : current.pendingSteering,
     plannerProvider: patch.plannerProvider ?? current.plannerProvider,
     plannerModel: patch.plannerModel !== undefined ? patch.plannerModel : current.plannerModel,
-    targetTerminal: patch.targetTerminal ?? current.targetTerminal
+    targetTerminal: patch.targetTerminal ?? current.targetTerminal,
+    nextRunAt: patch.nextRunAt !== undefined ? patch.nextRunAt : current.nextRunAt,
+    runCount: patch.runCount ?? current.runCount,
+    latestResult: patch.latestResult !== undefined ? patch.latestResult : current.latestResult,
+    archivedAt: patch.archivedAt !== undefined ? patch.archivedAt : current.archivedAt
   }
   must()
     .prepare(
       `UPDATE macro_sessions
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
            mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?,
-           planner_provider = ?, planner_model = ?, target_terminal = ?
+           planner_provider = ?, planner_model = ?, target_terminal = ?, next_run_at = ?,
+           run_count = ?, latest_result = ?, archived_at = ?
        WHERE id = ?`
     )
     .run(
@@ -1138,6 +1326,10 @@ export function updateMacroSession(
       next.plannerProvider,
       next.plannerModel,
       next.targetTerminal,
+      next.nextRunAt,
+      next.runCount,
+      next.latestResult,
+      next.archivedAt,
       sessionId
     )
   return getMacroSession(sessionId)
@@ -1156,6 +1348,124 @@ export function listMacroSessions(limit = 20): MacroSessionRow[] {
   return (
     must().prepare('SELECT * FROM macro_sessions ORDER BY updated_at DESC LIMIT ?').all(lim) as Record<string, unknown>[]
   ).map(toMacroSession)
+}
+
+export function archiveMacroSession(sessionId: string): MacroSessionRow | null {
+  if (!VALID_ID.test(sessionId)) return null
+  const current = getMacroSession(sessionId)
+  if (!current) return null
+  return updateMacroSession(sessionId, {
+    status: current.status === 'completed' || current.status === 'stopped' || current.status === 'error'
+      ? current.status
+      : 'stopped',
+    stopReason: current.stopReason ?? 'archived',
+    pauseReason: null,
+    archivedAt: Date.now()
+  })
+}
+
+export function deleteMacroSession(sessionId: string): boolean {
+  if (!VALID_ID.test(sessionId)) return false
+  const d = must()
+  if (!d.prepare('SELECT 1 FROM macro_sessions WHERE id = ?').get(sessionId)) return false
+  d.prepare('DELETE FROM macro_sessions WHERE id = ?').run(sessionId)
+  return true
+}
+
+export interface LoopRunRecordInput {
+  loopId: string
+  runIndex: number
+  startedAt: number
+  endedAt?: number | null
+  status: string
+  providerId?: string | null
+  model?: string | null
+  summary?: string | null
+  actionsTaken?: unknown
+  filesChanged?: string[] | null
+  commandsExecuted?: string[] | null
+  testBuildResults?: string | null
+  commitsCreated?: string[] | null
+  nextSuggestedStep?: string | null
+  error?: string | null
+}
+
+function jsonOrNull(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return null
+  }
+}
+
+export function recordLoopRun(input: LoopRunRecordInput): string | null {
+  if (!VALID_ID.test(input.loopId)) return null
+  const id = randomUUID()
+  const endedAt = input.endedAt ?? Date.now()
+  must()
+    .prepare(
+      `INSERT INTO loop_runs
+       (id, loop_id, run_index, started_at, ended_at, status, provider_id, model, summary,
+        actions_taken, files_changed, commands_executed, test_build_results, commits_created,
+        next_suggested_step, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.loopId,
+      input.runIndex,
+      input.startedAt,
+      endedAt,
+      input.status,
+      input.providerId ?? null,
+      input.model ?? null,
+      input.summary ?? null,
+      jsonOrNull(input.actionsTaken),
+      jsonOrNull(input.filesChanged ?? null),
+      jsonOrNull(input.commandsExecuted ?? null),
+      input.testBuildResults ?? null,
+      jsonOrNull(input.commitsCreated ?? null),
+      input.nextSuggestedStep ?? null,
+      input.error ?? null
+    )
+  const current = getMacroSession(input.loopId)
+  if (current) {
+    updateMacroSession(input.loopId, {
+      runCount: Math.max(current.runCount, input.runIndex),
+      latestResult: input.summary ?? input.error ?? current.latestResult,
+      nextRunAt: current.cadenceMinutes > 0 ? endedAt + current.cadenceMinutes * 60_000 : null
+    })
+  }
+  return id
+}
+
+export function recordLoopEvent(input: {
+  loopId: string
+  runId?: string | null
+  type: string
+  message: string
+  severity?: 'info' | 'success' | 'warning' | 'error'
+  metadata?: unknown
+}): void {
+  if (!VALID_ID.test(input.loopId)) return
+  const now = Date.now()
+  must()
+    .prepare(
+      `INSERT INTO loop_events (id, loop_id, run_id, ts, type, message, severity, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      randomUUID(),
+      input.loopId,
+      input.runId ?? null,
+      now,
+      input.type.slice(0, 80),
+      input.message.slice(0, 2_000),
+      input.severity ?? 'info',
+      jsonOrNull(input.metadata)
+    )
+  updateMacroSession(input.loopId, { latestResult: input.message })
 }
 
 export function listMacroTurns(sessionId: string): MacroTurnRow[] {

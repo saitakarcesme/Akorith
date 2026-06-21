@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MacroSessionRow, MacroState, ProviderInfo, PtyCommandKind } from '../../../preload/index.d'
-import { LoopIcon, PlusIcon, ChevronIcon } from './icons'
-
-// Phase 21: the Loop section. A deliberately non-technical home for auto-commit
-// project generation. You describe a project in a sentence or two; Akorith
-// scaffolds a git repo, builds it, and saves every change as a "Phase N" step.
-// The macro/critic/token machinery from Phases 19–20 runs underneath — none of
-// it is exposed here.
+import type { MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind } from '../../../preload/index.d'
+import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
 type LoopIntent = 'continuous' | 'monitor' | 'daily-build' | 'custom'
 type ExecutorTarget = 't1' | 't2'
+type LoopType =
+  | 'project-improvement'
+  | 'feature-development'
+  | 'social-monitoring'
+  | 'repo-analysis'
+  | 'project-creation'
+  | 'research-monitoring'
+  | 'maintenance'
+  | 'custom'
+type TargetType = 'new-project' | 'local-project' | 'github-repo' | 'social-source' | 'research-source' | 'custom-source'
+type ScheduleKind = 'continuous' | 'once' | 'hourly' | 'daily' | 'weekly' | 'custom'
+type AutonomyLevel = 'guided' | 'semi-auto' | 'full-auto'
+type CommitBehavior = 'commit' | 'suggest' | 'none'
+type ReportFormat = 'summary' | 'detailed' | 'brief'
+type SafetyLevel = 'strict' | 'balanced' | 'wide'
 
 interface AutoAction {
   type: string
@@ -18,6 +27,20 @@ interface AutoAction {
   message?: string
   reason?: string
   at?: number
+  [key: string]: unknown
+}
+
+interface LoopTemplate {
+  id: string
+  title: string
+  type: LoopType
+  targetType: TargetType
+  scheduleKind: ScheduleKind
+  autonomy: AutonomyLevel
+  commitBehavior: CommitBehavior
+  prompt: string
+  description: string
+  cadenceMinutes?: number
 }
 
 const EXECUTORS: Array<{ target: ExecutorTarget; kind: PtyCommandKind; label: string; hint: string }> = [
@@ -25,18 +48,118 @@ const EXECUTORS: Array<{ target: ExecutorTarget; kind: PtyCommandKind; label: st
   { target: 't2', kind: 'codex-auto', label: 'ChatGPT / Olympus', hint: 'use when Claude is busy' }
 ]
 
-const LOOP_INTENTS: Array<{ id: LoopIntent; label: string; defaultMinutes: number }> = [
-  { id: 'continuous', label: 'Continuous', defaultMinutes: 0 },
-  { id: 'monitor', label: 'Every 5 min', defaultMinutes: 5 },
-  { id: 'daily-build', label: 'Daily build', defaultMinutes: 1440 },
-  { id: 'custom', label: 'Custom', defaultMinutes: 15 }
+const LOOP_ACTIVITY = [
+  { active: true, label: 'Active', hint: 'Akorith continues automatically within the selected autonomy mode.' },
+  { active: false, label: 'Passive', hint: 'Akorith waits for you before continuing.' }
 ]
 
-// Phase 23.1: Fully Active/Passive Loop Switch.
-const LOOP_ACTIVITY = [
-  { active: true, label: 'Active', hint: 'Akorith starts and keeps going' },
-  { active: false, label: 'Passive', hint: 'You click Resume when it should move' }
+const LOOP_TYPES: Array<{ id: LoopType; label: string; hint: string }> = [
+  { id: 'project-improvement', label: 'Project improvement', hint: 'Improve an existing app over repeated cycles.' },
+  { id: 'feature-development', label: 'Feature loop', hint: 'Find, rank, build, test, and commit useful features.' },
+  { id: 'social-monitoring', label: 'Social monitor', hint: 'Watch accounts, keywords, competitors, or sources.' },
+  { id: 'repo-analysis', label: 'Repository analysis', hint: 'Audit repos repeatedly and surface actions.' },
+  { id: 'project-creation', label: 'Project creation', hint: 'Generate and build new usable projects.' },
+  { id: 'research-monitoring', label: 'Research monitor', hint: 'Track news, papers, products, and trends.' },
+  { id: 'maintenance', label: 'Maintenance', hint: 'Docs, tests, dependencies, releases, and cleanup.' },
+  { id: 'custom', label: 'Custom', hint: 'Any repeated AI-driven workflow.' }
 ]
+
+const TARGET_TYPES: Array<{ id: TargetType; label: string; hint: string }> = [
+  { id: 'new-project', label: 'New Akorith project', hint: 'Create a fresh workspace for the loop.' },
+  { id: 'local-project', label: 'Local project', hint: 'Work inside an existing project folder.' },
+  { id: 'github-repo', label: 'GitHub repository', hint: 'Track or improve a remote repository.' },
+  { id: 'social-source', label: 'Social account/source', hint: 'Monitor posts, replies, trends, or competitors.' },
+  { id: 'research-source', label: 'Research/news source', hint: 'Watch a topic, site, feed, or announcement stream.' },
+  { id: 'custom-source', label: 'Custom target', hint: 'Describe any target in plain language.' }
+]
+
+const SCHEDULES: Array<{ id: ScheduleKind; label: string; detail: string; minutes: number }> = [
+  { id: 'continuous', label: 'Continuous', detail: 'Keep moving until a stop condition is reached.', minutes: 0 },
+  { id: 'once', label: 'Once', detail: 'Run one complete cycle.', minutes: 0 },
+  { id: 'hourly', label: 'Hourly', detail: 'Repeat every hour.', minutes: 60 },
+  { id: 'daily', label: 'Daily', detail: 'Repeat once per day.', minutes: 1440 },
+  { id: 'weekly', label: 'Weekly', detail: 'Repeat once per week.', minutes: 10080 },
+  { id: 'custom', label: 'Custom', detail: 'Use a custom minute interval.', minutes: 15 }
+]
+
+const AUTONOMY: Array<{ id: AutonomyLevel; label: string; detail: string }> = [
+  { id: 'guided', label: 'Guided', detail: 'Ask before major actions.' },
+  { id: 'semi-auto', label: 'Semi-Auto', detail: 'Run automatically, pause for risky choices.' },
+  { id: 'full-auto', label: 'Full Auto', detail: 'Run end-to-end inside safety limits.' }
+]
+
+const TEMPLATES: LoopTemplate[] = [
+  {
+    id: 'github-commit',
+    title: 'GitHub commit automation',
+    type: 'project-improvement',
+    targetType: 'local-project',
+    scheduleKind: 'daily',
+    autonomy: 'semi-auto',
+    commitBehavior: 'commit',
+    description: 'Improve, validate, commit, and report on a project repeatedly.',
+    prompt: 'Keep improving this project every day. Add useful features, refactor weak areas, fix bugs, update documentation, run tests, and commit meaningful changes with clear messages.'
+  },
+  {
+    id: 'feature-loop',
+    title: 'Feature addition loop',
+    type: 'feature-development',
+    targetType: 'local-project',
+    scheduleKind: 'continuous',
+    autonomy: 'semi-auto',
+    commitBehavior: 'commit',
+    description: 'Analyze the product, rank improvements, build the best next feature.',
+    prompt: 'Analyze this project, find missing features or weak UX, rank the safest useful improvements, implement the best next one, run validation, commit it, then re-analyze.'
+  },
+  {
+    id: 'social-monitor',
+    title: 'Social media monitoring',
+    type: 'social-monitoring',
+    targetType: 'social-source',
+    scheduleKind: 'custom',
+    autonomy: 'semi-auto',
+    commitBehavior: 'commit',
+    cadenceMinutes: 5,
+    description: 'Watch an account, keyword, or competitor and report only meaningful changes.',
+    prompt: 'Monitor the X account @ibrahimsait_. Every 5 minutes, check for new posts, reposts, replies, or profile updates. Keep a seen-state, summarize what changed, and suggest useful follow-up ideas.'
+  },
+  {
+    id: 'repo-health',
+    title: 'Repository health analysis',
+    type: 'repo-analysis',
+    targetType: 'github-repo',
+    scheduleKind: 'weekly',
+    autonomy: 'guided',
+    commitBehavior: 'suggest',
+    description: 'Find stale repos, missing tests, weak READMEs, CI gaps, and roadmap ideas.',
+    prompt: 'Analyze the selected repositories every week. Detect stale areas, missing tests, weak documentation, outdated dependencies, and product opportunities. Produce a prioritized improvement report.'
+  },
+  {
+    id: 'project-factory',
+    title: 'Autonomous project factory',
+    type: 'project-creation',
+    targetType: 'new-project',
+    scheduleKind: 'daily',
+    autonomy: 'full-auto',
+    commitBehavior: 'commit',
+    description: 'Create one useful small developer tool, build it to MVP, and report.',
+    prompt: 'Every day, create one useful small developer tool. Pick the most useful idea, scaffold it, build a usable MVP, test it, commit meaningful phases, and write a final report with architecture and next steps.'
+  },
+  {
+    id: 'maintenance',
+    title: 'Maintenance loop',
+    type: 'maintenance',
+    targetType: 'local-project',
+    scheduleKind: 'daily',
+    autonomy: 'semi-auto',
+    commitBehavior: 'commit',
+    description: 'Docs, tests, dependency updates, UI polish, changelog, and release prep.',
+    prompt: 'Run a daily maintenance cycle: improve documentation, add missing tests, update safe dependencies, polish small UX issues, prepare changelog notes, validate the app, and commit only meaningful changes.'
+  }
+]
+
+const RUNNING = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
+const PAUSED = new Set(['awaiting_permission', 'awaiting_executor_result', 'awaiting_approval', 'paused'])
 
 function projectKey(id: string): string {
   return id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)
@@ -74,11 +197,16 @@ function selectedModel(provider: ProviderInfo | undefined, value: string): strin
   return provider.models[0] ?? ''
 }
 
-function normalizeCadence(intent: LoopIntent, minutes: number): number {
-  if (intent === 'continuous') return 0
-  if (intent === 'daily-build') return 1440
-  const n = Number.isFinite(minutes) ? Math.floor(minutes) : 5
-  return Math.min(Math.max(n, 1), 7 * 24 * 60)
+function minutesForSchedule(kind: ScheduleKind, customMinutes: number): number {
+  if (kind === 'custom') return Math.min(Math.max(Math.floor(customMinutes || 15), 1), 7 * 24 * 60)
+  return SCHEDULES.find((s) => s.id === kind)?.minutes ?? 0
+}
+
+function loopIntentFor(type: LoopType, schedule: ScheduleKind): LoopIntent {
+  if (type === 'social-monitoring' || type === 'research-monitoring') return 'monitor'
+  if (type === 'project-creation' || schedule === 'daily' || schedule === 'weekly') return 'daily-build'
+  if (schedule === 'custom' || schedule === 'hourly') return 'custom'
+  return 'continuous'
 }
 
 function formatCadenceMinutes(minutes: number): string {
@@ -88,12 +216,70 @@ function formatCadenceMinutes(minutes: number): string {
   return `every ${minutes} min`
 }
 
-function cadenceSummary(session: MacroSessionRow): string {
-  return formatCadenceMinutes(session.cadenceMinutes)
+function formatDateTime(ts: number | null): string {
+  if (!ts) return 'not scheduled'
+  return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function activitySummary(session: MacroSessionRow): string {
-  return session.mode === 'auto' ? 'fully active' : 'passive'
+function timeAgo(ts: number): string {
+  const diff = Math.max(0, Date.now() - ts)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff >= day) return `${Math.floor(diff / day)}d ago`
+  if (diff >= hour) return `${Math.floor(diff / hour)}h ago`
+  if (diff >= minute) return `${Math.floor(diff / minute)}m ago`
+  return 'just now'
+}
+
+function fmtDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m`
+  return `${s}s`
+}
+
+interface Friendly {
+  label: string
+  tone: 'running' | 'paused' | 'done' | 'stopped' | 'idle' | 'error'
+}
+
+function friendlyStatus(session: MacroSessionRow): Friendly {
+  const s = session.status
+  if (session.archivedAt) return { label: 'Archived', tone: 'stopped' }
+  if (RUNNING.has(s)) return { label: 'Running', tone: 'running' }
+  if (s === 'completed') return { label: 'Completed', tone: 'done' }
+  if (s === 'error' || s === 'failed') return { label: 'Failed', tone: 'error' }
+  if (s === 'stopped') return { label: 'Stopped', tone: 'stopped' }
+  if (s === 'scheduled') return { label: 'Scheduled', tone: 'idle' }
+  if (PAUSED.has(s)) return { label: session.pauseReason ? 'Waiting for approval' : 'Paused', tone: 'paused' }
+  return { label: 'Ready', tone: 'idle' }
+}
+
+function loopTitle(session: MacroSessionRow): string {
+  if (session.title?.trim()) return session.title.trim()
+  const goal = session.goal?.split('Loop profile:')[0]?.trim() ?? ''
+  return goal ? goal.slice(0, 90) : 'Untitled loop'
+}
+
+function cleanGoal(session: MacroSessionRow): string {
+  return (session.goal?.split('Loop profile:')[0]?.trim() || loopTitle(session)).slice(0, 1200)
+}
+
+function latestResult(session: MacroSessionRow, turns: MacroState['turns'] = []): string {
+  if (session.latestResult?.trim()) return session.latestResult.trim()
+  const last = [...turns].reverse().find((t) => t.executorResultSummary || t.error)
+  if (last?.error) return last.error
+  if (!last?.executorResultSummary) return 'No result recorded yet.'
+  return resultLine(last.executorResultSummary) || 'Result summarized.'
+}
+
+function resultLine(summary: string | null): string {
+  if (!summary) return ''
+  const first = summary.split('\n').map((l) => l.trim()).find(Boolean) ?? ''
+  return first.replace(/^current status:?\s*/i, '').slice(0, 240)
 }
 
 function parseStrArray(json: string | null | undefined): string[] {
@@ -106,63 +292,40 @@ function parseStrArray(json: string | null | undefined): string[] {
   }
 }
 
-/** A short, readable "what happened" line from a turn's result summary. */
-function resultLine(summary: string | null): string {
-  if (!summary) return ''
-  // The first line is the agent's current-status sentence; drop the folded-in
-  // critic block and metrics for a clean timeline entry.
-  const first = summary.split('\n').map((l) => l.trim()).find(Boolean) ?? ''
-  return first.replace(/^current status:?\s*/i, '').slice(0, 200)
-}
-
-const RUNNING = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
-const PAUSED = new Set(['awaiting_permission', 'awaiting_executor_result', 'awaiting_approval'])
-
-interface Friendly {
-  label: string
-  tone: 'running' | 'paused' | 'done' | 'stopped' | 'idle' | 'error'
-}
-
-function friendlyStatus(session: MacroSessionRow): Friendly {
-  const s = session.status
-  if (RUNNING.has(s)) return { label: 'Building…', tone: 'running' }
-  if (s === 'completed') return { label: 'Finished', tone: 'done' }
-  if (s === 'error') return { label: 'Needs attention', tone: 'error' }
-  if (s === 'stopped') return { label: 'Stopped', tone: 'stopped' }
-  if (PAUSED.has(s)) return { label: session.pauseReason ? 'Paused — needs you' : 'Waiting', tone: 'paused' }
-  return { label: 'Ready', tone: 'idle' }
-}
-
-function loopTitle(session: MacroSessionRow): string {
-  if (session.title && session.title.trim()) return session.title.trim()
-  const goal = session.goal?.trim() ?? ''
-  return goal ? goal.slice(0, 80) : 'Untitled loop'
-}
-
-function fmtDuration(ms: number): string {
-  if (ms < 0) ms = 0
-  const s = Math.floor(ms / 1000)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${sec}s`
-  return `${sec}s`
+function progressPercent(session: MacroSessionRow, turns: number, commits: number): number {
+  if (session.maxCommits > 0) return Math.min(100, Math.round((commits / session.maxCommits) * 100))
+  if (session.maxRuns > 0) return Math.min(100, Math.round((session.runCount / session.maxRuns) * 100))
+  if (session.finalScore != null) return Math.min(100, Math.round(session.finalScore))
+  if (session.maxIterations > 0) return Math.min(100, Math.round((turns / session.maxIterations) * 100))
+  return 0
 }
 
 export default function LoopsPage({ active }: { active: boolean }): JSX.Element {
   const [view, setView] = useState<View>('list')
   const [loops, setLoops] = useState<MacroSessionRow[]>([])
+  const [projects, setProjects] = useState<ProjectRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MacroState | null>(null)
   const [description, setDescription] = useState('')
+  const [loopType, setLoopType] = useState<LoopType>('project-improvement')
+  const [targetType, setTargetType] = useState<TargetType>('new-project')
+  const [targetRef, setTargetRef] = useState('')
+  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('continuous')
+  const [customMinutes, setCustomMinutes] = useState(15)
+  const [autonomyLevel, setAutonomyLevel] = useState<AutonomyLevel>('semi-auto')
+  const [fullyLoopActive, setFullyLoopActive] = useState(true)
+  const [maxRuns, setMaxRuns] = useState(30)
+  const [maxCommits, setMaxCommits] = useState(0)
+  const [commitBehavior, setCommitBehavior] = useState<CommitBehavior>('commit')
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [testCommands, setTestCommands] = useState('')
+  const [reportFormat, setReportFormat] = useState<ReportFormat>('summary')
+  const [safetyLevel, setSafetyLevel] = useState<SafetyLevel>('balanced')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [plannerProvider, setPlannerProvider] = useState('')
   const [plannerModel, setPlannerModel] = useState('')
   const [executorTarget, setExecutorTarget] = useState<ExecutorTarget>('t1')
-  const [loopIntent, setLoopIntent] = useState<LoopIntent>('continuous')
-  const [cadenceMinutes, setCadenceMinutes] = useState(5)
-  const [fullyLoopActive, setFullyLoopActive] = useState(true)
   const [detailProvider, setDetailProvider] = useState('')
   const [detailModel, setDetailModel] = useState('')
   const [detailTarget, setDetailTarget] = useState<ExecutorTarget>('t1')
@@ -170,16 +333,23 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [busy, setBusy] = useState(false)
   const [busyNote, setBusyNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  // Ticks once per second so timers update live without re-fetching.
   const [, setTick] = useState(0)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshLoops = useCallback(async (): Promise<void> => {
     try {
-      const list = await window.api.macro.list(50)
-      setLoops(list.filter((s) => s.workspaceDir))
+      const list = await window.api.macro.list(100)
+      setLoops(list.filter((s) => s.workspaceDir && !s.archivedAt))
     } catch {
       /* keep last list */
+    }
+  }, [])
+
+  const refreshProjects = useCallback(async (): Promise<void> => {
+    try {
+      setProjects(await window.api.projects.list())
+    } catch {
+      /* best effort */
     }
   }, [])
 
@@ -189,13 +359,12 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const firstAvailable = list.find((p) => p.available.ok) ?? list[0]
     if (firstAvailable) {
       setPlannerProvider((current) => (current && list.some((p) => p.id === current) ? current : firstAvailable.id))
-      setPlannerModel((current) => (current ? current : firstAvailable.models[0] ?? ''))
+      setPlannerModel((current) => current || firstAvailable.models[0] || '')
       setExecutorTarget((current) => current || defaultExecutorForProvider(firstAvailable.id))
     }
     return list
   }, [])
 
-  // Live one-second tick for elapsed timers.
   useEffect(() => {
     if (!active) return
     const t = setInterval(() => setTick((n) => n + 1), 1000)
@@ -204,17 +373,13 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
   useEffect(() => {
     if (!active) return
-    void refreshProviders().catch(() => {
-      /* provider state is best-effort */
-    })
-  }, [active, refreshProviders])
+    void refreshProviders().catch(() => undefined)
+    void refreshProjects()
+  }, [active, refreshProviders, refreshProjects])
 
-  // Poll the right thing for the current view.
   useEffect(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = null
     if (!active) return
     if (view === 'detail' && selectedId) {
       const sid = selectedId
@@ -235,8 +400,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
   const createPlanner = useMemo(() => providers.find((p) => p.id === plannerProvider), [providers, plannerProvider])
   const detailPlanner = useMemo(() => providers.find((p) => p.id === detailProvider), [providers, detailProvider])
+  const createModels = createPlanner?.models ?? []
 
-  // Ensure the selected executor agent is running in the loop's folder.
   const ensureExecutor = useCallback(async (project: { id: string }, cwd: string, targetTerminal: string): Promise<void> => {
     const key = projectKey(project.id)
     const executor = executorForTarget(targetTerminal)
@@ -244,43 +409,74 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     await window.api.pty.create(`${executor.target}::${key}`, { cols: 120, rows: 32, cwd, commandKind: executor.kind })
   }, [])
 
+  const applyTemplate = useCallback((template: LoopTemplate): void => {
+    setLoopType(template.type)
+    setTargetType(template.targetType)
+    setScheduleKind(template.scheduleKind)
+    setAutonomyLevel(template.autonomy)
+    setCommitBehavior(template.commitBehavior)
+    setCustomMinutes(template.cadenceMinutes ?? 15)
+    setDescription(template.prompt)
+    if (template.targetType === 'local-project' && projects[0]?.path) setTargetRef(projects[0].path)
+    else setTargetRef('')
+    setView('create')
+    setError(null)
+  }, [projects])
+
   const createLoop = useCallback(async (): Promise<void> => {
     const text = description.trim()
     if (!text || busy) return
     setBusy(true)
     setError(null)
     try {
-      setBusyNote('Checking the selected model…')
+      setBusyNote('Checking the selected model...')
       const list = providers.length ? providers : await refreshProviders()
-      const planner = list.find((p: ProviderInfo) => p.id === plannerProvider) ?? list.find((p: ProviderInfo) => p.available.ok)
+      const planner = list.find((p) => p.id === plannerProvider) ?? list.find((p) => p.available.ok)
       if (!planner?.available.ok) {
-        setError('No AI engine is available yet. Start Ollama (or sign in to a coding CLI) and try again.')
+        setError('No AI engine is available yet. Start Ollama, Claude, or Codex and try again.')
         return
       }
       const model = selectedModel(planner, plannerModel)
-      const target = executorTarget
-      const cadence = normalizeCadence(loopIntent, cadenceMinutes)
-      setBusyNote('Inventing and scaffolding your project…')
+      const cadence = minutesForSchedule(scheduleKind, customMinutes)
+      const intent = loopIntentFor(loopType, scheduleKind)
+      const target = targetType === 'local-project' && targetRef ? targetRef : targetRef.trim()
+      const mode = fullyLoopActive && autonomyLevel !== 'guided' ? 'auto' : 'approval'
+      setBusyNote(targetType === 'local-project' && target ? 'Binding the loop to your project...' : 'Creating the loop workspace...')
       const res = await window.api.macro.createWorkspaceProject({
         seed: text,
         plannerProvider: planner.id,
         plannerModel: model || undefined,
-        targetTerminal: target,
-        mode: fullyLoopActive ? 'auto' : 'approval',
-        loopIntent,
+        targetTerminal: executorTarget,
+        mode,
+        loopIntent: intent,
         cadenceMinutes: cadence,
-        maxIterations: cadence > 0 ? 200 : 30
+        maxIterations: maxRuns > 0 ? maxRuns : cadence > 0 ? 200 : 30,
+        goodEnoughThreshold: autonomyLevel === 'full-auto' ? 92 : 88,
+        loopType,
+        targetType,
+        targetRef: target,
+        scheduleKind,
+        scheduleDetail: cadence ? formatCadenceMinutes(cadence) : SCHEDULES.find((s) => s.id === scheduleKind)?.detail,
+        autonomyLevel,
+        stopCondition: maxCommits > 0 ? `stop after ${maxCommits} commits or manual stop` : maxRuns > 0 ? `stop after ${maxRuns} runs or manual stop` : 'manual stop',
+        maxRuns,
+        maxCommits,
+        commitBehavior,
+        pushEnabled,
+        testCommands,
+        reportFormat,
+        safetyLevel
       })
       if (!res.ok) {
         setError(res.error)
         return
       }
       let state = res.state
-      if (fullyLoopActive) {
-        setBusyNote('Waking up the builder…')
-        await ensureExecutor(res.project, res.workspaceDir, target)
-        await new Promise((r) => setTimeout(r, 3500))
-        setBusyNote('Starting the loop…')
+      if (fullyLoopActive && autonomyLevel !== 'guided') {
+        setBusyNote('Waking up the executor...')
+        await ensureExecutor(res.project, res.workspaceDir, executorTarget)
+        await new Promise((r) => setTimeout(r, 1500))
+        setBusyNote('Starting the loop...')
         const started = await window.api.macro.startAuto(res.state.session.id)
         if (started.ok) state = started.state
       }
@@ -289,45 +485,69 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       setDetail(state)
       setView('detail')
       void refreshLoops()
+      void refreshProjects()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
       setBusyNote('')
     }
-  }, [description, busy, providers, refreshProviders, plannerProvider, plannerModel, executorTarget, loopIntent, cadenceMinutes, fullyLoopActive, ensureExecutor, refreshLoops])
+  }, [
+    description,
+    busy,
+    providers,
+    refreshProviders,
+    plannerProvider,
+    plannerModel,
+    scheduleKind,
+    customMinutes,
+    loopType,
+    targetType,
+    targetRef,
+    fullyLoopActive,
+    autonomyLevel,
+    executorTarget,
+    maxRuns,
+    maxCommits,
+    commitBehavior,
+    pushEnabled,
+    testCommands,
+    reportFormat,
+    safetyLevel,
+    ensureExecutor,
+    refreshLoops,
+    refreshProjects
+  ])
+
+  const selected = detail?.session ?? loops.find((l) => l.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (!selected) return
+    setDetailProvider(selected.plannerProvider)
+    setDetailModel(selected.plannerModel ?? '')
+    setDetailTarget(executorForTarget(selected.targetTerminal).target)
+  }, [selected?.id, selected?.plannerProvider, selected?.plannerModel, selected?.targetTerminal])
 
   const openLoop = useCallback((id: string): void => {
     setSelectedId(id)
     setDetail(null)
     setView('detail')
-  }, [])
-
-  const stopLoop = useCallback(async (id: string): Promise<void> => {
-    await window.api.macro.stop(id)
-    const d = await window.api.macro.get(id)
-    if (d) setDetail(d)
-  }, [])
-
-  const steerLoop = useCallback(async (id: string, choice: string): Promise<void> => {
-    await window.api.macro.steer(id, choice)
-    const d = await window.api.macro.get(id)
-    if (d) setDetail(d)
+    setError(null)
   }, [])
 
   const resumeLoop = useCallback(async (session: MacroSessionRow): Promise<void> => {
     if (!session.workspaceDir) return
     setBusy(true)
+    setError(null)
     try {
-      // The executor may have exited (e.g. after a restart) — bring it back first.
-      // Its terminal key comes from the project (matched by its folder), not the session.
-      const projects = await window.api.projects.list()
-      const proj = projects.find((p) => p.path === session.workspaceDir)
-      if (proj) {
-        await ensureExecutor({ id: proj.id }, session.workspaceDir, session.targetTerminal)
-        await new Promise((r) => setTimeout(r, 1500))
+      const allProjects = projects.length ? projects : await window.api.projects.list()
+      const project = allProjects.find((p) => p.path === session.workspaceDir)
+      if (project) {
+        await ensureExecutor(project, session.workspaceDir, session.targetTerminal)
+        await new Promise((r) => setTimeout(r, 1200))
       }
-      await window.api.macro.startAuto(session.id)
+      const started = await window.api.macro.startAuto(session.id)
+      if (!started.ok) setError(started.error)
       const d = await window.api.macro.get(session.id)
       if (d) setDetail(d)
     } catch (err) {
@@ -335,14 +555,13 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     } finally {
       setBusy(false)
     }
-  }, [ensureExecutor])
+  }, [ensureExecutor, projects])
 
   const setLoopActivity = useCallback(async (session: MacroSessionRow, activeMode: boolean): Promise<void> => {
     setBusy(true)
     setError(null)
     try {
-      const mode = activeMode ? 'auto' : 'approval'
-      const res = await window.api.macro.setMode(session.id, mode)
+      const res = await window.api.macro.setMode(session.id, activeMode ? 'auto' : 'approval')
       if (!res.ok) {
         setError(res.error)
         return
@@ -358,14 +577,36 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     }
   }, [resumeLoop])
 
-  const selected = detail?.session ?? loops.find((l) => l.id === selectedId) ?? null
+  const stopLoop = useCallback(async (id: string): Promise<void> => {
+    const res = await window.api.macro.stop(id)
+    if (res.ok) setDetail(res.state)
+    else setError(res.error)
+  }, [])
 
-  useEffect(() => {
-    if (!selected) return
-    setDetailProvider(selected.plannerProvider)
-    setDetailModel(selected.plannerModel ?? '')
-    setDetailTarget(executorForTarget(selected.targetTerminal).target)
-  }, [selected?.id, selected?.plannerProvider, selected?.plannerModel, selected?.targetTerminal])
+  const archiveLoop = useCallback(async (id: string): Promise<void> => {
+    const res = await window.api.macro.archive(id)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setView('list')
+    setSelectedId(null)
+    setDetail(null)
+    void refreshLoops()
+  }, [refreshLoops])
+
+  const removeLoop = useCallback(async (id: string): Promise<void> => {
+    if (!window.confirm('Remove this loop from Akorith? This deletes the local loop record, not the project folder.')) return
+    const res = await window.api.macro.remove(id)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setView('list')
+    setSelectedId(null)
+    setDetail(null)
+    void refreshLoops()
+  }, [refreshLoops])
 
   const saveLoopPlanner = useCallback(async (session: MacroSessionRow): Promise<void> => {
     const list = providers.length ? providers : await refreshProviders()
@@ -378,21 +619,20 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     setError(null)
     try {
       const model = selectedModel(planner, detailModel)
-      const target = detailTarget
       const res = await window.api.macro.setPlanner({
         sessionId: session.id,
         plannerProvider: planner.id,
         plannerModel: model || undefined,
-        targetTerminal: target
+        targetTerminal: detailTarget
       })
       if (!res.ok) {
         setError(res.error)
         return
       }
       if (session.workspaceDir) {
-        const projects = await window.api.projects.list()
-        const proj = projects.find((p) => p.path === session.workspaceDir)
-        if (proj) await ensureExecutor({ id: proj.id }, session.workspaceDir, target)
+        const allProjects = projects.length ? projects : await window.api.projects.list()
+        const project = allProjects.find((p) => p.path === session.workspaceDir)
+        if (project) await ensureExecutor(project, session.workspaceDir, detailTarget)
       }
       setDetail(res.state)
     } catch (err) {
@@ -400,47 +640,89 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     } finally {
       setSavingPlanner(false)
     }
-  }, [providers, refreshProviders, detailProvider, detailModel, detailTarget, ensureExecutor])
+  }, [providers, refreshProviders, detailProvider, detailModel, detailTarget, projects, ensureExecutor])
 
-  // ---------- detail view ----------
+  const duplicateLoop = useCallback((session: MacroSessionRow): void => {
+    setDescription(cleanGoal(session))
+    setLoopType((session.loopType as LoopType) || 'custom')
+    setTargetType((session.targetType as TargetType) || 'new-project')
+    setTargetRef(session.targetRef ?? '')
+    setScheduleKind((session.scheduleKind as ScheduleKind) || 'continuous')
+    setCustomMinutes(session.cadenceMinutes || 15)
+    setAutonomyLevel(session.mode === 'approval' ? 'guided' : 'semi-auto')
+    setFullyLoopActive(session.mode === 'auto')
+    setMaxRuns(session.maxRuns || session.maxIterations || 30)
+    setMaxCommits(session.maxCommits || 0)
+    setCommitBehavior((session.commitBehavior as CommitBehavior) || 'commit')
+    setPushEnabled(session.pushEnabled)
+    setTestCommands(session.testCommands ?? '')
+    setReportFormat((session.reportFormat as ReportFormat) || 'summary')
+    setSafetyLevel((session.safetyLevel as SafetyLevel) || 'balanced')
+    setView('create')
+  }, [])
+
+  const dashboard = useMemo(() => {
+    const activeLoops = loops.filter((l) => RUNNING.has(l.status)).length
+    const pausedLoops = loops.filter((l) => PAUSED.has(l.status) || l.status === 'error').length
+    const completedLoops = loops.filter((l) => l.status === 'completed').length
+    const failedLoops = loops.filter((l) => l.status === 'error' || l.status === 'failed').length
+    const commits = loops.reduce((sum, l) => sum + commitsOf(l).length, 0)
+    return { activeLoops, pausedLoops, completedLoops, failedLoops, commits }
+  }, [loops])
+
   if (view === 'detail' && selected) {
     const f = friendlyStatus(selected)
-    const commits = commitsOf(selected)
-    const elapsed = fmtDuration(Date.now() - selected.createdAt)
-    const isRunning = RUNNING.has(selected.status)
-    const isPaused = PAUSED.has(selected.status)
-    const isActive = isRunning || isPaused
     const turns = detail?.turns ?? []
+    const commits = commitsOf(selected)
+    const actions = parseAutoActions(selected.autoActions)
     const latest = turns.length ? turns[turns.length - 1] : null
-    const activity = latest?.plannerRationale?.trim() || latest?.proposal?.trim() || ''
+    const isRunning = RUNNING.has(selected.status)
+    const isPaused = PAUSED.has(selected.status) || selected.status === 'idle'
     const options = parseStrArray(latest?.nextOptions)
-    const steered = selected.pendingSteering?.trim() ?? ''
+    const progress = progressPercent(selected, turns.length, commits.length)
+    const activity = latest?.plannerRationale?.trim() || latest?.proposal?.trim() || ''
+
     return (
-      <div className="loops-page">
+      <div className="loops-page loop-ops">
         <button type="button" className="loop-back" onClick={() => setView('list')}>
           <ChevronIcon size={16} direction="left" /> All loops
         </button>
-        <div className="loop-detail">
-          <div className="loop-detail-head">
-            <h1>{loopTitle(selected)}</h1>
+
+        <section className="loop-detail loop-detail-wide">
+          <div className="loop-detail-hero">
+            <div>
+              <div className="loop-kicker">{selected.loopType?.replace(/-/g, ' ') || 'autonomous loop'}</div>
+              <h1>{loopTitle(selected)}</h1>
+              <p>{cleanGoal(selected)}</p>
+            </div>
             <span className={`loop-pill is-${f.tone}`}>{f.label}</span>
           </div>
 
-          <div className="loop-stats">
+          <div className="loop-stats loop-stats-four">
             <div className="loop-stat">
-              <span className="loop-stat-num">{commits.length}</span>
-              <span className="loop-stat-label">changes saved</span>
+              <span className="loop-stat-num">{selected.runCount || turns.length}</span>
+              <span className="loop-stat-label">runs recorded</span>
             </div>
             <div className="loop-stat">
-              <span className="loop-stat-num">{elapsed}</span>
-              <span className="loop-stat-label">{isRunning ? 'running' : 'since started'}</span>
+              <span className="loop-stat-num">{commits.length}</span>
+              <span className="loop-stat-label">commits saved</span>
+            </div>
+            <div className="loop-stat">
+              <span className="loop-stat-num">{progress}%</span>
+              <span className="loop-stat-label">progress</span>
+            </div>
+            <div className="loop-stat">
+              <span className="loop-stat-num">{fmtDuration(Date.now() - selected.createdAt)}</span>
+              <span className="loop-stat-label">since start</span>
             </div>
           </div>
 
-          <div className="loop-control-panel">
+          <div className="loop-progress"><span style={{ width: `${progress}%` }} /></div>
+
+          <div className="loop-control-panel loop-ops-panel">
             <div className="loop-activity-row">
               <div>
-                <span className="loop-control-label">Fully loop</span>
+                <span className="loop-control-label">Loop automation</span>
                 <strong>{selected.mode === 'auto' ? 'Active' : 'Passive'}</strong>
               </div>
               <div className="loop-segmented is-compact">
@@ -458,9 +740,10 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                 ))}
               </div>
             </div>
+
             <div className="loop-control-row">
               <label className="loop-field">
-                <span>Model</span>
+                <span>Planning model</span>
                 <select
                   value={detailProvider}
                   disabled={savingPlanner || providers.length === 0}
@@ -487,14 +770,12 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                   onChange={(e) => setDetailModel(e.target.value)}
                 >
                   {(detailPlanner?.models.length ? detailPlanner.models : ['']).map((m) => (
-                    <option key={m || 'default'} value={m}>
-                      {m || 'Default'}
-                    </option>
+                    <option key={m || 'default'} value={m}>{m || 'Default'}</option>
                   ))}
                 </select>
               </label>
               <label className="loop-field">
-                <span>Builder</span>
+                <span>Executor</span>
                 <select
                   value={detailTarget}
                   disabled={savingPlanner}
@@ -505,361 +786,411 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                   ))}
                 </select>
               </label>
-              <button
-                type="button"
-                className="loop-btn"
-                disabled={savingPlanner || !detailProvider || !detailPlanner?.available.ok}
-                onClick={() => void saveLoopPlanner(selected)}
-              >
-                {savingPlanner ? 'Saving…' : 'Save model'}
+              <button type="button" className="loop-btn" disabled={savingPlanner || !detailProvider || !detailPlanner?.available.ok} onClick={() => void saveLoopPlanner(selected)}>
+                {savingPlanner ? 'Saving...' : 'Save model'}
               </button>
             </div>
+
             <div className="loop-meta-strip">
-              <span>{providerLabel(providers, selected.plannerProvider)} plans</span>
-              <span>{executorForTarget(selected.targetTerminal).label} builds</span>
-              <span>{cadenceSummary(selected)}</span>
-              <span>{activitySummary(selected)}</span>
+              <span>{selected.targetType || 'target'}: {selected.targetRef || selected.workspaceDir || 'workspace'}</span>
+              <span>{selected.scheduleKind || 'schedule'} · {selected.cadenceMinutes ? formatCadenceMinutes(selected.cadenceMinutes) : 'continuous'}</span>
+              <span>{selected.commitBehavior || 'commit'} · push {selected.pushEnabled ? 'on' : 'off'}</span>
+              <span>next run: {formatDateTime(selected.nextRunAt)}</span>
             </div>
-            {detailPlanner && !detailPlanner.available.ok && (
-              <div className="loop-field-hint">{detailPlanner.available.reason || 'This provider is unavailable right now.'}</div>
-            )}
           </div>
 
-          {/* What's happening right now — so you always know what the loop is doing. */}
-          {isActive && (
-            <div className="loop-now">
-              <span className="loop-now-label">{isRunning ? 'Working on' : 'Up next'}</span>
-              <p className="loop-now-text">{activity || 'Thinking about the next step…'}</p>
-            </div>
-          )}
+          {error && <div className="loop-note is-error">{error}</div>}
+          {selected.pauseReason && <div className="loop-note">Waiting: {selected.pauseReason.replace(/_/g, ' ')}</div>}
+          {selected.status === 'error' && selected.stopReason && <div className="loop-note is-error">{selected.stopReason}</div>}
 
-          {/* Steer what comes next — pick a direction, the loop keeps running. */}
-          {isActive && (steered || options.length > 0) && (
-            <div className="loop-steer">
-              {steered ? (
-                <div className="loop-steer-chosen">Heading toward: <strong>{steered}</strong> next.</div>
-              ) : (
-                <>
-                  <div className="loop-steer-q">Where should it go next?</div>
-                  <div className="loop-steer-options">
-                    {options.map((opt, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        className="loop-chip"
-                        onClick={() => void steerLoop(selected.id, opt)}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="loop-steer-hint">Or do nothing — it continues on the first option automatically.</div>
-                </>
-              )}
-            </div>
-          )}
-
-          {selected.pauseReason && isPaused && (
-            <div className="loop-note">Waiting on a decision ({selected.pauseReason.replace(/_/g, ' ')}). Resume to continue, or stop the loop.</div>
-          )}
-          {selected.status === 'error' && selected.stopReason && (
-            <div className="loop-note is-error">{selected.stopReason}</div>
-          )}
-          {selected.status === 'completed' && <div className="loop-note">Finished — the loop reached its goal. 🎉</div>}
-          {selected.status === 'stopped' && <div className="loop-empty">This loop has stopped. Start a new one anytime.</div>}
-
-          <div className="loop-actions">
-            {(isPaused || selected.status === 'idle') && (
+          <div className="loop-actions loop-actions-wrap">
+            {(isPaused || selected.status === 'idle') && selected.status !== 'completed' && selected.status !== 'stopped' && (
               <button type="button" className="loop-btn is-primary" disabled={busy} onClick={() => void resumeLoop(selected)}>
-                {busy ? 'Resuming…' : 'Resume'}
+                {busy ? 'Resuming...' : 'Resume'}
               </button>
             )}
-            {isActive && (
-              <button type="button" className="loop-btn is-stop" onClick={() => void stopLoop(selected.id)}>
-                Stop loop
-              </button>
-            )}
+            {isRunning && <button type="button" className="loop-btn is-stop" onClick={() => void stopLoop(selected.id)}>Stop</button>}
+            {selected.status !== 'completed' && <button type="button" className="loop-btn" onClick={() => void window.api.macro.complete(selected.id).then((r) => r.ok && setDetail(r.state))}>Mark complete</button>}
+            <button type="button" className="loop-btn" onClick={() => duplicateLoop(selected)}>Duplicate</button>
+            <button type="button" className="loop-btn" onClick={() => void archiveLoop(selected.id)}>Archive</button>
+            <button type="button" className="loop-btn is-stop" onClick={() => void removeLoop(selected.id)}>Remove loop</button>
           </div>
 
-          {/* Detailed step-by-step timeline: what it set out to do, and what happened. */}
-          <h2 className="loop-section-title">Steps</h2>
+          <div className="loop-detail-grid">
+            <section className="loop-panel">
+              <h2>Now</h2>
+              <p>{activity || latestResult(selected, turns)}</p>
+              {options.length > 0 && (
+                <div className="loop-steer-options">
+                  {options.map((opt, i) => (
+                    <button key={i} type="button" className="loop-chip" onClick={() => void window.api.macro.steer(selected.id, opt)}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="loop-panel">
+              <h2>Safety</h2>
+              <ul className="loop-simple-list">
+                <li>Destructive commands require approval.</li>
+                <li>Secrets, .env files, and credentials must not be committed.</li>
+                <li>Validation failures are reported honestly.</li>
+                <li>Every automatic action is persisted in history.</li>
+              </ul>
+            </section>
+          </div>
+
+          <h2 className="loop-section-title">Run timeline</h2>
           {turns.length === 0 ? (
-            <div className="loop-empty">
-              {isActive ? 'Getting started… the first step takes a minute.' : 'No steps yet.'}
-            </div>
+            <div className="loop-empty">No runs yet. Active loops start automatically after their executor wakes up.</div>
           ) : (
             <ol className="loop-steps">
               {[...turns].reverse().map((t) => {
                 const result = resultLine(t.executorResultSummary)
-                const inProgress = !t.executorResultSummary && isRunning && t.turnIndex === turns.length
                 return (
                   <li key={t.id} className="loop-step">
                     <div className="loop-step-head">
-                      <span className="loop-step-n">Step {t.turnIndex}</span>
-                      {t.criticScore != null ? (
+                      <span className="loop-step-n">Run {t.turnIndex}</span>
+                      {t.criticScore != null && (
                         <span className={`loop-pill is-${t.criticVerdict === 'regressed' ? 'error' : t.criticVerdict === 'complete' || t.criticVerdict === 'advanced' ? 'done' : 'paused'}`}>
                           {t.criticScore}/100
                         </span>
-                      ) : inProgress ? (
-                        <span className="loop-pill is-running">working…</span>
-                      ) : null}
+                      )}
                     </div>
                     {t.plannerRationale && <div className="loop-step-plan">{t.plannerRationale}</div>}
                     {result && <div className="loop-step-result">{result}</div>}
+                    {t.error && <div className="loop-step-result is-error">{t.error}</div>}
                   </li>
                 )
               })}
             </ol>
           )}
 
-          <h2 className="loop-section-title">Saved changes</h2>
-          {commits.length === 0 ? (
-            <div className="loop-empty">Nothing committed yet.</div>
-          ) : (
-            <ol className="loop-commits">
-              {[...commits].reverse().map((c, i) => (
-                <li key={i} className="loop-commit">
-                  <span className="loop-commit-dot" />
-                  <span className="loop-commit-msg">{c.message}</span>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="loop-detail-grid">
+            <section className="loop-panel">
+              <h2>Audit trail</h2>
+              {actions.length === 0 ? (
+                <div className="loop-empty">No automatic actions recorded yet.</div>
+              ) : (
+                <ol className="loop-audit">
+                  {[...actions].reverse().slice(0, 12).map((a, i) => (
+                    <li key={i}>
+                      <span>{a.type.replace(/_/g, ' ')}</span>
+                      <strong>{a.message || a.reason || (a.at ? timeAgo(a.at) : '')}</strong>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+            <section className="loop-panel">
+              <h2>Final report</h2>
+              <p>{selected.status === 'completed' ? latestResult(selected, turns) : 'The report fills in as the loop records runs, commits, findings, and completion notes.'}</p>
+              {commits.length > 0 && (
+                <ol className="loop-commits">
+                  {[...commits].reverse().map((c, i) => (
+                    <li key={i} className="loop-commit"><span className="loop-commit-dot" /><span className="loop-commit-msg">{c.message}</span></li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          </div>
 
-          {selected.workspaceDir && (
-            <div className="loop-folder">
-              Saved in <code>{selected.workspaceDir}</code>
-            </div>
-          )}
-        </div>
+          {selected.workspaceDir && <div className="loop-folder">Workspace <code>{selected.workspaceDir}</code></div>}
+        </section>
       </div>
     )
   }
 
-  // ---------- create view ----------
   if (view === 'create') {
-    const createModels = createPlanner?.models ?? []
-    const createCadence = normalizeCadence(loopIntent, cadenceMinutes)
+    const cadence = minutesForSchedule(scheduleKind, customMinutes)
+    const activeMode = fullyLoopActive && autonomyLevel !== 'guided'
+    const selectedProjectPath = targetType === 'local-project' ? targetRef || projects[0]?.path || '' : targetRef
+
     return (
-      <div className="loops-page">
+      <div className="loops-page loop-ops">
         <button type="button" className="loop-back" onClick={() => !busy && setView('list')}>
           <ChevronIcon size={16} direction="left" /> All loops
         </button>
-        <div className="loop-create">
-          <h1>Start a new loop</h1>
-          <p className="loops-sub">
-            Describe the loop, choose the model, and pick how often Akorith should take the next step.
-          </p>
+
+        <section className="loop-create loop-create-wide">
+          <div className="loop-create-head">
+            <div>
+              <div className="loop-kicker">Create loop</div>
+              <h1>What should this loop do?</h1>
+              <p className="loops-sub">Start simple. Akorith turns the instruction into a scheduled, auditable AI workflow.</p>
+            </div>
+          </div>
+
           <textarea
             className="loop-create-input"
-            rows={4}
+            rows={5}
             autoFocus
             disabled={busy}
             value={description}
-            placeholder="e.g. Watch @ibrahimsait_ on X. Every 5 minutes, check for new posts, reposts, or replies, update FINDINGS.md, and notify me when something changed."
+            placeholder="Keep improving this project every day. Find useful features, implement the best next change, run validation, commit it, and write a clear summary."
             onChange={(e) => setDescription(e.target.value)}
           />
-          <div className="loop-examples">
-            <button
-              type="button"
-              className="loop-chip"
-              disabled={busy}
-              onClick={() => {
-                setLoopIntent('monitor')
-                setCadenceMinutes(5)
-                setDescription('Watch the X account @ibrahimsait_. Every 5 minutes, check for new posts, reposts, and replies, keep a seen-state, update FINDINGS.md, and notify me when something changed.')
-              }}
-            >
-              X monitor
-            </button>
-            <button
-              type="button"
-              className="loop-chip"
-              disabled={busy}
-              onClick={() => {
-                setLoopIntent('daily-build')
-                setCadenceMinutes(1440)
-                setDescription('Create a useful small project idea, build it, then every day find one strong feature idea, develop it, test it, commit it, and push the changes to GitHub.')
-              }}
-            >
-              Daily project
-            </button>
+
+          <div className="loop-create-layout">
+            <section className="loop-panel">
+              <h2>Loop type</h2>
+              <div className="loop-option-grid">
+                {LOOP_TYPES.map((item) => (
+                  <button key={item.id} type="button" className={loopType === item.id ? 'is-selected' : ''} disabled={busy} onClick={() => setLoopType(item.id)}>
+                    <strong>{item.label}</strong>
+                    <span>{item.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="loop-panel">
+              <h2>Where should it work?</h2>
+              <div className="loop-control-row is-two">
+                <label className="loop-field">
+                  <span>Target</span>
+                  <select value={targetType} disabled={busy} onChange={(e) => {
+                    const next = e.target.value as TargetType
+                    setTargetType(next)
+                    setTargetRef(next === 'local-project' ? projects[0]?.path ?? '' : '')
+                  }}>
+                    {TARGET_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
+                </label>
+                {targetType === 'local-project' ? (
+                  <label className="loop-field">
+                    <span>Project</span>
+                    <select value={selectedProjectPath} disabled={busy || projects.length === 0} onChange={(e) => setTargetRef(e.target.value)}>
+                      {projects.length === 0 && <option value="">No saved projects yet</option>}
+                      {projects.filter((p) => p.path).map((p) => <option key={p.id} value={p.path ?? ''}>{p.name}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="loop-field">
+                    <span>Target reference</span>
+                    <input value={targetRef} disabled={busy} placeholder="@account, repo URL, topic, source..." onChange={(e) => setTargetRef(e.target.value)} />
+                  </label>
+                )}
+              </div>
+            </section>
+
+            <section className="loop-panel">
+              <h2>How often should it run?</h2>
+              <div className="loop-segmented loop-segmented-six">
+                {SCHEDULES.map((s) => (
+                  <button key={s.id} type="button" className={scheduleKind === s.id ? 'is-selected' : ''} disabled={busy} onClick={() => setScheduleKind(s.id)}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {scheduleKind === 'custom' && (
+                <label className="loop-field loop-field-small">
+                  <span>Minutes</span>
+                  <input type="number" min={1} max={10080} value={customMinutes} disabled={busy} onChange={(e) => setCustomMinutes(Number(e.target.value))} />
+                </label>
+              )}
+              <p className="loop-field-hint">{SCHEDULES.find((s) => s.id === scheduleKind)?.detail} {cadence ? `Current rhythm: ${formatCadenceMinutes(cadence)}.` : ''}</p>
+            </section>
+
+            <section className="loop-panel">
+              <h2>How much freedom should the AI have?</h2>
+              <div className="loop-option-grid is-three">
+                {AUTONOMY.map((a) => (
+                  <button key={a.id} type="button" className={autonomyLevel === a.id ? 'is-selected' : ''} disabled={busy} onClick={() => setAutonomyLevel(a.id)}>
+                    <strong>{a.label}</strong>
+                    <span>{a.detail}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="loop-activity-row is-inline">
+                <div>
+                  <span className="loop-control-label">Fully loop</span>
+                  <strong>{fullyLoopActive ? 'Active' : 'Passive'}</strong>
+                </div>
+                <div className="loop-segmented is-compact">
+                  {LOOP_ACTIVITY.map((item) => (
+                    <button key={item.label} type="button" className={fullyLoopActive === item.active ? 'is-selected' : ''} disabled={busy} title={item.hint} onClick={() => setFullyLoopActive(item.active)}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
           </div>
 
-          <div className="loop-create-controls">
-            <div className="loop-activity-row">
-              <div>
-                <span className="loop-control-label">Fully loop</span>
-                <strong>{fullyLoopActive ? 'Active' : 'Passive'}</strong>
-              </div>
-              <div className="loop-segmented is-compact">
-                {LOOP_ACTIVITY.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    className={fullyLoopActive === item.active ? 'is-selected' : ''}
-                    disabled={busy}
-                    title={item.hint}
-                    onClick={() => setFullyLoopActive(item.active)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="loop-field">
-              <span>Rhythm</span>
-              <div className="loop-segmented">
-                {LOOP_INTENTS.map((intent) => (
-                  <button
-                    key={intent.id}
-                    type="button"
-                    className={loopIntent === intent.id ? 'is-selected' : ''}
-                    disabled={busy}
-                    onClick={() => {
-                      setLoopIntent(intent.id)
-                      setCadenceMinutes(intent.defaultMinutes || 5)
-                    }}
-                  >
-                    {intent.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {(loopIntent === 'monitor' || loopIntent === 'custom') && (
-              <label className="loop-field loop-field-small">
-                <span>Minutes</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={7 * 24 * 60}
-                  value={cadenceMinutes}
-                  disabled={busy}
-                  onChange={(e) => setCadenceMinutes(Number(e.target.value))}
-                />
-              </label>
-            )}
-            <div className="loop-control-row">
-              <label className="loop-field">
-                <span>Model</span>
-                <select
-                  value={plannerProvider}
-                  disabled={busy || providers.length === 0}
-                  onChange={(e) => {
+          <button type="button" className="loop-advanced-toggle" onClick={() => setShowAdvanced((v) => !v)}>
+            {showAdvanced ? 'Hide advanced settings' : 'Advanced settings'}
+          </button>
+
+          {showAdvanced && (
+            <div className="loop-create-controls">
+              <div className="loop-control-row">
+                <label className="loop-field">
+                  <span>Planning model</span>
+                  <select value={plannerProvider} disabled={busy || providers.length === 0} onChange={(e) => {
                     const id = e.target.value
                     const p = providers.find((item) => item.id === id)
                     setPlannerProvider(id)
                     setPlannerModel(p?.models[0] ?? '')
                     setExecutorTarget(defaultExecutorForProvider(id))
-                  }}
-                >
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id} disabled={!p.available.ok}>
-                      {p.label}{p.available.ok ? '' : ' (offline)'}
-                    </option>
-                  ))}
-                </select>
+                  }}>
+                    {providers.map((p) => <option key={p.id} value={p.id} disabled={!p.available.ok}>{p.label}{p.available.ok ? '' : ' (offline)'}</option>)}
+                  </select>
+                </label>
+                <label className="loop-field">
+                  <span>Variant</span>
+                  <select value={plannerModel} disabled={busy || !createPlanner || createModels.length === 0} onChange={(e) => setPlannerModel(e.target.value)}>
+                    {(createModels.length ? createModels : ['']).map((m) => <option key={m || 'default'} value={m}>{m || 'Default'}</option>)}
+                  </select>
+                </label>
+                <label className="loop-field">
+                  <span>Executor</span>
+                  <select value={executorTarget} disabled={busy} onChange={(e) => setExecutorTarget(executorForTarget(e.target.value).target)}>
+                    {EXECUTORS.map((e) => <option key={e.target} value={e.target}>{e.label}</option>)}
+                  </select>
+                </label>
+                <label className="loop-field">
+                  <span>Report</span>
+                  <select value={reportFormat} disabled={busy} onChange={(e) => setReportFormat(e.target.value as ReportFormat)}>
+                    <option value="summary">Readable summary</option>
+                    <option value="detailed">Detailed report</option>
+                    <option value="brief">Brief alert</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="loop-control-row">
+                <label className="loop-field">
+                  <span>Max runs</span>
+                  <input type="number" min={1} max={10000} value={maxRuns} disabled={busy} onChange={(e) => setMaxRuns(Number(e.target.value))} />
+                </label>
+                <label className="loop-field">
+                  <span>Max commits</span>
+                  <input type="number" min={0} max={10000} value={maxCommits} disabled={busy} onChange={(e) => setMaxCommits(Number(e.target.value))} />
+                </label>
+                <label className="loop-field">
+                  <span>Commit behavior</span>
+                  <select value={commitBehavior} disabled={busy} onChange={(e) => setCommitBehavior(e.target.value as CommitBehavior)}>
+                    <option value="commit">Commit meaningful changes</option>
+                    <option value="suggest">Suggest only</option>
+                    <option value="none">No commits</option>
+                  </select>
+                </label>
+                <label className="loop-field">
+                  <span>Safety</span>
+                  <select value={safetyLevel} disabled={busy} onChange={(e) => setSafetyLevel(e.target.value as SafetyLevel)}>
+                    <option value="strict">Strict</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="wide">Wide</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="loop-check">
+                <input type="checkbox" checked={pushEnabled} disabled={busy} onChange={(e) => setPushEnabled(e.target.checked)} />
+                Push to GitHub when the target is configured and safe
               </label>
+
               <label className="loop-field">
-                <span>Variant</span>
-                <select
-                  value={plannerModel}
-                  disabled={busy || !createPlanner || createModels.length === 0}
-                  onChange={(e) => setPlannerModel(e.target.value)}
-                >
-                  {(createModels.length ? createModels : ['']).map((m) => (
-                    <option key={m || 'default'} value={m}>
-                      {m || 'Default'}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="loop-field">
-                <span>Builder</span>
-                <select
-                  value={executorTarget}
-                  disabled={busy}
-                  onChange={(e) => setExecutorTarget(executorForTarget(e.target.value).target)}
-                >
-                  {EXECUTORS.map((e) => (
-                    <option key={e.target} value={e.target}>{e.label}</option>
-                  ))}
-                </select>
+                <span>Validation commands</span>
+                <input value={testCommands} disabled={busy} placeholder="Auto-detect, or e.g. npm run typecheck && npm test" onChange={(e) => setTestCommands(e.target.value)} />
               </label>
             </div>
-            <div className="loop-meta-strip">
-              <span>{createPlanner ? `${createPlanner.label} plans` : 'no model selected'}</span>
-              <span>{executorForTarget(executorTarget).label} builds</span>
-              <span>{formatCadenceMinutes(createCadence)}</span>
-              <span>{fullyLoopActive ? 'fully active' : 'passive'}</span>
-            </div>
-            {createPlanner && !createPlanner.available.ok && (
-              <div className="loop-field-hint">{createPlanner.available.reason || 'This provider is unavailable right now.'}</div>
-            )}
+          )}
+
+          <div className="loop-meta-strip loop-create-summary">
+            <span>{createPlanner ? `${createPlanner.label} plans` : 'no model selected'}</span>
+            <span>{executorForTarget(executorTarget).label} executes</span>
+            <span>{activeMode ? 'active automation' : 'guided/passive'}</span>
+            <span>{cadence ? formatCadenceMinutes(cadence) : 'continuous'}</span>
+            <span>{commitBehavior}{pushEnabled ? ' + push' : ''}</span>
           </div>
+
           {error && <div className="loop-note is-error">{error}</div>}
+          {createPlanner && !createPlanner.available.ok && <div className="loop-note is-error">{createPlanner.available.reason || 'This provider is unavailable right now.'}</div>}
+
           <div className="loop-actions">
-            <button
-              type="button"
-              className="loop-btn is-primary is-big"
-              disabled={!description.trim() || busy || !createPlanner?.available.ok}
-              onClick={() => void createLoop()}
-            >
-              {busy ? busyNote || 'Setting up…' : 'Create loop'}
+            <button type="button" className="loop-btn is-primary is-big" disabled={!description.trim() || busy || !createPlanner?.available.ok} onClick={() => void createLoop()}>
+              {busy ? busyNote || 'Setting up...' : 'Create Loop'}
             </button>
           </div>
-          {busy && <div className="loop-empty">This takes a little while — you can leave this page; the loop keeps running.</div>}
-        </div>
+        </section>
       </div>
     )
   }
 
-  // ---------- list view ----------
   return (
-    <div className="loops-page">
-      <header className="loops-head">
-        <div className="loops-title">
-          <LoopIcon size={22} />
-          <h1>Loops</h1>
+    <div className="loops-page loop-ops">
+      <header className="loops-head loop-ops-head">
+        <div>
+          <div className="loops-title">
+            <LoopIcon size={22} />
+            <h1>Loop Operations Center</h1>
+          </div>
+          <p className="loops-sub">
+            Create autonomous workflows that monitor, analyze, build, validate, commit, report, and continue over time.
+          </p>
         </div>
-        <p className="loops-sub">
-          Tell Akorith a task in a sentence or two — research, monitoring, or building something. It
-          works on it automatically, step by step, and you can steer it as it goes.
-        </p>
+        <button type="button" className="loop-btn is-primary" onClick={() => setView('create')}>
+          <PlusIcon size={16} /> Create Loop
+        </button>
       </header>
 
       {error && <div className="loop-note is-error">{error}</div>}
 
-      <div className="loops-grid">
-        <button
-          type="button"
-          className="loop-card loop-card-new"
-          onClick={() => {
-            setError(null)
-            setView('create')
-          }}
-        >
-          <span className="loop-plus">
-            <PlusIcon size={28} />
-          </span>
-          <span className="loop-card-new-label">New loop</span>
+      <section className="loop-dashboard">
+        <div><strong>{dashboard.activeLoops}</strong><span>Active</span></div>
+        <div><strong>{dashboard.pausedLoops}</strong><span>Needs attention</span></div>
+        <div><strong>{dashboard.completedLoops}</strong><span>Completed</span></div>
+        <div><strong>{dashboard.failedLoops}</strong><span>Failed</span></div>
+        <div><strong>{dashboard.commits}</strong><span>Commits</span></div>
+      </section>
+
+      <section className="loop-template-section">
+        <div className="loop-section-head">
+          <h2>Templates</h2>
+          <span>Start from a proven automation pattern, then customize it.</span>
+        </div>
+        <div className="loop-template-grid">
+          {TEMPLATES.map((template) => (
+            <button key={template.id} type="button" className="loop-template-card" onClick={() => applyTemplate(template)}>
+              <strong>{template.title}</strong>
+              <span>{template.description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="loop-section-head">
+        <h2>Loops</h2>
+        <span>{loops.length} workflow{loops.length === 1 ? '' : 's'} saved locally</span>
+      </section>
+
+      <div className="loops-grid loop-card-grid">
+        <button type="button" className="loop-card loop-card-new" onClick={() => setView('create')}>
+          <span className="loop-plus"><PlusIcon size={28} /></span>
+          <span className="loop-card-new-label">Create Loop</span>
         </button>
 
         {loops.map((loop) => {
           const f = friendlyStatus(loop)
           const commits = commitsOf(loop)
+          const progress = progressPercent(loop, loop.runCount, commits.length)
           return (
-            <button key={loop.id} type="button" className="loop-card" onClick={() => openLoop(loop.id)}>
+            <button key={loop.id} type="button" className="loop-card loop-ops-card" onClick={() => openLoop(loop.id)}>
               <div className="loop-card-top">
                 <span className={`loop-pill is-${f.tone}`}>{f.label}</span>
+                <span>{loop.loopType?.replace(/-/g, ' ') || 'custom'}</span>
               </div>
               <div className="loop-card-title">{loopTitle(loop)}</div>
-              <div className="loop-card-meta">
-                {providerLabel(providers, loop.plannerProvider)} · {cadenceSummary(loop)} · {activitySummary(loop)}
-              </div>
+              <div className="loop-card-meta">{loop.targetType || 'target'} · {providerLabel(providers, loop.plannerProvider)} · {loop.mode === 'auto' ? 'active' : 'passive'}</div>
+              <div className="loop-progress"><span style={{ width: `${progress}%` }} /></div>
+              <div className="loop-card-result">{latestResult(loop)}</div>
               <div className="loop-card-foot">
-                <span>{commits.length} change{commits.length === 1 ? '' : 's'}</span>
-                <span>{fmtDuration(Date.now() - loop.createdAt)}</span>
+                <span>{commits.length} commit{commits.length === 1 ? '' : 's'}</span>
+                <span>{loop.nextRunAt ? formatDateTime(loop.nextRunAt) : timeAgo(loop.updatedAt)}</span>
               </div>
             </button>
           )
@@ -867,7 +1198,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       </div>
 
       {loops.length === 0 && (
-        <div className="loop-empty loops-empty">No loops yet. Tap the ＋ card to start your first one.</div>
+        <div className="loop-empty loops-empty">No loops yet. Create one from a template or describe your own autonomous workflow.</div>
       )}
     </div>
   )

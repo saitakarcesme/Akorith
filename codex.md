@@ -319,6 +319,12 @@ electron-vite in strict numbered phases.
 - [x] **Phase 23.1** - Fully Active/Passive Loop Switch. The Loop section has a Fully loop
       Active/Passive control; Active starts/keeps Auto Mode running, while Passive leaves the loop
       idle until the user resumes it.
+- [x] **Phase 23.2** - Loop Operations Center. Loop is now the product home for autonomous
+      workflows: templates, natural-language creation, targets, schedules, autonomy levels,
+      stop limits, commit/push/report controls, safety settings, model/executor choice, detailed
+      run timelines, audit trail, reports, archive/remove actions, and persistent Loop-native
+      storage (`loop_targets`, `loop_runs`, `loop_events`, `loop_templates`, `loop_artifacts`,
+      `loop_reports`) layered onto `macro_sessions`.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -352,6 +358,13 @@ electron-vite in strict numbered phases.
 - **Macro-loop: Approval Mode is the default and is unchanged.** Planner proposals are meta
   calls and do not write `usage_event`; the user approves or edits each executor prompt before
   it is sent through the bridge path.
+- **Loop Operations Center (Phase 23.2):** `macro_sessions` is still the compatibility spine, but
+  Loop metadata now records type, target, schedule, stop limits, commit/push/report behavior,
+  safety level, latest result, run count, next run, and archives. Automatic actions mirror into
+  `loop_events`; each Auto cycle records a `loop_runs` row with summary, changed files, commands,
+  validation result, commit messages, next step, and errors. Remove deletes the Loop record only,
+  never the workspace folder. Existing local-project targets are bound conservatively with no
+  scaffold/write on bind; fresh Loop projects still scaffold under Akorith Projects.
 - **Auto Mode (Phase 11) is opt-in and cautious — do not loosen its gates.** It may auto-send
   the planner's prompt and auto-answer ONLY low-risk, one-time, high-confidence (≥0.6)
   confirmations (`agentic-core.decidePermissionPolicy`). Medium/high-risk, low-confidence,

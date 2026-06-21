@@ -479,6 +479,8 @@ export interface EvaluateApi {
 // ---- macro-loop orchestration (Phase 9) ----
 
 export type MacroStatus =
+  | 'draft'
+  | 'scheduled'
   | 'idle'
   | 'preparing_context'
   | 'proposing'
@@ -488,8 +490,11 @@ export type MacroStatus =
   | 'summarizing'
   | 'awaiting_permission'
   | 'auto_running'
+  | 'paused'
   | 'completed'
+  | 'failed'
   | 'stopped'
+  | 'archived'
   | 'error'
 
 export type MacroMode = 'approval' | 'auto'
@@ -578,6 +583,24 @@ export interface MacroSessionRow {
   /** Loop purpose/cadence metadata. */
   loopIntent: string | null
   cadenceMinutes: number
+  /** Phase 23.2 Loop Operations Center metadata. */
+  loopType: string | null
+  targetType: string | null
+  targetRef: string | null
+  scheduleKind: string | null
+  scheduleDetail: string | null
+  nextRunAt: number | null
+  stopCondition: string | null
+  maxRuns: number
+  maxCommits: number
+  runCount: number
+  commitBehavior: string | null
+  pushEnabled: boolean
+  testCommands: string | null
+  reportFormat: string | null
+  safetyLevel: string | null
+  latestResult: string | null
+  archivedAt: number | null
 }
 
 export interface MacroTurnRow {
@@ -649,6 +672,20 @@ export interface WorkspaceCreateRequest {
   mode?: MacroMode
   loopIntent?: 'continuous' | 'monitor' | 'daily-build' | 'custom'
   cadenceMinutes?: number
+  loopType?: string
+  targetType?: string
+  targetRef?: string
+  scheduleKind?: string
+  scheduleDetail?: string
+  autonomyLevel?: string
+  stopCondition?: string
+  maxRuns?: number
+  maxCommits?: number
+  commitBehavior?: string
+  pushEnabled?: boolean
+  testCommands?: string
+  reportFormat?: string
+  safetyLevel?: string
 }
 
 export type WorkspaceCreateResponse =
@@ -656,6 +693,7 @@ export type WorkspaceCreateResponse =
   | { ok: false; error: string }
 
 export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
+export type MacroDeleteResponse = { ok: true } | { ok: false; error: string }
 export type MacroSummarizeResponse =
   | { ok: true; state: MacroState; summaryText?: string }
   | { ok: false; error: string; state?: MacroState }
@@ -671,6 +709,8 @@ export interface MacroApi {
   skip(args: { sessionId: string; turnId: string }): Promise<MacroResponse>
   stop(sessionId: string): Promise<MacroResponse>
   complete(sessionId: string): Promise<MacroResponse>
+  archive(sessionId: string): Promise<MacroResponse>
+  remove(sessionId: string): Promise<MacroDeleteResponse>
   /** Phase 11: switch Approval/Auto mode. */
   setMode(sessionId: string, mode: MacroMode): Promise<MacroResponse>
   /** Switch the loop's planner model/provider, optionally with the executor target. */

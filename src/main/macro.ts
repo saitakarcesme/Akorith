@@ -11,19 +11,23 @@
 
 import { app, ipcMain } from 'electron'
 import { existsSync } from 'fs'
-import { isAbsolute, join } from 'path'
+import { basename, isAbsolute, join } from 'path'
 import { bridgeSend } from './bridge'
-import { getBridgeSettings } from './config'
+import { getBridgeSettings, getDigestSettings } from './config'
 import { buildDigest } from './digest'
 import { ptyManager } from './pty'
 import {
   addMessage,
+  archiveMacroSession,
   createMacroSession,
-  createProject,
   createMacroTurn,
+  deleteMacroSession,
+  ensureProjectForPath,
   getMacroSession,
   getMacroState,
   listMacroSessions,
+  recordLoopEvent,
+  recordLoopRun,
   sessionExists,
   updateMacroSession,
   updateMacroTurn,
@@ -167,7 +171,10 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
   let digest: string | null = null
   if (s.session.includeRepoDigest) {
     try {
-      digest = await buildDigest()
+      const digestSettings = s.session.workspaceDir
+        ? { ...getDigestSettings(), workingDir: s.session.workspaceDir }
+        : undefined
+      digest = await buildDigest(digestSettings)
     } catch (err) {
       digest = `Repo digest unavailable: ${err instanceof Error ? err.message : String(err)}`
     }
@@ -312,6 +319,7 @@ function stop(sessionId: string, reason = 'manual_stop'): MacroResponse {
   activeProposals.get(sessionId)?.abort()
   activeLoops.get(sessionId)?.abort()
   updateMacroSession(sessionId, { status: 'stopped', stopReason: reason, pauseReason: null })
+  recordLoopEvent({ loopId: sessionId, type: 'loop_stopped', message: 'Loop stopped.', severity: 'warning', metadata: { reason } })
   return { ok: true, state: requireState(sessionId) }
 }
 
@@ -323,7 +331,23 @@ function complete(sessionId: string): MacroResponse {
     .filter((n): n is number => typeof n === 'number')
     .at(-1)
   updateMacroSession(sessionId, { status: 'completed', stopReason: 'user_complete', finalScore: score ?? undefined, pauseReason: null })
+  recordLoopEvent({ loopId: sessionId, type: 'loop_completed', message: 'Loop marked complete.', severity: 'success' })
   return { ok: true, state: requireState(sessionId) }
+}
+
+function archiveLoop(sessionId: string): MacroResponse {
+  activeProposals.get(sessionId)?.abort()
+  activeLoops.get(sessionId)?.abort()
+  const archived = archiveMacroSession(sessionId)
+  if (!archived) return { ok: false, error: 'macro session not found' }
+  recordLoopEvent({ loopId: sessionId, type: 'loop_archived', message: 'Loop archived.', severity: 'info' })
+  return { ok: true, state: requireState(sessionId) }
+}
+
+function removeLoop(sessionId: string): { ok: true } | { ok: false; error: string } {
+  activeProposals.get(sessionId)?.abort()
+  activeLoops.get(sessionId)?.abort()
+  return deleteMacroSession(sessionId) ? { ok: true } : { ok: false, error: 'macro session not found' }
 }
 
 // ---------- Phase 11: mode, summarizer, permission handling, Auto Mode ----------
@@ -346,6 +370,25 @@ function logAutoAction(sessionId: string, action: AutoAction): void {
   list.push({ ...action, at: Date.now() })
   if (list.length > MAX_AUTO_ACTIONS) list = list.slice(-MAX_AUTO_ACTIONS)
   updateMacroSession(sessionId, { autoActions: JSON.stringify(list) })
+  recordLoopEvent({
+    loopId: sessionId,
+    type: action.type,
+    message: loopEventMessage(action),
+    severity: action.type.includes('error') || action.type.includes('skipped') ? 'warning' : 'info',
+    metadata: action
+  })
+}
+
+function loopEventMessage(action: AutoAction): string {
+  if (typeof action.message === 'string' && action.message.trim()) return action.message.trim()
+  if (typeof action.reason === 'string' && action.reason.trim()) return action.reason.trim()
+  if (action.type === 'auto_send_prompt') return 'Sent the next executor step.'
+  if (action.type === 'auto_commit') return 'Saved a committed change.'
+  if (action.type === 'fully_loop_active') return 'Loop switched to Active.'
+  if (action.type === 'fully_loop_passive') return 'Loop switched to Passive.'
+  if (action.type === 'planner_switch') return 'Changed the planning model or executor.'
+  if (action.type === 'cadence_wait') return 'Waiting for the next scheduled cycle.'
+  return action.type.replace(/_/g, ' ')
 }
 
 function setMode(sessionId: string, mode: MacroMode): MacroResponse {
@@ -546,15 +589,22 @@ async function criticTurn(
  * (via stdin) come from Akorith, never from the executor agent. No-ops cleanly
  * when auto-commit is off, there is no workspace, or nothing changed.
  */
+interface AutoCommitOutcome {
+  committed: boolean
+  message?: string
+  phase?: number
+  reason?: string
+}
+
 async function maybeAutoCommit(
   sessionId: string,
   turnId: string,
   summaryStatus: string | null,
   criticRationale: string | null,
   criticVerdict: string | null
-): Promise<void> {
+): Promise<AutoCommitOutcome> {
   const s = getMacroSession(sessionId)
-  if (!s || !s.autoCommit || !s.workspaceDir) return
+  if (!s || !s.autoCommit || !s.workspaceDir) return { committed: false, reason: 'auto-commit disabled' }
   const headline = deriveHeadline({ criticRationale, criticVerdict, summaryStatus, goal: s.goal })
   try {
     const res = await commitPhase(s.workspaceDir, headline)
@@ -563,11 +613,15 @@ async function maybeAutoCommit(
       updateMacroTurn(turnId, {
         autoAction: JSON.stringify({ type: 'auto_commit', phase: res.phase, message: res.message, at: Date.now() })
       })
+      return { committed: true, phase: res.phase, message: res.message }
     } else {
       logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: res.reason })
+      return { committed: false, reason: res.reason }
     }
   } catch (err) {
-    logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: err instanceof Error ? err.message : String(err) })
+    const reason = err instanceof Error ? err.message : String(err)
+    logAutoAction(sessionId, { type: 'auto_commit_skipped', reason })
+    return { committed: false, reason }
   }
 }
 
@@ -786,12 +840,23 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         finishAuto(sessionId, 'stopped', 'token_budget_reached')
         break
       }
+      const runStartedAt = Date.now()
+      const runIndex = s.turns.length + 1
 
       // 1. Propose the next executor step (meta call).
       updateMacroSession(sessionId, { status: 'auto_running', pauseReason: null })
       const proposed = await propose(sessionId, signal)
       if (stopped()) break
       if (!proposed.ok) {
+        recordLoopRun({
+          loopId: sessionId,
+          runIndex,
+          startedAt: runStartedAt,
+          status: 'failed',
+          providerId: s.session.plannerProvider,
+          model: s.session.plannerModel,
+          error: proposed.error
+        })
         pauseAuto(sessionId, `planner_error:${proposed.error}`, false)
         break
       }
@@ -810,6 +875,15 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       // 3. Auto-send the proposal through the single bridge path.
       const sent = sendApprovedPrompt(sessionId, turn.id, turn.proposal, true)
       if (!sent.ok) {
+        recordLoopRun({
+          loopId: sessionId,
+          runIndex,
+          startedAt: runStartedAt,
+          status: 'failed',
+          providerId: afterPropose.session.plannerProvider,
+          model: afterPropose.session.plannerModel,
+          error: sent.error
+        })
         pauseAuto(sessionId, `bridge_error:${sent.error}`, false)
         break
       }
@@ -836,10 +910,26 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       const review = await criticTurn(sessionId, turn.id, summary, signal)
       if (stopped()) break
       // 6.7 Auto-commit this turn's work as "Phase N: <change>" (loop-driven git).
-      await maybeAutoCommit(sessionId, turn.id, summary.currentStatus, review.rationale, review.verdict)
+      const commitOutcome = await maybeAutoCommit(sessionId, turn.id, summary.currentStatus, review.rationale, review.verdict)
       if (stopped()) break
       // 7. Decide continue / complete / stop / pause.
       const now = requireState(sessionId)
+      recordLoopRun({
+        loopId: sessionId,
+        runIndex,
+        startedAt: runStartedAt,
+        status: review.verdict === 'regressed' || summary.needsUserAttention ? 'needs_attention' : 'completed',
+        providerId: now.session.plannerProvider,
+        model: now.session.plannerModel,
+        summary: summary.currentStatus,
+        actionsTaken: { criticVerdict: review.verdict, criticScore: review.progressScore },
+        filesChanged: summary.changedFiles,
+        commandsExecuted: summary.commandsRun,
+        testBuildResults: summary.testsRun,
+        commitsCreated: commitOutcome.committed && commitOutcome.message ? [commitOutcome.message] : [],
+        nextSuggestedStep: summary.likelyNextStep,
+        error: commitOutcome.committed ? null : commitOutcome.reason ?? null
+      })
       const outcome = evaluateAutoOutcome({
         iteration: now.turns.length,
         maxIterations: now.session.maxIterations,
@@ -850,6 +940,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         critic: review
       })
       if (outcome.action === 'complete') {
+        const projectLike = (now.session.loopType ?? now.session.loopIntent ?? '').match(/project|feature|build|code|docs|test|release|dependency/i)
+        if (projectLike && now.session.autoCommit && !commitOutcome.committed && summary.changedFiles.length === 0) {
+          pauseAuto(sessionId, 'verification_no_project_change', false)
+          break
+        }
         finishAuto(sessionId, 'completed', outcome.reason, review.progressScore)
         break
       }
@@ -868,6 +963,13 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       await interruptibleDelay(cadenceMinutes > 0 ? cadenceMinutes * 60_000 : 800, signal)
     }
   } catch (err) {
+    if (signal.aborted || getMacroSession(sessionId)?.mode !== 'auto') {
+      const current = getMacroSession(sessionId)
+      if (current && current.status !== 'stopped' && current.status !== 'completed') {
+        updateMacroSession(sessionId, { status: 'idle', pauseReason: null })
+      }
+      return
+    }
     updateMacroSession(sessionId, { status: 'error', stopReason: err instanceof Error ? err.message : String(err) })
   } finally {
     activeLoops.delete(sessionId)
@@ -899,6 +1001,20 @@ interface WorkspaceCreateArgs {
   loopIntent?: string
   cadenceMinutes?: number
   mode?: MacroMode
+  loopType?: string
+  targetType?: string
+  targetRef?: string
+  scheduleKind?: string
+  scheduleDetail?: string
+  autonomyLevel?: string
+  stopCondition?: string
+  maxRuns?: number
+  maxCommits?: number
+  commitBehavior?: string
+  pushEnabled?: boolean
+  testCommands?: string
+  reportFormat?: string
+  safetyLevel?: string
 }
 
 type WorkspaceCreateResponse =
@@ -933,6 +1049,16 @@ function cadenceLabel(minutes: number): string {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`
 }
 
+function safeText(value: unknown, fallback: string, max = 300): string {
+  if (typeof value !== 'string') return fallback
+  const text = value.replace(/[\0\r]/g, '').trim().slice(0, max)
+  return text || fallback
+}
+
+function checkboxText(value: boolean | undefined): string {
+  return value ? 'enabled' : 'disabled'
+}
+
 function loopRhythmInstruction(intent: string, cadenceMinutes: number): string {
   if (intent === 'monitor') {
     return `Loop rhythm: recurring monitor every ${cadenceLabel(cadenceMinutes)}. Treat each Akorith step as one check cycle: look for updates, compare them with the stored seen-state, update FINDINGS.md, and report only new posts, reposts, replies, or relevant changes.`
@@ -944,6 +1070,40 @@ function loopRhythmInstruction(intent: string, cadenceMinutes: number): string {
     return `Loop rhythm: recurring custom cycle every ${cadenceLabel(cadenceMinutes)}. Treat each Akorith step as one complete cycle, save state, report clearly, and let Akorith wait before the next cycle.`
   }
   return 'Loop rhythm: continuous. Work step by step until the goal is complete, saving visible progress after every step.'
+}
+
+function loopProfileInstruction(args: WorkspaceCreateArgs, cadenceMinutes: number): string {
+  const loopType = safeText(args.loopType, normalizeLoopIntent(args.loopIntent), 80)
+  const targetType = safeText(args.targetType, 'project', 80)
+  const targetRef = safeText(args.targetRef, 'the created Akorith workspace', 400)
+  const scheduleKind = safeText(args.scheduleKind, cadenceMinutes > 0 ? 'recurring' : 'continuous', 80)
+  const scheduleDetail = safeText(args.scheduleDetail, cadenceMinutes > 0 ? cadenceLabel(cadenceMinutes) : 'run continuously', 180)
+  const autonomy = safeText(args.autonomyLevel, args.mode === 'approval' ? 'guided' : 'semi-auto', 80)
+  const stopCondition = safeText(args.stopCondition, 'stop when the loop reaches the iteration, commit, budget, or manual stop limit', 300)
+  const commitBehavior = safeText(args.commitBehavior, 'commit', 80)
+  const reportFormat = safeText(args.reportFormat, 'summary', 80)
+  const safetyLevel = safeText(args.safetyLevel, 'balanced', 80)
+  const testCommands = typeof args.testCommands === 'string' && args.testCommands.trim()
+    ? args.testCommands.replace(/[\0\r]/g, '').trim().slice(0, 1000)
+    : 'auto-detect package scripts and validation commands'
+
+  return `Loop profile:
+- Loop type: ${loopType}
+- Target: ${targetType} - ${targetRef}
+- Schedule: ${scheduleKind} (${scheduleDetail})
+- Autonomy: ${autonomy}
+- Stop condition: ${stopCondition}
+- Commit behavior: ${commitBehavior}; push to GitHub is ${checkboxText(args.pushEnabled)}
+- Validation commands: ${testCommands}
+- Report format: ${reportFormat}
+- Safety level: ${safetyLevel}
+
+Operating rules:
+- Analyze the target before changing it, pick a safe useful next action, and explain the plan briefly.
+- Never run destructive commands, publish externally, or expose secrets without explicit approval.
+- Respect .gitignore and never commit .env files, API keys, tokens, credentials, or private files.
+- Run available validation commands before a meaningful commit when possible; report failures honestly.
+- Keep the loop auditable: summarize actions, changed files, commands, tests, commits, blockers, and the next suggested step.`
 }
 
 /**
@@ -987,34 +1147,78 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     7 * 24 * 60
   )
   const rhythm = loopRhythmInstruction(loopIntent, cadenceMinutes)
+  const profile = loopProfileInstruction(args, cadenceMinutes)
+  const commitBehavior = safeText(args.commitBehavior, 'commit', 80)
+  const autoCommit = commitBehavior !== 'suggest' && commitBehavior !== 'none'
+  const mode: MacroMode = args.mode === 'approval' || args.autonomyLevel === 'guided' ? 'approval' : 'auto'
 
-  // 2. Resolve a unique, safe workspace directory under the base path.
-  const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
-  let dir = join(base, idea.slug)
-  for (let n = 2; existsSync(dir) && n <= 50; n++) dir = join(base, `${idea.slug}-${n}`)
+  // 2. Resolve the target workspace. Existing local-project targets are bound
+  // conservatively (no scaffold/write); otherwise create a fresh Akorith repo.
+  const existingTarget =
+    args.targetType === 'local-project' &&
+    typeof args.targetRef === 'string' &&
+    isAbsolute(args.targetRef) &&
+    existsSync(args.targetRef)
+      ? args.targetRef
+      : null
+  const usingExistingProject = Boolean(existingTarget)
+  let dir = existingTarget ?? ''
+  if (!dir) {
+    const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
+    dir = join(base, idea.slug)
+    for (let n = 2; existsSync(dir) && n <= 50; n++) dir = join(base, `${idea.slug}-${n}`)
+  }
 
-  // 3. Scaffold: mkdir + git init + README + "Phase 0: scaffold project".
-  const init = await initWorkspace(dir, idea)
-  if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
+  // 3. Scaffold only for new Akorith workspaces.
+  if (!usingExistingProject) {
+    const init = await initWorkspace(dir, idea)
+    if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
+  }
 
-  // 4. Persist a sidebar project row + a macro session bound to it.
-  const project = createProject({ name: idea.name, path: dir })
+  // 4. Persist/reuse a sidebar project row + a macro session bound to it.
+  const project = ensureProjectForPath(dir, usingExistingProject ? basename(dir) : idea.name)
   const session = createMacroSession({
-    goal: cleanText(`${idea.firstGoal}\n\n${rhythm}`, MAX_GOAL_CHARS),
+    goal: cleanText(`${idea.firstGoal}\n\n${rhythm}\n\n${profile}`, MAX_GOAL_CHARS),
     plannerProvider: args.plannerProvider,
     plannerModel: args.plannerModel || undefined,
     targetTerminal: args.targetTerminal,
-    maxIterations: clampInt(args.maxIterations ?? 30, 30, 1, 200),
+    maxIterations: clampInt(args.maxIterations ?? args.maxRuns ?? 30, 30, 1, 200),
     goodEnoughThreshold: clampInt(args.goodEnoughThreshold ?? 90, 90, 1, 100),
     includeRepoDigest: true,
-    mode: args.mode === 'approval' ? 'approval' : 'auto',
+    mode,
     workspaceDir: dir,
-    autoCommit: true,
+    autoCommit,
     tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000),
     // Phase 21: show the user's own words on the loop card (fallback to the idea name).
     title: (args.seed?.trim() || idea.name).slice(0, 200),
     loopIntent,
-    cadenceMinutes
+    cadenceMinutes,
+    loopType: safeText(args.loopType, loopIntent, 80),
+    targetType: safeText(args.targetType, 'project', 80),
+    targetRef: safeText(args.targetRef, dir, 500),
+    scheduleKind: safeText(args.scheduleKind, cadenceMinutes > 0 ? 'recurring' : 'continuous', 80),
+    scheduleDetail: safeText(args.scheduleDetail, cadenceMinutes > 0 ? cadenceLabel(cadenceMinutes) : 'continuous', 200),
+    stopCondition: safeText(args.stopCondition, 'manual, max runs, max commits, or budget', 300),
+    maxRuns: clampInt(args.maxRuns ?? args.maxIterations ?? 0, 0, 0, 10_000),
+    maxCommits: clampInt(args.maxCommits ?? 0, 0, 0, 10_000),
+    commitBehavior,
+    pushEnabled: args.pushEnabled === true,
+    testCommands: typeof args.testCommands === 'string' ? args.testCommands.slice(0, 1000) : null,
+    reportFormat: safeText(args.reportFormat, 'summary', 80),
+    safetyLevel: safeText(args.safetyLevel, 'balanced', 80)
+  })
+  recordLoopEvent({
+    loopId: session.id,
+    type: 'loop_created',
+    message: 'Created a new autonomous loop.',
+    metadata: {
+      loopType: args.loopType ?? loopIntent,
+      targetType: args.targetType ?? 'project',
+      scheduleKind: args.scheduleKind,
+      autonomyLevel: args.autonomyLevel,
+      commitBehavior,
+      pushEnabled: args.pushEnabled === true
+    }
   })
   return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
 }
@@ -1034,7 +1238,21 @@ function validWorkspacePayload(args: unknown): args is WorkspaceCreateArgs {
     (a.tokenBudget === undefined || typeof a.tokenBudget === 'number') &&
     (a.loopIntent === undefined || (typeof a.loopIntent === 'string' && LOOP_INTENTS.has(a.loopIntent))) &&
     (a.cadenceMinutes === undefined || typeof a.cadenceMinutes === 'number') &&
-    (a.mode === undefined || a.mode === 'approval' || a.mode === 'auto')
+    (a.mode === undefined || a.mode === 'approval' || a.mode === 'auto') &&
+    (a.loopType === undefined || (typeof a.loopType === 'string' && a.loopType.length <= 80)) &&
+    (a.targetType === undefined || (typeof a.targetType === 'string' && a.targetType.length <= 80)) &&
+    (a.targetRef === undefined || (typeof a.targetRef === 'string' && a.targetRef.length <= 500)) &&
+    (a.scheduleKind === undefined || (typeof a.scheduleKind === 'string' && a.scheduleKind.length <= 80)) &&
+    (a.scheduleDetail === undefined || (typeof a.scheduleDetail === 'string' && a.scheduleDetail.length <= 200)) &&
+    (a.autonomyLevel === undefined || (typeof a.autonomyLevel === 'string' && a.autonomyLevel.length <= 80)) &&
+    (a.stopCondition === undefined || (typeof a.stopCondition === 'string' && a.stopCondition.length <= 300)) &&
+    (a.maxRuns === undefined || typeof a.maxRuns === 'number') &&
+    (a.maxCommits === undefined || typeof a.maxCommits === 'number') &&
+    (a.commitBehavior === undefined || (typeof a.commitBehavior === 'string' && a.commitBehavior.length <= 80)) &&
+    (a.pushEnabled === undefined || typeof a.pushEnabled === 'boolean') &&
+    (a.testCommands === undefined || (typeof a.testCommands === 'string' && a.testCommands.length <= 1000)) &&
+    (a.reportFormat === undefined || (typeof a.reportFormat === 'string' && a.reportFormat.length <= 80)) &&
+    (a.safetyLevel === undefined || (typeof a.safetyLevel === 'string' && a.safetyLevel.length <= 80))
   )
 }
 
@@ -1161,6 +1379,28 @@ export function registerMacroIpc(): void {
       return complete(args.sessionId)
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
+    }
+  })
+
+  ipcMain.handle('macro:archive', (_event, args: { sessionId: string }): MacroResponse => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {
+      return { ok: false, error: 'invalid macro:archive payload' }
+    }
+    try {
+      return archiveLoop(args.sessionId)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
+    }
+  })
+
+  ipcMain.handle('macro:remove', (_event, args: { sessionId: string }) => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {
+      return { ok: false, error: 'invalid macro:remove payload' }
+    }
+    try {
+      return removeLoop(args.sessionId)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 

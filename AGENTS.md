@@ -21,7 +21,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 13.3 per-project agent sessions + test-lab presets ·
 14 project/chat separation + activity drawer fixes · 15 theme toggle ·
 15.1 local-provider/workspace-context reliability polish ·
-**16 GitHub Test Lab + LAN Ollama + image chat** — all done.
+23 general-purpose task loops · 23.1 Fully Active/Passive Loop Switch ·
+**23.2 Loop Operations Center** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -604,6 +605,29 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   aborts Akorith's auto driver, leaving the loop idle until the user manually resumes or switches
   it back to Active. If a prompt was already sent to the executor terminal, that terminal command
   may finish, but Akorith will not plan or send the next cycle while Passive.
+- **Phase 23.2: Loop Operations Center.** The Loop section is now the product home for
+  autonomous workflows: project improvement, feature loops, GitHub/repo analysis, monitoring,
+  research, maintenance, and project creation. `LoopsPage.tsx` has a dashboard (Active / Needs
+  attention / Completed / Failed / Commits), template cards, a progressive create flow, advanced
+  schedule/stop/autonomy/safety/provider/commit/report controls, loop cards with type/target/status/
+  progress/latest result, detail controls for Active/Passive, model switching, Resume/Stop/Complete/
+  Duplicate/Archive/Remove, and separate Now, Safety, Run timeline, Audit trail, Saved changes, and
+  Final report panels. Remove deletes the loop record only; it never deletes the workspace folder.
+- **Phase 23.2 data model.** `macro_sessions` remains the compatibility spine, now with additive
+  Loop fields: `loop_type`, `target_type`, `target_ref`, `schedule_kind`, `schedule_detail`,
+  `next_run_at`, `stop_condition`, `max_runs`, `max_commits`, `run_count`, `commit_behavior`,
+  `push_enabled`, `test_commands`, `report_format`, `safety_level`, `latest_result`, and
+  `archived_at`. New tables reserve the durable product model: `loop_targets`, `loop_runs`,
+  `loop_events`, `loop_templates`, `loop_artifacts`, and `loop_reports`. Automatic actions still
+  append to `macro_sessions.auto_actions`, and now also mirror into `loop_events`; each Auto cycle
+  records a `loop_runs` row with summary, changed files, commands, tests/builds, commits, next step,
+  and errors.
+- **Phase 23.2 execution behavior.** `workspace:createProject` can now bind a loop to an existing
+  local project path (conservatively: no scaffold/write on bind) or create a fresh Akorith workspace.
+  Project loops use the loop workspace for `buildDigest()` instead of the app cwd. Planner prompts
+  include a structured Loop profile plus safety rules. Auto-commit returns an explicit result, and
+  project-like loops no longer mark themselves complete when the critic claims success but no files
+  changed and no commit was made. Archive/remove IPC channels abort active drivers first.
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
@@ -621,7 +645,9 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
 `macro_turns`: `summarizer_confidence`,
 `permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`,
 **Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON), and **Phase 22**
-`next_options` (JSON). Verified present in the packaged app's DB schema.
+`next_options` (JSON). **Phase 23.2** adds the Loop metadata columns listed above plus
+`loop_targets`, `loop_runs`, `loop_events`, `loop_templates`, `loop_artifacts`, and
+`loop_reports`. Verified present in the packaged app's DB schema.
 
 **Safety summary.** Default is Approval Mode (unchanged Phase 9 flow). Auto Mode is opt-in with
 a visible note, never auto-selects "always allow", never auto-answers medium/high-risk or
@@ -1361,6 +1387,18 @@ The Loop section now exposes a **Fully loop** Active/Passive switch. Active mode
 the loop running automatically; Passive mode creates or returns the session to a waiting state so
 the user manually resumes it. This maps to the existing macro `auto`/`approval` modes and preserves
 the single executor write path.
+
+### Phase 23.2: Loop Operations Center
+
+The Loop section is now a final-product-quality autonomous automation center. Users can start from
+templates or a natural-language instruction, choose a target (new project, local project, GitHub
+repo, social source, research source, or custom source), schedule, autonomy mode, stop limits,
+commit/push/report behavior, safety level, validation commands, provider/model, and executor.
+Loops are auditable and manageable with Resume, Stop, Complete, Duplicate, Archive, and Remove.
+The backend stores Loop-native targets/runs/events/templates/artifacts/reports, mirrors automatic
+actions into `loop_events`, records each autonomous run in `loop_runs`, uses the loop workspace for
+repo digest context, and refuses to mark project-like loops complete when no project change was
+verified.
 
 ## Conventions
 
