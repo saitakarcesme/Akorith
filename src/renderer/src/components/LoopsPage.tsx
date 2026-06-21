@@ -52,6 +52,15 @@ function parseStrArray(json: string | null | undefined): string[] {
   }
 }
 
+/** A short, readable "what happened" line from a turn's result summary. */
+function resultLine(summary: string | null): string {
+  if (!summary) return ''
+  // The first line is the agent's current-status sentence; drop the folded-in
+  // critic block and metrics for a clean timeline entry.
+  const first = summary.split('\n').map((l) => l.trim()).find(Boolean) ?? ''
+  return first.replace(/^current status:?\s*/i, '').slice(0, 200)
+}
+
 const RUNNING = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
 const PAUSED = new Set(['awaiting_permission', 'awaiting_executor_result', 'awaiting_approval'])
 
@@ -322,11 +331,40 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             )}
           </div>
 
-          <h2 className="loop-section-title">Progress</h2>
-          {commits.length === 0 ? (
+          {/* Detailed step-by-step timeline: what it set out to do, and what happened. */}
+          <h2 className="loop-section-title">Steps</h2>
+          {turns.length === 0 ? (
             <div className="loop-empty">
-              {isRunning ? 'Working on the first change… this can take a minute.' : 'No changes saved yet.'}
+              {isActive ? 'Getting started… the first step takes a minute.' : 'No steps yet.'}
             </div>
+          ) : (
+            <ol className="loop-steps">
+              {[...turns].reverse().map((t) => {
+                const result = resultLine(t.executorResultSummary)
+                const inProgress = !t.executorResultSummary && isRunning && t.turnIndex === turns.length
+                return (
+                  <li key={t.id} className="loop-step">
+                    <div className="loop-step-head">
+                      <span className="loop-step-n">Step {t.turnIndex}</span>
+                      {t.criticScore != null ? (
+                        <span className={`loop-pill is-${t.criticVerdict === 'regressed' ? 'error' : t.criticVerdict === 'complete' || t.criticVerdict === 'advanced' ? 'done' : 'paused'}`}>
+                          {t.criticScore}/100
+                        </span>
+                      ) : inProgress ? (
+                        <span className="loop-pill is-running">working…</span>
+                      ) : null}
+                    </div>
+                    {t.plannerRationale && <div className="loop-step-plan">{t.plannerRationale}</div>}
+                    {result && <div className="loop-step-result">{result}</div>}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+
+          <h2 className="loop-section-title">Saved changes</h2>
+          {commits.length === 0 ? (
+            <div className="loop-empty">Nothing committed yet.</div>
           ) : (
             <ol className="loop-commits">
               {[...commits].reverse().map((c, i) => (
@@ -357,14 +395,17 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         </button>
         <div className="loop-create">
           <h1>Start a new loop</h1>
-          <p className="loops-sub">Describe what you'd like to build in a sentence or two. That's it — Akorith does the rest.</p>
+          <p className="loops-sub">
+            Describe what you want — research something online, keep an eye on a page, or build a
+            small tool. Write it in a sentence or two; Akorith does the rest, on its own.
+          </p>
           <textarea
             className="loop-create-input"
             rows={4}
             autoFocus
             disabled={busy}
             value={description}
-            placeholder="e.g. A little command-line tool that renames messy photo files by date. Keep it simple."
+            placeholder="e.g. Check this person's X profile and list any new posts they've made, with links and a one-line summary of each."
             onChange={(e) => setDescription(e.target.value)}
           />
           {error && <div className="loop-note is-error">{error}</div>}
@@ -393,7 +434,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
           <h1>Loops</h1>
         </div>
         <p className="loops-sub">
-          Describe a small project in a sentence or two. Akorith builds it for you and saves every change as a step.
+          Tell Akorith a task in a sentence or two — research, monitoring, or building something. It
+          works on it automatically, step by step, and you can steer it as it goes.
         </p>
       </header>
 

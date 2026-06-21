@@ -871,24 +871,36 @@ function fallbackIdea(seed?: string): ProjectIdea {
 }
 
 /**
- * Generate an everyday-dev idea, scaffold it as its own git repo, and bind a
- * fresh auto-mode + auto-commit macro session to it. Does NOT start the loop —
- * the renderer first starts the executor terminal in `workspaceDir`, then calls
- * macro:startAuto. The build then commits each change as "Phase N: <change>".
+ * Phase 23: the user's prompt IS the goal — any autonomous task (research,
+ * monitoring, building, …), not only project generation. We scaffold a working
+ * folder (git repo, for an artifact/findings history) and bind a fresh auto-mode
+ * + auto-commit macro session to it. Idea-generation is only a fallback for an
+ * empty prompt ("surprise me"). Does NOT start the loop — the renderer starts the
+ * executor in `workspaceDir`, then calls macro:startAuto.
  */
 async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<WorkspaceCreateResponse> {
-  // 1. Generate an everyday-dev idea (meta call) with a deterministic fallback.
+  // 1. Prefer the user's own prompt as the goal; only invent one when it's blank.
+  const userPrompt = args.seed?.trim()
   let idea: ProjectIdea
-  try {
-    const res = await sendMetaPrompt(
-      args.plannerProvider,
-      args.plannerModel || undefined,
-      buildIdeaPrompt(args.seed),
-      AbortSignal.timeout(PROPOSE_TIMEOUT_MS)
-    )
-    idea = parseProjectIdea(res.text) ?? fallbackIdea(args.seed)
-  } catch {
-    idea = fallbackIdea(args.seed)
+  if (userPrompt) {
+    idea = {
+      name: userPrompt.replace(/\s+/g, ' ').slice(0, 60),
+      slug: slugify(userPrompt),
+      summary: userPrompt,
+      firstGoal: userPrompt
+    }
+  } else {
+    try {
+      const res = await sendMetaPrompt(
+        args.plannerProvider,
+        args.plannerModel || undefined,
+        buildIdeaPrompt(args.seed),
+        AbortSignal.timeout(PROPOSE_TIMEOUT_MS)
+      )
+      idea = parseProjectIdea(res.text) ?? fallbackIdea(args.seed)
+    } catch {
+      idea = fallbackIdea(args.seed)
+    }
   }
 
   // 2. Resolve a unique, safe workspace directory under the base path.

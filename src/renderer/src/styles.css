@@ -5323,3 +5323,43 @@ body {
   font-size: 14px;
   color: var(--text);
 }
+
+/* Phase 23: detailed step timeline */
+.loop-steps {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.loop-step {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+.loop-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.loop-step-n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.loop-step-plan {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.loop-step-result {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}

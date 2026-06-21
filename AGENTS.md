@@ -586,6 +586,18 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   `macro:steer` → `macro_sessions.pending_steering`, which the next `propose()` folds into the
   planner prompt and clears. No pick = it continues on the default. The detail page also shows
   Stop (reject) and a Resume only for the rare system pause.
+- **General-purpose tasks (Phase 23).** Loops are no longer only project generation — the user's
+  prompt IS the goal (research, monitoring, building, …). `createWorkspaceProject` uses the prompt
+  verbatim as the goal (idea-generation is only an empty-prompt fallback) and still scaffolds a
+  git working folder for an artifact/findings history. `buildPlannerPrompt` was rewritten to be
+  task-agnostic and tool-aware: it tells the agent it has web search/fetch, a shell, and file I/O,
+  and to keep a single results file (e.g. FINDINGS.md) updated each step — for monitoring goals,
+  to track seen items and report only what's new. The Loop detail page shows a detailed **Steps**
+  timeline (each step's plan + what happened + critic score) alongside the saved-changes commits.
+  NOTE: "computer use" depends on what tools the executor CLI actually exposes — Akorith passes
+  the instruction through, so web/shell/files work today; native screen-control needs the agent to
+  have such a tool. Recurring/scheduled re-runs are not built yet (a loop runs to its iteration cap
+  then stops; Resume continues it).
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
