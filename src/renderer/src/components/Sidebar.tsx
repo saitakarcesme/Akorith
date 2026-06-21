@@ -1003,7 +1003,7 @@ export default function Sidebar({
                 </label>
               </div>
             )}
-            <div className="settings-note">Package identity cleanup remains Phase 10.</div>
+            <div className="settings-note">Packaged app changes appear after rebuilding and launching the new build.</div>
           </div>
           </div>
         )}

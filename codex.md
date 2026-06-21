@@ -292,6 +292,34 @@ electron-vite in strict numbered phases.
       sandbox alias config for `@/` imports; Local/Ollama can scan the private LAN for a host PC's
       exposed models; chat supports image attachments, with real pixels sent to Ollama multimodal
       models. **Validation:** `npm run typecheck`, `npm run build`, `scripts/verify-testlab.ts`.
+- [x] **Phase 17** - Ollama startup. Local/Ollama can auto-start `ollama serve` for loopback
+      configs, with conservative PATH/executable discovery and graceful unavailable-provider UI.
+- [x] **Phase 18** - MacBook + PC integration. Akorith supports a stronger PC hosting Ollama while
+      a MacBook points Settings -> Ollama endpoint at a reachable LAN/VPN/Tailscale endpoint.
+- [x] **Phase 18.1-18.3** - friendlier connection settings and errors. Settings shows shareable
+      local/LAN/VPN endpoints, and off-network LAN failures explain the same-Wi-Fi vs Tailscale
+      fix instead of surfacing raw fetch errors.
+- [x] **Phase 19** - closed-loop critic/verifier. After each executor summary, a critic grades
+      actual progress against the goal and feeds gaps into the next plan.
+- [x] **Phase 20** - autonomous workspace loop. Loops scaffold their own git working folder,
+      auto-commit each change as `Phase N: <change>`, and track a meta-call token budget.
+- [x] **Phase 20.1-20.2** - one-click loop setup and SWC renderer transform. The create/open/start
+      sequence was streamlined, and `@vitejs/plugin-react-swc` replaced the renderer transform.
+- [x] **Phase 21** - dedicated Loop section. Autonomous loops moved out of the chat composer into a
+      top-level, card-based, non-technical Loop page.
+- [x] **Phase 22** - fully automatic loop with steering. The loop keeps running instead of
+      dead-pausing on soft signals, exposes three steering chips, and records the user's chosen
+      direction for the next planner turn.
+- [x] **Phase 22.1** - no permission stalls for headless loops. The hidden loop executor uses
+      `claude-auto` / `codex-auto` command kinds in its own generated workspace, while user-facing
+      workspace agents stay interactive.
+- [x] **Phase 23** - general-purpose task loops. The user's prompt is the goal, so loops can do
+      research, monitoring, or building; planner prompts are task-agnostic and tell the executor to
+      maintain a results/artifact file.
+- [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
+      records the full product combination matrix, passing automated checks, blocked Local/Ollama
+      live cases while the home PC is off, remote model connection steps, and the build-freshness
+      findings.
 
 ## Locked design decisions
 

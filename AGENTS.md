@@ -1328,6 +1328,27 @@ colors through the user theme unless Phase 15.x explicitly asks for terminal the
   receives real image bytes via `/api/chat` `images` for multimodal local models; text-only CLI
   providers receive an attachment-name note but not pixel data.
 
+### Phase 23: Biggest Test Step of Akorith
+
+`docs/validation/phase23-biggest-test-step.md` is the broad product validation pass for the current
+Phase 23 surface. It records the combination matrix across General Chat, Workspace, bridge sends,
+agent summaries, permission cards, Loops, Test Lab, dashboard, settings, packaging, and remote
+Local/Ollama.
+
+Results: `npm run typecheck`, `npm run build`, `verify-macro-loop`, `verify-agentic-loop`,
+`verify-critic-loop`, `verify-conversation-context`, `verify-bridge-autoenter`,
+`verify-workspace-loop`, and `verify-testlab` pass. Live Local/Ollama model calls were blocked
+because the home PC was off, but the remote model path is documented: use Tailscale/WireGuard or a
+protected tunnel, run Ollama on the PC with `OLLAMA_HOST=0.0.0.0:11434`, paste the PC's
+`http://100.x.y.z:11434` endpoint into Mac Akorith Settings, Test, then Save.
+
+Findings to remember for future phases: an already installed packaged app stays old until a fresh
+build/package is launched or installed; `electron-vite dev` only hot-reloads renderer code, so
+`src/main` and `src/preload` changes require restarting the dev server; `package.json` still says
+`0.1.0`; and `npm run pack:mac` compiled but then hung silently during this validation window with
+no `dist/mac-arm64/Akorith.app` output, so packaging needs another focused investigation before a
+release.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
