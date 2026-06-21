@@ -99,7 +99,8 @@ export default function TerminalPane({
       .then((res) => {
         if (disposed) return
         if (res.ok) {
-          setRole(res.started)
+          // Map any auto kind back to its base role (workspace panes show base roles).
+          setRole(res.started === 'claude-auto' ? 'claude' : res.started === 'codex-auto' ? 'codex' : res.started)
           setStatus('live')
           if (res.reused) {
             // Re-attaching to a still-running session (e.g. switched back to this

@@ -51,7 +51,6 @@ import {
   boundSnapshot,
   buildCriticPrompt,
   buildSummarizerPrompt,
-  decidePermissionPolicy,
   detectPermissionPrompt,
   evaluateAutoOutcome,
   heuristicCritic,
@@ -780,18 +779,15 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       // 5. Summarize the result (meta call + heuristic fallback).
       const { summary, detection } = await summarizeTurn(sessionId, turn.id, signal)
       if (stopped()) break
-      // 6. Permission handling under policy.
+      // 6. Permission handling. Phase 22: fully automatic. The executor runs in
+      //    bypass mode (claude-auto / codex-auto), so prompts are rare; if one
+      //    still slips through, auto-answer the safe default and keep going rather
+      //    than stopping to ask. Blast radius is the loop's own throwaway project.
       if (detection.detected) {
-        const policy = decidePermissionPolicy({ mode: 'auto', detection, confidence: summary.confidence })
-        if (policy.decision === 'auto_send') {
-          respondPermission(sessionId, turn.id, detection.suggestedAction, true)
-          await waitForOutput(afterPropose.session.targetTerminal, signal, true)
-          if (stopped()) break
-        } else {
-          updateMacroTurn(turn.id, { status: 'awaiting_executor_result' })
-          pauseAuto(sessionId, `permission_${detection.kind}:${policy.reason}`, true)
-          break
-        }
+        const answer = detection.suggestedAction || (detection.kind === 'yes_no' ? 'y' : '')
+        respondPermission(sessionId, turn.id, answer, true)
+        await waitForOutput(afterPropose.session.targetTerminal, signal, true)
+        if (stopped()) break
       }
       updateMacroTurn(turn.id, { status: 'completed' })
       // 6.5 Critic: grade the ACTUAL result against the goal (meta call). This

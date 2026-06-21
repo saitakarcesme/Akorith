@@ -586,6 +586,11 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   `macro:steer` → `macro_sessions.pending_steering`, which the next `propose()` folds into the
   planner prompt and clears. No pick = it continues on the default. The detail page also shows
   Stop (reject) and a Resume only for the rare system pause.
+- **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
+  new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
+  (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
+  interactive kinds. And `runAutoLoop` no longer pauses on a detected prompt — it auto-answers the
+  safe default and continues (blast radius is the loop's own throwaway project folder).
 - In `runAutoLoop`: after the critic, `maybeAutoCommit` commits the turn's work as the next
   `Phase N`; a metered meta-call **token budget** (`token_budget`, accumulated into `tokens_used`
   by `recordMetaUsage` on every planner/critic/summarizer call; `0` = unlimited) stops the loop

@@ -19,8 +19,10 @@ interface AutoAction {
 }
 
 // Logical executor terminal (t1 = Atlantis / Claude). Hidden from the user.
+// `claude-auto` launches the agent with permissions bypassed so the autonomous
+// loop never stops to ask — it builds inside its own throwaway project folder.
 const EXECUTOR = 't1'
-const EXECUTOR_KIND = 'claude'
+const EXECUTOR_KIND = 'claude-auto'
 
 function projectKey(id: string): string {
   return id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)

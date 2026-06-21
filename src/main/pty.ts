@@ -18,7 +18,10 @@ export interface PtyCreateOptions {
   commandKind?: PtyCommandKind
 }
 
-export type PtyCommandKind = 'shell' | 'codex' | 'claude'
+// `*-auto` kinds launch the agent CLI in non-interactive / bypass-permission
+// mode, used by the autonomous Loop section so it never stops to ask. The plain
+// kinds keep their normal interactive prompts for the user-driven workspace.
+export type PtyCommandKind = 'shell' | 'codex' | 'claude' | 'claude-auto' | 'codex-auto'
 
 export type PtyCreateResponse =
   | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string; reused?: boolean }
@@ -80,10 +83,20 @@ function resolveExecutable(command: 'codex' | 'claude'): string | null {
 }
 
 function commandSpec(kind: PtyCommandKind): { command: string; args: string[]; started: PtyCommandKind; message?: string } {
-  if (kind === 'codex' || kind === 'claude') {
-    const resolved = resolveExecutable(kind)
-    if (resolved) return { command: resolved, args: [], started: kind }
-    const label = kind === 'codex' ? 'Codex' : 'Claude'
+  if (kind === 'codex' || kind === 'claude' || kind === 'claude-auto' || kind === 'codex-auto') {
+    const base = kind === 'codex' || kind === 'codex-auto' ? 'codex' : 'claude'
+    const resolved = resolveExecutable(base)
+    if (resolved) {
+      // Loop's autonomous executor: skip interactive permission/approval prompts.
+      const args =
+        kind === 'claude-auto'
+          ? ['--dangerously-skip-permissions']
+          : kind === 'codex-auto'
+            ? ['--dangerously-bypass-approvals-and-sandbox']
+            : []
+      return { command: resolved, args, started: kind }
+    }
+    const label = base === 'codex' ? 'Codex' : 'Claude'
     return {
       command: resolveDefaultShell(),
       args: [],
@@ -297,11 +310,12 @@ class PtyManager {
 export const ptyManager = new PtyManager()
 
 export function registerPtyIpc(): void {
+  const VALID_KINDS = new Set<string>(['shell', 'codex', 'claude', 'claude-auto', 'codex-auto'])
   ipcMain.handle('pty:create', (event, args: { id: string } & PtyCreateOptions): PtyCreateResponse => {
     if (
       typeof args?.id !== 'string' ||
       !VALID_ID.test(args.id) ||
-      (args.commandKind !== undefined && args.commandKind !== 'shell' && args.commandKind !== 'codex' && args.commandKind !== 'claude')
+      (args.commandKind !== undefined && !VALID_KINDS.has(args.commandKind))
     ) {
       return { ok: false, error: 'invalid pty:create payload' }
     }
