@@ -422,23 +422,23 @@ export type AutoOutcome =
   | { action: 'stop'; reason: string }
   | { action: 'pause'; reason: string }
 
-const CONTINUE_CONFIDENCE_MIN = 0.4
+// Phase 22: the loop is fully automatic. Too many consecutive hard failures end
+// the run cleanly (a clear stop, never a dead pause that waits on the user).
+const MAX_AUTO_FAILURES = 4
 
-/** Cautious gate evaluated after each Auto-Mode turn is summarized and graded. */
+/**
+ * Gate evaluated after each turn is summarized and graded. Phase 22: fully
+ * automatic — it returns continue / complete / stop, never pause. Soft signals
+ * (needs-attention, low confidence, a one-off regression) keep the loop going;
+ * the critic's gaps steer the next plan. Only the goal being met (complete),
+ * the iteration cap, or repeated hard failures (stop) end it.
+ */
 export function evaluateAutoOutcome(input: AutoStopInput): AutoOutcome {
   const critic = input.critic ?? null
-  // Phase 19: the critic grades the ACTUAL result against the goal, so prefer it
-  // over the planner's pre-execution prediction (doneScore) when deciding.
-  if (critic) {
-    if (critic.recommendation === 'escalate') {
-      return { action: 'pause', reason: 'critic_escalated' }
-    }
-    if (critic.verdict === 'regressed') {
-      return { action: 'pause', reason: 'critic_detected_regression' }
-    }
-    if ((critic.goalMet || critic.verdict === 'complete') && critic.progressScore >= input.threshold) {
-      return { action: 'complete', reason: 'critic_goal_met' }
-    }
+  // The critic grades the ACTUAL result against the goal, so prefer it over the
+  // planner's pre-execution prediction (doneScore) when deciding completion.
+  if (critic && (critic.goalMet || critic.verdict === 'complete') && critic.progressScore >= input.threshold) {
+    return { action: 'complete', reason: 'critic_goal_met' }
   }
   const effectiveScore =
     critic && Number.isFinite(critic.progressScore) ? critic.progressScore : input.doneScore
@@ -451,14 +451,8 @@ export function evaluateAutoOutcome(input: AutoStopInput): AutoOutcome {
   if (input.iteration >= input.maxIterations) {
     return { action: 'stop', reason: 'max_iterations' }
   }
-  if (input.consecutiveFailures >= 2) {
-    return { action: 'pause', reason: 'repeated_failures' }
-  }
-  if (input.summary) {
-    if (input.summary.needsUserAttention) return { action: 'pause', reason: 'summary_needs_user_attention' }
-    if (input.summary.confidence < CONTINUE_CONFIDENCE_MIN) {
-      return { action: 'pause', reason: 'summarizer_confidence_too_low' }
-    }
+  if (input.consecutiveFailures >= MAX_AUTO_FAILURES) {
+    return { action: 'stop', reason: 'too_many_failures' }
   }
   return { action: 'continue' }
 }

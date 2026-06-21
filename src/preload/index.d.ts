@@ -573,6 +573,8 @@ export interface MacroSessionRow {
   tokensUsed: number
   /** Phase 21: plain-language loop label. */
   title: string | null
+  /** Phase 22: the user's chosen next direction (consumed by the next plan). */
+  pendingSteering: string | null
 }
 
 export interface MacroTurnRow {
@@ -601,6 +603,8 @@ export interface MacroTurnRow {
   criticScore: number | null
   criticVerdict: string | null
   criticReview: string | null
+  /** Phase 22: JSON array of 3 suggested next directions. */
+  nextOptions: string | null
 }
 
 export interface MacroState {
@@ -663,6 +667,8 @@ export interface MacroApi {
   complete(sessionId: string): Promise<MacroResponse>
   /** Phase 11: switch Approval/Auto mode. */
   setMode(sessionId: string, mode: MacroMode): Promise<MacroResponse>
+  /** Phase 22: steer the next step toward a chosen direction (loop keeps running). */
+  steer(sessionId: string, choice: string): Promise<MacroResponse>
   /** Phase 11: begin the cautious Auto-Mode loop (returns immediately). */
   startAuto(sessionId: string): Promise<MacroResponse>
   /** Phase 11: summarize a turn's executor result from the terminal snapshot. */

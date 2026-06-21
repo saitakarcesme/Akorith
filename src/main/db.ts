@@ -176,6 +176,10 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'tokens_used', 'INTEGER NOT NULL DEFAULT 0')
   // Phase 21 Loop section: a plain-language label for the loop card.
   ensureColumn('macro_sessions', 'title', 'TEXT')
+  // Phase 22 fully-automatic loop + steering: the user's chosen next direction
+  // (consumed by the next plan) and the planner's 3 suggested directions per turn.
+  ensureColumn('macro_sessions', 'pending_steering', 'TEXT')
+  ensureColumn('macro_turns', 'next_options', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -880,6 +884,8 @@ export interface MacroSessionRow {
   tokensUsed: number
   /** Phase 21: plain-language label shown on the loop card. */
   title: string | null
+  /** Phase 22: the user's chosen next direction, consumed by the next plan. */
+  pendingSteering: string | null
 }
 
 export interface MacroTurnRow {
@@ -911,6 +917,8 @@ export interface MacroTurnRow {
   criticVerdict: string | null
   /** JSON-serialized CriticReview. */
   criticReview: string | null
+  /** Phase 22: JSON array of 3 suggested next directions for steering. */
+  nextOptions: string | null
 }
 
 export interface MacroSessionWithTurns {
@@ -940,7 +948,8 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   autoCommit: r.auto_commit === 1,
   tokenBudget: (r.token_budget as number | null) ?? 0,
   tokensUsed: (r.tokens_used as number | null) ?? 0,
-  title: (r.title as string | null) ?? null
+  title: (r.title as string | null) ?? null,
+  pendingSteering: (r.pending_steering as string | null) ?? null
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -968,7 +977,8 @@ const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
   resultStatus: (r.result_status as string | null) ?? null,
   criticScore: (r.critic_score as number | null) ?? null,
   criticVerdict: (r.critic_verdict as string | null) ?? null,
-  criticReview: (r.critic_review as string | null) ?? null
+  criticReview: (r.critic_review as string | null) ?? null,
+  nextOptions: (r.next_options as string | null) ?? null
 })
 
 function touchMacroSession(sessionId: string, status?: MacroStatus): void {
@@ -1016,7 +1026,8 @@ export function createMacroSession(input: {
     autoCommit: input.autoCommit ?? false,
     tokenBudget: Math.max(0, Math.floor(input.tokenBudget ?? 0)),
     tokensUsed: 0,
-    title: input.title ?? null
+    title: input.title ?? null,
+    pendingSteering: null
   }
   must()
     .prepare(
@@ -1066,6 +1077,7 @@ export function updateMacroSession(
       | 'autoActions'
       | 'pauseReason'
       | 'tokensUsed'
+      | 'pendingSteering'
     >
   >
 ): MacroSessionRow | null {
@@ -1080,13 +1092,14 @@ export function updateMacroSession(
     mode: patch.mode ?? current.mode,
     autoActions: patch.autoActions !== undefined ? patch.autoActions : current.autoActions,
     pauseReason: patch.pauseReason !== undefined ? patch.pauseReason : current.pauseReason,
-    tokensUsed: patch.tokensUsed ?? current.tokensUsed
+    tokensUsed: patch.tokensUsed ?? current.tokensUsed,
+    pendingSteering: patch.pendingSteering !== undefined ? patch.pendingSteering : current.pendingSteering
   }
   must()
     .prepare(
       `UPDATE macro_sessions
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
-           mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?
+           mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?
        WHERE id = ?`
     )
     .run(
@@ -1099,6 +1112,7 @@ export function updateMacroSession(
       next.autoActions,
       next.pauseReason,
       next.tokensUsed,
+      next.pendingSteering,
       sessionId
     )
   return getMacroSession(sessionId)
@@ -1174,7 +1188,8 @@ export function createMacroTurn(input: {
     resultStatus: null,
     criticScore: null,
     criticVerdict: null,
-    criticReview: null
+    criticReview: null,
+    nextOptions: null
   }
   must()
     .prepare(
@@ -1239,6 +1254,7 @@ export function updateMacroTurn(
       | 'criticScore'
       | 'criticVerdict'
       | 'criticReview'
+      | 'nextOptions'
     >
   >
 ): MacroTurnRow | null {
@@ -1256,7 +1272,8 @@ export function updateMacroTurn(
            planner_rationale = ?, expected_result = ?, confidence_score = ?, good_enough_score = ?,
            risk_level = ?, provider_used = ?, model_used = ?, error = ?,
            summarizer_confidence = ?, permission_detection = ?, terminal_snapshot_meta = ?,
-           auto_action = ?, result_status = ?, critic_score = ?, critic_verdict = ?, critic_review = ?
+           auto_action = ?, result_status = ?, critic_score = ?, critic_verdict = ?, critic_review = ?,
+           next_options = ?
        WHERE id = ?`
     )
     .run(
@@ -1281,6 +1298,7 @@ export function updateMacroTurn(
       next.criticScore,
       next.criticVerdict,
       next.criticReview,
+      next.nextOptions,
       turnId
     )
   touchMacroSession(row.sessionId)

@@ -575,6 +575,17 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   commandKind:'claude'})` — no visible terminal UI), then `macro:startAuto`. The detail page shows
   a live timer, the saved changes (auto-commit log → "Phase N: …"), and Pause/Resume — all
   framed in plain language; the macro/critic/token machinery stays hidden.
+- **Fully automatic + steering (Phase 22).** The loop never dead-pauses waiting on the user.
+  `evaluateAutoOutcome` returns only continue / complete / stop (no `pause`): soft signals
+  (needs-attention, low confidence, a one-off critic regression/escalation) keep it going — the
+  critic's gaps steer the next plan — and it ends only on goal-met (complete), the iteration cap,
+  or `MAX_AUTO_FAILURES` consecutive failures (stop). A high planner-risk label no longer pauses
+  (destructive shell ops are still gated by the permission detector). Each plan also returns
+  `next_options` (3 short plain-language directions, persisted on `macro_turns.next_options`); the
+  Loop detail page shows the current activity + those as steer chips. Picking one calls
+  `macro:steer` → `macro_sessions.pending_steering`, which the next `propose()` folds into the
+  planner prompt and clears. No pick = it continues on the default. The detail page also shows
+  Stop (reject) and a Resume only for the rare system pause.
 - In `runAutoLoop`: after the critic, `maybeAutoCommit` commits the turn's work as the next
   `Phase N`; a metered meta-call **token budget** (`token_budget`, accumulated into `tokens_used`
   by `recordMetaUsage` on every planner/critic/summarizer call; `0` = unlimited) stops the loop
@@ -583,10 +594,11 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
 
 **Persistence (additive, safe `ensureColumn` migrations).** `macro_sessions`: `mode`,
 `auto_actions` (JSON), `pause_reason`, and **Phase 20** `workspace_dir`, `auto_commit`,
-`token_budget`, `tokens_used`, and **Phase 21** `title`. `macro_turns`: `summarizer_confidence`,
+`token_budget`, `tokens_used`, **Phase 21** `title`, and **Phase 22** `pending_steering`.
+`macro_turns`: `summarizer_confidence`,
 `permission_detection` (JSON), `terminal_snapshot_meta` (JSON), `auto_action`, `result_status`,
-and **Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON).
-Verified present in the packaged app's DB schema.
+**Phase 19** `critic_score`, `critic_verdict`, `critic_review` (JSON), and **Phase 22**
+`next_options` (JSON). Verified present in the packaged app's DB schema.
 
 **Safety summary.** Default is Approval Mode (unchanged Phase 9 flow). Auto Mode is opt-in with
 a visible note, never auto-selects "always allow", never auto-answers medium/high-risk or

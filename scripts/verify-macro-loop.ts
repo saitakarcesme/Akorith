@@ -12,7 +12,8 @@ const parsed = parsePlannerProposal(`{
   "expected_result": "A concise report.",
   "done_score": 42,
   "risk_level": "low",
-  "requires_user_approval": true
+  "requires_user_approval": true,
+  "next_options": ["add tests", "improve docs", "refactor core", "extra ignored"]
 }`)
 
 assert.equal(parsed.parseOk, true)
@@ -20,6 +21,9 @@ assert.equal(parsed.nextPrompt, 'Inspect src/main/macro.ts and report issues.')
 assert.equal(parsed.doneScore, 42)
 assert.equal(parsed.riskLevel, 'low')
 assert.equal(parsed.requiresUserApproval, true)
+// Phase 22: up to 3 steering directions are parsed (extra dropped).
+assert.deepEqual(parsed.nextOptions, ['add tests', 'improve docs', 'refactor core'])
+assert.deepEqual(parsePlannerProposal('not json').nextOptions, [])
 
 const fenced = parsePlannerProposal('```json\n{"next_prompt":"Run typecheck","done_score":95,"risk_level":"medium","requires_user_approval":true}\n```')
 assert.equal(fenced.parseOk, true)
@@ -43,6 +47,7 @@ const prompt = buildPlannerPrompt({
   maxIterations: 5,
   goodEnoughThreshold: 85,
   repoDigest: '## Repo context\nfile tree',
+  steering: 'focus on a clean CLI',
   turns: [
     {
       turnIndex: 1,
@@ -61,5 +66,8 @@ assert.match(prompt, /Iteration: 2 of 5/)
 assert.match(prompt, /Changed files and ran tests/)
 assert.match(prompt, /Repo context included/)
 assert.match(prompt, /Return ONLY JSON/)
+// Phase 22: steering + next_options surface in the planner prompt.
+assert.match(prompt, /focus on a clean CLI/)
+assert.match(prompt, /next_options/)
 
 console.log('verify-macro-loop: ok')

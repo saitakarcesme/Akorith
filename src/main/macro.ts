@@ -175,13 +175,16 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
   }
 
   s = requireState(sessionId)
+  // Phase 22: fold in any direction the user picked to steer this next step.
+  const steering = s.session.pendingSteering
   const prompt = buildPlannerPrompt({
     goal: s.session.goal,
     iteration: s.turns.length + 1,
     maxIterations: s.session.maxIterations,
     goodEnoughThreshold: s.session.goodEnoughThreshold,
     turns: s.turns.map((t) => ({ ...t, criticGaps: turnCriticGaps(t) })),
-    repoDigest: digest
+    repoDigest: digest,
+    steering
   })
 
   updateMacroSession(sessionId, { status: 'proposing' })
@@ -197,7 +200,7 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
     if (current.session.status === 'stopped') return { ok: true, state: current }
 
     const parsed = parsePlannerProposal(result.text)
-    createMacroTurn({
+    const created = createMacroTurn({
       sessionId,
       turnIndex: current.turns.length + 1,
       status: 'awaiting_approval',
@@ -210,9 +213,12 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
       modelUsed: result.model,
       error: parsed.parseOk ? undefined : 'planner response was not valid structured JSON'
     })
+    // Persist the 3 steering directions for this turn; clear consumed steering.
+    updateMacroTurn(created.id, { nextOptions: JSON.stringify(parsed.nextOptions) })
     updateMacroSession(sessionId, {
       status: 'awaiting_approval',
-      finalScore: parsed.doneScore ?? undefined
+      finalScore: parsed.doneScore ?? undefined,
+      ...(steering ? { pendingSteering: null } : {})
     })
     return { ok: true, state: requireState(sessionId) }
   } catch (err) {
@@ -344,6 +350,19 @@ function logAutoAction(sessionId: string, action: AutoAction): void {
 
 function setMode(sessionId: string, mode: MacroMode): MacroResponse {
   updateMacroSession(sessionId, { mode })
+  return { ok: true, state: requireState(sessionId) }
+}
+
+/**
+ * Phase 22: steer the next step. Stores the user's chosen direction; the next
+ * propose() folds it into the planner prompt and clears it. The loop keeps
+ * running automatically — this only nudges where it goes next.
+ */
+function steer(sessionId: string, choice: string): MacroResponse {
+  const text = cleanText(choice, 200)
+  if (!text) return { ok: false, error: 'empty steering choice', state: requireState(sessionId) }
+  updateMacroSession(sessionId, { pendingSteering: text })
+  logAutoAction(sessionId, { type: 'user_steer', choice: text })
   return { ok: true, state: requireState(sessionId) }
 }
 
@@ -743,10 +762,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         pauseAuto(sessionId, 'no_proposal', false)
         break
       }
-      // 2. Planner risk gate — high risk always pauses for the user.
+      // Phase 22: fully automatic — a high planner-risk label no longer pauses
+      // (it is only a prompt to the agent; destructive shell ops are still gated
+      // by the permission detector below). Logged for the audit trail.
       if (turn.riskLevel === 'high') {
-        pauseAuto(sessionId, 'planner_risk_high', false)
-        break
+        logAutoAction(sessionId, { type: 'high_risk_continue', turn: turn.turnIndex })
       }
       // 3. Auto-send the proposal through the single bridge path.
       const sent = sendApprovedPrompt(sessionId, turn.id, turn.proposal, true)
@@ -1056,6 +1076,23 @@ export function registerMacroIpc(): void {
     }
     try {
       return setMode(args.sessionId, args.mode)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
+    }
+  })
+
+  // Phase 22: steer the next step toward a chosen direction (loop keeps running).
+  ipcMain.handle('macro:steer', (_event, args: { sessionId: string; choice: string }): MacroResponse => {
+    if (
+      typeof args?.sessionId !== 'string' ||
+      !VALID_ID.test(args.sessionId) ||
+      typeof args.choice !== 'string' ||
+      args.choice.length > 200
+    ) {
+      return { ok: false, error: 'invalid macro:steer payload' }
+    }
+    try {
+      return steer(args.sessionId, args.choice)
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
     }

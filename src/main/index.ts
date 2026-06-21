@@ -23,6 +23,7 @@ import { closeDb, initDb, registerDbIpc } from './db'
 // (CFBundleName/CFBundleDisplayName = Akorith via electron-builder productName),
 // so the packaged app shows Akorith in the menu bar and dock.
 app.setName('Akorith')
+app.setAboutPanelOptions({ applicationName: 'Akorith', applicationVersion: app.getVersion() })
 
 /**
  * macOS/Linux GUI apps launched from Finder/Dock inherit a minimal PATH

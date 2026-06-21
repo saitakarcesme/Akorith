@@ -81,16 +81,18 @@ assert.ok(/Critic: \d+\/100/.test(renderCriticText(advanced)), 'critic text show
 
 const baseGate = { iteration: 2, maxIterations: 5, consecutiveFailures: 0, threshold: 85, summary } as const
 
-// Critic regression pauses even if the planner predicted a high done score.
+// Phase 22: fully automatic — a one-off regression no longer pauses; the critic's
+// low score just keeps the loop going (its gaps steer the next plan), and it
+// ignores an optimistic predicted score because the critic takes precedence.
 assert.equal(
   evaluateAutoOutcome({ ...baseGate, doneScore: 95, critic: regressed }).action,
-  'pause',
-  'critic regression overrides an optimistic predicted score'
+  'continue',
+  'critic regression keeps the automatic loop going, overriding the optimistic prediction'
 )
 
-// Critic escalation pauses for a human.
+// Escalation no longer pauses either — the loop continues automatically.
 const escalate: CriticReview = { ...advanced, recommendation: 'escalate', verdict: 'stalled', goalMet: false, progressScore: 50 }
-assert.equal(evaluateAutoOutcome({ ...baseGate, critic: escalate }).action, 'pause')
+assert.equal(evaluateAutoOutcome({ ...baseGate, critic: escalate }).action, 'continue')
 
 // Critic-confirmed completion completes the loop.
 const done = evaluateAutoOutcome({ ...baseGate, doneScore: 0, critic: { ...advanced, progressScore: 90 } })

@@ -40,6 +40,16 @@ function commitsOf(session: MacroSessionRow): AutoAction[] {
   return parseAutoActions(session.autoActions).filter((a) => a.type === 'auto_commit' && a.message)
 }
 
+function parseStrArray(json: string | null | undefined): string[] {
+  if (!json) return []
+  try {
+    const list = JSON.parse(json) as unknown
+    return Array.isArray(list) ? list.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 const RUNNING = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
 const PAUSED = new Set(['awaiting_permission', 'awaiting_executor_result', 'awaiting_approval'])
 
@@ -189,6 +199,12 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     if (d) setDetail(d)
   }, [])
 
+  const steerLoop = useCallback(async (id: string, choice: string): Promise<void> => {
+    await window.api.macro.steer(id, choice)
+    const d = await window.api.macro.get(id)
+    if (d) setDetail(d)
+  }, [])
+
   const resumeLoop = useCallback(async (session: MacroSessionRow): Promise<void> => {
     if (!session.workspaceDir) return
     setBusy(true)
@@ -220,6 +236,12 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const elapsed = fmtDuration(Date.now() - selected.createdAt)
     const isRunning = RUNNING.has(selected.status)
     const isPaused = PAUSED.has(selected.status)
+    const isActive = isRunning || isPaused
+    const turns = detail?.turns ?? []
+    const latest = turns.length ? turns[turns.length - 1] : null
+    const activity = latest?.plannerRationale?.trim() || latest?.proposal?.trim() || ''
+    const options = parseStrArray(latest?.nextOptions)
+    const steered = selected.pendingSteering?.trim() ?? ''
     return (
       <div className="loops-page">
         <button type="button" className="loop-back" onClick={() => setView('list')}>
@@ -242,22 +264,58 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             </div>
           </div>
 
+          {/* What's happening right now — so you always know what the loop is doing. */}
+          {isActive && (
+            <div className="loop-now">
+              <span className="loop-now-label">{isRunning ? 'Working on' : 'Up next'}</span>
+              <p className="loop-now-text">{activity || 'Thinking about the next step…'}</p>
+            </div>
+          )}
+
+          {/* Steer what comes next — pick a direction, the loop keeps running. */}
+          {isActive && (steered || options.length > 0) && (
+            <div className="loop-steer">
+              {steered ? (
+                <div className="loop-steer-chosen">Heading toward: <strong>{steered}</strong> next.</div>
+              ) : (
+                <>
+                  <div className="loop-steer-q">Where should it go next?</div>
+                  <div className="loop-steer-options">
+                    {options.map((opt, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="loop-chip"
+                        onClick={() => void steerLoop(selected.id, opt)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="loop-steer-hint">Or do nothing — it continues on the first option automatically.</div>
+                </>
+              )}
+            </div>
+          )}
+
           {selected.pauseReason && isPaused && (
-            <div className="loop-note">Paused: {selected.pauseReason.replace(/_/g, ' ')}. Resume when you're ready.</div>
+            <div className="loop-note">Waiting on a decision ({selected.pauseReason.replace(/_/g, ' ')}). Resume to continue, or stop the loop.</div>
           )}
           {selected.status === 'error' && selected.stopReason && (
             <div className="loop-note is-error">{selected.stopReason}</div>
           )}
+          {selected.status === 'completed' && <div className="loop-note">Finished — the loop reached its goal. 🎉</div>}
+          {selected.status === 'stopped' && <div className="loop-empty">This loop has stopped. Start a new one anytime.</div>}
 
           <div className="loop-actions">
-            {isRunning && (
-              <button type="button" className="loop-btn is-stop" onClick={() => void stopLoop(selected.id)}>
-                Pause loop
-              </button>
-            )}
             {(isPaused || selected.status === 'idle') && (
               <button type="button" className="loop-btn is-primary" disabled={busy} onClick={() => void resumeLoop(selected)}>
-                {busy ? 'Resuming…' : 'Resume loop'}
+                {busy ? 'Resuming…' : 'Resume'}
+              </button>
+            )}
+            {isActive && (
+              <button type="button" className="loop-btn is-stop" onClick={() => void stopLoop(selected.id)}>
+                Stop loop
               </button>
             )}
           </div>

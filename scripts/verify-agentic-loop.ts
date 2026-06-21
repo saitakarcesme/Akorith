@@ -132,15 +132,20 @@ assert.equal(
   evaluateAutoOutcome({ iteration: 2, maxIterations: 5, consecutiveFailures: 0, doneScore: 90, threshold: 85, summary: null }).action,
   'complete'
 )
-// Pauses on repeated failures.
+// Phase 22: fully automatic — soft signals no longer pause. A couple of failures
+// keep going (the critic re-plans); only the hard cap (>=4) stops cleanly.
 assert.equal(
   evaluateAutoOutcome({ iteration: 2, maxIterations: 5, consecutiveFailures: 2, threshold: 85, summary: null }).action,
-  'pause'
+  'continue'
 )
-// Pauses when the summary needs attention.
+assert.deepEqual(
+  evaluateAutoOutcome({ iteration: 2, maxIterations: 5, consecutiveFailures: 4, threshold: 85, summary: null }),
+  { action: 'stop', reason: 'too_many_failures' }
+)
+// A summary that "needs attention" no longer pauses — it continues.
 assert.equal(
   evaluateAutoOutcome({ iteration: 2, maxIterations: 5, consecutiveFailures: 0, threshold: 85, summary: heur }).action,
-  'pause'
+  'continue'
 )
 // Otherwise continues.
 assert.equal(
