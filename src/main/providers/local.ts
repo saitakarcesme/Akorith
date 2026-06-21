@@ -259,6 +259,21 @@ export class LocalProvider implements Provider {
       await this.ensureReachable(2_000, true)
       return { ok: true }
     } catch {
+      // A private LAN endpoint only routes on the same network as the Ollama
+      // machine; off-network it will never connect without a VPN/Tailscale.
+      const host = (() => {
+        try {
+          return new URL(this.baseUrl).hostname.replace(/^\[|\]$/g, '')
+        } catch {
+          return ''
+        }
+      })()
+      if (host && isPrivateIpv4(host)) {
+        return {
+          ok: false,
+          reason: `Ollama not reachable at ${this.baseUrl} — that's a LAN address that only works on the same Wi-Fi as the PC. On another network, run Tailscale on both machines and use the PC's Tailscale address (100.x.x.x).`
+        }
+      }
       const auto = this.autoStart && isLoopback(this.baseUrl)
         ? startedOllamaServe
           ? '; Akorith is starting Ollama'

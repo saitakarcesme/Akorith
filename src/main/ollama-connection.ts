@@ -98,6 +98,31 @@ function shareInfo(): OllamaShareInfo {
   return { hostName: hostname(), port, endpoints }
 }
 
+/** Turn a low-level fetch failure into an explanation the user can act on.
+ *  The common off-network case: the saved endpoint is a home/LAN IP that is
+ *  only routable on the same network as the Ollama machine. */
+function describeOllamaError(baseUrl: string, err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  let host = ''
+  try {
+    host = new URL(baseUrl).hostname.replace(/^\[|\]$/g, '')
+  } catch {
+    // fall through with empty host
+  }
+  const kind = host ? endpointKind(host) : 'other'
+  const timedOut = /timed out|timeout|aborted/i.test(raw)
+  if (kind === 'lan') {
+    return `Can't reach ${host} — that's a home/Wi-Fi (LAN) address that only works on the same network as the Ollama machine. You're on a different network now. To use it from anywhere, run Tailscale on both machines and switch this endpoint to the PC's Tailscale address (100.x.x.x). Make sure the PC is on, awake, and Ollama is started with OLLAMA_HOST=0.0.0.0.`
+  }
+  if (kind === 'vpn') {
+    return `Can't reach ${host} over Tailscale/VPN${timedOut ? ' (timed out)' : ''}. Check that the PC is on and awake, Tailscale is connected on both devices, and Ollama is running with OLLAMA_HOST=0.0.0.0.`
+  }
+  if (timedOut) {
+    return `Timed out reaching ${baseUrl}. The machine may be off, asleep, or on another network.`
+  }
+  return `Can't reach ${baseUrl}: ${raw}. Confirm Ollama is running there and reachable from this network.`
+}
+
 async function testOllamaEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult> {
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(6_000) })
@@ -106,7 +131,7 @@ async function testOllamaEndpoint(baseUrl: string): Promise<OllamaConnectionTest
     const models = (body.models ?? []).map((model) => model.name).filter((name): name is string => typeof name === 'string')
     return { ok: true, baseUrl, models, modelCount: models.length }
   } catch (err) {
-    return { ok: false, baseUrl, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, baseUrl, error: describeOllamaError(baseUrl, err) }
   }
 }
 
