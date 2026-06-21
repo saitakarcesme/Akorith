@@ -316,6 +316,9 @@ electron-vite in strict numbered phases.
 - [x] **Phase 23** - general-purpose task loops. The user's prompt is the goal, so loops can do
       research, monitoring, or building; planner prompts are task-agnostic and tell the executor to
       maintain a results/artifact file.
+- [x] **Phase 23.1** - Fully Active/Passive Loop Switch. The Loop section has a Fully loop
+      Active/Passive control; Active starts/keeps Auto Mode running, while Passive leaves the loop
+      idle until the user resumes it.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness

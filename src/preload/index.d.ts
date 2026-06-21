@@ -575,6 +575,9 @@ export interface MacroSessionRow {
   title: string | null
   /** Phase 22: the user's chosen next direction (consumed by the next plan). */
   pendingSteering: string | null
+  /** Loop purpose/cadence metadata. */
+  loopIntent: string | null
+  cadenceMinutes: number
 }
 
 export interface MacroTurnRow {
@@ -643,6 +646,9 @@ export interface WorkspaceCreateRequest {
   maxIterations?: number
   goodEnoughThreshold?: number
   tokenBudget?: number
+  mode?: MacroMode
+  loopIntent?: 'continuous' | 'monitor' | 'daily-build' | 'custom'
+  cadenceMinutes?: number
 }
 
 export type WorkspaceCreateResponse =
@@ -667,6 +673,13 @@ export interface MacroApi {
   complete(sessionId: string): Promise<MacroResponse>
   /** Phase 11: switch Approval/Auto mode. */
   setMode(sessionId: string, mode: MacroMode): Promise<MacroResponse>
+  /** Switch the loop's planner model/provider, optionally with the executor target. */
+  setPlanner(args: {
+    sessionId: string
+    plannerProvider: string
+    plannerModel?: string | null
+    targetTerminal?: string
+  }): Promise<MacroResponse>
   /** Phase 22: steer the next step toward a chosen direction (loop keeps running). */
   steer(sessionId: string, choice: string): Promise<MacroResponse>
   /** Phase 11: begin the cautious Auto-Mode loop (returns immediately). */

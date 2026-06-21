@@ -180,6 +180,9 @@ export function initDb(): void {
   // (consumed by the next plan) and the planner's 3 suggested directions per turn.
   ensureColumn('macro_sessions', 'pending_steering', 'TEXT')
   ensureColumn('macro_turns', 'next_options', 'TEXT')
+  // Loop systems: remember the user's loop intent and optional cadence.
+  ensureColumn('macro_sessions', 'loop_intent', 'TEXT')
+  ensureColumn('macro_sessions', 'cadence_minutes', 'INTEGER NOT NULL DEFAULT 0')
 }
 
 export function closeDb(): void {
@@ -886,6 +889,9 @@ export interface MacroSessionRow {
   title: string | null
   /** Phase 22: the user's chosen next direction, consumed by the next plan. */
   pendingSteering: string | null
+  /** Monitoring/build cadence metadata for the Loop section. */
+  loopIntent: string | null
+  cadenceMinutes: number
 }
 
 export interface MacroTurnRow {
@@ -949,7 +955,9 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   tokenBudget: (r.token_budget as number | null) ?? 0,
   tokensUsed: (r.tokens_used as number | null) ?? 0,
   title: (r.title as string | null) ?? null,
-  pendingSteering: (r.pending_steering as string | null) ?? null
+  pendingSteering: (r.pending_steering as string | null) ?? null,
+  loopIntent: (r.loop_intent as string | null) ?? null,
+  cadenceMinutes: (r.cadence_minutes as number | null) ?? 0
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -1002,6 +1010,8 @@ export function createMacroSession(input: {
   autoCommit?: boolean
   tokenBudget?: number
   title?: string | null
+  loopIntent?: string | null
+  cadenceMinutes?: number
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -1027,15 +1037,18 @@ export function createMacroSession(input: {
     tokenBudget: Math.max(0, Math.floor(input.tokenBudget ?? 0)),
     tokensUsed: 0,
     title: input.title ?? null,
-    pendingSteering: null
+    pendingSteering: null,
+    loopIntent: input.loopIntent ?? null,
+    cadenceMinutes: Math.max(0, Math.floor(input.cadenceMinutes ?? 0))
   }
   must()
     .prepare(
       `INSERT INTO macro_sessions
        (id, created_at, updated_at, status, goal, planner_provider, planner_model, target_terminal,
         max_iterations, good_enough_threshold, include_repo_digest, repo_digest_snapshot, final_score, stop_reason,
-        mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used, title)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used, title,
+        loop_intent, cadence_minutes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -1059,7 +1072,9 @@ export function createMacroSession(input: {
       row.autoCommit ? 1 : 0,
       row.tokenBudget,
       row.tokensUsed,
-      row.title
+      row.title,
+      row.loopIntent,
+      row.cadenceMinutes
     )
   return row
 }
@@ -1078,6 +1093,9 @@ export function updateMacroSession(
       | 'pauseReason'
       | 'tokensUsed'
       | 'pendingSteering'
+      | 'plannerProvider'
+      | 'plannerModel'
+      | 'targetTerminal'
     >
   >
 ): MacroSessionRow | null {
@@ -1093,13 +1111,17 @@ export function updateMacroSession(
     autoActions: patch.autoActions !== undefined ? patch.autoActions : current.autoActions,
     pauseReason: patch.pauseReason !== undefined ? patch.pauseReason : current.pauseReason,
     tokensUsed: patch.tokensUsed ?? current.tokensUsed,
-    pendingSteering: patch.pendingSteering !== undefined ? patch.pendingSteering : current.pendingSteering
+    pendingSteering: patch.pendingSteering !== undefined ? patch.pendingSteering : current.pendingSteering,
+    plannerProvider: patch.plannerProvider ?? current.plannerProvider,
+    plannerModel: patch.plannerModel !== undefined ? patch.plannerModel : current.plannerModel,
+    targetTerminal: patch.targetTerminal ?? current.targetTerminal
   }
   must()
     .prepare(
       `UPDATE macro_sessions
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
-           mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?
+           mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?,
+           planner_provider = ?, planner_model = ?, target_terminal = ?
        WHERE id = ?`
     )
     .run(
@@ -1113,6 +1135,9 @@ export function updateMacroSession(
       next.pauseReason,
       next.tokensUsed,
       next.pendingSteering,
+      next.plannerProvider,
+      next.plannerModel,
+      next.targetTerminal,
       sessionId
     )
   return getMacroSession(sessionId)

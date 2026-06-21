@@ -83,6 +83,7 @@ const MAX_AUTO_ACTIONS = 80
 // Olympus = Codex (t2), Atlantis = Claude (t1) — for labeling persisted summaries.
 const TERMINAL_LABEL: Record<string, string> = { t1: 'Atlantis', t2: 'Olympus' }
 const AGENT_ROLE: Record<string, string> = { t1: 'Claude', t2: 'Codex' }
+const LOOP_INTENTS = new Set(['continuous', 'monitor', 'daily-build', 'custom'])
 
 type MacroResponse = { ok: true; state: MacroSessionWithTurns } | { ok: false; error: string; state?: MacroSessionWithTurns }
 
@@ -348,8 +349,42 @@ function logAutoAction(sessionId: string, action: AutoAction): void {
 }
 
 function setMode(sessionId: string, mode: MacroMode): MacroResponse {
+  if (mode === 'approval') {
+    activeProposals.get(sessionId)?.abort()
+    activeLoops.get(sessionId)?.abort()
+    const current = requireState(sessionId).session
+    updateMacroSession(sessionId, {
+      mode,
+      status: current.status === 'completed' || current.status === 'stopped' ? current.status : 'idle',
+      pauseReason: null
+    })
+    logAutoAction(sessionId, { type: 'fully_loop_passive' })
+    return { ok: true, state: requireState(sessionId) }
+  }
   updateMacroSession(sessionId, { mode })
+  logAutoAction(sessionId, { type: 'fully_loop_active' })
   return { ok: true, state: requireState(sessionId) }
+}
+
+function setPlanner(args: {
+  sessionId: string
+  plannerProvider: string
+  plannerModel?: string | null
+  targetTerminal?: string
+}): MacroResponse {
+  const current = requireState(args.sessionId).session
+  updateMacroSession(args.sessionId, {
+    plannerProvider: args.plannerProvider,
+    plannerModel: args.plannerModel || null,
+    targetTerminal: args.targetTerminal || current.targetTerminal
+  })
+  logAutoAction(args.sessionId, {
+    type: 'planner_switch',
+    provider: args.plannerProvider,
+    model: args.plannerModel || null,
+    targetTerminal: args.targetTerminal || current.targetTerminal
+  })
+  return { ok: true, state: requireState(args.sessionId) }
 }
 
 /**
@@ -737,6 +772,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
     while (!stopped()) {
       const s = requireState(sessionId)
       if (s.session.status === 'completed' || s.session.status === 'stopped') break
+      if (s.session.mode !== 'auto') {
+        updateMacroSession(sessionId, { status: 'idle', pauseReason: null })
+        logAutoAction(sessionId, { type: 'passive_wait' })
+        break
+      }
       if (maxIterationsReached(s.turns.length, s.session.maxIterations)) {
         finishAuto(sessionId, 'stopped', 'max_iterations')
         break
@@ -821,7 +861,11 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         pauseAuto(sessionId, outcome.reason, false)
         break
       }
-      await interruptibleDelay(800, signal)
+      const cadenceMinutes = Math.max(0, getMacroSession(sessionId)?.cadenceMinutes ?? 0)
+      if (cadenceMinutes > 0) {
+        logAutoAction(sessionId, { type: 'cadence_wait', minutes: cadenceMinutes })
+      }
+      await interruptibleDelay(cadenceMinutes > 0 ? cadenceMinutes * 60_000 : 800, signal)
     }
   } catch (err) {
     updateMacroSession(sessionId, { status: 'error', stopReason: err instanceof Error ? err.message : String(err) })
@@ -852,6 +896,9 @@ interface WorkspaceCreateArgs {
   maxIterations?: number
   goodEnoughThreshold?: number
   tokenBudget?: number
+  loopIntent?: string
+  cadenceMinutes?: number
+  mode?: MacroMode
 }
 
 type WorkspaceCreateResponse =
@@ -870,10 +917,39 @@ function fallbackIdea(seed?: string): ProjectIdea {
   }
 }
 
+function normalizeLoopIntent(value: unknown): string {
+  return typeof value === 'string' && LOOP_INTENTS.has(value) ? value : 'continuous'
+}
+
+function defaultCadenceMinutes(intent: string): number {
+  if (intent === 'monitor') return 5
+  if (intent === 'daily-build') return 1440
+  return 0
+}
+
+function cadenceLabel(minutes: number): string {
+  if (minutes >= 1440 && minutes % 1440 === 0) return `${minutes / 1440} day${minutes === 1440 ? '' : 's'}`
+  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60} hour${minutes === 60 ? '' : 's'}`
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`
+}
+
+function loopRhythmInstruction(intent: string, cadenceMinutes: number): string {
+  if (intent === 'monitor') {
+    return `Loop rhythm: recurring monitor every ${cadenceLabel(cadenceMinutes)}. Treat each Akorith step as one check cycle: look for updates, compare them with the stored seen-state, update FINDINGS.md, and report only new posts, reposts, replies, or relevant changes.`
+  }
+  if (intent === 'daily-build') {
+    return `Loop rhythm: recurring build cycle every ${cadenceLabel(cadenceMinutes)}. Treat each Akorith step as one focused development cycle: choose or refine one idea/feature, implement a small verified increment, record what changed, and keep the repository ready to commit/push.`
+  }
+  if (intent === 'custom' && cadenceMinutes > 0) {
+    return `Loop rhythm: recurring custom cycle every ${cadenceLabel(cadenceMinutes)}. Treat each Akorith step as one complete cycle, save state, report clearly, and let Akorith wait before the next cycle.`
+  }
+  return 'Loop rhythm: continuous. Work step by step until the goal is complete, saving visible progress after every step.'
+}
+
 /**
  * Phase 23: the user's prompt IS the goal — any autonomous task (research,
  * monitoring, building, …), not only project generation. We scaffold a working
- * folder (git repo, for an artifact/findings history) and bind a fresh auto-mode
+ * folder (git repo, for an artifact/findings history) and bind a fresh loop
  * + auto-commit macro session to it. Idea-generation is only a fallback for an
  * empty prompt ("surprise me"). Does NOT start the loop — the renderer starts the
  * executor in `workspaceDir`, then calls macro:startAuto.
@@ -903,6 +979,15 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     }
   }
 
+  const loopIntent = normalizeLoopIntent(args.loopIntent)
+  const cadenceMinutes = clampInt(
+    args.cadenceMinutes ?? defaultCadenceMinutes(loopIntent),
+    defaultCadenceMinutes(loopIntent),
+    0,
+    7 * 24 * 60
+  )
+  const rhythm = loopRhythmInstruction(loopIntent, cadenceMinutes)
+
   // 2. Resolve a unique, safe workspace directory under the base path.
   const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
   let dir = join(base, idea.slug)
@@ -912,22 +997,24 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
   const init = await initWorkspace(dir, idea)
   if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
 
-  // 4. Persist a sidebar project row + an auto-mode macro session bound to it.
+  // 4. Persist a sidebar project row + a macro session bound to it.
   const project = createProject({ name: idea.name, path: dir })
   const session = createMacroSession({
-    goal: cleanText(idea.firstGoal, MAX_GOAL_CHARS),
+    goal: cleanText(`${idea.firstGoal}\n\n${rhythm}`, MAX_GOAL_CHARS),
     plannerProvider: args.plannerProvider,
     plannerModel: args.plannerModel || undefined,
     targetTerminal: args.targetTerminal,
     maxIterations: clampInt(args.maxIterations ?? 30, 30, 1, 200),
     goodEnoughThreshold: clampInt(args.goodEnoughThreshold ?? 90, 90, 1, 100),
     includeRepoDigest: true,
-    mode: 'auto',
+    mode: args.mode === 'approval' ? 'approval' : 'auto',
     workspaceDir: dir,
     autoCommit: true,
     tokenBudget: clampInt(args.tokenBudget ?? 0, 0, 0, 100_000_000),
     // Phase 21: show the user's own words on the loop card (fallback to the idea name).
-    title: (args.seed?.trim() || idea.name).slice(0, 200)
+    title: (args.seed?.trim() || idea.name).slice(0, 200),
+    loopIntent,
+    cadenceMinutes
   })
   return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
 }
@@ -944,7 +1031,10 @@ function validWorkspacePayload(args: unknown): args is WorkspaceCreateArgs {
     (a.basePath === undefined || (typeof a.basePath === 'string' && a.basePath.length <= 2_000)) &&
     (a.maxIterations === undefined || typeof a.maxIterations === 'number') &&
     (a.goodEnoughThreshold === undefined || typeof a.goodEnoughThreshold === 'number') &&
-    (a.tokenBudget === undefined || typeof a.tokenBudget === 'number')
+    (a.tokenBudget === undefined || typeof a.tokenBudget === 'number') &&
+    (a.loopIntent === undefined || (typeof a.loopIntent === 'string' && LOOP_INTENTS.has(a.loopIntent))) &&
+    (a.cadenceMinutes === undefined || typeof a.cadenceMinutes === 'number') &&
+    (a.mode === undefined || a.mode === 'approval' || a.mode === 'auto')
   )
 }
 
@@ -1088,6 +1178,27 @@ export function registerMacroIpc(): void {
       return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
     }
   })
+
+  ipcMain.handle(
+    'macro:setPlanner',
+    (_event, args: { sessionId: string; plannerProvider: string; plannerModel?: string | null; targetTerminal?: string }): MacroResponse => {
+      if (
+        typeof args?.sessionId !== 'string' ||
+        !VALID_ID.test(args.sessionId) ||
+        typeof args.plannerProvider !== 'string' ||
+        !VALID_PROVIDER.test(args.plannerProvider) ||
+        (args.plannerModel !== undefined && args.plannerModel !== null && (typeof args.plannerModel !== 'string' || !VALID_MODEL.test(args.plannerModel))) ||
+        (args.targetTerminal !== undefined && (typeof args.targetTerminal !== 'string' || !VALID_TERMINAL.test(args.targetTerminal)))
+      ) {
+        return { ok: false, error: 'invalid macro:setPlanner payload' }
+      }
+      try {
+        return setPlanner(args)
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err), state: state(args.sessionId) }
+      }
+    }
+  )
 
   // Phase 22: steer the next step toward a chosen direction (loop keeps running).
   ipcMain.handle('macro:steer', (_event, args: { sessionId: string; choice: string }): MacroResponse => {

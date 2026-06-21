@@ -596,8 +596,14 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   timeline (each step's plan + what happened + critic score) alongside the saved-changes commits.
   NOTE: "computer use" depends on what tools the executor CLI actually exposes — Akorith passes
   the instruction through, so web/shell/files work today; native screen-control needs the agent to
-  have such a tool. Recurring/scheduled re-runs are not built yet (a loop runs to its iteration cap
-  then stops; Resume continues it).
+  have such a tool. Recurring cadence loops are supported while Akorith is running: each turn is one
+  cycle, then `runAutoLoop` waits for the configured cadence before planning the next cycle.
+- **Phase 23.1: Fully Active/Passive Loop Switch.** The Loop section has a **Fully loop**
+  Active/Passive control on create and detail. Active creates/keeps a loop in Auto Mode and starts
+  or resumes it without another click. Passive stores the session in Approval/passive mode and
+  aborts Akorith's auto driver, leaving the loop idle until the user manually resumes or switches
+  it back to Active. If a prompt was already sent to the executor terminal, that terminal command
+  may finish, but Akorith will not plan or send the next cycle while Passive.
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
@@ -1348,6 +1354,13 @@ build/package is launched or installed; `electron-vite dev` only hot-reloads ren
 `0.1.0`; and `npm run pack:mac` compiled but then hung silently during this validation window with
 no `dist/mac-arm64/Akorith.app` output, so packaging needs another focused investigation before a
 release.
+
+### Phase 23.1: Fully Active/Passive Loop Switch
+
+The Loop section now exposes a **Fully loop** Active/Passive switch. Active mode starts and keeps
+the loop running automatically; Passive mode creates or returns the session to a waiting state so
+the user manually resumes it. This maps to the existing macro `auto`/`approval` modes and preserves
+the single executor write path.
 
 ## Conventions
 

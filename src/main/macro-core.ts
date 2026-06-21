@@ -182,6 +182,7 @@ Decide the single best next step and write it as a direct instruction to the age
 Rules:
 - Produce exactly one concrete, self-contained instruction for the agent (no preamble).
 - Use the right tool for the goal: for research/monitoring/lookup goals, search and fetch the live web; for "build/make" goals, create and edit files and verify by running them.
+- If the goal includes a "Loop rhythm" or cadence, treat this Akorith turn as one cycle of that rhythm. Do one check/build increment, save state, report clearly, and let Akorith wait for the next cycle; do not add busy-wait sleeps unless the user explicitly asked you to build a standalone scheduler.
 - Keep a single, clearly-named results file in the working folder (e.g. FINDINGS.md for research/monitoring, or the project files for building) and have the agent UPDATE it every step so progress is visible. For monitoring ("new" items), have it record what it has already seen and report only what's new.
 - Prefer small, verifiable steps. Address the latest critic gaps; do not repeat a step graded stalled/regressed without changing approach.
 - Always have the agent report concretely what it did and what it found/produced.

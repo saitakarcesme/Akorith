@@ -194,6 +194,7 @@ const macro = Object.freeze({
   stop: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:stop', { sessionId }),
   complete: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:complete', { sessionId }),
   setMode: (sessionId: string, mode: string): Promise<unknown> => ipcRenderer.invoke('macro:setMode', { sessionId, mode }),
+  setPlanner: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:setPlanner', args),
   steer: (sessionId: string, choice: string): Promise<unknown> => ipcRenderer.invoke('macro:steer', { sessionId, choice }),
   startAuto: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:startAuto', { sessionId }),
   summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:summarize', args),
