@@ -3123,6 +3123,51 @@ textarea:focus-visible {
   background: rgba(95, 179, 126, 0.95);
 }
 
+.dash-bar-chart,
+.dash-donut {
+  display: block;
+  width: 100%;
+  height: 260px;
+  overflow: visible;
+}
+
+.dash-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.72;
+}
+
+.dash-chart-axis {
+  fill: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.dash-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 8px;
+}
+
+.dash-donut-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.dash-donut-value {
+  fill: var(--text);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.dash-donut-label {
+  fill: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
 .dash-footnote {
   font-size: 11px;
   color: var(--text-faint);
@@ -5727,6 +5772,23 @@ body {
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--text-dim);
+}
+.loop-terminal-panel {
+  grid-column: 1 / -1;
+}
+.loop-terminal-panel pre {
+  overflow: auto;
+  max-height: 360px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: #08080d;
+  color: #d7d7df;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 .loop-control-row.is-two {
   grid-template-columns: minmax(180px, 0.6fr) minmax(240px, 1fr);

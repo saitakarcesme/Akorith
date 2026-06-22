@@ -1,16 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts'
 import type { DailyUsageRow, UsageSummary } from '../../../preload/index.d'
 
 // Reads ONLY usage_events (via the usage IPC).
@@ -34,12 +22,37 @@ const fmtTokens = (n: number): string =>
 const dayKey = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-const TOOLTIP_STYLE = {
-  backgroundColor: '#191821',
-  border: '1px solid #2a2834',
-  borderRadius: 6,
-  fontSize: 12
-} as const
+const chartTicks = (max: number): number[] => {
+  if (max <= 0) return [0]
+  return [max, max * 0.66, max * 0.33, 0]
+}
+
+const polar = (cx: number, cy: number, radius: number, angle: number): { x: number; y: number } => {
+  const radians = ((angle - 90) * Math.PI) / 180
+  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) }
+}
+
+const donutSlicePath = (
+  cx: number,
+  cy: number,
+  outerRadius: number,
+  innerRadius: number,
+  startAngle: number,
+  endAngle: number
+): string => {
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0
+  const outerStart = polar(cx, cy, outerRadius, startAngle)
+  const outerEnd = polar(cx, cy, outerRadius, endAngle)
+  const innerStart = polar(cx, cy, innerRadius, endAngle)
+  const innerEnd = polar(cx, cy, innerRadius, startAngle)
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerStart.x} ${innerStart.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y}`,
+    'Z'
+  ].join(' ')
+}
 
 export default function Dashboard(): JSX.Element {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
@@ -114,6 +127,24 @@ export default function Dashboard(): JSX.Element {
         .filter((d) => d.value > 0),
     [summary]
   )
+  const maxBarTotal = useMemo(
+    () =>
+      Math.max(
+        0,
+        ...barData.map((row) => providerIds.reduce((sum, id) => sum + Number(row[id] ?? 0), 0))
+      ),
+    [barData, providerIds]
+  )
+  const donutTotal = donutData.reduce((sum, d) => sum + d.value, 0)
+  const donutSlices = useMemo(() => {
+    let cursor = 0
+    return donutData.map((d) => {
+      const span = donutTotal > 0 ? (d.value / donutTotal) * 360 : 0
+      const slice = { ...d, startAngle: cursor, endAngle: Math.min(cursor + span, 359.99) }
+      cursor += span
+      return slice
+    })
+  }, [donutData, donutTotal])
 
   const hasData = (summary?.byProvider.length ?? 0) > 0
 
@@ -188,17 +219,65 @@ export default function Dashboard(): JSX.Element {
       <div className="dash-grid">
         <section className="dash-section">
           <h2>Daily token usage — last {BAR_DAYS} days</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={barData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <XAxis dataKey="day" tick={{ fill: '#7d8590', fontSize: 10 }} interval={4} />
-              <YAxis tick={{ fill: '#7d8590', fontSize: 10 }} tickFormatter={fmtTokens} width={44} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }} />
-              <Legend formatter={(v: string) => `${v}${isEstimated(v) ? ' ≈' : ''}`} />
-              {providerIds.map((id) => (
-                <Bar key={id} dataKey={id} stackId="tokens" fill={fillOf(id)} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+          <svg className="dash-bar-chart" viewBox="0 0 640 260" role="img" aria-label="Daily token usage">
+            {chartTicks(maxBarTotal).map((tick) => {
+              const y = 18 + (1 - (maxBarTotal > 0 ? tick / maxBarTotal : 0)) * 188
+              return (
+                <g key={tick}>
+                  <line x1={48} x2={628} y1={y} y2={y} className="dash-chart-grid" />
+                  <text x={0} y={y + 4} className="dash-chart-axis">
+                    {fmtTokens(Math.round(tick))}
+                  </text>
+                </g>
+              )
+            })}
+            {barData.map((row, index) => {
+              const step = 580 / Math.max(barData.length, 1)
+              const width = Math.max(5, step * 0.62)
+              const x = 48 + index * step + (step - width) / 2
+              let stackBottom = 206
+              return (
+                <g key={String(row.day)}>
+                  {providerIds.map((id) => {
+                    const value = Number(row[id] ?? 0)
+                    if (value <= 0 || maxBarTotal <= 0) return null
+                    const height = Math.max(1, (value / maxBarTotal) * 188)
+                    const y = stackBottom - height
+                    stackBottom = y
+                    return (
+                      <rect
+                        key={id}
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={2}
+                        fill={fillOf(id)}
+                      >
+                        <title>
+                          {row.day} — {id}: {fmtTokens(value)} tokens
+                        </title>
+                      </rect>
+                    )
+                  })}
+                  {index % 5 === 0 && (
+                    <text x={x + width / 2} y={232} textAnchor="middle" className="dash-chart-axis">
+                      {String(row.day)}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+          </svg>
+          <div className="dash-chart-legend">
+            {providerIds.map((id) => (
+              <span key={id} className="dash-chip">
+                <span className="dash-chip-dot" style={{ background: colorOf(id) }} />
+                {id}
+                {isEstimated(id) && <span className="chat-estimated">≈</span>}
+              </span>
+            ))}
+          </div>
         </section>
 
         <section className="dash-section">
@@ -206,20 +285,37 @@ export default function Dashboard(): JSX.Element {
           {donutData.length === 0 ? (
             <div className="dash-empty-hint">no usage recorded yet</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={donutData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={2}>
-                  {donutData.map((d) => (
-                    <Cell key={d.providerId} fill={fillOf(d.providerId)} stroke="#0b0b10" />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  formatter={(v) => (typeof v === 'number' ? fmtTokens(v) : String(v ?? ''))}
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="dash-donut-wrap">
+              <svg className="dash-donut" viewBox="0 0 240 240" role="img" aria-label="Provider token distribution">
+                {donutSlices.map((d) => (
+                  <path
+                    key={d.providerId}
+                    d={donutSlicePath(120, 120, 94, 58, d.startAngle, d.endAngle)}
+                    fill={fillOf(d.providerId)}
+                    stroke="#0b0b10"
+                    strokeWidth={2}
+                  >
+                    <title>
+                      {d.name}: {fmtTokens(d.value)} tokens
+                    </title>
+                  </path>
+                ))}
+                <text x={120} y={114} textAnchor="middle" className="dash-donut-value">
+                  {fmtTokens(donutTotal)}
+                </text>
+                <text x={120} y={136} textAnchor="middle" className="dash-donut-label">
+                  tokens
+                </text>
+              </svg>
+              <div className="dash-chart-legend">
+                {donutData.map((d) => (
+                  <span key={d.providerId} className="dash-chip">
+                    <span className="dash-chip-dot" style={{ background: colorOf(d.providerId) }} />
+                    {d.name} {fmtTokens(d.value)}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
         </section>
       </div>

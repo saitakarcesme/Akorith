@@ -19,14 +19,14 @@ export interface RunCliResult {
 }
 
 /**
- * Run a CLI on the user's PATH. Uses a shell so Windows .cmd shims (npm
- * installs) resolve; callers must never put untrusted text in `args` —
- * prompts go through `stdin`.
+ * Run a CLI on the user's PATH. Windows uses a shell so .cmd shims (npm
+ * installs) resolve; macOS/Linux spawn the executable directly so packaged
+ * loops cannot strand shell wrappers around git/provider calls.
  */
 export function runCli(command: string, args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      shell: true,
+      shell: process.platform === 'win32',
       windowsHide: true,
       cwd: options.cwd,
       env: process.env

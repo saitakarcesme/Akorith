@@ -15,7 +15,7 @@ import { basename, isAbsolute, join } from 'path'
 import { bridgeSend } from './bridge'
 import { getBridgeSettings, getDigestSettings } from './config'
 import { buildDigest } from './digest'
-import { ptyManager } from './pty'
+import { ptyManager, type PtyCommandKind } from './pty'
 import {
   addMessage,
   archiveMacroSession,
@@ -37,6 +37,7 @@ import {
   type ProjectRow
 } from './db'
 import { sendMetaPrompt } from './providers/registry'
+import type { SendResult } from './providers/types'
 import {
   buildIdeaPrompt,
   commitPhase,
@@ -71,7 +72,7 @@ import {
 const VALID_ID = /^[\w-]{1,64}$/
 const VALID_PROVIDER = /^[a-z0-9-]{1,32}$/
 const VALID_MODEL = /^[\w.:/-]{1,64}$/
-const VALID_TERMINAL = /^[a-z0-9-]{1,32}$/
+const VALID_TERMINAL = /^[a-z0-9-]{1,32}(::[a-z0-9-]{1,40})?$/
 const MAX_GOAL_CHARS = 40_000
 const MAX_SUMMARY_CHARS = 80_000
 const MAX_PROMPT_CHARS = 200_000
@@ -79,6 +80,7 @@ const PROPOSE_TIMEOUT_MS = 600_000
 const SUMMARIZE_TIMEOUT_MS = 120_000
 const CRITIC_TIMEOUT_MS = 120_000
 const SNAPSHOT_CHARS = 8000
+const DIGEST_TIMEOUT_MS = 12_000
 // Auto-Mode polling: bounded, never spins the CPU.
 const POLL_INTERVAL_MS = 1200
 const MAX_WAIT_PER_TURN_MS = 30_000
@@ -109,6 +111,125 @@ function recordMetaUsage(sessionId: string, usage: { promptTokens?: number; comp
 
 function tokenBudgetExceeded(s: MacroSessionRow): boolean {
   return s.tokenBudget > 0 && s.tokensUsed >= s.tokenBudget
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
+function looksLikeUsageLimit(message: string): boolean {
+  return /usage limit|rate limit|quota|credit|credits|try again/i.test(message)
+}
+
+async function sendPlannerPromptForLoop(
+  session: MacroSessionRow,
+  prompt: string,
+  signal: AbortSignal,
+  sessionId: string
+): Promise<{ result: SendResult; providerId: string }> {
+  try {
+    return {
+      result: await sendMetaPrompt(session.plannerProvider, session.plannerModel ?? undefined, prompt, signal),
+      providerId: session.plannerProvider
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (session.mode !== 'auto' || session.plannerProvider === 'claude' || !looksLikeUsageLimit(message)) {
+      throw err
+    }
+    recordLoopEvent({
+      loopId: sessionId,
+      type: 'planner_provider_fallback',
+      message: `Primary planner ${session.plannerProvider} was limited; retrying with Claude.`,
+      severity: 'warning',
+      metadata: { primaryProvider: session.plannerProvider, primaryModel: session.plannerModel, error: message }
+    })
+    try {
+      return {
+        result: await sendMetaPrompt('claude', 'sonnet', prompt, signal),
+        providerId: 'claude'
+      }
+    } catch (fallbackErr) {
+      const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+      throw new Error(`${message}\nFallback planner claude failed: ${fallbackMessage}`)
+    }
+  }
+}
+
+function baseTerminalId(id: string): 't1' | 't2' {
+  return id.split('::')[0] === 't2' ? 't2' : 't1'
+}
+
+function terminalLabel(id: string): string {
+  const base = baseTerminalId(id)
+  return TERMINAL_LABEL[base] ?? id
+}
+
+function agentRole(id: string): string {
+  const base = baseTerminalId(id)
+  return AGENT_ROLE[base] ?? 'the agent'
+}
+
+function loopProjectKey(sessionId: string): string {
+  return `loop-${sessionId.replace(/[^a-z0-9-]/gi, '').slice(0, 34)}`
+}
+
+function loopTerminalId(session: MacroSessionRow): string {
+  return `${baseTerminalId(session.targetTerminal)}::${loopProjectKey(session.id)}`
+}
+
+function loopExecutorKind(session: MacroSessionRow): PtyCommandKind {
+  return baseTerminalId(session.targetTerminal) === 't2' ? 'codex-auto' : 'claude-auto'
+}
+
+function ensureAutoExecutor(sessionId: string): { ok: true; terminalId: string } | { ok: false; error: string } {
+  const current = getMacroSession(sessionId)
+  if (!current) return { ok: false, error: 'macro session not found' }
+  if (!current.workspaceDir || !existsSync(current.workspaceDir)) {
+    return { ok: false, error: 'loop workspace is missing' }
+  }
+
+  const terminalId = loopTerminalId(current)
+  const started = ptyManager.createHeadless(terminalId, {
+    cols: 120,
+    rows: 32,
+    cwd: current.workspaceDir,
+    commandKind: loopExecutorKind(current)
+  })
+  if (!started.ok) return { ok: false, error: started.error }
+  if (started.fallback || started.started === 'shell') {
+    ptyManager.kill(terminalId)
+    const base = baseTerminalId(current.targetTerminal)
+    const agent = base === 't2' ? 'Codex' : 'Claude'
+    const error = `${agent} CLI is not available for the live loop executor`
+    recordLoopEvent({
+      loopId: sessionId,
+      type: 'loop_executor_unavailable',
+      message: error,
+      severity: 'error',
+      metadata: { terminalId, requested: loopExecutorKind(current), started }
+    })
+    return { ok: false, error }
+  }
+
+  if (current.targetTerminal !== terminalId) {
+    updateMacroSession(sessionId, { targetTerminal: terminalId })
+  }
+  if (!started.reused) {
+    logAutoAction(sessionId, {
+      type: 'loop_executor_started',
+      message: `Started live ${started.started} executor for this loop.`,
+      terminalId,
+      cwd: current.workspaceDir
+    })
+  }
+  return { ok: true, terminalId }
 }
 
 function state(sessionId: string): MacroSessionWithTurns | undefined {
@@ -170,13 +291,35 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
   updateMacroSession(sessionId, { status: 'preparing_context' })
   let digest: string | null = null
   if (s.session.includeRepoDigest) {
-    try {
-      const digestSettings = s.session.workspaceDir
-        ? { ...getDigestSettings(), workingDir: s.session.workspaceDir }
-        : undefined
-      digest = await buildDigest(digestSettings)
-    } catch (err) {
-      digest = `Repo digest unavailable: ${err instanceof Error ? err.message : String(err)}`
+    if (s.session.mode === 'auto') {
+      digest = 'Repo digest skipped for Full Auto mode; the live executor inspects the workspace directly.'
+      recordLoopEvent({
+        loopId: sessionId,
+        type: 'repo_digest_skipped',
+        message: digest,
+        severity: 'info'
+      })
+    } else {
+      try {
+        const digestSettings = s.session.workspaceDir
+          ? { ...getDigestSettings(), workingDir: s.session.workspaceDir }
+          : undefined
+        digest = await withTimeout(
+          buildDigest(digestSettings),
+          DIGEST_TIMEOUT_MS,
+          `Repo digest skipped: timed out after ${DIGEST_TIMEOUT_MS}ms.`
+        )
+      } catch (err) {
+        digest = `Repo digest unavailable: ${err instanceof Error ? err.message : String(err)}`
+      }
+      if (digest?.startsWith('Repo digest skipped:')) {
+        recordLoopEvent({
+          loopId: sessionId,
+          type: 'repo_digest_timeout',
+          message: digest,
+          severity: 'warning'
+        })
+      }
     }
     if (digest) updateMacroSession(sessionId, { repoDigestSnapshot: digest })
   }
@@ -201,7 +344,8 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
     const signals = [controller.signal, AbortSignal.timeout(PROPOSE_TIMEOUT_MS)]
     if (extraSignal) signals.push(extraSignal)
     const signal = AbortSignal.any(signals)
-    const result = await sendMetaPrompt(s.session.plannerProvider, s.session.plannerModel ?? undefined, prompt, signal)
+    const planner = await sendPlannerPromptForLoop(s.session, prompt, signal, sessionId)
+    const result = planner.result
     recordMetaUsage(sessionId, result.usage)
     const current = requireState(sessionId)
     if (current.session.status === 'stopped') return { ok: true, state: current }
@@ -216,7 +360,7 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
       expectedResult: parsed.expectedResult,
       goodEnoughScore: parsed.doneScore ?? undefined,
       riskLevel: parsed.riskLevel,
-      providerUsed: s.session.plannerProvider,
+      providerUsed: planner.providerId,
       modelUsed: result.model,
       error: parsed.parseOk ? undefined : 'planner response was not valid structured JSON'
     })
@@ -253,6 +397,10 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
  * manual approve() IPC and by the Auto-Mode loop (auto=true only logs differently).
  */
 function sendApprovedPrompt(sessionId: string, turnId: string, rawText: string, auto: boolean): MacroResponse {
+  if (auto) {
+    const executor = ensureAutoExecutor(sessionId)
+    if (!executor.ok) return { ok: false, error: executor.error, state: requireState(sessionId) }
+  }
   const s = requireState(sessionId)
   const turn = s.turns.find((t) => t.id === turnId)
   if (!turn) return { ok: false, error: 'macro turn not found', state: s }
@@ -264,7 +412,7 @@ function sendApprovedPrompt(sessionId: string, turnId: string, rawText: string, 
   const send = bridgeSend({
     text,
     targetTerminalId: s.session.targetTerminal,
-    autoEnter: getBridgeSettings().autoEnter
+    autoEnter: auto ? true : getBridgeSettings().autoEnter
   })
   if (!send.ok) {
     updateMacroTurn(turnId, { status: 'awaiting_approval', error: send.error })
@@ -653,8 +801,8 @@ type AgentSummaryResponse =
 
 /** One-line, role-appropriate text for an agent summary persisted into a chat. */
 function renderAgentSummaryMessage(terminalId: string, summary: ExecutorSummary): string {
-  const label = TERMINAL_LABEL[terminalId] ?? terminalId
-  const role = AGENT_ROLE[terminalId] ?? 'the agent'
+  const label = terminalLabel(terminalId)
+  const role = agentRole(terminalId)
   return `[Agent activity — ${label} / ${role}]\n${renderSummaryText(summary)}`
 }
 
@@ -840,6 +988,20 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         finishAuto(sessionId, 'stopped', 'token_budget_reached')
         break
       }
+      const executor = ensureAutoExecutor(sessionId)
+      if (!executor.ok) {
+        recordLoopRun({
+          loopId: sessionId,
+          runIndex: s.turns.length + 1,
+          startedAt: Date.now(),
+          status: 'failed',
+          providerId: s.session.plannerProvider,
+          model: s.session.plannerModel,
+          error: executor.error
+        })
+        pauseAuto(sessionId, `executor_error:${executor.error}`, false)
+        break
+      }
       const runStartedAt = Date.now()
       const runIndex = s.turns.length + 1
 
@@ -981,10 +1143,36 @@ function startAuto(sessionId: string): MacroResponse {
   if (s.session.status === 'completed' || s.session.status === 'stopped') {
     return { ok: false, error: 'session is finished; start a new loop', state: s }
   }
+  const executor = ensureAutoExecutor(sessionId)
+  if (!executor.ok) {
+    updateMacroSession(sessionId, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
+    return { ok: false, error: executor.error, state: requireState(sessionId) }
+  }
   updateMacroSession(sessionId, { mode: 'auto', status: 'auto_running', pauseReason: null })
   // Fire-and-forget; the renderer polls macro:get for progress.
   void runAutoLoop(sessionId)
   return { ok: true, state: requireState(sessionId) }
+}
+
+export function resumeActiveAutoLoopsAtStartup(limit = 100): void {
+  const sessions = listMacroSessions(limit).filter(
+    (session) =>
+      session.mode === 'auto' &&
+      Boolean(session.workspaceDir) &&
+      !session.archivedAt &&
+      session.status !== 'completed' &&
+      session.status !== 'stopped' &&
+      session.status !== 'error'
+  )
+  for (const session of sessions) {
+    const executor = ensureAutoExecutor(session.id)
+    if (!executor.ok) {
+      updateMacroSession(session.id, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
+      continue
+    }
+    updateMacroSession(session.id, { mode: 'auto', status: 'auto_running', pauseReason: null })
+    void runAutoLoop(session.id)
+  }
 }
 
 // ---------- Phase 20: autonomous workspace project creation ----------

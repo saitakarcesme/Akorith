@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind } from '../../../preload/index.d'
+import type { MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind, PtySnapshot } from '../../../preload/index.d'
 import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
@@ -282,6 +282,17 @@ function resultLine(summary: string | null): string {
   return first.replace(/^current status:?\s*/i, '').slice(0, 240)
 }
 
+function terminalText(snapshot: PtySnapshot | null): string {
+  if (!snapshot?.text) return ''
+  return snapshot.text
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .slice(-80)
+    .join('\n')
+    .trim()
+}
+
 function parseStrArray(json: string | null | undefined): string[] {
   if (!json) return []
   try {
@@ -329,6 +340,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [detailProvider, setDetailProvider] = useState('')
   const [detailModel, setDetailModel] = useState('')
   const [detailTarget, setDetailTarget] = useState<ExecutorTarget>('t1')
+  const [terminalSnapshot, setTerminalSnapshot] = useState<PtySnapshot | null>(null)
   const [savingPlanner, setSavingPlanner] = useState(false)
   const [busy, setBusy] = useState(false)
   const [busyNote, setBusyNote] = useState('')
@@ -384,11 +396,16 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     if (view === 'detail' && selectedId) {
       const sid = selectedId
       const pull = (): void => {
-        void window.api.macro.get(sid).then((d) => d && setDetail(d))
+        void window.api.macro.get(sid).then((d) => {
+          if (!d) return
+          setDetail(d)
+          void window.api.pty.snapshot(d.session.targetTerminal, 8000).then(setTerminalSnapshot).catch(() => undefined)
+        })
       }
       pull()
       pollRef.current = setInterval(pull, 2000)
     } else if (view === 'list') {
+      setTerminalSnapshot(null)
       void refreshLoops()
       pollRef.current = setInterval(() => void refreshLoops(), 3000)
     }
@@ -817,6 +834,15 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
           </div>
 
           <div className="loop-detail-grid">
+            <section className="loop-panel loop-terminal-panel">
+              <h2>Live executor terminal</h2>
+              {terminalSnapshot?.alive ? (
+                <pre>{terminalText(terminalSnapshot) || 'Executor is live. Waiting for output...'}</pre>
+              ) : (
+                <div className="loop-empty">Executor terminal is starting or not attached yet.</div>
+              )}
+            </section>
+
             <section className="loop-panel">
               <h2>Now</h2>
               <p>{activity || latestResult(selected, turns)}</p>

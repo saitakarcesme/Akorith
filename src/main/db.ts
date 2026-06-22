@@ -7,11 +7,13 @@
 
 import { app, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
+import { createRequire } from 'module'
 import { basename, isAbsolute, join, resolve, sep } from 'path'
 import { mkdirSync, statSync } from 'fs'
-import Database from 'better-sqlite3'
+import type Database from 'better-sqlite3'
 
 let db: Database.Database | null = null
+const require = createRequire(__filename)
 
 const VALID_ID = /^[\w-]{1,64}$/
 const MAX_TITLE = 200
@@ -31,6 +33,7 @@ export function dbPath(): string {
 }
 
 export function initDb(): void {
+  const Database = require('better-sqlite3') as typeof import('better-sqlite3')
   db = new Database(dbPath())
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
@@ -286,6 +289,10 @@ export function closeDb(): void {
 function must(): Database.Database {
   if (!db) throw new Error('database not initialized')
   return db
+}
+
+function ready(): boolean {
+  return db !== null
 }
 
 function ensureColumn(table: string, column: string, ddl: string): void {
@@ -1752,9 +1759,11 @@ async function createProjectFolder(
 
 export function registerDbIpc(): void {
   ipcMain.handle('history:list', (): SessionRow[] =>
-    (must().prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]).map(
-      toSession
-    )
+    ready()
+      ? (must().prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]).map(
+          toSession
+        )
+      : []
   )
 
   ipcMain.handle('history:messages', (_event, args: { sessionId: string }) => {
@@ -1819,14 +1828,18 @@ export function registerDbIpc(): void {
     return true
   })
 
-  ipcMain.handle('usage:summary', () => usageSummary())
+  ipcMain.handle('usage:summary', () =>
+    ready()
+      ? usageSummary()
+      : { totalTokens: 0, totalCostUsd: 0, sessionCount: 0, byProvider: [] } satisfies UsageSummary
+  )
 
   ipcMain.handle('usage:daily', (_event, args: { days: number }) => {
     const days = typeof args?.days === 'number' && Number.isFinite(args.days) ? Math.min(Math.max(args.days, 1), 730) : 270
-    return usageDaily(days)
+    return ready() ? usageDaily(days) : []
   })
 
-  ipcMain.handle('projects:list', (): ProjectRow[] => listProjects())
+  ipcMain.handle('projects:list', (): ProjectRow[] => (ready() ? listProjects() : []))
 
   ipcMain.handle('projects:openFolder', (_event, args: { projectId?: string | null }) => {
     if (args?.projectId !== undefined && args.projectId !== null && (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId))) {

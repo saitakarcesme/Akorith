@@ -1,5 +1,5 @@
-import { ipcMain, type WebContents } from 'electron'
-import { accessSync, constants, existsSync, statSync } from 'fs'
+import { ipcMain } from 'electron'
+import { accessSync, chmodSync, constants, existsSync, readdirSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, isAbsolute, join } from 'path'
 import { spawn, type IPty } from 'node-pty'
@@ -33,6 +33,26 @@ function clampDimension(value: unknown, fallback: number): number {
 }
 
 let cachedShell: string | null = null
+let spawnHelperChecked = false
+
+function ensureSpawnHelperExecutable(): void {
+  if (spawnHelperChecked || process.platform !== 'darwin') return
+  spawnHelperChecked = true
+
+  const prebuildsDir = join(__dirname, '..', '..', 'node_modules', 'node-pty', 'prebuilds')
+  try {
+    for (const entry of readdirSync(prebuildsDir)) {
+      if (!entry.startsWith('darwin-')) continue
+      const helper = join(prebuildsDir, entry, 'spawn-helper')
+      const stat = statSync(helper)
+      if ((stat.mode & 0o111) === 0) {
+        chmodSync(helper, stat.mode | 0o755)
+      }
+    }
+  } catch {
+    // If the layout changes, node-pty's spawn failure will still surface clearly.
+  }
+}
 
 function resolveDefaultShell(): string {
   if (cachedShell) return cachedShell
@@ -125,8 +145,20 @@ interface Session {
 
 // Hard cap on retained scrollback per terminal — keeps memory bounded.
 const MAX_BUFFER_CHARS = 120_000
-// Keep live agent sessions for at most this many recent projects (Phase 13.3).
-const MAX_LIVE_PROJECTS = 3
+// Keep live agent sessions for enough recent projects/loops to support the
+// Loop Operations Center. Earlier phases used 3 for the interactive workspace,
+// but 10 active autonomous loops need their own PTYs alive at the same time.
+const MAX_LIVE_PROJECTS = 20
+
+interface PtySink {
+  isDestroyed(): boolean
+  send(channel: string, payload: unknown): void
+}
+
+const HEADLESS_SINK: PtySink = {
+  isDestroyed: () => false,
+  send: () => undefined
+}
 
 export interface PtySnapshot {
   id: string
@@ -167,7 +199,7 @@ class PtyManager {
     this.activeProjectKey = projectKey
   }
 
-  create(id: string, options: PtyCreateOptions, sink: WebContents): PtyCreateResponse {
+  create(id: string, options: PtyCreateOptions, sink: PtySink): PtyCreateResponse {
     const cwd = safeCwd(options.cwd)
     if (!cwd) return { ok: false, error: 'invalid terminal working directory' }
     const kind = options.commandKind ?? 'shell'
@@ -188,6 +220,7 @@ class PtyManager {
 
     let pty: IPty
     try {
+      ensureSpawnHelperExecutable()
       pty = spawn(spec.command, spec.args, {
         name: 'xterm-color',
         cols: clampDimension(options.cols, 80),
@@ -227,6 +260,11 @@ class PtyManager {
       fallback: spec.started !== kind,
       message: spec.message
     }
+  }
+
+  /** Start/reuse a PTY owned by the loop runtime rather than a visible xterm. */
+  createHeadless(id: string, options: PtyCreateOptions): PtyCreateResponse {
+    return this.create(id, options, HEADLESS_SINK)
   }
 
   /**

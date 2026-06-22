@@ -21,7 +21,6 @@ import {
 import { sendMetaPrompt } from './providers/registry'
 
 const require = createRequire(__filename)
-const PDFDocument = require('pdfkit') as new (options?: Record<string, unknown>) => PdfDoc
 
 const VALID_ID = /^[\w-]{1,64}$/
 const MAX_RUNS = 12
@@ -50,6 +49,11 @@ interface PdfDoc {
   fill(color?: string): PdfDoc
   text(text: string, ...args: unknown[]): PdfDoc
   moveDown(lines?: number): PdfDoc
+}
+
+function createPdfDocument(options?: Record<string, unknown>): PdfDoc {
+  const PDFDocument = require('pdfkit') as new (options?: Record<string, unknown>) => PdfDoc
+  return new PDFDocument(options)
 }
 
 interface GeneratedFile {
@@ -629,7 +633,7 @@ function renderCode(doc: PdfDoc, rows: TestRunRow[]): void {
 async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: string): Promise<void> {
   mkdirSync(dirname(pdfPath), { recursive: true })
   await new Promise<void>((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 48 })
+    const doc = createPdfDocument({ size: 'LETTER', margin: 48 })
     const stream = createWriteStream(pdfPath)
     stream.on('finish', resolve)
     stream.on('error', reject)

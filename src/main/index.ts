@@ -11,9 +11,12 @@ import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
 import { registerEvaluateIpc } from './evaluate'
-import { registerMacroIpc } from './macro'
+import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { closeDb, initDb, registerDbIpc } from './db'
+
+let mainWindowRef: BrowserWindow | null = null
+let splashWindowRef: BrowserWindow | null = null
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
 // "About Akorith"/"Hide Akorith"/"Quit Akorith" menu roles, and userData.
@@ -193,12 +196,16 @@ function createSplashWindow(): BrowserWindow | null {
 
   splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined)
   splash.once('ready-to-show', () => splash.show())
+  splash.on('closed', () => {
+    if (splashWindowRef === splash) splashWindowRef = null
+  })
   return splash
 }
 
 function createWindow(): void {
   const icon = resolveAppIcon()
   const splashWindow = createSplashWindow()
+  splashWindowRef = splashWindow
   // Paint the main window in the selected theme's base color so there's no
   // bright flash between the splash and the rendered UI.
   const mainBg = getTheme() === 'light' ? '#f2f3f5' : '#101012'
@@ -219,15 +226,22 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  mainWindowRef = mainWindow
 
   // Keep the splash up for a guaranteed minimum so it's actually seen, even when
-  // the renderer is ready almost instantly. Reveal the main window only once it's
-  // ready AND that minimum has elapsed — so there's never a blank gap.
+  // the renderer is ready almost instantly. Reveal the main window once the
+  // renderer reports ready; if Electron never emits `ready-to-show`, fall back to
+  // `did-finish-load` / a bounded timer so launch can never get stuck invisible.
   const MIN_SPLASH_MS = 1500
+  const MAX_HIDDEN_MS = 5000
   const splashShownAt = Date.now()
-  mainWindow.on('ready-to-show', () => {
+  let revealed = false
+  const reveal = (): void => {
+    if (revealed || mainWindow.isDestroyed()) return
+    revealed = true
     const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - splashShownAt))
     setTimeout(() => {
+      if (mainWindow.isDestroyed()) return
       mainWindow.show()
       if (splashWindow && !splashWindow.isDestroyed()) {
         setTimeout(() => {
@@ -235,9 +249,18 @@ function createWindow(): void {
         }, 220)
       }
     }, wait)
+  }
+
+  mainWindow.once('ready-to-show', reveal)
+  mainWindow.webContents.once('did-finish-load', reveal)
+  mainWindow.webContents.once('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(`[main] failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`)
+    reveal()
   })
+  setTimeout(reveal, MAX_HIDDEN_MS)
 
   mainWindow.on('closed', () => {
+    if (mainWindowRef === mainWindow) mainWindowRef = null
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
   })
 
@@ -281,8 +304,6 @@ function warmLocalProviderAtStartup(): void {
 
 app.whenReady().then(() => {
   ensureCliPath()
-  warmLocalProviderAtStartup()
-  initDb()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -297,6 +318,21 @@ app.whenReady().then(() => {
   applyAppIdentity()
   applyDockIcon()
   createWindow()
+
+  // Native SQLite can occasionally stall during Electron startup on macOS dev
+  // bundles. Open the first window before touching it so a native-module issue
+  // can never leave Akorith as a blank, unresponsive shell.
+  setTimeout(() => {
+    if (process.env.AKORITH_SKIP_DB_INIT !== '1') {
+      try {
+        initDb()
+        resumeActiveAutoLoopsAtStartup()
+      } catch (err) {
+        console.error('[db] SQLite initialization failed:', err)
+      }
+    }
+    warmLocalProviderAtStartup()
+  }, 1_000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
