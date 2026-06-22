@@ -159,7 +159,8 @@ const TEMPLATES: LoopTemplate[] = [
 ]
 
 const RUNNING = new Set(['auto_running', 'proposing', 'preparing_context', 'sending', 'summarizing'])
-const PAUSED = new Set(['awaiting_permission', 'awaiting_executor_result', 'awaiting_approval', 'paused'])
+const AUTO_ACTIVE = new Set([...RUNNING, 'awaiting_executor_result', 'awaiting_approval', 'idle', 'scheduled'])
+const PAUSED = new Set(['awaiting_permission', 'paused'])
 
 function projectKey(id: string): string {
   return id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)
@@ -249,6 +250,15 @@ interface Friendly {
 function friendlyStatus(session: MacroSessionRow): Friendly {
   const s = session.status
   if (session.archivedAt) return { label: 'Archived', tone: 'stopped' }
+  if (session.mode === 'auto' && AUTO_ACTIVE.has(s)) {
+    if (s === 'awaiting_executor_result' && session.nextRunAt && session.nextRunAt > Date.now()) {
+      return { label: 'Active', tone: 'running' }
+    }
+    if (session.latestResult?.startsWith('Recovering automatically') || session.pauseReason?.startsWith('planner_error') || session.pauseReason?.startsWith('executor_error')) {
+      return { label: 'Recovering', tone: 'running' }
+    }
+    return { label: 'Active', tone: 'running' }
+  }
   if (RUNNING.has(s)) return { label: 'Running', tone: 'running' }
   if (s === 'completed') return { label: 'Completed', tone: 'done' }
   if (s === 'error' || s === 'failed') return { label: 'Failed', tone: 'error' }
@@ -269,6 +279,9 @@ function cleanGoal(session: MacroSessionRow): string {
 }
 
 function latestResult(session: MacroSessionRow, turns: MacroState['turns'] = []): string {
+  if (session.mode === 'auto' && session.latestResult?.startsWith('planner_error:')) return 'Recovering automatically with the next available planner.'
+  if (session.mode === 'auto' && session.latestResult?.startsWith('executor_error:')) return 'Recovering automatically and reconnecting the executor.'
+  if (session.mode === 'auto' && session.latestResult === 'Waiting for the next scheduled cycle.') return 'Active; waiting for the next scheduled cycle.'
   if (session.latestResult?.trim()) return session.latestResult.trim()
   const last = [...turns].reverse().find((t) => t.executorResultSummary || t.error)
   if (last?.error) return last.error
@@ -679,8 +692,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   }, [])
 
   const dashboard = useMemo(() => {
-    const activeLoops = loops.filter((l) => RUNNING.has(l.status)).length
-    const pausedLoops = loops.filter((l) => PAUSED.has(l.status) || l.status === 'error').length
+    const activeLoops = loops.filter((l) => (l.mode === 'auto' && AUTO_ACTIVE.has(l.status)) || RUNNING.has(l.status)).length
+    const pausedLoops = loops.filter((l) => !((l.mode === 'auto' && AUTO_ACTIVE.has(l.status)) || RUNNING.has(l.status)) && (PAUSED.has(l.status) || l.status === 'error')).length
     const completedLoops = loops.filter((l) => l.status === 'completed').length
     const failedLoops = loops.filter((l) => l.status === 'error' || l.status === 'failed').length
     const commits = loops.reduce((sum, l) => sum + commitsOf(l).length, 0)
@@ -693,8 +706,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const commits = commitsOf(selected)
     const actions = parseAutoActions(selected.autoActions)
     const latest = turns.length ? turns[turns.length - 1] : null
-    const isRunning = RUNNING.has(selected.status)
-    const isPaused = PAUSED.has(selected.status) || selected.status === 'idle'
+    const isRunning = (selected.mode === 'auto' && AUTO_ACTIVE.has(selected.status)) || RUNNING.has(selected.status)
+    const isPaused = !isRunning && (PAUSED.has(selected.status) || selected.status === 'idle')
     const options = parseStrArray(latest?.nextOptions)
     const progress = progressPercent(selected, turns.length, commits.length)
     const activity = latest?.plannerRationale?.trim() || latest?.proposal?.trim() || ''

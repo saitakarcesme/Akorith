@@ -36,7 +36,7 @@ import {
   type MacroSessionWithTurns,
   type ProjectRow
 } from './db'
-import { sendMetaPrompt } from './providers/registry'
+import { describeProviders, sendMetaPrompt } from './providers/registry'
 import type { SendResult } from './providers/types'
 import {
   buildIdeaPrompt,
@@ -81,11 +81,14 @@ const SUMMARIZE_TIMEOUT_MS = 120_000
 const CRITIC_TIMEOUT_MS = 120_000
 const SNAPSHOT_CHARS = 8000
 const DIGEST_TIMEOUT_MS = 12_000
+const PLANNER_ATTEMPT_TIMEOUT_MS = 90_000
 // Auto-Mode polling: bounded, never spins the CPU.
 const POLL_INTERVAL_MS = 1200
 const MAX_WAIT_PER_TURN_MS = 30_000
 const SHORT_WAIT_MS = 6000
 const MAX_AUTO_ACTIONS = 80
+const AUTO_RETRY_DELAY_MS = 90_000
+const MAX_PARALLEL_PLANNERS = 2
 // Olympus = Codex (t2), Atlantis = Claude (t1) — for labeling persisted summaries.
 const TERMINAL_LABEL: Record<string, string> = { t1: 'Atlantis', t2: 'Olympus' }
 const AGENT_ROLE: Record<string, string> = { t1: 'Claude', t2: 'Codex' }
@@ -96,6 +99,8 @@ type MacroResponse = { ok: true; state: MacroSessionWithTurns } | { ok: false; e
 const activeProposals = new Map<string, AbortController>()
 // Active Auto-Mode loops, keyed by session id, so Stop can abort them.
 const activeLoops = new Map<string, AbortController>()
+let activePlannerCalls = 0
+const plannerQueue: (() => void)[] = []
 
 // Phase 20: accumulate metered meta-call tokens onto the session so a token
 // budget ("till the tokens are gone") can stop the loop. Only the loop's own
@@ -113,6 +118,48 @@ function tokenBudgetExceeded(s: MacroSessionRow): boolean {
   return s.tokenBudget > 0 && s.tokensUsed >= s.tokenBudget
 }
 
+function releasePlannerSlot(): void {
+  activePlannerCalls = Math.max(0, activePlannerCalls - 1)
+  plannerQueue.shift()?.()
+}
+
+function acquirePlannerSlot(signal: AbortSignal): Promise<() => void> {
+  if (signal.aborted) return Promise.reject(new Error('cancelled'))
+  if (activePlannerCalls < MAX_PARALLEL_PLANNERS) {
+    activePlannerCalls += 1
+    return Promise.resolve(releasePlannerSlot)
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const grant = (): void => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      activePlannerCalls += 1
+      resolve(releasePlannerSlot)
+    }
+    const onAbort = (): void => {
+      if (settled) return
+      settled = true
+      const index = plannerQueue.indexOf(grant)
+      if (index >= 0) plannerQueue.splice(index, 1)
+      reject(new Error('cancelled'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    plannerQueue.push(grant)
+  })
+}
+
+async function withPlannerSlot<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<T> {
+  const release = await acquirePlannerSlot(signal)
+  try {
+    return await fn()
+  } finally {
+    release()
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<T>((resolve) => {
@@ -123,8 +170,43 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   })
 }
 
-function looksLikeUsageLimit(message: string): boolean {
-  return /usage limit|rate limit|quota|credit|credits|try again/i.test(message)
+function isRetriablePlannerError(message: string): boolean {
+  return /usage limit|rate limit|quota|credit|credits|try again|timed out|timeout|no output|temporar|network|not reachable|ECONN|failed/i.test(message)
+}
+
+function modelForProvider(id: string, models: string[], preferred?: string | null): string | undefined {
+  if (id === 'claude') {
+    if (preferred && models.includes(preferred)) return preferred
+    return models.includes('sonnet') ? 'sonnet' : models[0]
+  }
+  if (preferred && models.includes(preferred)) return preferred
+  return models[0]
+}
+
+async function fallbackPlannerCandidates(primary: string): Promise<{ id: string; model?: string }[]> {
+  const providers = await describeProviders().catch(() => [])
+  const available = new Map(providers.filter((p) => p.available.ok).map((p) => [p.id, p]))
+  const order =
+    primary === 'chatgpt'
+      ? ['claude', 'local']
+      : primary === 'claude'
+        ? ['local', 'chatgpt']
+        : ['claude', 'chatgpt']
+  const seen = new Set([primary])
+  const out: { id: string; model?: string }[] = []
+  for (const id of order) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const provider = available.get(id)
+    if (!provider) continue
+    out.push({ id, model: modelForProvider(id, provider.models) })
+  }
+  return out
+}
+
+async function sendPlannerAttempt(providerId: string, model: string | undefined, prompt: string, signal: AbortSignal): Promise<SendResult> {
+  const attemptSignal = AbortSignal.any([signal, AbortSignal.timeout(PLANNER_ATTEMPT_TIMEOUT_MS)])
+  return withPlannerSlot(attemptSignal, () => sendMetaPrompt(providerId, model, prompt, attemptSignal))
 }
 
 async function sendPlannerPromptForLoop(
@@ -135,30 +217,37 @@ async function sendPlannerPromptForLoop(
 ): Promise<{ result: SendResult; providerId: string }> {
   try {
     return {
-      result: await sendMetaPrompt(session.plannerProvider, session.plannerModel ?? undefined, prompt, signal),
+      result: await sendPlannerAttempt(session.plannerProvider, session.plannerModel ?? undefined, prompt, signal),
       providerId: session.plannerProvider
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (session.mode !== 'auto' || session.plannerProvider === 'claude' || !looksLikeUsageLimit(message)) {
+    if (session.mode !== 'auto' || signal.aborted || !isRetriablePlannerError(message)) {
       throw err
     }
-    recordLoopEvent({
-      loopId: sessionId,
-      type: 'planner_provider_fallback',
-      message: `Primary planner ${session.plannerProvider} was limited; retrying with Claude.`,
-      severity: 'warning',
-      metadata: { primaryProvider: session.plannerProvider, primaryModel: session.plannerModel, error: message }
-    })
-    try {
-      return {
-        result: await sendMetaPrompt('claude', 'sonnet', prompt, signal),
-        providerId: 'claude'
+
+    const failures = [`${session.plannerProvider}: ${message}`]
+    for (const candidate of await fallbackPlannerCandidates(session.plannerProvider)) {
+      if (signal.aborted) break
+      recordLoopEvent({
+        loopId: sessionId,
+        type: 'planner_provider_fallback',
+        message: `Primary planner ${session.plannerProvider} failed; retrying with ${candidate.id}.`,
+        severity: 'warning',
+        metadata: { primaryProvider: session.plannerProvider, primaryModel: session.plannerModel, fallbackProvider: candidate.id, fallbackModel: candidate.model, error: message }
+      })
+      try {
+        return {
+          result: await sendPlannerAttempt(candidate.id, candidate.model, prompt, signal),
+          providerId: candidate.id
+        }
+      } catch (fallbackErr) {
+        const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+        failures.push(`${candidate.id}: ${fallbackMessage}`)
+        if (!isRetriablePlannerError(fallbackMessage)) break
       }
-    } catch (fallbackErr) {
-      const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
-      throw new Error(`${message}\nFallback planner claude failed: ${fallbackMessage}`)
     }
+    throw new Error(`Planner providers unavailable right now: ${failures.join(' | ')}`)
   }
 }
 
@@ -186,6 +275,31 @@ function loopTerminalId(session: MacroSessionRow): string {
 
 function loopExecutorKind(session: MacroSessionRow): PtyCommandKind {
   return baseTerminalId(session.targetTerminal) === 't2' ? 'codex-auto' : 'claude-auto'
+}
+
+function executorBlockText(summary: ExecutorSummary): string {
+  return [summary.currentStatus, summary.likelyNextStep, summary.testsRun ?? '', ...summary.failures].join('\n')
+}
+
+function looksLikeProviderBlock(text: string): boolean {
+  return /usage limit|rate limit|quota|credit|credits|try again|timed out|timeout/i.test(text)
+}
+
+function switchExecutorAfterProviderBlock(sessionId: string, summary: ExecutorSummary): boolean {
+  if (!looksLikeProviderBlock(executorBlockText(summary))) return false
+  const current = getMacroSession(sessionId)
+  if (!current) return false
+  const currentBase = baseTerminalId(current.targetTerminal)
+  const nextBase: 't1' | 't2' = currentBase === 't2' ? 't1' : 't2'
+  const nextTerminal = `${nextBase}::${loopProjectKey(sessionId)}`
+  updateMacroSession(sessionId, { targetTerminal: nextTerminal })
+  logAutoAction(sessionId, {
+    type: 'executor_provider_fallback',
+    from: currentBase === 't2' ? 'Codex' : 'Claude',
+    to: nextBase === 't2' ? 'Codex' : 'Claude',
+    message: `Executor provider looked limited; switching to ${nextBase === 't2' ? 'Codex' : 'Claude'} for the next cycle.`
+  })
+  return true
 }
 
 function ensureAutoExecutor(sessionId: string): { ok: true; terminalId: string } | { ok: false; error: string } {
@@ -536,6 +650,9 @@ function loopEventMessage(action: AutoAction): string {
   if (action.type === 'fully_loop_passive') return 'Loop switched to Passive.'
   if (action.type === 'planner_switch') return 'Changed the planning model or executor.'
   if (action.type === 'cadence_wait') return 'Waiting for the next scheduled cycle.'
+  if (action.type === 'auto_retry_scheduled') return 'Retrying automatically with the next available route.'
+  if (action.type === 'planner_provider_fallback') return 'Trying another planning provider.'
+  if (action.type === 'executor_provider_fallback') return 'Switching executor provider for the next cycle.'
   return action.type.replace(/_/g, ' ')
 }
 
@@ -946,6 +1063,30 @@ function pauseAuto(sessionId: string, reason: string, permission: boolean): void
   logAutoAction(sessionId, { type: 'pause', reason, permission })
 }
 
+function scheduleAutoRetry(sessionId: string, reason: string, delayMs = AUTO_RETRY_DELAY_MS): void {
+  const retryAt = Date.now() + delayMs
+  updateMacroSession(sessionId, {
+    status: 'auto_running',
+    pauseReason: null,
+    stopReason: null,
+    latestResult: `Recovering automatically: ${reason}. Retrying ${fmtRetryDelay(delayMs)}.`,
+    nextRunAt: retryAt
+  })
+  logAutoAction(sessionId, { type: 'auto_retry_scheduled', reason, delayMs })
+  const timer = setTimeout(() => {
+    const current = getMacroSession(sessionId)
+    if (!current || current.mode !== 'auto' || current.status === 'completed' || current.status === 'stopped' || current.status === 'error') return
+    void runAutoLoop(sessionId)
+  }, delayMs)
+  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') timer.unref()
+}
+
+function fmtRetryDelay(ms: number): string {
+  const seconds = Math.max(1, Math.round(ms / 1000))
+  if (seconds >= 60) return `in ${Math.round(seconds / 60)} min`
+  return `in ${seconds}s`
+}
+
 function finishAuto(sessionId: string, status: 'completed' | 'stopped', reason: string, score?: number | null): void {
   updateMacroSession(sessionId, {
     status,
@@ -999,7 +1140,7 @@ async function runAutoLoop(sessionId: string): Promise<void> {
           model: s.session.plannerModel,
           error: executor.error
         })
-        pauseAuto(sessionId, `executor_error:${executor.error}`, false)
+        scheduleAutoRetry(sessionId, `executor_error:${executor.error}`)
         break
       }
       const runStartedAt = Date.now()
@@ -1019,13 +1160,13 @@ async function runAutoLoop(sessionId: string): Promise<void> {
           model: s.session.plannerModel,
           error: proposed.error
         })
-        pauseAuto(sessionId, `planner_error:${proposed.error}`, false)
+        scheduleAutoRetry(sessionId, `planner_error:${proposed.error}`)
         break
       }
       const afterPropose = requireState(sessionId)
       const turn = afterPropose.turns[afterPropose.turns.length - 1]
       if (!turn || !turn.proposal) {
-        pauseAuto(sessionId, 'no_proposal', false)
+        scheduleAutoRetry(sessionId, 'no_proposal')
         break
       }
       // Phase 22: fully automatic — a high planner-risk label no longer pauses
@@ -1046,7 +1187,7 @@ async function runAutoLoop(sessionId: string): Promise<void> {
           model: afterPropose.session.plannerModel,
           error: sent.error
         })
-        pauseAuto(sessionId, `bridge_error:${sent.error}`, false)
+        scheduleAutoRetry(sessionId, `bridge_error:${sent.error}`)
         break
       }
       // 4. Wait (bounded) for output to settle.
@@ -1055,6 +1196,26 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       // 5. Summarize the result (meta call + heuristic fallback).
       const { summary, detection } = await summarizeTurn(sessionId, turn.id, signal)
       if (stopped()) break
+      if (switchExecutorAfterProviderBlock(sessionId, summary)) {
+        updateMacroTurn(turn.id, { status: 'completed' })
+        recordLoopRun({
+          loopId: sessionId,
+          runIndex,
+          startedAt: runStartedAt,
+          status: 'needs_attention',
+          providerId: afterPropose.session.plannerProvider,
+          model: afterPropose.session.plannerModel,
+          summary: summary.currentStatus,
+          actionsTaken: { executorProviderFallback: true },
+          filesChanged: summary.changedFiles,
+          commandsExecuted: summary.commandsRun,
+          testBuildResults: summary.testsRun,
+          nextSuggestedStep: summary.likelyNextStep,
+          error: 'executor_provider_blocked'
+        })
+        scheduleAutoRetry(sessionId, 'executor_provider_blocked', 15_000)
+        break
+      }
       // 6. Permission handling. Phase 22: fully automatic. The executor runs in
       //    bypass mode (claude-auto / codex-auto), so prompts are rare; if one
       //    still slips through, auto-answer the safe default and keep going rather
@@ -1104,23 +1265,29 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       if (outcome.action === 'complete') {
         const projectLike = (now.session.loopType ?? now.session.loopIntent ?? '').match(/project|feature|build|code|docs|test|release|dependency/i)
         if (projectLike && now.session.autoCommit && !commitOutcome.committed && summary.changedFiles.length === 0) {
-          pauseAuto(sessionId, 'verification_no_project_change', false)
+          scheduleAutoRetry(sessionId, 'verification_no_project_change')
           break
         }
         finishAuto(sessionId, 'completed', outcome.reason, review.progressScore)
         break
       }
       if (outcome.action === 'stop') {
-        finishAuto(sessionId, 'stopped', outcome.reason)
+        scheduleAutoRetry(sessionId, outcome.reason, 120_000)
         break
       }
       if (outcome.action === 'pause') {
-        pauseAuto(sessionId, outcome.reason, false)
+        scheduleAutoRetry(sessionId, outcome.reason)
         break
       }
       const cadenceMinutes = Math.max(0, getMacroSession(sessionId)?.cadenceMinutes ?? 0)
       if (cadenceMinutes > 0) {
         logAutoAction(sessionId, { type: 'cadence_wait', minutes: cadenceMinutes })
+        updateMacroSession(sessionId, {
+          status: 'auto_running',
+          pauseReason: null,
+          latestResult: 'Waiting for the next scheduled cycle.',
+          nextRunAt: Date.now() + cadenceMinutes * 60_000
+        })
       }
       await interruptibleDelay(cadenceMinutes > 0 ? cadenceMinutes * 60_000 : 800, signal)
     }
