@@ -43,9 +43,15 @@ import {
   buildIdeaPrompt,
   commitPhase,
   deriveHeadline,
+  ensureLoopRepository,
   initWorkspace,
+  loopWorkspaceFolder,
   parseProjectIdea,
+  pushWorkspace,
   slugify,
+  syncWorkspace,
+  withLoopGitQueue,
+  LOOP_REPOSITORY_URL,
   type ProjectIdea
 } from './workspace'
 import {
@@ -1125,6 +1131,7 @@ interface AutoCommitOutcome {
   committed: boolean
   message?: string
   phase?: number
+  pushed?: boolean
   reason?: string
 }
 
@@ -1139,17 +1146,44 @@ async function maybeAutoCommit(
   if (!s || !s.autoCommit || !s.workspaceDir) return { committed: false, reason: 'auto-commit disabled' }
   const headline = deriveHeadline({ criticRationale, criticVerdict, summaryStatus, goal: s.goal })
   try {
-    const res = await commitPhase(s.workspaceDir, headline)
-    if (res.committed) {
-      logAutoAction(sessionId, { type: 'auto_commit', phase: res.phase, message: res.message })
-      updateMacroTurn(turnId, {
-        autoAction: JSON.stringify({ type: 'auto_commit', phase: res.phase, message: res.message, at: Date.now() })
-      })
-      return { committed: true, phase: res.phase, message: res.message }
-    } else {
-      logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: res.reason })
-      return { committed: false, reason: res.reason }
-    }
+    return await withLoopGitQueue(async () => {
+      const synced = await syncWorkspace(s.workspaceDir!)
+      if (!synced.pushed) {
+        logAutoAction(sessionId, { type: 'auto_sync_skipped', reason: synced.reason })
+      }
+      const res = await commitPhase(s.workspaceDir!, headline)
+      if (res.committed) {
+        logAutoAction(sessionId, { type: 'auto_commit', phase: res.phase, message: res.message })
+        updateMacroTurn(turnId, {
+          autoAction: JSON.stringify({ type: 'auto_commit', phase: res.phase, message: res.message, at: Date.now() })
+        })
+        if (s.pushEnabled) {
+          const pushed = await pushWorkspace(s.workspaceDir!)
+          if (pushed.pushed) {
+            logAutoAction(sessionId, { type: 'auto_push', message: `Pushed ${res.message} to ${LOOP_REPOSITORY_URL}` })
+            recordLoopEvent({
+              loopId: sessionId,
+              type: 'auto_push',
+              message: `Pushed ${res.message} to AkorithLoop.`,
+              severity: 'success'
+            })
+            return { committed: true, phase: res.phase, message: res.message, pushed: true }
+          }
+          logAutoAction(sessionId, { type: 'auto_push_failed', reason: pushed.reason })
+          recordLoopEvent({
+            loopId: sessionId,
+            type: 'auto_push_failed',
+            message: pushed.reason ?? 'git push failed',
+            severity: 'warning'
+          })
+          return { committed: true, phase: res.phase, message: res.message, pushed: false, reason: pushed.reason }
+        }
+        return { committed: true, phase: res.phase, message: res.message, pushed: false }
+      } else {
+        logAutoAction(sessionId, { type: 'auto_commit_skipped', reason: res.reason })
+        return { committed: false, reason: res.reason }
+      }
+    })
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
     logAutoAction(sessionId, { type: 'auto_commit_skipped', reason })
@@ -1799,31 +1833,25 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
   const autoCommit = commitBehavior !== 'suggest' && commitBehavior !== 'none'
   const mode: MacroMode = args.mode === 'approval' || args.autonomyLevel === 'guided' ? 'approval' : 'auto'
 
-  // 2. Resolve the target workspace. Existing local-project targets are bound
-  // conservatively (no scaffold/write); otherwise create a fresh Akorith repo.
-  const existingTarget =
-    args.targetType === 'local-project' &&
-    typeof args.targetRef === 'string' &&
-    isAbsolute(args.targetRef) &&
-    existsSync(args.targetRef)
-      ? args.targetRef
-      : null
-  const usingExistingProject = Boolean(existingTarget)
-  let dir = existingTarget ?? ''
-  if (!dir) {
-    const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
-    dir = join(base, idea.slug)
-    for (let n = 2; existsSync(dir) && n <= 50; n++) dir = join(base, `${idea.slug}-${n}`)
-  }
-
-  // 3. Scaffold only for new Akorith workspaces.
-  if (!usingExistingProject) {
+  // 2. Resolve the shared loop repository. Every loop gets its own folder
+  // inside AkorithLoop, while targetRef remains metadata/instructions about
+  // what the loop should inspect or improve.
+  const repoDir = args.basePath && isAbsolute(args.basePath)
+    ? args.basePath
+    : join(app.getPath('documents'), 'AkorithLoop')
+  const prepared = await withLoopGitQueue(async () => {
+    const repo = await ensureLoopRepository(repoDir, LOOP_REPOSITORY_URL)
+    if (!repo.ok) return { ok: false as const, error: repo.error ?? 'failed to initialize AkorithLoop repository' }
+    const dir = loopWorkspaceFolder(repo.dir, idea.slug)
     const init = await initWorkspace(dir, idea)
-    if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
-  }
+    if (!init.ok) return { ok: false as const, error: init.error ?? 'failed to initialize loop folder' }
+    return { ok: true as const, dir }
+  })
+  if (!prepared.ok) return { ok: false, error: prepared.error }
+  const dir = prepared.dir
 
   // 4. Persist/reuse a sidebar project row + a macro session bound to it.
-  const project = ensureProjectForPath(dir, usingExistingProject ? basename(dir) : idea.name)
+  const project = ensureProjectForPath(dir, idea.name)
   const session = createMacroSession({
     goal: cleanText(`${idea.firstGoal}\n\n${rhythm}\n\n${profile}`, MAX_GOAL_CHARS),
     plannerProvider: args.plannerProvider,
@@ -1864,9 +1892,25 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
       scheduleKind: args.scheduleKind,
       autonomyLevel: args.autonomyLevel,
       commitBehavior,
-      pushEnabled: args.pushEnabled === true
+      pushEnabled: args.pushEnabled === true,
+      loopRepository: LOOP_REPOSITORY_URL,
+      loopFolder: dir
     }
   })
+  if (args.pushEnabled === true) {
+    const pushed = await withLoopGitQueue(() => pushWorkspace(dir))
+    if (pushed.pushed) {
+      logAutoAction(session.id, { type: 'auto_push', message: `Pushed Phase 0 scaffold to ${LOOP_REPOSITORY_URL}` })
+    } else {
+      logAutoAction(session.id, { type: 'auto_push_failed', reason: pushed.reason })
+      recordLoopEvent({
+        loopId: session.id,
+        type: 'auto_push_failed',
+        message: pushed.reason ?? 'git push failed',
+        severity: 'warning'
+      })
+    }
+  }
   return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
 }
 

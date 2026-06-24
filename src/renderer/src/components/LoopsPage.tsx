@@ -343,7 +343,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [maxRuns, setMaxRuns] = useState(30)
   const [maxCommits, setMaxCommits] = useState(0)
   const [commitBehavior, setCommitBehavior] = useState<CommitBehavior>('commit')
-  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(true)
   const [testCommands, setTestCommands] = useState('')
   const [reportFormat, setReportFormat] = useState<ReportFormat>('summary')
   const [safetyLevel, setSafetyLevel] = useState<SafetyLevel>('balanced')
@@ -1132,7 +1132,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
               <label className="loop-check">
                 <input type="checkbox" checked={pushEnabled} disabled={busy} onChange={(e) => setPushEnabled(e.target.checked)} />
-                Push to GitHub when the target is configured and safe
+                Push every loop commit to AkorithLoop
               </label>
 
               <label className="loop-field">

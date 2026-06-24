@@ -11,12 +11,16 @@
 // (which also drives the real git helpers against a throwaway repo).
 
 import { spawn } from 'child_process'
+import { randomUUID } from 'crypto'
 import { mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { basename, dirname, join } from 'path'
 
 const GIT_TIMEOUT_MS = 20_000
 const HEADLINE_MAX = 72
+export const LOOP_REPOSITORY_URL = 'https://github.com/saitakarcesme/AkorithLoop.git'
+export const LOOP_REPOSITORY_BRANCH = 'main'
+let loopGitQueue: Promise<void> = Promise.resolve()
 // Fixed identity so commits work in a headless/first-run environment without
 // mutating the user's global git config. These are constants, never user input.
 const GIT_IDENTITY = ['-c', 'user.name=Akorith', '-c', 'user.email=akorith@local']
@@ -163,15 +167,84 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 
 /** True when the worktree has any staged or unstaged change (porcelain). */
 export async function hasChanges(cwd: string): Promise<boolean> {
-  const res = await git(cwd, ['status', '--porcelain'])
+  const res = await git(cwd, ['status', '--porcelain', '--', '.'])
   return res.ok && res.stdout.length > 0
 }
 
 /** Next "Phase N" number for this repo: highest existing phase + 1 (min 1). */
 export async function nextPhaseNumber(cwd: string): Promise<number> {
-  const res = await git(cwd, ['log', '--pretty=%s', '-n', '200'])
+  const res = await git(cwd, ['log', '--pretty=%s', '-n', '200', '--', '.'])
   if (!res.ok || !res.stdout) return 1
   return parseHighestPhase(res.stdout.split('\n')) + 1
+}
+
+async function configureLoopRemote(dir: string, repoUrl = LOOP_REPOSITORY_URL): Promise<GitResult> {
+  const remote = await git(dir, ['remote', 'get-url', 'origin'])
+  if (remote.ok) return git(dir, ['remote', 'set-url', 'origin', repoUrl])
+  return git(dir, ['remote', 'add', 'origin', repoUrl])
+}
+
+async function ensureMainBranch(dir: string): Promise<void> {
+  await git(dir, ['fetch', 'origin', LOOP_REPOSITORY_BRANCH])
+  const local = await git(dir, ['rev-parse', '--verify', LOOP_REPOSITORY_BRANCH])
+  const remote = await git(dir, ['rev-parse', '--verify', `origin/${LOOP_REPOSITORY_BRANCH}`])
+  if (remote.ok) {
+    await git(dir, ['checkout', '-B', LOOP_REPOSITORY_BRANCH, `origin/${LOOP_REPOSITORY_BRANCH}`])
+  } else if (local.ok) {
+    await git(dir, ['checkout', LOOP_REPOSITORY_BRANCH])
+  } else {
+    await git(dir, ['checkout', '-B', LOOP_REPOSITORY_BRANCH])
+    await git(dir, ['symbolic-ref', 'HEAD', `refs/heads/${LOOP_REPOSITORY_BRANCH}`])
+  }
+}
+
+/**
+ * Ensure the shared AkorithLoop output repository exists locally. Every loop
+ * workspace is a subfolder inside this one repo, so all loop commits and pushes
+ * land in the same GitHub history instead of isolated throwaway repos.
+ */
+export async function ensureLoopRepository(dir: string, repoUrl = LOOP_REPOSITORY_URL): Promise<InitResult> {
+  try {
+    const parent = dirname(dir)
+    await mkdir(parent, { recursive: true })
+    if (!existsSync(join(dir, '.git'))) {
+      if (!existsSync(dir)) {
+        const clone = await git(parent, ['clone', repoUrl, basename(dir)])
+        if (!clone.ok) return { ok: false, dir, error: `git clone failed: ${clone.stderr || clone.stdout}` }
+      }
+      if (!existsSync(join(dir, '.git'))) {
+        await mkdir(dir, { recursive: true })
+        const init = await git(dir, ['init'])
+        if (!init.ok) return { ok: false, dir, error: `git init failed: ${init.stderr}` }
+      }
+    }
+    const remote = await configureLoopRemote(dir, repoUrl)
+    if (!remote.ok) return { ok: false, dir, error: `git remote failed: ${remote.stderr || remote.stdout}` }
+    await ensureMainBranch(dir)
+    await git(dir, ['pull', '--ff-only', 'origin', LOOP_REPOSITORY_BRANCH])
+    return { ok: true, dir }
+  } catch (err) {
+    return { ok: false, dir, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export function loopWorkspaceFolder(repoDir: string, slug: string): string {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').toLowerCase()
+  return join(repoDir, `${slugify(slug)}-${stamp}-${randomUUID().slice(0, 8)}`)
+}
+
+export async function withLoopGitQueue<T>(work: () => Promise<T>): Promise<T> {
+  const previous = loopGitQueue
+  let release!: () => void
+  loopGitQueue = new Promise((resolve) => {
+    release = resolve
+  })
+  await previous
+  try {
+    return await work()
+  } finally {
+    release()
+  }
 }
 
 export interface InitResult {
@@ -197,7 +270,7 @@ export async function initWorkspace(dir: string, idea: ProjectIdea): Promise<Ini
     const readme = `# ${idea.name}\n\n${idea.summary}\n\n> Built autonomously by Akorith's macro loop. Each change is committed as \`Phase N: <change>\`.\n\n## First goal\n\n${idea.firstGoal}\n`
     await writeFile(join(dir, 'README.md'), readme, 'utf8')
     if (await hasChanges(dir)) {
-      await git(dir, ['add', '-A'])
+      await git(dir, ['add', '-A', '--', '.'])
       await git(dir, [...GIT_IDENTITY, 'commit', '-F', '-'], 'Phase 0: scaffold project')
     }
     return { ok: true, dir }
@@ -220,7 +293,7 @@ export interface CommitResult {
  */
 export async function commitPhase(cwd: string, headline: string): Promise<CommitResult> {
   if (!(await isGitRepo(cwd))) return { committed: false, reason: 'not a git repository' }
-  const add = await git(cwd, ['add', '-A'])
+  const add = await git(cwd, ['add', '-A', '--', '.'])
   if (!add.ok) return { committed: false, reason: `git add failed: ${add.stderr}` }
   if (!(await hasChanges(cwd))) return { committed: false, reason: 'no changes to commit' }
   const phase = await nextPhaseNumber(cwd)
@@ -228,4 +301,25 @@ export async function commitPhase(cwd: string, headline: string): Promise<Commit
   const commit = await git(cwd, [...GIT_IDENTITY, 'commit', '-F', '-'], message)
   if (!commit.ok) return { committed: false, reason: `git commit failed: ${commit.stderr}` }
   return { committed: true, phase, message }
+}
+
+export interface PushResult {
+  pushed: boolean
+  reason?: string
+}
+
+export async function syncWorkspace(cwd: string): Promise<PushResult> {
+  if (!(await isGitRepo(cwd))) return { pushed: false, reason: 'not a git repository' }
+  const pull = await git(cwd, ['pull', '--rebase', '--autostash', 'origin', LOOP_REPOSITORY_BRANCH])
+  if (!pull.ok && !/couldn't find remote ref|no such ref|no tracking information/i.test(pull.stderr + pull.stdout)) {
+    return { pushed: false, reason: `git pull failed: ${pull.stderr || pull.stdout}` }
+  }
+  return { pushed: true }
+}
+
+export async function pushWorkspace(cwd: string): Promise<PushResult> {
+  if (!(await isGitRepo(cwd))) return { pushed: false, reason: 'not a git repository' }
+  const push = await git(cwd, ['push', '-u', 'origin', `HEAD:${LOOP_REPOSITORY_BRANCH}`])
+  if (!push.ok) return { pushed: false, reason: `git push failed: ${push.stderr || push.stdout}` }
+  return { pushed: true }
 }
