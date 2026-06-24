@@ -7,11 +7,11 @@
 //
 // Terminal injection — proposals AND permission responses — still flows only
 // through bridgeSend() -> PtyManager.write(). No second write path. Planner and
-// summarizer calls are meta calls (sendMetaPrompt) and write no usage_events.
+// loop meta calls are recorded as usage_events so Dashboard includes loop tokens.
 
 import { app, ipcMain } from 'electron'
-import { existsSync } from 'fs'
-import { basename, isAbsolute, join } from 'path'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import { bridgeSend } from './bridge'
 import { getBridgeSettings, getDigestSettings } from './config'
 import { buildDigest } from './digest'
@@ -28,6 +28,7 @@ import {
   listMacroSessions,
   recordLoopEvent,
   recordLoopRun,
+  recordUsageEvent,
   sessionExists,
   updateMacroSession,
   updateMacroTurn,
@@ -106,12 +107,25 @@ const plannerQueue: (() => void)[] = []
 // budget ("till the tokens are gone") can stop the loop. Only the loop's own
 // planner/critic/summarizer calls are metered — the external executor agent's
 // usage is not visible to Akorith.
-function recordMetaUsage(sessionId: string, usage: { promptTokens?: number; completionTokens?: number }): void {
+function recordMetaUsage(
+  sessionId: string,
+  providerId: string,
+  model: string | null | undefined,
+  usage: { promptTokens?: number; completionTokens?: number; costUsd?: number; estimated: boolean }
+): void {
   const tokens = (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0)
-  if (tokens <= 0) return
   const s = getMacroSession(sessionId)
-  if (!s) return
-  updateMacroSession(sessionId, { tokensUsed: s.tokensUsed + tokens })
+  if (s && tokens > 0) {
+    updateMacroSession(sessionId, { tokensUsed: s.tokensUsed + tokens })
+  }
+  recordUsageEvent({
+    providerId,
+    model: model ?? undefined,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    costUsd: usage.costUsd,
+    estimated: usage.estimated
+  })
 }
 
 function tokenBudgetExceeded(s: MacroSessionRow): boolean {
@@ -184,6 +198,7 @@ function modelForProvider(id: string, models: string[], preferred?: string | nul
 }
 
 async function fallbackPlannerCandidates(primary: string): Promise<{ id: string; model?: string }[]> {
+  if (primary === 'local') return []
   const providers = await describeProviders().catch(() => [])
   const available = new Map(providers.filter((p) => p.available.ok).map((p) => [p.id, p]))
   const order =
@@ -289,6 +304,7 @@ function switchExecutorAfterProviderBlock(sessionId: string, summary: ExecutorSu
   if (!looksLikeProviderBlock(executorBlockText(summary))) return false
   const current = getMacroSession(sessionId)
   if (!current) return false
+  if (usesLocalExecutor(current)) return false
   const currentBase = baseTerminalId(current.targetTerminal)
   const nextBase: 't1' | 't2' = currentBase === 't2' ? 't1' : 't2'
   const nextTerminal = `${nextBase}::${loopProjectKey(sessionId)}`
@@ -302,11 +318,260 @@ function switchExecutorAfterProviderBlock(sessionId: string, summary: ExecutorSu
   return true
 }
 
-function ensureAutoExecutor(sessionId: string): { ok: true; terminalId: string } | { ok: false; error: string } {
+function usesLocalExecutor(session: MacroSessionRow): boolean {
+  return session.plannerProvider === 'local' || session.targetTerminal === 'local'
+}
+
+interface LocalExecutorFile {
+  path: string
+  content: string
+}
+
+interface LocalExecutorPayload {
+  summary: string
+  files: LocalExecutorFile[]
+  commandsRun: string[]
+  testsRun: string | null
+  failures: string[]
+  likelyNextStep: string
+  doneScore: number | null
+  needsUserAttention: boolean
+}
+
+function extractJsonObject(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const source = fenced ? fenced[1] : text
+  let start = -1
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\' && inString) {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (ch === '{') {
+      if (depth === 0) start = i
+      depth += 1
+    } else if (ch === '}' && depth > 0) {
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        return JSON.parse(source.slice(start, i + 1))
+      }
+    }
+  }
+  const body = source.slice(source.indexOf('{'), source.lastIndexOf('}') + 1)
+  if (!body.trim()) throw new Error('no JSON object found')
+  return JSON.parse(body)
+}
+
+function stringList(value: unknown, max = 12, eachMax = 400): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().slice(0, eachMax))
+    .filter(Boolean)
+    .slice(0, max)
+}
+
+function parseLocalExecutorPayload(text: string): LocalExecutorPayload {
+  try {
+    const parsed = extractJsonObject(text) as Record<string, unknown>
+    const rawFiles = Array.isArray(parsed.files) ? parsed.files : []
+    const files = rawFiles
+      .map((item): LocalExecutorFile | null => {
+        if (!item || typeof item !== 'object') return null
+        const row = item as Record<string, unknown>
+        if (typeof row.path !== 'string' || typeof row.content !== 'string') return null
+        return { path: row.path.trim(), content: row.content.slice(0, 80_000) }
+      })
+      .filter((item): item is LocalExecutorFile => Boolean(item))
+      .slice(0, 8)
+    const doneScore = typeof parsed.done_score === 'number' && Number.isFinite(parsed.done_score)
+      ? Math.max(0, Math.min(100, Math.round(parsed.done_score)))
+      : null
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 1200) : 'Local executor produced workspace updates.',
+      files,
+      commandsRun: stringList(parsed.commands_run, 12, 240),
+      testsRun: typeof parsed.tests_run === 'string' ? parsed.tests_run.trim().slice(0, 500) : null,
+      failures: stringList(parsed.failures, 8, 400),
+      likelyNextStep: typeof parsed.likely_next_step === 'string' ? parsed.likely_next_step.trim().slice(0, 600) : 'Continue the next local loop cycle.',
+      doneScore,
+      needsUserAttention: parsed.needs_user_attention === true
+    }
+  } catch {
+    return {
+      summary: 'Local executor returned unstructured text; saved it as a loop artifact.',
+      files: [{ path: 'LOCAL_LOOP_OUTPUT.md', content: `# Local loop output\n\n${text.trim().slice(0, 80_000)}\n` }],
+      commandsRun: [],
+      testsRun: null,
+      failures: ['Local executor response was not valid JSON.'],
+      likelyNextStep: 'Ask the local model for one smaller structured update.',
+      doneScore: null,
+      needsUserAttention: false
+    }
+  }
+}
+
+function safeWorkspaceFile(workspaceDir: string, filePath: string): string | null {
+  const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+  if (!normalized || normalized.includes('\0') || normalized.split('/').includes('..')) return null
+  const full = resolve(workspaceDir, normalized)
+  const rel = relative(workspaceDir, full)
+  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null
+  const name = basename(full).toLowerCase()
+  if (name === '.env' || name.startsWith('.env.')) return null
+  return full
+}
+
+function writeLocalExecutorFiles(workspaceDir: string, files: LocalExecutorFile[], turnIndex: number): { changed: string[]; failures: string[] } {
+  const changed: string[] = []
+  const failures: string[] = []
+  const list = files.length
+    ? files
+    : [{ path: `LOCAL_LOOP_TURN_${turnIndex}.md`, content: `# Local loop turn ${turnIndex}\n\nNo file content was returned.\n` }]
+  for (const file of list) {
+    const full = safeWorkspaceFile(workspaceDir, file.path)
+    if (!full) {
+      failures.push(`Skipped unsafe file path: ${file.path}`)
+      continue
+    }
+    mkdirSync(dirname(full), { recursive: true })
+    writeFileSync(full, file.content, 'utf8')
+    changed.push(relative(workspaceDir, full).replace(/\\/g, '/'))
+  }
+  return { changed, failures }
+}
+
+function buildLocalExecutorPrompt(session: MacroSessionRow, turn: MacroSessionWithTurns['turns'][number]): string {
+  return `You are Akorith's LOCAL executor. You are running fully offline through Ollama, not Claude, not Codex, and not any remote API.
+
+Workspace:
+${session.workspaceDir ?? '(missing)'}
+
+Goal:
+${session.goal}
+
+Instruction for this turn:
+${turn.proposal ?? turn.editedProposal ?? turn.sentPrompt ?? ''}
+
+Rules:
+- Return ONLY JSON. No prose outside JSON.
+- Make one useful, concrete increment by writing files into the workspace.
+- Use relative file paths only. Never write .env files, secrets, credentials, or files outside the workspace.
+- For monitoring/research/social targets, maintain a FINDINGS.md or WATCH_STATE.md artifact. If live web access is unavailable, record the check plan and the exact source/endpoint needed next.
+- For project/build/maintenance targets, create or update real project/docs/test artifacts in small safe steps.
+- Do not claim you ran shell commands unless the command is listed as not_run/planned in tests_run.
+
+Schema:
+{
+  "summary": "one concise sentence of what you changed",
+  "files": [
+    { "path": "relative/path.md", "content": "complete file content" }
+  ],
+  "commands_run": [],
+  "tests_run": "not run - local executor file-only mode" ,
+  "failures": [],
+  "likely_next_step": "one concise next step",
+  "done_score": 0,
+  "needs_user_attention": false
+}`
+}
+
+async function runLocalExecutorTurn(
+  sessionId: string,
+  turn: MacroSessionWithTurns['turns'][number],
+  signal: AbortSignal
+): Promise<{ summary: ExecutorSummary; detection: PermissionDetection }> {
+  const current = requireState(sessionId)
+  const session = current.session
+  if (!session.workspaceDir || !existsSync(session.workspaceDir)) {
+    throw new Error('loop workspace is missing')
+  }
+  updateMacroSession(sessionId, { status: 'awaiting_executor_result', pauseReason: null })
+  updateMacroTurn(turn.id, {
+    status: 'awaiting_executor_result',
+    editedProposal: turn.proposal ?? '',
+    sentPrompt: turn.proposal ?? '',
+    error: null,
+    autoAction: JSON.stringify({ type: 'local_executor_prompt', at: Date.now() })
+  })
+  logAutoAction(sessionId, { type: 'local_executor_prompt', turn: turn.turnIndex })
+  const result = await sendMetaPrompt(
+    session.plannerProvider,
+    session.plannerModel ?? undefined,
+    buildLocalExecutorPrompt(session, turn),
+    AbortSignal.any([signal, AbortSignal.timeout(PROPOSE_TIMEOUT_MS)])
+  )
+  recordMetaUsage(sessionId, session.plannerProvider, result.model, result.usage)
+  const payload = parseLocalExecutorPayload(result.text)
+  const written = writeLocalExecutorFiles(session.workspaceDir, payload.files, turn.turnIndex)
+  const failures = [...payload.failures, ...written.failures]
+  const summary: ExecutorSummary = {
+    changedFiles: written.changed,
+    commandsRun: payload.commandsRun,
+    testsRun: payload.testsRun,
+    failures,
+    currentStatus: payload.summary,
+    likelyNextStep: payload.likelyNextStep,
+    confidence: failures.length ? 0.65 : 0.82,
+    needsUserAttention: payload.needsUserAttention || written.changed.length === 0,
+    source: 'model'
+  }
+  updateMacroTurn(turn.id, {
+    executorResultSummary: renderSummaryText(summary),
+    confidenceScore: summary.confidence,
+    summarizerConfidence: summary.confidence,
+    terminalSnapshotMeta: JSON.stringify({
+      terminal: 'local-ollama',
+      chars: result.text.length,
+      lines: result.text.split(/\r?\n/).length,
+      truncated: false,
+      alive: true
+    }),
+    resultStatus: summary.needsUserAttention ? 'needs_attention' : 'ok',
+    goodEnoughScore: payload.doneScore ?? turn.goodEnoughScore ?? undefined
+  })
+  recordLoopEvent({
+    loopId: sessionId,
+    type: 'local_executor_turn',
+    message: summary.currentStatus,
+    severity: failures.length ? 'warning' : 'success',
+    metadata: { changedFiles: summary.changedFiles, model: result.model }
+  })
+  return {
+    summary,
+    detection: {
+      detected: false,
+      kind: 'none',
+      suggestedAction: '',
+      riskLevel: 'low',
+      rationale: 'Local executor does not use an interactive terminal.',
+      requiresUserReview: false,
+      options: []
+    }
+  }
+}
+
+function ensureAutoExecutor(sessionId: string): { ok: true; terminalId: string; local?: boolean } | { ok: false; error: string } {
   const current = getMacroSession(sessionId)
   if (!current) return { ok: false, error: 'macro session not found' }
   if (!current.workspaceDir || !existsSync(current.workspaceDir)) {
     return { ok: false, error: 'loop workspace is missing' }
+  }
+  if (usesLocalExecutor(current)) {
+    return { ok: true, terminalId: 'local', local: true }
   }
 
   const terminalId = loopTerminalId(current)
@@ -460,7 +725,7 @@ async function propose(sessionId: string, extraSignal?: AbortSignal): Promise<Ma
     const signal = AbortSignal.any(signals)
     const planner = await sendPlannerPromptForLoop(s.session, prompt, signal, sessionId)
     const result = planner.result
-    recordMetaUsage(sessionId, result.usage)
+    recordMetaUsage(sessionId, planner.providerId, result.model, result.usage)
     const current = requireState(sessionId)
     if (current.session.status === 'stopped') return { ok: true, state: current }
 
@@ -710,7 +975,7 @@ function steer(sessionId: string, choice: string): MacroResponse {
 
 /**
  * Summarize the executor result for a turn from a read-only terminal snapshot.
- * Uses the planner provider as a meta call (no usage_event); falls back to the
+ * Uses the planner provider as a metered meta call; falls back to the
  * deterministic heuristic if the provider call fails or returns unusable JSON.
  */
 async function summarizeTurn(
@@ -745,7 +1010,7 @@ async function summarizeTurn(
       prompt,
       AbortSignal.any(signals)
     )
-    recordMetaUsage(sessionId, result.usage)
+    recordMetaUsage(sessionId, s.session.plannerProvider, result.model, result.usage)
     summary = parseSummaryJson(result.text) ?? heuristicSummary(snap.text)
   } catch {
     summary = heuristicSummary(snap.text)
@@ -792,7 +1057,7 @@ function priorCriticScores(turns: MacroSessionWithTurns['turns'], exceptTurnId: 
 
 /**
  * Phase 19: grade the ACTUAL result of a turn against the goal. Runs after the
- * summarizer as a meta call (no usage_event) with a deterministic heuristic
+ * summarizer as a metered meta call with a deterministic heuristic
  * fallback, and persists the measured grade so both the stop/continue gate and
  * the next planner turn can use it. Read-only over the terminal.
  */
@@ -806,8 +1071,10 @@ async function criticTurn(
   const turn = s.turns.find((t) => t.id === turnId)
   if (!turn) throw new Error('macro turn not found')
 
-  const snap = ptyManager.snapshot(s.session.targetTerminal, SNAPSHOT_CHARS + 4000)
-  const bounded = boundSnapshot(snap.text, SNAPSHOT_CHARS, 200)
+  const snapshotText = usesLocalExecutor(s.session)
+    ? (turn.executorResultSummary ?? renderSummaryText(summary))
+    : ptyManager.snapshot(s.session.targetTerminal, SNAPSHOT_CHARS + 4000).text
+  const bounded = boundSnapshot(snapshotText, SNAPSHOT_CHARS, 200)
   const priorScores = priorCriticScores(s.turns, turnId)
 
   let review: CriticReview
@@ -829,7 +1096,7 @@ async function criticTurn(
       prompt,
       AbortSignal.any(signals)
     )
-    recordMetaUsage(sessionId, result.usage)
+    recordMetaUsage(sessionId, s.session.plannerProvider, result.model, result.usage)
     review = parseCriticReview(result.text) ?? heuristicCritic(summary, priorScores)
   } catch {
     review = heuristicCritic(summary, priorScores)
@@ -1081,6 +1348,15 @@ function scheduleAutoRetry(sessionId: string, reason: string, delayMs = AUTO_RET
   if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') timer.unref()
 }
 
+function scheduleAutoResume(sessionId: string, delayMs: number): void {
+  const timer = setTimeout(() => {
+    const current = getMacroSession(sessionId)
+    if (!current || current.mode !== 'auto' || current.status === 'completed' || current.status === 'stopped' || current.status === 'error') return
+    void runAutoLoop(sessionId)
+  }, Math.max(0, delayMs))
+  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') timer.unref()
+}
+
 function fmtRetryDelay(ms: number): string {
   const seconds = Math.max(1, Math.round(ms / 1000))
   if (seconds >= 60) return `in ${Math.round(seconds / 60)} min`
@@ -1143,6 +1419,7 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         scheduleAutoRetry(sessionId, `executor_error:${executor.error}`)
         break
       }
+      const localExecutor = executor.local === true
       const runStartedAt = Date.now()
       const runIndex = s.turns.length + 1
 
@@ -1175,26 +1452,36 @@ async function runAutoLoop(sessionId: string): Promise<void> {
       if (turn.riskLevel === 'high') {
         logAutoAction(sessionId, { type: 'high_risk_continue', turn: turn.turnIndex })
       }
-      // 3. Auto-send the proposal through the single bridge path.
-      const sent = sendApprovedPrompt(sessionId, turn.id, turn.proposal, true)
-      if (!sent.ok) {
-        recordLoopRun({
-          loopId: sessionId,
-          runIndex,
-          startedAt: runStartedAt,
-          status: 'failed',
-          providerId: afterPropose.session.plannerProvider,
-          model: afterPropose.session.plannerModel,
-          error: sent.error
-        })
-        scheduleAutoRetry(sessionId, `bridge_error:${sent.error}`)
-        break
+      let summary: ExecutorSummary
+      let detection: PermissionDetection
+      if (localExecutor) {
+        const localResult = await runLocalExecutorTurn(sessionId, turn, signal)
+        summary = localResult.summary
+        detection = localResult.detection
+      } else {
+        // 3. Auto-send the proposal through the single bridge path.
+        const sent = sendApprovedPrompt(sessionId, turn.id, turn.proposal, true)
+        if (!sent.ok) {
+          recordLoopRun({
+            loopId: sessionId,
+            runIndex,
+            startedAt: runStartedAt,
+            status: 'failed',
+            providerId: afterPropose.session.plannerProvider,
+            model: afterPropose.session.plannerModel,
+            error: sent.error
+          })
+          scheduleAutoRetry(sessionId, `bridge_error:${sent.error}`)
+          break
+        }
+        // 4. Wait (bounded) for output to settle.
+        await waitForOutput(afterPropose.session.targetTerminal, signal)
+        if (stopped()) break
+        // 5. Summarize the result (meta call + heuristic fallback).
+        const summarized = await summarizeTurn(sessionId, turn.id, signal)
+        summary = summarized.summary
+        detection = summarized.detection
       }
-      // 4. Wait (bounded) for output to settle.
-      await waitForOutput(afterPropose.session.targetTerminal, signal)
-      if (stopped()) break
-      // 5. Summarize the result (meta call + heuristic fallback).
-      const { summary, detection } = await summarizeTurn(sessionId, turn.id, signal)
       if (stopped()) break
       if (switchExecutorAfterProviderBlock(sessionId, summary)) {
         updateMacroTurn(turn.id, { status: 'completed' })
@@ -1332,6 +1619,11 @@ export function resumeActiveAutoLoopsAtStartup(limit = 100): void {
       session.status !== 'error'
   )
   for (const session of sessions) {
+    if (session.nextRunAt && session.nextRunAt > Date.now()) {
+      updateMacroSession(session.id, { mode: 'auto', status: 'auto_running', pauseReason: null })
+      scheduleAutoResume(session.id, session.nextRunAt - Date.now())
+      continue
+    }
     const executor = ensureAutoExecutor(session.id)
     if (!executor.ok) {
       updateMacroSession(session.id, { status: 'error', stopReason: executor.error, pauseReason: executor.error })

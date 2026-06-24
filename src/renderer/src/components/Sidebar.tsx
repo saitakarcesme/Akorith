@@ -317,6 +317,7 @@ export default function Sidebar({
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
   const localProvider = providers.find((provider) => provider.id === 'local')
   const shareEndpoints = ollamaShare?.endpoints ?? []
+  const remoteEndpoint = shareEndpoints.find((endpoint) => endpoint.kind === 'vpn')
 
   const refreshProjects = async (): Promise<void> => {
     const list = await window.api.projects.list()
@@ -957,6 +958,17 @@ export default function Sidebar({
                     <span>This machine</span>
                     {ollamaShare?.hostName && <em>{ollamaShare.hostName}</em>}
                   </div>
+                  {ollamaShare && (
+                    <div className={`ollama-remote-status ${ollamaShare.remoteReady ? 'is-ready' : 'is-waiting'}`}>
+                      <strong>{ollamaShare.remoteReady ? 'Remote access ready' : 'Remote access needs VPN'}</strong>
+                      <span>{ollamaShare.remoteMessage}</span>
+                      {remoteEndpoint && (
+                        <button type="button" onClick={() => useOllamaEndpoint(remoteEndpoint)}>
+                          Use remote endpoint
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="ollama-endpoint-list">
                     {shareEndpoints.map((endpoint) => (
                       <div className={`ollama-endpoint-card is-${endpoint.kind}`} key={endpoint.baseUrl}>

@@ -33,6 +33,7 @@ export function dbPath(): string {
 }
 
 export function initDb(): void {
+  if (db) return
   const Database = require('better-sqlite3') as typeof import('better-sqlite3')
   db = new Database(dbPath())
   db.pragma('journal_mode = WAL')

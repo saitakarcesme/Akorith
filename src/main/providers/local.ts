@@ -107,6 +107,13 @@ function isPrivateIpv4(ip: string): boolean {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
 }
 
+function isVpnLikeIpv4(ip: string): boolean {
+  const parts = ip.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
+  const [a, b] = parts
+  return a === 100 && b >= 64 && b <= 127
+}
+
 function lanCandidates(): string[] {
   const out: string[] = []
   for (const entries of Object.values(networkInterfaces())) {
@@ -268,6 +275,12 @@ export class LocalProvider implements Provider {
           return ''
         }
       })()
+      if (host && isVpnLikeIpv4(host)) {
+        return {
+          ok: false,
+          reason: `Ollama not reachable at ${this.baseUrl} over Tailscale/VPN. Check that the host PC is on and awake, both machines are connected to the same VPN, and Ollama is running with OLLAMA_HOST=0.0.0.0.`
+        }
+      }
       if (host && isPrivateIpv4(host)) {
         return {
           ok: false,

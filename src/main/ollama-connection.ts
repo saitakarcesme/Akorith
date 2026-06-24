@@ -27,6 +27,9 @@ export interface OllamaShareInfo {
   hostName: string
   port: number
   endpoints: OllamaEndpointSuggestion[]
+  remoteReady: boolean
+  remoteEndpoint?: string
+  remoteMessage: string
 }
 
 function validBaseUrl(value: unknown): string | null {
@@ -67,8 +70,8 @@ function endpointKind(address: string): OllamaEndpointSuggestion['kind'] {
 
 function endpointLabel(kind: OllamaEndpointSuggestion['kind'], address: string): string {
   if (kind === 'local') return 'This device only'
-  if (kind === 'vpn') return `VPN / Tailscale (${address})`
-  if (kind === 'lan') return `Same Wi-Fi / LAN (${address})`
+  if (kind === 'vpn') return `VPN / Tailscale - other networks (${address})`
+  if (kind === 'lan') return `Same Wi-Fi only (${address})`
   return `Network adapter (${address})`
 }
 
@@ -91,11 +94,25 @@ function shareInfo(): OllamaShareInfo {
         baseUrl: `http://${address}:${port}`,
         address,
         kind,
-        recommended: kind === 'vpn' || kind === 'lan'
+        recommended: kind === 'vpn'
       }
     })
     .sort((a, b) => rank[a.kind] - rank[b.kind] || a.address.localeCompare(b.address))
-  return { hostName: hostname(), port, endpoints }
+  const vpn = endpoints.find((endpoint) => endpoint.kind === 'vpn')
+  const lan = endpoints.find((endpoint) => endpoint.kind === 'lan')
+  const remoteMessage = vpn
+    ? `Remote-ready via ${vpn.baseUrl}. Use this endpoint on another PC after both machines are connected to the same Tailscale/VPN network.`
+    : lan
+      ? `Same-Wi-Fi endpoint is available at ${lan.baseUrl}. For a different Wi-Fi or internet connection, connect both machines with Tailscale/VPN; then a 100.x.x.x endpoint will appear here.`
+      : 'No shareable network endpoint was found. Connect this PC to a private network or Tailscale/VPN to expose a safe remote endpoint.'
+  return {
+    hostName: hostname(),
+    port,
+    endpoints,
+    remoteReady: Boolean(vpn),
+    ...(vpn ? { remoteEndpoint: vpn.baseUrl } : {}),
+    remoteMessage
+  }
 }
 
 /** Turn a low-level fetch failure into an explanation the user can act on.

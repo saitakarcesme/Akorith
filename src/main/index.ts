@@ -317,6 +317,13 @@ app.whenReady().then(() => {
   registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()
+  if (process.env.AKORITH_SKIP_DB_INIT !== '1') {
+    try {
+      initDb()
+    } catch (err) {
+      console.error('[db] SQLite initialization failed before first window:', err)
+    }
+  }
   createWindow()
 
   // Native SQLite can occasionally stall during Electron startup on macOS dev

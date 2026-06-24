@@ -773,6 +773,9 @@ export interface OllamaShareInfo {
   hostName: string
   port: number
   endpoints: OllamaEndpointSuggestion[]
+  remoteReady: boolean
+  remoteEndpoint?: string
+  remoteMessage: string
 }
 
 export interface OllamaApi {

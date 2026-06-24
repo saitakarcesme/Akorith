@@ -1434,6 +1434,51 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.ollama-remote-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  padding: 8px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ollama-remote-status.is-ready {
+  border-color: rgba(91, 211, 151, 0.45);
+}
+
+.ollama-remote-status.is-waiting {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.ollama-remote-status strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.ollama-remote-status span {
+  color: var(--text-faint);
+}
+
+.ollama-remote-status button {
+  justify-self: start;
+  height: 28px;
+  padding: 0 9px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ollama-remote-status button:hover {
+  background: var(--hover);
+}
+
 .ollama-endpoint-list {
   display: flex;
   flex-direction: column;

@@ -4,7 +4,7 @@ import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
 type LoopIntent = 'continuous' | 'monitor' | 'daily-build' | 'custom'
-type ExecutorTarget = 't1' | 't2'
+type ExecutorTarget = 'local' | 't1' | 't2'
 type LoopType =
   | 'project-improvement'
   | 'feature-development'
@@ -43,7 +43,8 @@ interface LoopTemplate {
   cadenceMinutes?: number
 }
 
-const EXECUTORS: Array<{ target: ExecutorTarget; kind: PtyCommandKind; label: string; hint: string }> = [
+const EXECUTORS: Array<{ target: ExecutorTarget; kind?: PtyCommandKind; label: string; hint: string }> = [
+  { target: 'local', label: 'Local / Ollama', hint: 'fully local model execution' },
   { target: 't1', kind: 'claude-auto', label: 'Claude / Atlantis', hint: 'best for coding agent work' },
   { target: 't2', kind: 'codex-auto', label: 'ChatGPT / Olympus', hint: 'use when Claude is busy' }
 ]
@@ -180,11 +181,12 @@ function commitsOf(session: MacroSessionRow): AutoAction[] {
   return parseAutoActions(session.autoActions).filter((a) => a.type === 'auto_commit' && a.message)
 }
 
-function executorForTarget(target: string): { target: ExecutorTarget; kind: PtyCommandKind; label: string; hint: string } {
+function executorForTarget(target: string): { target: ExecutorTarget; kind?: PtyCommandKind; label: string; hint: string } {
   return EXECUTORS.find((e) => e.target === target) ?? EXECUTORS[0]
 }
 
 function defaultExecutorForProvider(providerId: string): ExecutorTarget {
+  if (providerId === 'local') return 'local'
   return providerId === 'chatgpt' ? 't2' : 't1'
 }
 
@@ -435,6 +437,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const ensureExecutor = useCallback(async (project: { id: string }, cwd: string, targetTerminal: string): Promise<void> => {
     const key = projectKey(project.id)
     const executor = executorForTarget(targetTerminal)
+    if (executor.target === 'local' || !executor.kind) return
     window.api.pty.setActiveProject(key)
     await window.api.pty.create(`${executor.target}::${key}`, { cols: 120, rows: 32, cwd, commandKind: executor.kind })
   }, [])
