@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 25: Test
-Lab Rebuild**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 26:
+Settings Center**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -334,6 +334,9 @@ Lab Rebuild**.
       selectable subject -> Local/Claude/ChatGPT judge -> run-and-PDF flow. Folder picker and
       GitHub URL sources share read-only sandboxing; generated tests auto-run, auto-score, and
       auto-export an Akorith Test Report PDF. Runner details remain collapsed for detection misses.
+- [x] **Phase 26** - Settings Center. The sidebar profile opens a tabbed settings surface for
+      Profile, Providers/Ollama, Workflow, Test Lab, and Data; writes still go through validated
+      main-process IPC (`settings`, `ollama`, `bridge`, `digest`, `test:setSettings`).
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -369,6 +372,10 @@ Lab Rebuild**.
   judge; one main action runs, evaluates, and exports PDF. The source repo remains read-only, and
   generated tests write only to the temporary sandbox. Do not reintroduce a mandatory free-form
   test-topic field.
+- **Settings Center (Phase 26):** the renderer may present many controls, but each write stays
+  behind its existing validated IPC owner. Do not add direct renderer filesystem writes, provider
+  sends, terminal writes, or secret storage from Settings. Test Lab defaults are persisted only via
+  `test:setSettings`, whose main-process setter clamps values before writing config.
 - **Macro-loop: Approval Mode is the default and is unchanged.** Planner proposals are meta
   calls and do not write `usage_event`; the user approves or edits each executor prompt before
   it is sent through the bridge path.
@@ -538,6 +545,21 @@ The PDF template is now intentionally readable and branded as an Akorith Test Re
 dark report header, verdict and ISAScore, source/judge/generated metadata, objective metrics, run
 evidence, score breakdown, judge rationale, generated test code excerpts, and bounded sandbox output
 excerpts. Historical runs can still be re-scored and exported from Review and PDF.
+
+## Phase 26 - Settings Center
+
+The old profile popover is now a Settings Center mounted from the sidebar footer. It has Profile,
+Providers, Workflow, Test Lab, and Data tabs. Profile owns display name and theme; Providers shows
+registry availability and the full Ollama endpoint/LAN/VPN controls; Workflow owns bridge
+Auto-Enter, repo-context enablement/path, and read-only AkorithLoop remote/folder status; Test Lab
+owns default source, install-deps, timeout, retained sandboxes, and report identity; Data documents
+the local storage and sandbox boundaries.
+
+The implementation intentionally centralizes UI without centralizing unsafe authority. Theme still
+uses `settings:*`; Ollama still uses `ollama:*`; bridge Auto-Enter still uses `bridge:*`; repo
+context still uses `digest:*`; and Test Lab defaults now use `test:setSettings`. The main-process
+`setTestSettings()` clamps timeout, retained sandboxes, source length, and provider id before
+writing `loopex.config.json`. Folder pickers still go through `projects:pickDirectory`.
 
 ## Rule: keep the docs current
 

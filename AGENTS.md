@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 25 (Test Lab Rebuild:
-guided source/model/topic/judge flow with automatic PDF reports).
+with electron-vite, in strict numbered phases — currently through Phase 26 (Settings Center:
+detailed profile/provider/workflow/Test Lab controls).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -24,7 +24,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 23 general-purpose task loops · 23.1 Fully Active/Passive Loop Switch ·
 23.2 Loop Operations Center ·
 24 Loop Completion ·
-**25 Test Lab Rebuild** — all done.
+25 Test Lab Rebuild ·
+**26 Settings Center** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -653,6 +654,17 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   Review and PDF section. The PDF template is branded as an Akorith Test Report with verdict,
   ISAScore, metadata, objective metrics, run evidence, score breakdown, judge rationale, generated
   test excerpts, and bounded output excerpts.
+- **Phase 26: Settings Center.** The profile footer now opens a real Settings Center instead of a
+  small single-column popover. `SettingsCenter.tsx` owns five English sections: Profile
+  (display name, light/dark theme, summary chips), Providers (registry availability plus Ollama
+  endpoint, LAN/VPN suggestions, auto-start/LAN/discovery toggles), Workflow (bridge Auto-Enter,
+  repo-context toggle/path, read-only AkorithLoop remote/folder), Test Lab (default source,
+  install-deps toggle, timeout, retained sandboxes, report identity), and Data (local storage and
+  safety boundaries). Existing validated IPC remains the only write path for each setting:
+  `settings:*` for theme, `ollama:*` for local provider settings, `bridge:*` for Auto-Enter,
+  `digest:*` for repo context, and the new `test:setSettings` for Test Lab defaults. The Settings
+  Center does not introduce terminal writes, provider sends, secret storage, or filesystem writes
+  from the renderer.
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
@@ -1443,6 +1455,30 @@ Loop history is now durable after restart: `listLoopRuns()` / `listLoopEvents()`
 persisted `loop_runs` and `loop_events` tables through `macro:listRuns` and `macro:listEvents`.
 `LoopsPage.tsx` renders these as Run ledger and Event log panels in addition to the older turn
 timeline and `auto_actions` audit trail. Keep loop deletes DB-only; never delete loop folders.
+
+### Phase 25: Test Lab Rebuild
+
+Test Lab is now a guided English workflow: source selection, Local/Ollama test writer, fixed test
+subject preset, Local/Claude/ChatGPT result judge, then one run action that evaluates and exports a
+PDF. Sources can come from saved projects, a folder picker, or GitHub URLs; generated tests still
+write only into a temporary sandbox copied from the source. The old advanced runner controls remain
+available but collapsed.
+
+The PDF report is now an Akorith Test Report with a dark header, verdict, ISAScore, metadata,
+objective metrics, run evidence, score breakdown, judge rationale, generated test excerpts, and
+bounded output excerpts. The primary Test Lab flow keeps running until the PDF path is available.
+
+### Phase 26: Settings Center
+
+The sidebar profile footer opens `SettingsCenter.tsx`, a tabbed settings surface with Profile,
+Providers, Workflow, Test Lab, and Data sections. It centralizes the knobs that had been scattered
+across the sidebar and workflow surfaces without adding new unsafe capabilities.
+
+Settings writes still go through their existing main-process owners: theme via `settings:*`, Ollama
+via `ollama:*`, bridge Auto-Enter via `bridge:*`, repo context via `digest:*`, and Test Lab defaults
+via the new validated `test:setSettings` IPC. `config.ts` clamps Test Lab timeout, retained sandbox
+count, source length, and provider id before writing `loopex.config.json`. Renderer folder choices
+reuse the validated `projects:pickDirectory` dialog; renderer code never writes project files.
 
 ## Conventions
 
