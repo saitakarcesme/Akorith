@@ -501,8 +501,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
     }
 
-    setRunning(false)
-    setPhase('')
     refreshRecent()
     const runIds = completed.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
     if (runIds.length > 0) {
@@ -515,6 +513,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         await exportPdf(evaluation)
       }
     }
+    setRunning(false)
     setPhase('')
   }
 
