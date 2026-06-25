@@ -68,13 +68,6 @@ function providerTone(id: string): string {
   return 'tone-neutral'
 }
 
-function providerShortLabel(id: string, label: string): string {
-  if (id.includes('claude')) return 'Cl'
-  if (id.includes('chatgpt') || id.includes('codex')) return 'Cx'
-  if (id.includes('local') || id.includes('ollama')) return 'Lo'
-  return label.slice(0, 2)
-}
-
 function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
   return providers.some((provider) =>
     provider.id === 'local' &&
@@ -415,40 +408,7 @@ export default function Sidebar({
         })}
       </nav>
 
-      {sidebarCollapsed ? (
-        <div className="sidebar-collapsed-stack">
-          <button
-            type="button"
-            className={`collapsed-project-dot ${!activeProject ? 'is-active' : ''}`}
-            onClick={() => onSelectProject(null)}
-            title="All projects"
-          >
-            <FolderIcon size={17} />
-          </button>
-          {projects.slice(0, 8).map((project) => (
-            <button
-              type="button"
-              key={project.id}
-              className={`collapsed-project-dot ${activeProject?.id === project.id ? 'is-active' : ''}`}
-              onClick={() => onSelectProject(project)}
-              title={project.name}
-            >
-              {project.name.slice(0, 1).toUpperCase()}
-            </button>
-          ))}
-          {providers.map((provider) => (
-            <button
-              type="button"
-              key={provider.id}
-              className={`collapsed-provider-dot ${providerTone(provider.id)}`}
-              title={provider.label}
-              onClick={() => onNewChat(provider.id)}
-            >
-              {providerShortLabel(provider.id, provider.label)}
-            </button>
-          ))}
-        </div>
-      ) : (
+      {!sidebarCollapsed && (
         <div className="sidebar-scroll">
           <div className="sidebar-fixed-groups">
             <section className="sidebar-section project-section">

@@ -1126,20 +1126,17 @@ textarea:focus-visible {
 }
 
 .provider-section.tone-claude,
-.recent-chat.tone-claude,
-.collapsed-provider-dot.tone-claude {
+.recent-chat.tone-claude {
   background-color: var(--provider-claude-bg);
 }
 
 .provider-section.tone-codex,
-.recent-chat.tone-codex,
-.collapsed-provider-dot.tone-codex {
+.recent-chat.tone-codex {
   background-color: var(--provider-codex-bg);
 }
 
 .provider-section.tone-local,
-.recent-chat.tone-local,
-.collapsed-provider-dot.tone-local {
+.recent-chat.tone-local {
   background-color: var(--provider-local-bg);
 }
 
@@ -1166,39 +1163,6 @@ textarea:focus-visible {
   background: currentColor;
 }
 
-.sidebar-collapsed-stack {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0;
-  overflow-y: auto;
-}
-
-.collapsed-project-dot,
-.collapsed-provider-dot {
-  width: 42px;
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-dim);
-  background: transparent;
-  border: 0;
-  border-radius: 11px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.collapsed-project-dot:hover,
-.collapsed-project-dot.is-active,
-.collapsed-provider-dot:hover {
-  color: var(--text);
-  background: var(--accent-dim);
-}
-
 .sidebar-profile {
   position: relative;
   flex: 0 0 auto;
@@ -1221,6 +1185,7 @@ textarea:focus-visible {
 .sidebar.is-collapsed .sidebar-profile {
   display: flex;
   justify-content: center;
+  margin-top: auto;
   padding: 10px 0;
 }
 
@@ -4710,8 +4675,7 @@ textarea:focus-visible {
   border: 0;
 }
 /* keep only a tiny provider dot as the color accent */
-.recent-chat .recent-provider-dot,
-.collapsed-provider-dot {
+.recent-chat .recent-provider-dot {
   border-radius: 50%;
 }
 
