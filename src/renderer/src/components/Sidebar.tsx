@@ -205,7 +205,6 @@ export default function Sidebar({
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const recentSessions = sessions
   const generalSessions = sessions.filter((s) => !s.projectId)
-  const sidebarExpanded = !sidebarCollapsed || sidebarPeeking
 
   // Registry providers first (in registry order), then any orphaned provider
   // ids that still have sessions but are gone from config.
@@ -411,8 +410,13 @@ export default function Sidebar({
         onPointerEnter={revealSidebar}
         onMouseLeave={handleSidebarLeave}
       >
-        {sidebarExpanded && (
-          <>
+        <div
+          className="sidebar-surface"
+          aria-hidden={sidebarCollapsed && !sidebarPeeking}
+          onMouseEnter={revealSidebar}
+          onPointerEnter={revealSidebar}
+          onMouseLeave={handleSidebarLeave}
+        >
       <div className="sidebar-brand">
         <div className="brand-lockup" title="Akorith">
           <div>
@@ -810,8 +814,7 @@ export default function Sidebar({
           <SettingsIcon size={16} />
         </button>
       </div>
-        </>
-      )}
+        </div>
 
       {confirmRemoveProject && (
         <div className="modal-overlay" onClick={() => setConfirmRemoveProject(null)}>

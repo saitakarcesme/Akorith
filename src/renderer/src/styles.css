@@ -115,6 +115,8 @@ select,
 input,
 textarea,
 .sidebar,
+.sidebar-surface,
+.ws-topbar,
 .chat-panel,
 .terminal-pane,
 .sidebar-item,
@@ -269,8 +271,7 @@ textarea:focus-visible {
   flex: 0 0 var(--sidebar-width);
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  display: flex;
-  flex-direction: column;
+  display: block;
   /* Light/white product navigation. Sidebar gets its own token scope so the
      dark workspace tokens never leak in — dark text + gray icons on white. */
   --text: var(--sidebar-text);
@@ -289,10 +290,24 @@ textarea:focus-visible {
   --accent: var(--sidebar-accent);
   --on-accent: var(--sidebar-on-accent);
   --focus-ring: var(--sidebar-focus-ring);
+  color: var(--sidebar-text);
+  background: transparent;
+  border-right: 0;
+  overflow: visible;
+}
+
+.sidebar-surface {
+  width: var(--sidebar-width);
+  height: 100%;
+  min-width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
+  transform: translateX(0);
+  will-change: transform;
 }
 
 .sidebar.is-collapsed {
@@ -304,18 +319,26 @@ textarea:focus-visible {
   overflow: visible;
 }
 
-.sidebar.is-peeking {
+.sidebar.is-collapsed .sidebar-surface {
   position: fixed;
   inset: 0 auto 0 0;
   z-index: 80;
-  flex: 0 0 var(--sidebar-peek-width);
   width: min(var(--sidebar-peek-width), calc(100vw - 24px));
   min-width: 0;
+  height: 100vh;
   background: #111113;
   border-right: 1px solid var(--sidebar-border);
   border-radius: 0 14px 14px 0;
-  box-shadow: 22px 0 60px rgba(0, 0, 0, 0.42);
+  box-shadow: none;
   overflow: hidden;
+  pointer-events: none;
+  transform: translateX(calc(-100% - 8px));
+}
+
+.sidebar.is-peeking .sidebar-surface {
+  box-shadow: 22px 0 60px rgba(0, 0, 0, 0.42);
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .sidebar-hover-zone {
@@ -346,23 +369,6 @@ textarea:focus-visible {
 .sidebar-edge-button:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.11);
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .sidebar-brand {
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 0 10px;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .brand-lockup {
-  justify-content: center;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
 }
 
 .sidebar-brand {
@@ -458,13 +464,6 @@ textarea:focus-visible {
   border: 0;
   border-radius: 11px;
   cursor: pointer;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .sidebar-nav button {
-  width: 44px;
-  height: 42px;
-  justify-content: center;
-  padding: 0;
 }
 
 .sidebar-nav button:hover {
@@ -1231,36 +1230,6 @@ textarea:focus-visible {
   border: 0;
   border-radius: 14px;
   cursor: pointer;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .sidebar-profile {
-  display: flex;
-  justify-content: center;
-  margin-top: auto;
-  padding: 10px 0;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .profile-button {
-  width: 44px;
-  height: 42px;
-  flex: 0 0 auto;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 11px;
-  background: transparent;
-}
-
-/* The collapsed button has a single icon (UserIcon). It is also svg:last-child,
-   so the expanded rule below would shove it right with margin-left:auto and dim
-   it. Re-center it and restore a legible color so it matches the nav items. */
-.sidebar.is-collapsed:not(.is-peeking) .profile-button svg {
-  margin-left: 0;
-  color: inherit;
-}
-
-.sidebar.is-collapsed:not(.is-peeking) .profile-button:hover {
-  background: var(--hover);
 }
 
 .profile-button:hover {
@@ -4947,13 +4916,6 @@ textarea:focus-visible {
 .sidebar-newchat.is-active {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
-.sidebar.is-collapsed:not(.is-peeking) .sidebar-newchat {
-  width: 44px;
-  height: 42px;
-  justify-content: center;
-  padding: 0;
-}
-
 /* ---- prominent provider/model switcher in the workspace top bar ---- */
 .model-switcher {
   display: inline-flex;
