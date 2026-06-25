@@ -1400,12 +1400,91 @@ export interface LoopRunRecordInput {
   error?: string | null
 }
 
+export interface LoopRunRow {
+  id: string
+  loopId: string
+  runIndex: number
+  startedAt: number
+  endedAt: number | null
+  status: string
+  providerId: string | null
+  model: string | null
+  summary: string | null
+  actionsTaken: unknown
+  filesChanged: string[] | null
+  commandsExecuted: string[] | null
+  testBuildResults: string | null
+  commitsCreated: string[] | null
+  nextSuggestedStep: string | null
+  error: string | null
+}
+
+export interface LoopEventRow {
+  id: string
+  loopId: string
+  runId: string | null
+  ts: number
+  type: string
+  message: string
+  severity: 'info' | 'success' | 'warning' | 'error'
+  metadata: unknown
+}
+
 function jsonOrNull(value: unknown): string | null {
   if (value === undefined || value === null) return null
   try {
     return JSON.stringify(value)
   } catch {
     return null
+  }
+}
+
+function parseJsonValue(raw: unknown): unknown {
+  if (typeof raw !== 'string' || !raw) return null
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return null
+  }
+}
+
+function parseStringArray(raw: unknown): string[] | null {
+  const parsed = parseJsonValue(raw)
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : null
+}
+
+function toLoopRun(r: Record<string, unknown>): LoopRunRow {
+  return {
+    id: r.id as string,
+    loopId: r.loop_id as string,
+    runIndex: (r.run_index as number) ?? 0,
+    startedAt: (r.started_at as number) ?? 0,
+    endedAt: (r.ended_at as number | null) ?? null,
+    status: (r.status as string) ?? 'unknown',
+    providerId: (r.provider_id as string | null) ?? null,
+    model: (r.model as string | null) ?? null,
+    summary: (r.summary as string | null) ?? null,
+    actionsTaken: parseJsonValue(r.actions_taken),
+    filesChanged: parseStringArray(r.files_changed),
+    commandsExecuted: parseStringArray(r.commands_executed),
+    testBuildResults: (r.test_build_results as string | null) ?? null,
+    commitsCreated: parseStringArray(r.commits_created),
+    nextSuggestedStep: (r.next_suggested_step as string | null) ?? null,
+    error: (r.error as string | null) ?? null
+  }
+}
+
+function toLoopEvent(r: Record<string, unknown>): LoopEventRow {
+  const severity = r.severity === 'success' || r.severity === 'warning' || r.severity === 'error' ? r.severity : 'info'
+  return {
+    id: r.id as string,
+    loopId: r.loop_id as string,
+    runId: (r.run_id as string | null) ?? null,
+    ts: (r.ts as number) ?? 0,
+    type: (r.type as string) ?? 'event',
+    message: (r.message as string) ?? '',
+    severity,
+    metadata: parseJsonValue(r.metadata)
   }
 }
 
@@ -1450,6 +1529,15 @@ export function recordLoopRun(input: LoopRunRecordInput): string | null {
   return id
 }
 
+export function listLoopRuns(loopId: string, limit = 50): LoopRunRow[] {
+  if (!VALID_ID.test(loopId)) return []
+  return (
+    must()
+      .prepare('SELECT * FROM loop_runs WHERE loop_id = ? ORDER BY run_index DESC, started_at DESC LIMIT ?')
+      .all(loopId, Math.max(1, Math.min(200, Math.floor(limit)))) as Record<string, unknown>[]
+  ).map(toLoopRun)
+}
+
 export function recordLoopEvent(input: {
   loopId: string
   runId?: string | null
@@ -1476,6 +1564,15 @@ export function recordLoopEvent(input: {
       jsonOrNull(input.metadata)
     )
   updateMacroSession(input.loopId, { latestResult: input.message })
+}
+
+export function listLoopEvents(loopId: string, limit = 80): LoopEventRow[] {
+  if (!VALID_ID.test(loopId)) return []
+  return (
+    must()
+      .prepare('SELECT * FROM loop_events WHERE loop_id = ? ORDER BY ts DESC LIMIT ?')
+      .all(loopId, Math.max(1, Math.min(250, Math.floor(limit)))) as Record<string, unknown>[]
+  ).map(toLoopEvent)
 }
 
 export function listMacroTurns(sessionId: string): MacroTurnRow[] {

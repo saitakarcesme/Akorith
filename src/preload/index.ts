@@ -204,6 +204,8 @@ const macro = Object.freeze({
   respondPermission: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:respondPermission', args),
   inspectWorkspace: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:inspectWorkspace', { sessionId }),
   syncWorkspace: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:syncWorkspace', { sessionId }),
+  listRuns: (sessionId: string, limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:listRuns', { sessionId, limit }),
+  listEvents: (sessionId: string, limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:listEvents', { sessionId, limit }),
   get: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:get', { sessionId }),
   list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
 })

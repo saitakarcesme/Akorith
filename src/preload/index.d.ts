@@ -726,6 +726,36 @@ export type LoopWorkspaceStatusResponse =
   | { ok: true; status: LoopWorkspaceStatus }
   | { ok: false; error: string; status?: LoopWorkspaceStatus }
 
+export interface LoopRunRow {
+  id: string
+  loopId: string
+  runIndex: number
+  startedAt: number
+  endedAt: number | null
+  status: string
+  providerId: string | null
+  model: string | null
+  summary: string | null
+  actionsTaken: unknown
+  filesChanged: string[] | null
+  commandsExecuted: string[] | null
+  testBuildResults: string | null
+  commitsCreated: string[] | null
+  nextSuggestedStep: string | null
+  error: string | null
+}
+
+export interface LoopEventRow {
+  id: string
+  loopId: string
+  runId: string | null
+  ts: number
+  type: string
+  message: string
+  severity: 'info' | 'success' | 'warning' | 'error'
+  metadata: unknown
+}
+
 export interface MacroApi {
   createSession(args: MacroCreateRequest): Promise<MacroResponse>
   /** Phase 20: scaffold an everyday-dev project and bind an auto-commit loop to it. */
@@ -761,6 +791,10 @@ export interface MacroApi {
   inspectWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
   /** Phase 24: pull/rebase and push this loop workspace to AkorithLoop. */
   syncWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
+  /** Phase 24: persisted per-run ledger rows. */
+  listRuns(sessionId: string, limit?: number): Promise<LoopRunRow[]>
+  /** Phase 24: persisted loop event ledger rows. */
+  listEvents(sessionId: string, limit?: number): Promise<LoopEventRow[]>
   get(sessionId: string): Promise<MacroState | null>
   list(limit?: number): Promise<MacroSessionRow[]>
 }

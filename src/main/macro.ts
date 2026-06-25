@@ -25,6 +25,8 @@ import {
   ensureProjectForPath,
   getMacroSession,
   getMacroState,
+  listLoopEvents,
+  listLoopRuns,
   listMacroSessions,
   recordLoopEvent,
   recordLoopRun,
@@ -1994,6 +1996,16 @@ export function registerMacroIpc(): void {
       return { ok: false, error: 'invalid macro:syncWorkspace payload' }
     }
     return syncLoopGit(args.sessionId)
+  })
+
+  ipcMain.handle('macro:listRuns', (_event, args: { sessionId: string; limit?: number }) => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return []
+    return listLoopRuns(args.sessionId, typeof args.limit === 'number' ? args.limit : 50)
+  })
+
+  ipcMain.handle('macro:listEvents', (_event, args: { sessionId: string; limit?: number }) => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return []
+    return listLoopEvents(args.sessionId, typeof args.limit === 'number' ? args.limit : 80)
   })
 
   ipcMain.handle('macro:list', (_event, args: { limit?: number }) =>

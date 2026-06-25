@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { LoopWorkspaceStatus, MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind, PtySnapshot } from '../../../preload/index.d'
+import type { LoopEventRow, LoopRunRow, LoopWorkspaceStatus, MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind, PtySnapshot } from '../../../preload/index.d'
 import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
@@ -249,6 +249,14 @@ function syncTone(status: LoopWorkspaceStatus | null): Friendly['tone'] {
   return 'idle'
 }
 
+function statusTone(status: string, fallback: Friendly['tone'] = 'idle'): Friendly['tone'] {
+  if (/complete|success|advanced/i.test(status)) return 'done'
+  if (/running|active|started|retry/i.test(status)) return 'running'
+  if (/fail|error|regress|blocked/i.test(status)) return 'error'
+  if (/attention|warning|pause|stopped/i.test(status)) return 'paused'
+  return fallback
+}
+
 function timeAgo(ts: number): string {
   const diff = Math.max(0, Date.now() - ts)
   const minute = 60_000
@@ -382,6 +390,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [detailTarget, setDetailTarget] = useState<ExecutorTarget>('t1')
   const [terminalSnapshot, setTerminalSnapshot] = useState<PtySnapshot | null>(null)
   const [workspaceStatus, setWorkspaceStatus] = useState<LoopWorkspaceStatus | null>(null)
+  const [loopRuns, setLoopRuns] = useState<LoopRunRow[]>([])
+  const [loopEvents, setLoopEvents] = useState<LoopEventRow[]>([])
   const [workspaceSyncing, setWorkspaceSyncing] = useState(false)
   const [savingPlanner, setSavingPlanner] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -584,6 +594,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   useEffect(() => {
     if (!active || view !== 'detail' || !selectedId) {
       setWorkspaceStatus(null)
+      setLoopRuns([])
+      setLoopEvents([])
       return
     }
     let cancelled = false
@@ -592,6 +604,16 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         if (!cancelled) setWorkspaceStatus(res.status ?? null)
       }).catch(() => {
         if (!cancelled) setWorkspaceStatus(null)
+      })
+      void window.api.macro.listRuns(selectedId, 24).then((rows) => {
+        if (!cancelled) setLoopRuns(rows)
+      }).catch(() => {
+        if (!cancelled) setLoopRuns([])
+      })
+      void window.api.macro.listEvents(selectedId, 32).then((rows) => {
+        if (!cancelled) setLoopEvents(rows)
+      }).catch(() => {
+        if (!cancelled) setLoopEvents([])
       })
     }
     load()
@@ -613,6 +635,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     setSelectedId(id)
     setDetail(null)
     setWorkspaceStatus(null)
+    setLoopRuns([])
+    setLoopEvents([])
     setView('detail')
     setError(null)
   }, [])
@@ -1007,6 +1031,44 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                     <li key={i}>
                       <span>{a.type.replace(/_/g, ' ')}</span>
                       <strong>{a.message || a.reason || (a.at ? timeAgo(a.at) : '')}</strong>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+            <section className="loop-panel">
+              <h2>Run ledger</h2>
+              {loopRuns.length === 0 ? (
+                <div className="loop-empty">No persisted run rows yet.</div>
+              ) : (
+                <ol className="loop-ledger">
+                  {loopRuns.slice(0, 10).map((run) => (
+                    <li key={run.id}>
+                      <div>
+                        <span className={`loop-pill is-${statusTone(run.status)}`}>{run.status.replace(/_/g, ' ')}</span>
+                        <strong>Run {run.runIndex}</strong>
+                      </div>
+                      <p>{run.summary || run.error || run.nextSuggestedStep || 'No summary recorded.'}</p>
+                      <span>{formatShortDate(run.endedAt || run.startedAt)} · {(run.commitsCreated ?? []).length} commit{(run.commitsCreated ?? []).length === 1 ? '' : 's'}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+            <section className="loop-panel">
+              <h2>Event log</h2>
+              {loopEvents.length === 0 ? (
+                <div className="loop-empty">No events recorded yet.</div>
+              ) : (
+                <ol className="loop-ledger">
+                  {loopEvents.slice(0, 12).map((event) => (
+                    <li key={event.id}>
+                      <div>
+                        <span className={`loop-pill is-${statusTone(event.severity, event.severity === 'warning' ? 'paused' : 'idle')}`}>{event.severity}</span>
+                        <strong>{event.type.replace(/_/g, ' ')}</strong>
+                      </div>
+                      <p>{event.message}</p>
+                      <span>{formatShortDate(event.ts)}</span>
                     </li>
                   ))}
                 </ol>
