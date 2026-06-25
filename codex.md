@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with
-electron-vite in strict numbered phases.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 24: Loop
+Completion**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -325,6 +325,11 @@ electron-vite in strict numbered phases.
       run timelines, audit trail, reports, archive/remove actions, and persistent Loop-native
       storage (`loop_targets`, `loop_runs`, `loop_events`, `loop_templates`, `loop_artifacts`,
       `loop_reports`) layered onto `macro_sessions`.
+- [x] **Phase 24** - Loop Completion. Loop workspaces live under `~/Documents/AkorithLoop`, use
+      `https://github.com/saitakarcesme/AkorithLoop.git`, force `push_enabled=true` for
+      commit-producing loops, show GitHub sync health in Loop detail, expose manual Sync to
+      AkorithLoop, and render persisted `loop_runs` / `loop_events` as Run ledger and Event log.
+      `npm run verify:workspace-loop` validates Phase-N commit numbering and workspace inspection.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -365,6 +370,12 @@ electron-vite in strict numbered phases.
   validation result, commit messages, next step, and errors. Remove deletes the Loop record only,
   never the workspace folder. Existing local-project targets are bound conservatively with no
   scaffold/write on bind; fresh Loop projects still scaffold under Akorith Projects.
+- **Loop completion (Phase 24):** all loop output is GitHub-auditable under AkorithLoop.
+  `workspace.ts` owns `inspectLoopWorkspace()` and `syncAndPushLoopWorkspace()`; renderer calls
+  only validated macro IPC (`macro:inspectWorkspace`, `macro:syncWorkspace`, `macro:listRuns`,
+  `macro:listEvents`). The main process normalizes commit-producing loops to `push_enabled=true`
+  and pushes Phase 0 plus every later `Phase N: ...` commit. Manual sync repairs the origin URL,
+  pulls/rebases with autostash, pushes to `main`, and records a loop event.
 - **Auto Mode (Phase 11) is opt-in and cautious — do not loosen its gates.** It may auto-send
   the planner's prompt and auto-answer ONLY low-risk, one-time, high-confidence (≥0.6)
   confirmations (`agentic-core.decidePermissionPolicy`). Medium/high-risk, low-confidence,

@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 16 (GitHub Test Lab,
-LAN Ollama discovery, and image chat attachments).
+with electron-vite, in strict numbered phases — currently through Phase 24 (Loop Completion:
+AkorithLoop sync guarantees, loop git health, and persisted run/event ledgers).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -22,7 +22,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 14 project/chat separation + activity drawer fixes · 15 theme toggle ·
 15.1 local-provider/workspace-context reliability polish ·
 23 general-purpose task loops · 23.1 Fully Active/Passive Loop Switch ·
-**23.2 Loop Operations Center** — all done.
+23.2 Loop Operations Center ·
+**24 Loop Completion** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -628,6 +629,17 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   include a structured Loop profile plus safety rules. Auto-commit returns an explicit result, and
   project-like loops no longer mark themselves complete when the critic claims success but no files
   changed and no commit was made. Archive/remove IPC channels abort active drivers first.
+- **Phase 24: Loop Completion.** Loop workspaces are first-class AkorithLoop outputs. The default
+  loop repository is `https://github.com/saitakarcesme/AkorithLoop.git`, each loop lives in its own
+  folder under `~/Documents/AkorithLoop`, and commit-producing loops force `push_enabled=true`
+  even if a stale renderer payload says otherwise. `workspace.ts` exposes read-only
+  `inspectLoopWorkspace()` plus `syncAndPushLoopWorkspace()`; `macro:inspectWorkspace` and
+  `macro:syncWorkspace` are validated IPC endpoints. The Loop detail UI shows GitHub sync state
+  (remote, branch, path-scoped commit count, latest phase, ahead/behind, dirty file count, head),
+  and the **Sync to AkorithLoop** button records success/failure in `loop_events`. `loop_runs` and
+  `loop_events` now have typed list APIs and render as Run ledger / Event log panels, so restarts
+  do not hide what happened. `npm run verify:workspace-loop` is the canonical headless check for
+  Phase-N commit numbering and loop workspace inspection.
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain
@@ -1399,6 +1411,25 @@ The backend stores Loop-native targets/runs/events/templates/artifacts/reports, 
 actions into `loop_events`, records each autonomous run in `loop_runs`, uses the loop workspace for
 repo digest context, and refuses to mark project-like loops complete when no project change was
 verified.
+
+### Phase 24: Loop Completion
+
+Loop output is now GitHub-auditable instead of only local. Existing Phase 23 loop folders were
+migrated into `~/Documents/AkorithLoop` and pushed to `saitakarcesme/AkorithLoop` with one folder
+per loop. New commit-producing loops normalize `push_enabled` to true in the main process, push the
+Phase 0 scaffold immediately, and push every later `Phase N: ...` commit from `maybeAutoCommit()`.
+The renderer cannot silently disable push while `commitBehavior` is `commit`.
+
+The Loop detail page has a GitHub sync panel backed by main-process git inspection. It reports the
+remote URL, branch, path-scoped commit count, latest Phase number, ahead/behind counts, dirty file
+count, head, and latest commit subject. Manual **Sync to AkorithLoop** runs through the shared loop
+git queue, repairs the origin URL, pulls/rebases with autostash, pushes to `main`, updates
+`push_enabled`, and writes a success/failure `loop_events` record.
+
+Loop history is now durable after restart: `listLoopRuns()` / `listLoopEvents()` expose the
+persisted `loop_runs` and `loop_events` tables through `macro:listRuns` and `macro:listEvents`.
+`LoopsPage.tsx` renders these as Run ledger and Event log panels in addition to the older turn
+timeline and `auto_actions` audit trail. Keep loop deletes DB-only; never delete loop folders.
 
 ## Conventions
 
