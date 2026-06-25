@@ -792,19 +792,6 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-profile">
-        {settingsOpen && (
-          <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
-            <SettingsCenter
-              theme={theme}
-              displayName={displayName}
-              providers={providers}
-              onThemeChange={onThemeChange}
-              onDisplayNameChange={setDisplayName}
-              onRefreshProviders={loadProviders}
-              onClose={() => setSettingsOpen(false)}
-            />
-          </div>
-        )}
         <button type="button" className="profile-button" onClick={() => setSettingsOpen((value) => !value)} title="Settings">
           <UserIcon size={17} />
           <span>
@@ -896,6 +883,20 @@ export default function Sidebar({
         </div>
       )}
       </aside>
+
+      {settingsOpen && (
+        <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+          <SettingsCenter
+            theme={theme}
+            displayName={displayName}
+            providers={providers}
+            onThemeChange={onThemeChange}
+            onDisplayNameChange={setDisplayName}
+            onRefreshProviders={loadProviders}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </div>
+      )}
     </>
   )
 }

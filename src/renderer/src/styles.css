@@ -76,6 +76,7 @@
   --radius-xl: 22px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 140ms var(--ease);
+  --sidebar-slide: 240ms var(--ease);
   --font-ui:
     -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono:
@@ -294,6 +295,10 @@ textarea:focus-visible {
   background: transparent;
   border-right: 0;
   overflow: visible;
+  transition:
+    flex-basis var(--sidebar-slide),
+    width var(--sidebar-slide),
+    min-width var(--sidebar-slide);
 }
 
 .sidebar-surface {
@@ -307,6 +312,11 @@ textarea:focus-visible {
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
   transform: translateX(0);
+  transition:
+    transform var(--sidebar-slide),
+    box-shadow var(--sidebar-slide),
+    background-color var(--fast),
+    border-color var(--fast);
   will-change: transform;
 }
 
@@ -610,7 +620,7 @@ textarea:focus-visible {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4164,6 +4174,9 @@ textarea:focus-visible {
   gap: 12px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border-soft);
+  transition:
+    padding var(--sidebar-slide),
+    border-color var(--fast);
 }
 
 .sidebar.is-collapsed + .workspace .ws-topbar {
