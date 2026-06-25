@@ -84,6 +84,11 @@ interface TestPreset {
 }
 const PRESETS: TestPreset[] = [
   {
+    id: 'general',
+    label: 'General coverage',
+    focus: 'Choose the most valuable stable behavior in this repository and write broad, useful tests for it.'
+  },
+  {
     id: 'debug',
     label: 'Debug regression',
     focus: 'Find likely regressions and fragile logic; write focused tests that reproduce bugs or edge-case failures.'
@@ -125,6 +130,7 @@ function evaluationWarning(evaluation: EvaluationRow): string | null {
 export default function TestPage({ active, activeProject }: TestPageProps): JSX.Element {
   const [settings, setSettings] = useState<TestSettings | null>(null)
   const [sourceRepo, setSourceRepo] = useState('')
+  const [sourceMode, setSourceMode] = useState<'folder' | 'github'>('folder')
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [providerId, setProviderId] = useState('')
@@ -169,7 +175,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   const localProvider = providers.find((p) => p.id === 'local')
   const selected = localProvider
-  const judgeProviders = providers.filter((p) => p.available.ok && p.kind.includes('chat') && (p.id === 'claude' || p.id === 'chatgpt'))
+  const judgeProviders = providers.filter((p) => p.available.ok && (p.id === 'local' || p.id === 'claude' || p.id === 'chatgpt'))
   const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
   const projectOptions = projects.filter((project) => Boolean(project.path))
   const selectedProjectPath = projectOptions.find((project) => project.path === sourceRepo)?.path ?? ''
@@ -232,15 +238,15 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setModel((cur) => (selected && selected.models.includes(cur) ? cur : (selected?.models[0] ?? '')))
   }, [selected])
 
-  // Pick a sensible but overridable judge default. ISAScore quality judging is
-  // intentionally subscription-only here: Claude first, then ChatGPT.
+  // Pick a sensible but overridable judge default. Phase 25 allows Local,
+  // Claude, or ChatGPT; Local is preferred when available.
   useEffect(() => {
     setJudgeProviderId((cur) => {
       if (judgeProviders.some((p) => p.id === cur)) return cur
       return (
+        judgeProviders.find((p) => p.id === 'local')?.id ||
         judgeProviders.find((p) => p.id === 'claude')?.id ||
         judgeProviders.find((p) => p.id === 'chatgpt')?.id ||
-        judgeProviders[0]?.id ||
         ''
       )
     })
@@ -269,6 +275,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setSourceNotice(null)
     }
     return resolved.path
+  }
+
+  const chooseFolder = async (): Promise<void> => {
+    setError(null)
+    const res = await window.api.projects.pickDirectory()
+    if (!res.ok) {
+      if (!res.cancelled) setError(res.error)
+      return
+    }
+    setSourceMode('folder')
+    setSourceRepo(res.path)
+    setDetection(null)
+    setRepoContext(null)
+    setSourceNotice(null)
   }
 
   const detect = async (): Promise<DetectionResult | null> => {
@@ -428,13 +448,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const canRun =
     !running &&
     Boolean(sourceRepo.trim()) &&
-    Boolean(selected?.available.ok)
+    Boolean(selected?.available.ok) &&
+    Boolean(model || selected?.models.length === 0) &&
+    Boolean(judgeProviderId)
 
   const handleRun = async (): Promise<void> => {
     setError(null)
     if (!canRun) {
       if (!sourceRepo.trim()) setError('Pick a source repo.')
       else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to generate tests.')
+      else if (!judgeProviderId) setError('Pick a result judge: Local, Claude, or ChatGPT.')
       return
     }
 
@@ -485,7 +508,14 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     if (runIds.length > 0) {
       setSelectedRunIds(runIds)
       setLatestEvaluation(null)
+      setPhase('scoring test result...')
+      const evaluation = await runEvaluation(runIds, { includeQuality: true })
+      if (evaluation) {
+        setPhase('exporting PDF report...')
+        await exportPdf(evaluation)
+      }
     }
+    setPhase('')
   }
 
   const stop = (): void => {
@@ -605,16 +635,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const runEvaluation = async (
     runIds = selectedRunIds,
     opts: { includeQuality?: boolean } = {}
-  ): Promise<void> => {
+  ): Promise<EvaluationRow | null> => {
     const wantsQuality = opts.includeQuality ?? true
     setEvalError(null)
     if (runIds.length === 0) {
       setEvalError('Select at least one finished run.')
-      return
+      return null
     }
     if (wantsQuality && !judgeProviderId) {
-      setEvalError('Pick Claude or ChatGPT to score this run.')
-      return
+      setEvalError('Pick Local, Claude, or ChatGPT to score this run.')
+      return null
     }
     setEvaluating(true)
     try {
@@ -626,13 +656,15 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       })
       if (!res.ok) {
         setEvalError(res.error)
-        return
+        return null
       }
       setLatestEvaluation(res.evaluation)
       setSelectedRunIds(res.evaluation.testRunIds)
       refreshEvaluations()
+      return res.evaluation
     } catch (err) {
       setEvalError(err instanceof Error ? err.message : String(err))
+      return null
     } finally {
       setEvaluating(false)
     }
@@ -688,88 +720,166 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   return (
     <div className="test-page">
       <div className="test-config">
-        <h2 className="test-title">Test lab</h2>
-        <p className="test-sub">
-          A local model writes tests for your repo; they run automatically in a fresh, isolated temp sandbox. The
-          source repo is never modified.
-        </p>
-
-        <label className="test-field">
-          <span>Project / repo</span>
-          {projectOptions.length > 0 && (
-            <select
-              value={selectedProjectPath}
-              onChange={(e) => {
-                setSourceRepo(e.target.value)
-                setDetection(null)
-                setRepoContext(null)
-                setSourceNotice(null)
-                setError(null)
-              }}
-            >
-              <option value="">GitHub URL or custom path</option>
-              {projectOptions.map((project) => (
-                <option key={project.id} value={project.path ?? ''}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <div className="test-row">
-            <input
-              type="text"
-              value={sourceRepo}
-              placeholder="Local path or https://github.com/owner/repo"
-              onChange={(e) => {
-                setSourceRepo(e.target.value)
-                setSourceNotice(null)
-              }}
-              spellCheck={false}
-            />
-            <button type="button" className="test-btn" onClick={() => void detect()}>
-              Auto-detect
-            </button>
+        <div className="test-head">
+          <div>
+            <h2 className="test-title">Test Lab</h2>
+            <p className="test-sub">
+              Pick a project or GitHub repo, choose a local model, choose the test subject, then let Akorith run and export the report.
+            </p>
           </div>
-        </label>
-
-        {sourceNotice && <div className="test-detected">{sourceNotice}</div>}
-
-        {detection && (
-          <div className="test-detected">
-            Detected: <strong>{detection.framework}</strong>
-            {detection.lockfile ? ` · lockfile ${detection.lockfile}` : ''}
-            {detection.note ? ` · ${detection.note}` : ''}
-          </div>
-        )}
-
-        {/* Simple flow: repo + test kind + Local model. */}
-        <div className="test-grid">
-          <label className="test-field">
-            <span>Test type</span>
-            <select value={preset} onChange={(e) => void applyPreset(e.target.value)}>
-              {PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {selected && selected.models.length > 0 && (
-            <label className="test-field">
-              <span>Local model</span>
-              <select value={model} onChange={(e) => setModel(e.target.value)}>
-                {selected.models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <div className="test-head-badge">Sandboxed</div>
         </div>
-        {selected && !selected.available.ok && (
-          <div className="test-error">Local (Ollama) is unavailable. Akorith will auto-start it when possible.</div>
-        )}
+
+        <div className="test-wizard">
+          <section className="test-step">
+            <div className="test-step-head">
+              <span>1</span>
+              <div>
+                <strong>Choose source</strong>
+                <p>Local folders and GitHub repos are copied into a fresh temp sandbox before tests run.</p>
+              </div>
+            </div>
+            <div className="test-source-tabs">
+              <button type="button" className={sourceMode === 'folder' ? 'is-selected' : ''} onClick={() => setSourceMode('folder')}>
+                Folder
+              </button>
+              <button type="button" className={sourceMode === 'github' ? 'is-selected' : ''} onClick={() => setSourceMode('github')}>
+                GitHub link
+              </button>
+            </div>
+            {sourceMode === 'folder' ? (
+              <div className="test-source-box">
+                {projectOptions.length > 0 && (
+                  <label className="test-field">
+                    <span>Saved project</span>
+                    <select
+                      value={selectedProjectPath}
+                      onChange={(e) => {
+                        setSourceRepo(e.target.value)
+                        setDetection(null)
+                        setRepoContext(null)
+                        setSourceNotice(null)
+                        setError(null)
+                      }}
+                    >
+                      <option value="">Choose a saved project or browse...</option>
+                      {projectOptions.map((project) => (
+                        <option key={project.id} value={project.path ?? ''}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="test-row">
+                  <input type="text" value={sourceRepo} placeholder="No folder selected" readOnly spellCheck={false} />
+                  <button type="button" className="test-btn" onClick={() => void chooseFolder()}>
+                    Choose folder
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label className="test-field">
+                <span>GitHub repository URL</span>
+                <div className="test-row">
+                  <input
+                    type="text"
+                    value={sourceRepo}
+                    placeholder="https://github.com/owner/repo"
+                    onChange={(e) => {
+                      setSourceRepo(e.target.value)
+                      setSourceNotice(null)
+                      setDetection(null)
+                      setRepoContext(null)
+                    }}
+                    spellCheck={false}
+                  />
+                  <button type="button" className="test-btn" onClick={() => void detect()}>
+                    Detect
+                  </button>
+                </div>
+              </label>
+            )}
+            {sourceNotice && <div className="test-detected">{sourceNotice}</div>}
+            {detection && (
+              <div className="test-detected">
+                Detected: <strong>{detection.framework}</strong>
+                {detection.lockfile ? ` · lockfile ${detection.lockfile}` : ''}
+                {detection.note ? ` · ${detection.note}` : ''}
+              </div>
+            )}
+          </section>
+
+          <section className="test-step">
+            <div className="test-step-head">
+              <span>2</span>
+              <div>
+                <strong>Choose local test writer</strong>
+                <p>Tests are generated by your Local/Ollama model, not an API key.</p>
+              </div>
+            </div>
+            {selected && selected.models.length > 0 ? (
+              <label className="test-field">
+                <span>Local model</span>
+                <select value={model} onChange={(e) => setModel(e.target.value)}>
+                  {selected.models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className="test-error">Local (Ollama) is unavailable. Akorith will auto-start it when possible.</div>
+            )}
+          </section>
+
+          <section className="test-step">
+            <div className="test-step-head">
+              <span>3</span>
+              <div>
+                <strong>Choose test subject</strong>
+                <p>No writing required. Pick the intent and Akorith will choose the concrete target from the repo.</p>
+              </div>
+            </div>
+            <div className="test-choice-grid">
+              {PRESETS.map((p) => (
+                <button key={p.id} type="button" className={preset === p.id ? 'is-selected' : ''} onClick={() => void applyPreset(p.id)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="test-step">
+            <div className="test-step-head">
+              <span>4</span>
+              <div>
+                <strong>Choose result judge</strong>
+                <p>The judge scores the finished run and the PDF records objective metrics plus quality rationale.</p>
+              </div>
+            </div>
+            <div className="test-grid">
+              <label className="test-field">
+                <span>Judge provider</span>
+                <select value={judgeProviderId} onChange={(e) => setJudgeProviderId(e.target.value)}>
+                  {judgeProviders.length === 0 && <option value="">No available judge</option>}
+                  {judgeProviders.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+              {judgeSelected && judgeSelected.models.length > 0 && (
+                <label className="test-field">
+                  <span>Judge model</span>
+                  <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
+                    {judgeSelected.models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          </section>
+        </div>
 
         {/* Advanced: auto-filled runner details, only needed when detection misses. */}
         <details className="test-advanced">
@@ -807,7 +917,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              Generate tests
+              Run test and export PDF
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -879,7 +989,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         <div className="test-evaluate">
           <div className="test-evaluate-head">
             <div>
-              <div className="test-recent-title">Evaluate</div>
+              <div className="test-recent-title">Review and PDF</div>
               <div className="test-hint">
                 {selectedRunIds.length === 0
                   ? 'Select finished runs below.'
@@ -892,7 +1002,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               disabled={evaluating || selectedRunIds.length === 0 || !judgeProviderId}
               onClick={() => void runEvaluation()}
             >
-              {evaluating ? 'Scoring…' : 'Score with Claude / ChatGPT'}
+              {evaluating ? 'Scoring…' : 'Re-score selected runs'}
             </button>
           </div>
 
@@ -900,7 +1010,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               <label className="test-field">
                 <span>Score provider</span>
                 <select value={judgeProviderId} onChange={(e) => setJudgeProviderId(e.target.value)}>
-                  {judgeProviders.length === 0 && <option value="">No available Claude / ChatGPT</option>}
+                  {judgeProviders.length === 0 && <option value="">No available judge</option>}
                   {judgeProviders.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
