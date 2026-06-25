@@ -630,6 +630,95 @@ function renderCode(doc: PdfDoc, rows: TestRunRow[]): void {
   }
 }
 
+function passSummary(run: TestRunRow): string {
+  const passed = run.passed ?? 0
+  const failed = run.failed ?? 0
+  const errored = run.errored ?? 0
+  const total = passed + failed + errored
+  if (total <= 0) return run.status ?? 'no test counts'
+  return `${passed}/${total} passed${failed ? `, ${failed} failed` : ''}${errored ? `, ${errored} errors` : ''}`
+}
+
+function reportVerdict(evaluation: EvaluationRow): string {
+  if (evaluation.totalScore >= 85) return 'Strong'
+  if (evaluation.totalScore >= 70) return 'Usable'
+  if (evaluation.totalScore >= 50) return 'Needs review'
+  return 'Weak'
+}
+
+function renderHero(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[]): void {
+  const pageWidth = doc.page.width
+  doc.rect(0, 0, pageWidth, 112).fill('#111827')
+  doc.y = 30
+  doc.font('Helvetica-Bold').fontSize(23).fillColor('#f9fafb').text('Akorith Test Report', left(doc), doc.y, {
+    width: contentWidth(doc)
+  })
+  doc.font('Helvetica').fontSize(10).fillColor('#c7d2fe').text(
+    `${reportVerdict(evaluation)} result - ISAScore ${evaluation.totalScore.toFixed(1)} - ${evaluation.kind}`,
+    left(doc),
+    doc.y + 5,
+    { width: contentWidth(doc) }
+  )
+  doc.y = 132
+
+  const cardY = doc.y
+  const gap = 10
+  const cardW = (contentWidth(doc) - gap * 2) / 3
+  const cards = [
+    ['Source', sourceRepoLabel(rows)],
+    ['Judge', evaluation.judgeModel ?? 'objective-only'],
+    ['Generated', safeDate(Date.now())]
+  ]
+  for (let i = 0; i < cards.length; i++) {
+    const x = left(doc) + i * (cardW + gap)
+    doc.rect(x, cardY, cardW, 52).fill('#f8fafc')
+    doc.rect(x, cardY, cardW, 52).strokeColor('#d8dee9').lineWidth(0.5).stroke()
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#6b7280').text(cards[i][0].toUpperCase(), x + 10, cardY + 9, {
+      width: cardW - 20,
+      lineBreak: false,
+      ellipsis: true
+    })
+    doc.font('Helvetica').fontSize(9).fillColor('#111827').text(cards[i][1], x + 10, cardY + 25, {
+      width: cardW - 20,
+      lineBreak: false,
+      ellipsis: true
+    })
+  }
+  doc.y = cardY + 68
+  small(doc, `Target: ${rows[0]?.targetDesc || 'not recorded'}`)
+  small(doc, `Evaluation id: ${evaluation.id}`)
+}
+
+function renderRunEvidence(doc: PdfDoc, rows: TestRunRow[]): void {
+  section(doc, 'Run Evidence')
+  for (const run of rows) {
+    ensureSpace(doc, 94)
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(modelLabel(run), left(doc), doc.y, {
+      width: contentWidth(doc)
+    })
+    small(
+      doc,
+      `Status: ${run.status ?? 'unknown'} - ${passSummary(run)} - duration ${
+        run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : 'n/a'
+      } - tokens ${run.tokens ?? 0}`
+    )
+    if (run.rawOutput?.trim()) {
+      ensureSpace(doc, 90)
+      const excerpt = cap(run.rawOutput.trim().slice(-2_400), 2_400)
+      const y = doc.y + 4
+      doc.rect(left(doc), y, contentWidth(doc), Math.min(130, 22 + excerpt.split('\n').length * 8)).fill('#f8fafc')
+      doc.font('Courier').fontSize(7).fillColor('#111827').text(excerpt, left(doc) + 8, y + 8, {
+        width: contentWidth(doc) - 16,
+        height: 112,
+        lineGap: 1,
+        ellipsis: true
+      })
+      doc.y = y + 136
+    }
+    doc.moveDown(0.4)
+  }
+}
+
 async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: string): Promise<void> {
   mkdirSync(dirname(pdfPath), { recursive: true })
   await new Promise<void>((resolve, reject) => {
@@ -641,25 +730,12 @@ async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: 
     doc.pipe(stream)
 
     const scores = scorePayload(evaluation)
-    doc.font('Helvetica-Bold').fontSize(20).fillColor('#111827').text('Akorith Evaluation Report', left(doc), doc.y, {
-      width: contentWidth(doc)
-    })
-    doc.font('Helvetica').fontSize(10).fillColor('#4b5563').text(`Generated ${safeDate(Date.now())}`, left(doc), doc.y, {
-      width: contentWidth(doc)
-    })
-    doc.moveDown(0.4)
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text(evaluation.kind.toUpperCase(), left(doc), doc.y, {
-      width: contentWidth(doc)
-    })
-    small(doc, `Source: ${sourceRepoLabel(rows)}`)
-    small(doc, `Target: ${rows[0]?.targetDesc || 'not recorded'}`)
-    small(doc, `Judge: ${evaluation.judgeModel ?? 'objective-only'}`)
-    small(doc, `Stored evaluation: ${evaluation.id}`)
+    renderHero(doc, evaluation, rows)
     if (scores.qualityFailure) small(doc, `Quality judge omitted: ${scores.qualityFailure}`)
-    addRule(doc)
 
     section(doc, 'Objective Metrics + ISAScore')
     renderTable(doc, evaluation, rows)
+    renderRunEvidence(doc, rows)
 
     section(doc, 'Score Breakdown')
     renderBreakdown(doc, evaluation)
@@ -676,7 +752,7 @@ async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: 
 
     doc.moveDown(0.8)
     addRule(doc)
-    small(doc, 'PDF generated by Akorith using the single evaluation report template.')
+    small(doc, 'PDF generated by Akorith Test Lab. Source repositories are copied into a temporary sandbox before execution.')
     doc.end()
   })
 }
