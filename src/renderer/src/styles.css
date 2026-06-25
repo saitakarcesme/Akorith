@@ -388,18 +388,18 @@ textarea:focus-visible {
 .sidebar-nav {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 2px;
   flex: 0 0 auto;
-  padding: 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
 }
 
 .sidebar-nav button {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
@@ -432,7 +432,7 @@ textarea:focus-visible {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 8px 12px;
+  padding: 5px 8px 10px;
 }
 
 .sidebar-fixed-groups {
@@ -4698,8 +4698,8 @@ textarea:focus-visible {
 
 /* ---- provider folders: secondary, compact, no loud color blocks ---- */
 .provider-section {
-  margin: 2px 0;
-  padding: 4px 0;
+  margin: 0;
+  padding: 1px 0;
   background: transparent !important;
   border-radius: var(--radius-sm);
 }
@@ -5314,7 +5314,7 @@ textarea:focus-visible {
 .sidebar-fixed-groups {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
 }
 
 .sidebar-fixed-groups .sidebar-section {
@@ -5322,12 +5322,13 @@ textarea:focus-visible {
 }
 
 .sidebar-fixed-groups .sidebar-section-header {
-  min-height: 32px;
-  padding: 3px 4px;
+  min-height: 27px;
+  padding: 1px 4px;
 }
 
 .sidebar-fixed-groups .sidebar-fold {
   gap: 6px;
+  padding: 3px 7px;
 }
 
 .sidebar-fixed-groups .sidebar-count {
