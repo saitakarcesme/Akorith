@@ -66,6 +66,8 @@
   --provider-local-bg: rgba(154, 143, 224, 0.14);
 
   --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.45);
+  --sidebar-width: 320px;
+  --sidebar-peek-width: 320px;
 
   /* Consistent radius system (modern, not cartoonish) */
   --radius-sm: 8px;
@@ -264,8 +266,9 @@ textarea:focus-visible {
 
 .sidebar {
   position: relative;
-  flex: 0 0 268px;
-  width: 268px;
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   /* Light/white product navigation. Sidebar gets its own token scope so the
@@ -293,22 +296,70 @@ textarea:focus-visible {
 }
 
 .sidebar.is-collapsed {
-  flex-basis: 72px;
-  width: 72px;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  border-right: 0;
+  background: transparent;
+  overflow: visible;
 }
 
-.sidebar.is-collapsed .sidebar-brand {
+.sidebar.is-peeking {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 80;
+  flex: 0 0 var(--sidebar-peek-width);
+  width: min(var(--sidebar-peek-width), calc(100vw - 24px));
+  min-width: 0;
+  background: #111113;
+  border-right: 1px solid var(--sidebar-border);
+  border-radius: 0 14px 14px 0;
+  box-shadow: 22px 0 60px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+}
+
+.sidebar-hover-zone {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 78;
+  width: 22px;
+}
+
+.sidebar-edge-button {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 79;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.sidebar-edge-button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.sidebar.is-collapsed:not(.is-peeking) .sidebar-brand {
   flex-direction: column;
   justify-content: center;
   gap: 8px;
   padding: 12px 0 10px;
 }
 
-.sidebar.is-collapsed .brand-lockup {
+.sidebar.is-collapsed:not(.is-peeking) .brand-lockup {
   justify-content: center;
 }
 
-.sidebar.is-collapsed .brand-mark {
+.sidebar.is-collapsed:not(.is-peeking) .brand-mark {
   width: 42px;
   height: 42px;
   border-radius: 14px;
@@ -409,7 +460,7 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.sidebar.is-collapsed .sidebar-nav button {
+.sidebar.is-collapsed:not(.is-peeking) .sidebar-nav button {
   width: 44px;
   height: 42px;
   justify-content: center;
@@ -1182,14 +1233,14 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.sidebar.is-collapsed .sidebar-profile {
+.sidebar.is-collapsed:not(.is-peeking) .sidebar-profile {
   display: flex;
   justify-content: center;
   margin-top: auto;
   padding: 10px 0;
 }
 
-.sidebar.is-collapsed .profile-button {
+.sidebar.is-collapsed:not(.is-peeking) .profile-button {
   width: 44px;
   height: 42px;
   flex: 0 0 auto;
@@ -1203,12 +1254,12 @@ textarea:focus-visible {
 /* The collapsed button has a single icon (UserIcon). It is also svg:last-child,
    so the expanded rule below would shove it right with margin-left:auto and dim
    it. Re-center it and restore a legible color so it matches the nav items. */
-.sidebar.is-collapsed .profile-button svg {
+.sidebar.is-collapsed:not(.is-peeking) .profile-button svg {
   margin-left: 0;
   color: inherit;
 }
 
-.sidebar.is-collapsed .profile-button:hover {
+.sidebar.is-collapsed:not(.is-peeking) .profile-button:hover {
   background: var(--hover);
 }
 
@@ -4146,6 +4197,10 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--border-soft);
 }
 
+.sidebar.is-collapsed + .workspace .ws-topbar {
+  padding-left: 58px;
+}
+
 .ws-topbar-left {
   display: flex;
   align-items: center;
@@ -4892,7 +4947,7 @@ textarea:focus-visible {
 .sidebar-newchat.is-active {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
-.sidebar.is-collapsed .sidebar-newchat {
+.sidebar.is-collapsed:not(.is-peeking) .sidebar-newchat {
   width: 44px;
   height: 42px;
   justify-content: center;

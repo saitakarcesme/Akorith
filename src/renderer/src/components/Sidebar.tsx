@@ -115,6 +115,7 @@ export default function Sidebar({
   // Defaults to expanded since the workspace is the primary entry point.
   const [projectsCollapsed, setProjectsCollapsed] = useState(() => storageBoolean('akorith.projectsCollapsed', false))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
+  const [sidebarPeeking, setSidebarPeeking] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -204,6 +205,7 @@ export default function Sidebar({
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const recentSessions = sessions
   const generalSessions = sessions.filter((s) => !s.projectId)
+  const sidebarExpanded = !sidebarCollapsed || sidebarPeeking
 
   // Registry providers first (in registry order), then any orphaned provider
   // ids that still have sessions but are gone from config.
@@ -358,24 +360,71 @@ export default function Sidebar({
     onHistoryChange()
   }
 
+  const pinSidebar = (): void => {
+    setSidebarPeeking(false)
+    setSidebarCollapsed(false)
+  }
+
+  const revealSidebar = (): void => {
+    if (sidebarCollapsed) setSidebarPeeking(true)
+  }
+
+  const closeSidebar = (): void => {
+    setSettingsOpen(false)
+    setSidebarPeeking(false)
+    setSidebarCollapsed(true)
+  }
+
+  const handleSidebarLeave = (): void => {
+    if (sidebarCollapsed && !settingsOpen && !createOpen && !confirmRemoveProject && !projectMenuOpen && !projectRowMenu) {
+      setSidebarPeeking(false)
+    }
+  }
+
   return (
-    <aside className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
+    <>
+      {sidebarCollapsed && (
+        <>
+          <div
+            className="sidebar-hover-zone"
+            onMouseEnter={revealSidebar}
+            onMouseMove={revealSidebar}
+            onPointerEnter={revealSidebar}
+            onPointerMove={revealSidebar}
+          />
+          {!sidebarPeeking && (
+            <button
+              type="button"
+              className="sidebar-edge-button"
+              title="Open sidebar"
+              onClick={pinSidebar}
+            >
+              <PanelsIcon size={16} />
+            </button>
+          )}
+        </>
+      )}
+
+      <aside
+        className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
+        onMouseEnter={revealSidebar}
+        onPointerEnter={revealSidebar}
+        onMouseLeave={handleSidebarLeave}
+      >
+        {sidebarExpanded && (
+          <>
       <div className="sidebar-brand">
         <div className="brand-lockup" title="Akorith">
-          {sidebarCollapsed ? (
-            <img className="brand-mark" src="./akorith-logo.png" alt="" />
-          ) : (
-            <div>
-              <div className="brand-name">Akorith</div>
-              <div className="brand-subtitle">Agent orchestration</div>
-            </div>
-          )}
+          <div>
+            <div className="brand-name">Akorith</div>
+            <div className="brand-subtitle">Agent orchestration</div>
+          </div>
         </div>
         <button
           type="button"
           className="sidebar-collapse-btn"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={() => setSidebarCollapsed((value) => !value)}
+          title={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
+          onClick={sidebarCollapsed ? pinSidebar : closeSidebar}
         >
           <ChevronIcon size={16} direction={sidebarCollapsed ? 'right' : 'left'} />
         </button>
@@ -389,7 +438,7 @@ export default function Sidebar({
           title="Start a fresh general chat"
         >
           <PlusIcon size={16} />
-          {!sidebarCollapsed && <span>New chat</span>}
+          <span>New chat</span>
         </button>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon
@@ -402,346 +451,341 @@ export default function Sidebar({
               title={item.label}
             >
               <Icon size={17} />
-              {!sidebarCollapsed && <span>{item.label}</span>}
+              <span>{item.label}</span>
             </button>
           )
         })}
       </nav>
 
-      {!sidebarCollapsed && (
-        <div className="sidebar-scroll">
-          <div className="sidebar-fixed-groups">
-            <section className="sidebar-section project-section">
-              <div className="sidebar-section-header provider-header">
+      <div className="sidebar-scroll">
+        <div className="sidebar-fixed-groups">
+          <section className="sidebar-section project-section">
+            <div className="sidebar-section-header provider-header">
+              <button
+                type="button"
+                className="sidebar-fold"
+                onClick={() => setProjectsCollapsed((value) => !value)}
+                title={projectsCollapsed ? 'Expand' : 'Collapse'}
+              >
+                <ChevronIcon size={13} direction={projectsCollapsed ? 'right' : 'down'} />
+                <FolderIcon size={15} />
+                Projects
+                {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
+              </button>
+              <div className="sidebar-add-wrap">
                 <button
                   type="button"
-                  className="sidebar-fold"
-                  onClick={() => setProjectsCollapsed((value) => !value)}
-                  title={projectsCollapsed ? 'Expand' : 'Collapse'}
+                  className="sidebar-add"
+                  title="Add project"
+                  aria-haspopup="menu"
+                  aria-expanded={projectMenuOpen}
+                  disabled={projectBusy !== null}
+                  onClick={() => setProjectMenuOpen((value) => !value)}
                 >
-                  <ChevronIcon size={13} direction={projectsCollapsed ? 'right' : 'down'} />
-                  <FolderIcon size={15} />
-                  Projects
-                  {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
+                  <PlusIcon size={14} />
                 </button>
-                <div className="sidebar-add-wrap">
+                {projectMenuOpen && (
+                  <>
+                    <div className="popover-backdrop" onClick={() => setProjectMenuOpen(false)} />
+                    <div className="project-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => void openExistingProject()}>
+                        <FolderIcon size={14} />
+                        <span>Open Project</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={beginCreateProject}>
+                        <PlusIcon size={14} />
+                        <span>Create Project</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            {!projectsCollapsed && (
+              <>
+                {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
+                {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
+                <div className="project-list">
+                  {projects.length === 0 ? (
+                    <div className="sidebar-empty-state">
+                      <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
+                      <div className="sidebar-empty-actions">
+                        <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
+                          <FolderIcon size={14} />
+                          Open Project
+                        </button>
+                        <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
+                          <PlusIcon size={14} />
+                          Create Project
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    projects.map((project) => (
+                      <div
+                        key={project.id}
+                        className={`project-row ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''} ${projectRowMenu?.id === project.id ? 'is-menu-open' : ''}`}
+                        title={project.path ?? project.name}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => renamingProjectId !== project.id && onSelectProject(project)}
+                        onKeyDown={(event) => {
+                          if (renamingProjectId === project.id) return
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            onSelectProject(project)
+                          }
+                        }}
+                      >
+                        <span className="project-row-ico">
+                          <FolderIcon size={15} />
+                        </span>
+                        <span className="project-text">
+                          {renamingProjectId === project.id ? (
+                            <input
+                              className="sidebar-rename-input"
+                              value={renameProjectValue}
+                              autoFocus
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => setRenameProjectValue(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') void commitProjectRename(project)
+                                if (event.key === 'Escape') setRenamingProjectId(null)
+                              }}
+                              onBlur={() => void commitProjectRename(project)}
+                            />
+                          ) : (
+                            <>
+                              <span>{project.name}</span>
+                              {project.path && <em>{project.path}</em>}
+                            </>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          className="project-overflow"
+                          title="Project actions"
+                          aria-haspopup="menu"
+                          aria-expanded={projectRowMenu?.id === project.id}
+                          onClick={(event) => toggleProjectRowMenu(project.id, event)}
+                        >
+                          ⋯
+                        </button>
+                        {projectRowMenu?.id === project.id && (
+                          <>
+                            <div
+                              className="popover-backdrop"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setProjectRowMenu(null)
+                              }}
+                            />
+                            <div
+                              className="project-menu project-row-menu"
+                              role="menu"
+                              style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
+                                <span>Rename</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={!project.path}
+                                onClick={() => void revealProject(project)}
+                              >
+                                <span>Reveal in Finder</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="is-danger"
+                                onClick={() => {
+                                  setProjectRowMenu(null)
+                                  setConfirmRemoveProject(project)
+                                }}
+                              >
+                                <span>Remove from Akorith</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+                {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
+              </>
+            )}
+          </section>
+
+          {folderIds.map((providerId) => {
+            const items = generalSessions.filter((s) => s.providerId === providerId)
+            const isCollapsed = providerCollapsed[providerId] ?? true
+            return (
+              <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
+                <div className="sidebar-section-header provider-header">
+                  <button
+                    type="button"
+                    className="sidebar-fold"
+                    onClick={() => setProviderCollapsed((c) => ({ ...c, [providerId]: !isCollapsed }))}
+                    title={isCollapsed ? 'Expand' : 'Collapse'}
+                  >
+                    <ChevronIcon size={13} direction={isCollapsed ? 'right' : 'down'} />
+                    <FolderIcon size={15} />
+                    {labelOf(providerId)}
+                    {items.length > 0 && <span className="sidebar-count">{items.length}</span>}
+                  </button>
                   <button
                     type="button"
                     className="sidebar-add"
-                    title="Add project"
-                    aria-haspopup="menu"
-                    aria-expanded={projectMenuOpen}
-                    disabled={projectBusy !== null}
-                    onClick={() => setProjectMenuOpen((value) => !value)}
+                    title={`New ${labelOf(providerId)} chat`}
+                    onClick={() => onNewChat(providerId)}
                   >
                     <PlusIcon size={14} />
                   </button>
-                  {projectMenuOpen && (
-                    <>
-                      <div className="popover-backdrop" onClick={() => setProjectMenuOpen(false)} />
-                      <div className="project-menu" role="menu">
-                        <button type="button" role="menuitem" onClick={() => void openExistingProject()}>
-                          <FolderIcon size={14} />
-                          <span>Open Project</span>
-                        </button>
-                        <button type="button" role="menuitem" onClick={beginCreateProject}>
-                          <PlusIcon size={14} />
-                          <span>Create Project</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
                 </div>
-              </div>
-              {!projectsCollapsed && (
-                <>
-                  {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
-                  {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
-                  <div className="project-list">
-                    {projects.length === 0 ? (
-                      <div className="sidebar-empty-state">
-                        <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
-                        <div className="sidebar-empty-actions">
-                          <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
-                            <FolderIcon size={14} />
-                            Open Project
-                          </button>
-                          <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
-                            <PlusIcon size={14} />
-                            Create Project
-                          </button>
+                {!isCollapsed &&
+                  (items.length === 0 ? (
+                    <div className="sidebar-item is-empty">
+                      <MessageIcon size={13} />
+                      <span>No general chats yet</span>
+                    </div>
+                  ) : (
+                    items.map((s) =>
+                      renamingId === s.id ? (
+                        <div className="sidebar-item" key={s.id}>
+                          <input
+                            className="sidebar-rename-input"
+                            value={renameValue}
+                            autoFocus
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void commitRename(s.id)
+                              if (e.key === 'Escape') setRenamingId(null)
+                            }}
+                            onBlur={() => void commitRename(s.id)}
+                          />
                         </div>
-                      </div>
-                    ) : (
-                      // Phase 14.3: only real projects here — the "All projects" row was removed.
-                      // Phase 14.4: a clean folder-list row (folder icon + name +
-                      // muted path) — no avatar/letter card. Active = subtle gray.
-                      projects.map((project) => (
+                      ) : (
                         <div
-                          key={project.id}
-                          className={`project-row ${view === 'workspace' && activeProject?.id === project.id ? 'is-active' : ''} ${projectRowMenu?.id === project.id ? 'is-menu-open' : ''}`}
-                          title={project.path ?? project.name}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => renamingProjectId !== project.id && onSelectProject(project)}
-                          onKeyDown={(event) => {
-                            if (renamingProjectId === project.id) return
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              onSelectProject(project)
-                            }
-                          }}
+                          className={`sidebar-item is-session ${s.id === activeSessionId ? 'is-active' : ''}`}
+                          key={s.id}
+                          onClick={() => selectSession(s)}
+                          title={s.title}
                         >
-                          <span className="project-row-ico">
-                            <FolderIcon size={15} />
-                          </span>
-                          <span className="project-text">
-                            {renamingProjectId === project.id ? (
-                              <input
-                                className="sidebar-rename-input"
-                                value={renameProjectValue}
-                                autoFocus
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => setRenameProjectValue(event.target.value)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') void commitProjectRename(project)
-                                  if (event.key === 'Escape') setRenamingProjectId(null)
-                                }}
-                                onBlur={() => void commitProjectRename(project)}
-                              />
-                            ) : (
-                              <>
-                                <span>{project.name}</span>
-                                {project.path && <em>{project.path}</em>}
-                              </>
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            className="project-overflow"
-                            title="Project actions"
-                            aria-haspopup="menu"
-                            aria-expanded={projectRowMenu?.id === project.id}
-                            onClick={(event) => toggleProjectRowMenu(project.id, event)}
-                          >
-                            ⋯
-                          </button>
-                          {projectRowMenu?.id === project.id && (
-                            <>
-                              <div
-                                className="popover-backdrop"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setProjectRowMenu(null)
-                                }}
-                              />
-                              <div
-                                className="project-menu project-row-menu"
-                                role="menu"
-                                style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
-                                  <span>Rename</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  disabled={!project.path}
-                                  onClick={() => void revealProject(project)}
-                                >
-                                  <span>Reveal in Finder</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="is-danger"
-                                  onClick={() => {
-                                    setProjectRowMenu(null)
-                                    setConfirmRemoveProject(project)
-                                  }}
-                                >
-                                  <span>Remove from Akorith</span>
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
-                </>
-              )}
-            </section>
-
-            {folderIds.map((providerId) => {
-              const items = generalSessions.filter((s) => s.providerId === providerId)
-              const isCollapsed = providerCollapsed[providerId] ?? true
-              return (
-                <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
-                  <div className="sidebar-section-header provider-header">
-                    <button
-                      type="button"
-                      className="sidebar-fold"
-                      onClick={() => setProviderCollapsed((c) => ({ ...c, [providerId]: !isCollapsed }))}
-                      title={isCollapsed ? 'Expand' : 'Collapse'}
-                    >
-                      <ChevronIcon size={13} direction={isCollapsed ? 'right' : 'down'} />
-                      <FolderIcon size={15} />
-                      {labelOf(providerId)}
-                      {items.length > 0 && <span className="sidebar-count">{items.length}</span>}
-                    </button>
-                    <button
-                      type="button"
-                      className="sidebar-add"
-                      title={`New ${labelOf(providerId)} chat`}
-                      onClick={() => onNewChat(providerId)}
-                    >
-                      <PlusIcon size={14} />
-                    </button>
-                  </div>
-                  {!isCollapsed &&
-                    (items.length === 0 ? (
-                      <div className="sidebar-item is-empty">
-                        <MessageIcon size={13} />
-                        <span>No general chats yet</span>
-                      </div>
-                    ) : (
-                      items.map((s) =>
-                        renamingId === s.id ? (
-                          <div className="sidebar-item" key={s.id}>
-                            <input
-                              className="sidebar-rename-input"
-                              value={renameValue}
-                              autoFocus
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void commitRename(s.id)
-                                if (e.key === 'Escape') setRenamingId(null)
+                          <span className="sidebar-item-title">{s.title}</span>
+                          <span className="sidebar-item-actions">
+                            <button
+                              type="button"
+                              title="Rename"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRenamingId(s.id)
+                                setRenameValue(s.title)
+                                setConfirmDeleteId(null)
                               }}
-                              onBlur={() => void commitRename(s.id)}
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            className={`sidebar-item is-session ${s.id === activeSessionId ? 'is-active' : ''}`}
-                            key={s.id}
-                            onClick={() => selectSession(s)}
-                            title={s.title}
-                          >
-                            <span className="sidebar-item-title">{s.title}</span>
-                            <span className="sidebar-item-actions">
+                            >
+                              Edit
+                            </button>
+                            {confirmDeleteId === s.id ? (
                               <button
                                 type="button"
-                                title="Rename"
+                                className="is-danger"
+                                title="Click again to delete"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setRenamingId(s.id)
-                                  setRenameValue(s.title)
-                                  setConfirmDeleteId(null)
+                                  void deleteSession(s)
                                 }}
                               >
-                                Edit
+                                Delete?
                               </button>
-                              {confirmDeleteId === s.id ? (
-                                <button
-                                  type="button"
-                                  className="is-danger"
-                                  title="Click again to delete"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    void deleteSession(s)
-                                  }}
-                                >
-                                  Delete?
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  title="Delete"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setConfirmDeleteId(s.id)
-                                    setTimeout(() => setConfirmDeleteId((id) => (id === s.id ? null : id)), 2500)
-                                  }}
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </span>
-                          </div>
-                        )
+                            ) : (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setConfirmDeleteId(s.id)
+                                  setTimeout(() => setConfirmDeleteId((id) => (id === s.id ? null : id)), 2500)
+                                }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </span>
+                        </div>
                       )
-                    ))}
-                </section>
-              )
-            })}
-          </div>
-
-          <section className="sidebar-section recent-section">
-            <div className="sidebar-section-title">Recent chats</div>
-            <div className="recent-list">
-              {recentSessions.length === 0 ? (
-                <div className="sidebar-item is-empty">No recent chats yet</div>
-              ) : (
-                recentSessions.map((session) => {
-                  const provider = labelOf(session.providerId)
-                  const project = session.projectId ? projectById.get(session.projectId) : null
-                  const meta = `${project ? `Workspace · ${project.name}` : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
-                  return (
-                    <div
-                      className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
-                      key={session.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => selectSession(session)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          selectSession(session)
-                        }
-                      }}
-                      title={`${session.title} — ${meta}`}
-                    >
-                      <span className="recent-chat-text">
-                        <span>{session.title}</span>
-                      </span>
-                      <span className="sidebar-item-actions">
-                        {confirmDeleteId === session.id ? (
-                          <button
-                            type="button"
-                            className="is-danger"
-                            title="Click again to delete this chat"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              void deleteSession(session)
-                            }}
-                          >
-                            Delete?
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            title="Delete chat"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setConfirmDeleteId(session.id)
-                              setTimeout(() => setConfirmDeleteId((id) => (id === session.id ? null : id)), 2500)
-                            }}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </section>
+                    )
+                  ))}
+              </section>
+            )
+          })}
         </div>
-      )}
+
+        <section className="sidebar-section recent-section">
+          <div className="sidebar-section-title">Recent chats</div>
+          <div className="recent-list">
+            {recentSessions.length === 0 ? (
+              <div className="sidebar-item is-empty">No recent chats yet</div>
+            ) : (
+              recentSessions.map((session) => {
+                const provider = labelOf(session.providerId)
+                const project = session.projectId ? projectById.get(session.projectId) : null
+                const meta = `${project ? `Workspace · ${project.name}` : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
+                return (
+                  <div
+                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
+                    key={session.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => selectSession(session)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        selectSession(session)
+                      }
+                    }}
+                    title={`${session.title} — ${meta}`}
+                  >
+                    <span className="recent-chat-text">
+                      <span>{session.title}</span>
+                    </span>
+                    <span className="sidebar-item-actions">
+                      {confirmDeleteId === session.id ? (
+                        <button
+                          type="button"
+                          className="is-danger"
+                          title="Click again to delete this chat"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void deleteSession(session)
+                          }}
+                        >
+                          Delete?
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          title="Delete chat"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setConfirmDeleteId(session.id)
+                            setTimeout(() => setConfirmDeleteId((id) => (id === session.id ? null : id)), 2500)
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </section>
+      </div>
 
       <div className="sidebar-profile">
         {settingsOpen && (
@@ -759,15 +803,15 @@ export default function Sidebar({
         )}
         <button type="button" className="profile-button" onClick={() => setSettingsOpen((value) => !value)} title="Settings">
           <UserIcon size={17} />
-          {!sidebarCollapsed && (
-            <span>
-              <strong>{displayName.trim() || 'User'}</strong>
-              <em>Local profile</em>
-            </span>
-          )}
-          {!sidebarCollapsed && <SettingsIcon size={16} />}
+          <span>
+            <strong>{displayName.trim() || 'User'}</strong>
+            <em>Local profile</em>
+          </span>
+          <SettingsIcon size={16} />
         </button>
       </div>
+        </>
+      )}
 
       {confirmRemoveProject && (
         <div className="modal-overlay" onClick={() => setConfirmRemoveProject(null)}>
@@ -848,6 +892,7 @@ export default function Sidebar({
           </div>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   )
 }
