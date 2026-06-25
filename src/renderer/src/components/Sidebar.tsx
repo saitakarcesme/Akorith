@@ -1,10 +1,9 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { OllamaConnectionSettings, OllamaEndpointSuggestion, OllamaShareInfo, ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
+import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
   ChartIcon,
   ChevronIcon,
-  CloseIcon,
   FlaskIcon,
   FolderIcon,
   LoopIcon,
@@ -14,6 +13,7 @@ import {
   SettingsIcon,
   UserIcon
 } from './icons'
+import SettingsCenter from './SettingsCenter'
 
 interface SidebarProps {
   view: AppView
@@ -83,15 +83,6 @@ function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
   )
 }
 
-function shortEndpointLabel(value: string): string {
-  try {
-    const url = new URL(value)
-    return `${url.protocol}//${url.host}`
-  } catch {
-    return value
-  }
-}
-
 function formatDate(ts: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts))
 }
@@ -149,11 +140,6 @@ export default function Sidebar({
   const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
-  const [ollamaSettings, setOllamaSettings] = useState<OllamaConnectionSettings | null>(null)
-  const [ollamaEndpoint, setOllamaEndpoint] = useState('')
-  const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
-  const [ollamaBusy, setOllamaBusy] = useState<'test' | 'save' | null>(null)
-  const [ollamaStatus, setOllamaStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
 
   const loadProviders = useCallback(() => {
     window.api.chat
@@ -162,36 +148,18 @@ export default function Sidebar({
       .catch(() => setProviders([]))
   }, [])
 
-  const loadOllamaSettings = useCallback(() => {
-    window.api.ollama
-      .getSettings()
-      .then((settings) => {
-        setOllamaSettings(settings)
-        setOllamaEndpoint(settings.baseUrl)
-      })
-      .catch(() => {
-        setOllamaSettings(null)
-        setOllamaEndpoint('http://localhost:11434')
-      })
-    window.api.ollama
-      .getShareInfo()
-      .then(setOllamaShare)
-      .catch(() => setOllamaShare(null))
-  }, [])
-
   useEffect(() => {
     loadProviders()
   }, [loadProviders])
 
   useEffect(() => {
     if (!settingsOpen) return
-    loadOllamaSettings()
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setSettingsOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, loadOllamaSettings])
+  }, [settingsOpen])
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -229,70 +197,6 @@ export default function Sidebar({
     localStorage.setItem('akorith.displayName', displayName)
   }, [displayName])
 
-  const testOllamaEndpoint = async (): Promise<void> => {
-    const endpoint = ollamaEndpoint.trim()
-    if (!endpoint) {
-      setOllamaStatus({ kind: 'error', text: 'Enter an Ollama endpoint.' })
-      return
-    }
-    setOllamaBusy('test')
-    setOllamaStatus(null)
-    try {
-      const result = await window.api.ollama.testEndpoint(endpoint)
-      if (result.ok) {
-        setOllamaEndpoint(result.baseUrl)
-        setOllamaStatus({ kind: 'ok', text: `Connected to ${shortEndpointLabel(result.baseUrl)} - ${result.modelCount} model${result.modelCount === 1 ? '' : 's'}` })
-      } else {
-        setOllamaStatus({ kind: 'error', text: result.error })
-      }
-    } catch (err) {
-      setOllamaStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setOllamaBusy(null)
-    }
-  }
-
-  const saveOllamaSettings = async (): Promise<void> => {
-    const endpoint = ollamaEndpoint.trim()
-    if (!endpoint || !ollamaSettings) return
-    setOllamaBusy('save')
-    setOllamaStatus(null)
-    try {
-      const response = await window.api.ollama.setSettings({ ...ollamaSettings, baseUrl: endpoint })
-      setOllamaSettings(response.settings)
-      setOllamaEndpoint(response.settings.baseUrl)
-      if (response.ok) {
-        setOllamaStatus({ kind: 'ok', text: `Saved ${shortEndpointLabel(response.settings.baseUrl)}` })
-        loadProviders()
-      } else {
-        setOllamaStatus({ kind: 'error', text: response.error })
-      }
-    } catch (err) {
-      setOllamaStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setOllamaBusy(null)
-    }
-  }
-
-  const updateOllamaSetting = <K extends keyof OllamaConnectionSettings>(key: K, value: OllamaConnectionSettings[K]): void => {
-    setOllamaSettings((settings) => (settings ? { ...settings, [key]: value } : settings))
-  }
-
-  const useOllamaEndpoint = (endpoint: OllamaEndpointSuggestion): void => {
-    setOllamaEndpoint(endpoint.baseUrl)
-    setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
-  }
-
-  const copyOllamaEndpoint = async (endpoint: OllamaEndpointSuggestion): Promise<void> => {
-    setOllamaEndpoint(endpoint.baseUrl)
-    try {
-      await navigator.clipboard.writeText(endpoint.baseUrl)
-      setOllamaStatus({ kind: 'ok', text: `Copied ${shortEndpointLabel(endpoint.baseUrl)}` })
-    } catch {
-      setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
-    }
-  }
-
   // Close the project actions menu on Escape (outside-click is handled by its
   // backdrop). Also re-close if the list scrolls so it never floats detached.
   useEffect(() => {
@@ -315,8 +219,6 @@ export default function Sidebar({
     ...[...new Set(generalSessions.map((s) => s.providerId))].filter((id) => !providers.some((p) => p.id === id))
   ]
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
-  const localProvider = providers.find((provider) => provider.id === 'local')
-  const shareEndpoints = ollamaShare?.endpoints ?? []
 
   const refreshProjects = async (): Promise<void> => {
     const list = await window.api.projects.list()
@@ -884,127 +786,15 @@ export default function Sidebar({
       <div className="sidebar-profile">
         {settingsOpen && (
           <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
-          <div
-            className="settings-popover"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Settings"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="settings-header">
-              <div className="settings-title">Settings</div>
-              <button
-                type="button"
-                className="settings-close"
-                onClick={() => setSettingsOpen(false)}
-                aria-label="Close settings"
-                title="Close"
-              >
-                <CloseIcon size={16} />
-              </button>
-            </div>
-            <label>
-              <span>Display name</span>
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-            </label>
-            <div className="settings-field">
-              <span>Theme</span>
-              <div className="theme-toggle" role="group" aria-label="Theme">
-                <button
-                  type="button"
-                  className={theme === 'light' ? 'is-active' : ''}
-                  onClick={() => onThemeChange('light')}
-                >
-                  Light
-                </button>
-                <button
-                  type="button"
-                  className={theme === 'dark' ? 'is-active' : ''}
-                  onClick={() => onThemeChange('dark')}
-                >
-                  Dark
-                </button>
-              </div>
-            </div>
-            <div className="settings-divider" />
-            <div className="settings-field is-stacked">
-              <span>Ollama endpoint</span>
-              <div className="ollama-endpoint-row">
-                <input
-                  value={ollamaEndpoint}
-                  spellCheck={false}
-                  placeholder="http://localhost:11434"
-                  onChange={(event) => setOllamaEndpoint(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void testOllamaEndpoint()
-                  }}
-                />
-                <button type="button" onClick={() => setOllamaEndpoint('http://localhost:11434')}>
-                  Localhost
-                </button>
-              </div>
-              <div className="ollama-action-row">
-                <button type="button" disabled={ollamaBusy !== null} onClick={() => void testOllamaEndpoint()}>
-                  {ollamaBusy === 'test' ? 'Testing...' : 'Test'}
-                </button>
-                <button type="button" className="is-primary" disabled={ollamaBusy !== null || !ollamaSettings} onClick={() => void saveOllamaSettings()}>
-                  {ollamaBusy === 'save' ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-              {shareEndpoints.length > 0 && (
-                <div className="ollama-share-box">
-                  <div className="ollama-share-title">
-                    <span>This machine</span>
-                    {ollamaShare?.hostName && <em>{ollamaShare.hostName}</em>}
-                  </div>
-                  <div className="ollama-endpoint-list">
-                    {shareEndpoints.map((endpoint) => (
-                      <div className={`ollama-endpoint-card is-${endpoint.kind}`} key={endpoint.baseUrl}>
-                        <button type="button" className="ollama-endpoint-main" onClick={() => useOllamaEndpoint(endpoint)}>
-                          <span>{endpoint.label}</span>
-                          <em>{endpoint.baseUrl}</em>
-                        </button>
-                        <button type="button" className="ollama-copy-btn" onClick={() => void copyOllamaEndpoint(endpoint)}>
-                          Copy
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {ollamaStatus && <div className={`ollama-status is-${ollamaStatus.kind}`}>{ollamaStatus.text}</div>}
-              {localProvider && !localProvider.available.ok && <div className="ollama-status is-error">{localProvider.available.reason}</div>}
-            </div>
-            {ollamaSettings && (
-              <div className="settings-checks">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={ollamaSettings.autoStart}
-                    onChange={(event) => updateOllamaSetting('autoStart', event.target.checked)}
-                  />
-                  <span>Auto-start local Ollama</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={ollamaSettings.exposeLan}
-                    onChange={(event) => updateOllamaSetting('exposeLan', event.target.checked)}
-                  />
-                  <span>Expose local Ollama on LAN</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={ollamaSettings.lanDiscovery}
-                    onChange={(event) => updateOllamaSetting('lanDiscovery', event.target.checked)}
-                  />
-                  <span>Discover LAN Ollama hosts</span>
-                </label>
-              </div>
-            )}
-            <div className="settings-note">Packaged app changes appear after rebuilding and launching the new build.</div>
-          </div>
+            <SettingsCenter
+              theme={theme}
+              displayName={displayName}
+              providers={providers}
+              onThemeChange={onThemeChange}
+              onDisplayNameChange={setDisplayName}
+              onRefreshProviders={loadProviders}
+              onClose={() => setSettingsOpen(false)}
+            />
           </div>
         )}
         <button type="button" className="profile-button" onClick={() => setSettingsOpen((value) => !value)} title="Settings">
