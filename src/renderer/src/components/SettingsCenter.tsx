@@ -112,6 +112,11 @@ export default function SettingsCenter({
   const localProvider = providers.find((provider) => provider.id === 'local')
   const shareEndpoints = ollamaShare?.endpoints ?? []
   const remoteEndpoint = shareEndpoints.find((endpoint) => endpoint.kind === 'vpn')
+  const reachableEndpoint = remoteEndpoint ?? shareEndpoints.find((endpoint) => endpoint.kind === 'lan')
+  const remoteReady = Boolean(reachableEndpoint)
+  const remoteMessage = remoteReady
+    ? `${reachableEndpoint?.label ?? 'Network endpoint'} can be used from another Akorith instance when Ollama is running on this machine.`
+    : 'Start Ollama with LAN exposure or connect through VPN/Tailscale to share local models.'
 
   const availableProviders = useMemo(
     () => providers.filter((provider) => provider.available.ok).length,
@@ -392,9 +397,9 @@ export default function SettingsCenter({
                     {ollamaShare?.hostName && <em>{ollamaShare.hostName}</em>}
                   </div>
                   {ollamaShare && (
-                    <div className={`ollama-remote-status ${ollamaShare.remoteReady ? 'is-ready' : 'is-waiting'}`}>
-                      <strong>{ollamaShare.remoteReady ? 'Remote access ready' : 'Remote access needs VPN'}</strong>
-                      <span>{ollamaShare.remoteMessage}</span>
+                    <div className={`ollama-remote-status ${remoteReady ? 'is-ready' : 'is-waiting'}`}>
+                      <strong>{remoteReady ? 'Remote access ready' : 'Remote access needs VPN'}</strong>
+                      <span>{remoteMessage}</span>
                       {remoteEndpoint && (
                         <button type="button" onClick={() => useOllamaEndpoint(remoteEndpoint)}>
                           Use remote endpoint
