@@ -1285,6 +1285,7 @@ export function updateMacroSession(
       | 'nextRunAt'
       | 'runCount'
       | 'latestResult'
+      | 'pushEnabled'
       | 'archivedAt'
     >
   >
@@ -1308,6 +1309,7 @@ export function updateMacroSession(
     nextRunAt: patch.nextRunAt !== undefined ? patch.nextRunAt : current.nextRunAt,
     runCount: patch.runCount ?? current.runCount,
     latestResult: patch.latestResult !== undefined ? patch.latestResult : current.latestResult,
+    pushEnabled: patch.pushEnabled ?? current.pushEnabled,
     archivedAt: patch.archivedAt !== undefined ? patch.archivedAt : current.archivedAt
   }
   must()
@@ -1316,7 +1318,7 @@ export function updateMacroSession(
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
            mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?,
            planner_provider = ?, planner_model = ?, target_terminal = ?, next_run_at = ?,
-           run_count = ?, latest_result = ?, archived_at = ?
+           run_count = ?, latest_result = ?, push_enabled = ?, archived_at = ?
        WHERE id = ?`
     )
     .run(
@@ -1336,6 +1338,7 @@ export function updateMacroSession(
       next.nextRunAt,
       next.runCount,
       next.latestResult,
+      next.pushEnabled ? 1 : 0,
       next.archivedAt,
       sessionId
     )

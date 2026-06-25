@@ -43,8 +43,17 @@ import {
   commitPhase,
   deriveHeadline,
   initWorkspace,
+  inspectLoopWorkspace,
+  ensureLoopRepository,
+  loopWorkspaceFolder,
   parseProjectIdea,
+  pushWorkspace,
+  syncAndPushLoopWorkspace,
   slugify,
+  syncWorkspace,
+  withLoopGitQueue,
+  LOOP_REPOSITORY_URL,
+  type LoopWorkspaceStatus,
   type ProjectIdea
 } from './workspace'
 import {
@@ -610,6 +619,42 @@ function removeLoop(sessionId: string): { ok: true } | { ok: false; error: strin
   activeProposals.get(sessionId)?.abort()
   activeLoops.get(sessionId)?.abort()
   return deleteMacroSession(sessionId) ? { ok: true } : { ok: false, error: 'macro session not found' }
+}
+
+type LoopWorkspaceStatusResponse =
+  | { ok: true; status: LoopWorkspaceStatus }
+  | { ok: false; error: string; status?: LoopWorkspaceStatus }
+
+async function inspectLoopGit(sessionId: string): Promise<LoopWorkspaceStatusResponse> {
+  const s = getMacroSession(sessionId)
+  if (!s?.workspaceDir) return { ok: false, error: 'loop workspace is missing' }
+  const status = await withLoopGitQueue(() => inspectLoopWorkspace(s.workspaceDir!))
+  return status.ok ? { ok: true, status } : { ok: false, error: status.error ?? 'workspace inspection failed', status }
+}
+
+async function syncLoopGit(sessionId: string): Promise<LoopWorkspaceStatusResponse> {
+  const s = getMacroSession(sessionId)
+  if (!s?.workspaceDir) return { ok: false, error: 'loop workspace is missing' }
+  const result = await withLoopGitQueue(() => syncAndPushLoopWorkspace(s.workspaceDir!))
+  if (result.ok) {
+    updateMacroSession(sessionId, { pushEnabled: true })
+    recordLoopEvent({
+      loopId: sessionId,
+      type: 'manual_git_sync',
+      message: 'Synced this loop workspace to AkorithLoop.',
+      severity: 'success',
+      metadata: result.status
+    })
+    return { ok: true, status: result.status }
+  }
+  recordLoopEvent({
+    loopId: sessionId,
+    type: 'manual_git_sync_failed',
+    message: result.error ?? 'AkorithLoop sync failed.',
+    severity: 'warning',
+    metadata: result.status
+  })
+  return { ok: false, error: result.error ?? 'AkorithLoop sync failed', status: result.status }
 }
 
 // ---------- Phase 11: mode, summarizer, permission handling, Auto Mode ----------
@@ -1501,14 +1546,17 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     0,
     7 * 24 * 60
   )
-  const rhythm = loopRhythmInstruction(loopIntent, cadenceMinutes)
-  const profile = loopProfileInstruction(args, cadenceMinutes)
   const commitBehavior = safeText(args.commitBehavior, 'commit', 80)
   const autoCommit = commitBehavior !== 'suggest' && commitBehavior !== 'none'
+  const pushEnabled = autoCommit || args.pushEnabled === true
+  const normalizedArgs = { ...args, commitBehavior, pushEnabled }
+  const rhythm = loopRhythmInstruction(loopIntent, cadenceMinutes)
+  const profile = loopProfileInstruction(normalizedArgs, cadenceMinutes)
   const mode: MacroMode = args.mode === 'approval' || args.autonomyLevel === 'guided' ? 'approval' : 'auto'
 
   // 2. Resolve the target workspace. Existing local-project targets are bound
-  // conservatively (no scaffold/write); otherwise create a fresh Akorith repo.
+  // conservatively (no scaffold/write); otherwise every loop gets its own
+  // folder under the shared AkorithLoop repository.
   const existingTarget =
     args.targetType === 'local-project' &&
     typeof args.targetRef === 'string' &&
@@ -1519,12 +1567,17 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
   const usingExistingProject = Boolean(existingTarget)
   let dir = existingTarget ?? ''
   if (!dir) {
-    const base = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'Akorith Projects')
-    dir = join(base, idea.slug)
-    for (let n = 2; existsSync(dir) && n <= 50; n++) dir = join(base, `${idea.slug}-${n}`)
+    const repoDir = args.basePath && isAbsolute(args.basePath) ? args.basePath : join(app.getPath('documents'), 'AkorithLoop')
+    const prepared = await withLoopGitQueue(async () => {
+      const repo = await ensureLoopRepository(repoDir, LOOP_REPOSITORY_URL)
+      if (!repo.ok) return { ok: false as const, error: repo.error ?? 'failed to initialize AkorithLoop repository' }
+      return { ok: true as const, dir: loopWorkspaceFolder(repo.dir, idea.slug) }
+    })
+    if (!prepared.ok) return { ok: false, error: prepared.error }
+    dir = prepared.dir
   }
 
-  // 3. Scaffold only for new Akorith workspaces.
+  // 3. Scaffold only for new AkorithLoop workspaces.
   if (!usingExistingProject) {
     const init = await initWorkspace(dir, idea)
     if (!init.ok) return { ok: false, error: init.error ?? 'failed to initialize workspace' }
@@ -1557,7 +1610,7 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     maxRuns: clampInt(args.maxRuns ?? args.maxIterations ?? 0, 0, 0, 10_000),
     maxCommits: clampInt(args.maxCommits ?? 0, 0, 0, 10_000),
     commitBehavior,
-    pushEnabled: args.pushEnabled === true,
+    pushEnabled,
     testCommands: typeof args.testCommands === 'string' ? args.testCommands.slice(0, 1000) : null,
     reportFormat: safeText(args.reportFormat, 'summary', 80),
     safetyLevel: safeText(args.safetyLevel, 'balanced', 80)
@@ -1572,9 +1625,25 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
       scheduleKind: args.scheduleKind,
       autonomyLevel: args.autonomyLevel,
       commitBehavior,
-      pushEnabled: args.pushEnabled === true
+      pushEnabled,
+      loopRepository: LOOP_REPOSITORY_URL,
+      loopFolder: dir
     }
   })
+  if (pushEnabled) {
+    const pushed = await withLoopGitQueue(() => pushWorkspace(dir))
+    if (pushed.pushed) {
+      logAutoAction(session.id, { type: 'auto_push', message: `Pushed Phase 0 scaffold to ${LOOP_REPOSITORY_URL}` })
+    } else {
+      logAutoAction(session.id, { type: 'auto_push_failed', reason: pushed.reason })
+      recordLoopEvent({
+        loopId: session.id,
+        type: 'auto_push_failed',
+        message: pushed.reason ?? 'git push failed',
+        severity: 'warning'
+      })
+    }
+  }
   return { ok: true, idea, project, state: requireState(session.id), workspaceDir: dir }
 }
 
@@ -1911,6 +1980,20 @@ export function registerMacroIpc(): void {
   ipcMain.handle('macro:get', (_event, args: { sessionId: string }) => {
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return null
     return getMacroState(args.sessionId)
+  })
+
+  ipcMain.handle('macro:inspectWorkspace', async (_event, args: { sessionId: string }): Promise<LoopWorkspaceStatusResponse> => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {
+      return { ok: false, error: 'invalid macro:inspectWorkspace payload' }
+    }
+    return inspectLoopGit(args.sessionId)
+  })
+
+  ipcMain.handle('macro:syncWorkspace', async (_event, args: { sessionId: string }): Promise<LoopWorkspaceStatusResponse> => {
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) {
+      return { ok: false, error: 'invalid macro:syncWorkspace payload' }
+    }
+    return syncLoopGit(args.sessionId)
   })
 
   ipcMain.handle('macro:list', (_event, args: { limit?: number }) =>

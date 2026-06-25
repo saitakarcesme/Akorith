@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind, PtySnapshot } from '../../../preload/index.d'
+import type { LoopWorkspaceStatus, MacroSessionRow, MacroState, ProjectRow, ProviderInfo, PtyCommandKind, PtySnapshot } from '../../../preload/index.d'
 import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
@@ -222,6 +222,33 @@ function formatDateTime(ts: number | null): string {
   return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+function formatShortDate(ts: number | null): string {
+  if (!ts) return 'not available'
+  return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function syncLabel(status: LoopWorkspaceStatus | null): string {
+  if (!status) return 'Checking GitHub sync'
+  if (!status.ok) return status.error || 'Workspace unavailable'
+  if (status.syncState === 'synced') return 'Synced to AkorithLoop'
+  if (status.syncState === 'dirty') return 'Local changes waiting for a loop commit'
+  if (status.syncState === 'ahead') return 'Ready to push'
+  if (status.syncState === 'behind') return 'Remote has newer commits'
+  if (status.syncState === 'diverged') return 'Local and remote diverged'
+  if (status.syncState === 'missing') return 'Workspace folder missing'
+  if (status.syncState === 'not_git') return 'Workspace is not a git repo'
+  if (status.syncState === 'no_remote') return 'AkorithLoop remote missing'
+  return 'Sync state unknown'
+}
+
+function syncTone(status: LoopWorkspaceStatus | null): Friendly['tone'] {
+  if (!status) return 'idle'
+  if (!status.ok || status.syncState === 'missing' || status.syncState === 'not_git' || status.syncState === 'diverged') return 'error'
+  if (status.syncState === 'synced') return 'done'
+  if (status.syncState === 'dirty' || status.syncState === 'ahead' || status.syncState === 'behind' || status.syncState === 'no_remote') return 'paused'
+  return 'idle'
+}
+
 function timeAgo(ts: number): string {
   const diff = Math.max(0, Date.now() - ts)
   const minute = 60_000
@@ -354,6 +381,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [detailModel, setDetailModel] = useState('')
   const [detailTarget, setDetailTarget] = useState<ExecutorTarget>('t1')
   const [terminalSnapshot, setTerminalSnapshot] = useState<PtySnapshot | null>(null)
+  const [workspaceStatus, setWorkspaceStatus] = useState<LoopWorkspaceStatus | null>(null)
+  const [workspaceSyncing, setWorkspaceSyncing] = useState(false)
   const [savingPlanner, setSavingPlanner] = useState(false)
   const [busy, setBusy] = useState(false)
   const [busyNote, setBusyNote] = useState('')
@@ -471,6 +500,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       const intent = loopIntentFor(loopType, scheduleKind)
       const target = targetType === 'local-project' && targetRef ? targetRef : targetRef.trim()
       const mode = fullyLoopActive && autonomyLevel !== 'guided' ? 'auto' : 'approval'
+      const effectivePushEnabled = commitBehavior === 'commit' || pushEnabled
       setBusyNote(targetType === 'local-project' && target ? 'Binding the loop to your project...' : 'Creating the loop workspace...')
       const res = await window.api.macro.createWorkspaceProject({
         seed: text,
@@ -492,7 +522,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         maxRuns,
         maxCommits,
         commitBehavior,
-        pushEnabled,
+        pushEnabled: effectivePushEnabled,
         testCommands,
         reportFormat,
         safetyLevel
@@ -552,6 +582,27 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const selected = detail?.session ?? loops.find((l) => l.id === selectedId) ?? null
 
   useEffect(() => {
+    if (!active || view !== 'detail' || !selectedId) {
+      setWorkspaceStatus(null)
+      return
+    }
+    let cancelled = false
+    const load = (): void => {
+      void window.api.macro.inspectWorkspace(selectedId).then((res) => {
+        if (!cancelled) setWorkspaceStatus(res.status ?? null)
+      }).catch(() => {
+        if (!cancelled) setWorkspaceStatus(null)
+      })
+    }
+    load()
+    const t = setInterval(load, 12_000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [active, view, selectedId])
+
+  useEffect(() => {
     if (!selected) return
     setDetailProvider(selected.plannerProvider)
     setDetailModel(selected.plannerModel ?? '')
@@ -561,6 +612,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const openLoop = useCallback((id: string): void => {
     setSelectedId(id)
     setDetail(null)
+    setWorkspaceStatus(null)
     setView('detail')
     setError(null)
   }, [])
@@ -672,6 +724,22 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     }
   }, [providers, refreshProviders, detailProvider, detailModel, detailTarget, projects, ensureExecutor])
 
+  const syncLoopWorkspace = useCallback(async (sessionId: string): Promise<void> => {
+    setWorkspaceSyncing(true)
+    setError(null)
+    try {
+      const res = await window.api.macro.syncWorkspace(sessionId)
+      if (res.status) setWorkspaceStatus(res.status)
+      if (!res.ok) setError(res.error)
+      const d = await window.api.macro.get(sessionId)
+      if (d) setDetail(d)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setWorkspaceSyncing(false)
+    }
+  }, [])
+
   const duplicateLoop = useCallback((session: MacroSessionRow): void => {
     setDescription(cleanGoal(session))
     setLoopType((session.loopType as LoopType) || 'custom')
@@ -684,7 +752,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     setMaxRuns(session.maxRuns || session.maxIterations || 30)
     setMaxCommits(session.maxCommits || 0)
     setCommitBehavior((session.commitBehavior as CommitBehavior) || 'commit')
-    setPushEnabled(session.pushEnabled)
+    setPushEnabled(session.pushEnabled || session.commitBehavior === 'commit')
     setTestCommands(session.testCommands ?? '')
     setReportFormat((session.reportFormat as ReportFormat) || 'summary')
     setSafetyLevel((session.safetyLevel as SafetyLevel) || 'balanced')
@@ -711,6 +779,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const options = parseStrArray(latest?.nextOptions)
     const progress = progressPercent(selected, turns.length, commits.length)
     const activity = latest?.plannerRationale?.trim() || latest?.proposal?.trim() || ''
+    const gitTone = syncTone(workspaceStatus)
 
     return (
       <div className="loops-page loop-ops">
@@ -870,6 +939,26 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
               )}
             </section>
 
+            <section className="loop-panel loop-git-panel">
+              <div className="loop-panel-head">
+                <h2>GitHub sync</h2>
+                <span className={`loop-pill is-${gitTone}`}>{syncLabel(workspaceStatus)}</span>
+              </div>
+              <div className="loop-git-grid">
+                <div><span>Repository</span><strong>{workspaceStatus?.remoteUrl || 'AkorithLoop'}</strong></div>
+                <div><span>Branch</span><strong>{workspaceStatus?.branch || 'main'}</strong></div>
+                <div><span>Path commits</span><strong>{workspaceStatus?.commitCount ?? commits.length}</strong></div>
+                <div><span>Latest phase</span><strong>{workspaceStatus?.lastPhase ? `Phase ${workspaceStatus.lastPhase}` : 'not started'}</strong></div>
+                <div><span>Ahead / behind</span><strong>{workspaceStatus ? `${workspaceStatus.ahead} / ${workspaceStatus.behind}` : 'checking'}</strong></div>
+                <div><span>Dirty files</span><strong>{workspaceStatus ? workspaceStatus.staged + workspaceStatus.unstaged + workspaceStatus.untracked : 0}</strong></div>
+                <div><span>Head</span><strong>{workspaceStatus?.head || 'not available'}</strong></div>
+                <div><span>Last commit</span><strong>{workspaceStatus?.headSubject || formatShortDate(workspaceStatus?.lastCommitAt ?? null)}</strong></div>
+              </div>
+              <button type="button" className="loop-btn" disabled={workspaceSyncing || !selected.workspaceDir} onClick={() => void syncLoopWorkspace(selected.id)}>
+                {workspaceSyncing ? 'Syncing...' : 'Sync to AkorithLoop'}
+              </button>
+            </section>
+
             <section className="loop-panel">
               <h2>Safety</h2>
               <ul className="loop-simple-list">
@@ -946,6 +1035,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const cadence = minutesForSchedule(scheduleKind, customMinutes)
     const activeMode = fullyLoopActive && autonomyLevel !== 'guided'
     const selectedProjectPath = targetType === 'local-project' ? targetRef || projects[0]?.path || '' : targetRef
+    const effectivePushEnabled = commitBehavior === 'commit' || pushEnabled
 
     return (
       <div className="loops-page loop-ops">
@@ -1128,8 +1218,13 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
               </div>
 
               <label className="loop-check">
-                <input type="checkbox" checked={pushEnabled} disabled={busy} onChange={(e) => setPushEnabled(e.target.checked)} />
-                Push to GitHub when the target is configured and safe
+                <input
+                  type="checkbox"
+                  checked={effectivePushEnabled}
+                  disabled={busy || commitBehavior === 'commit'}
+                  onChange={(e) => setPushEnabled(e.target.checked)}
+                />
+                Push every loop commit to AkorithLoop
               </label>
 
               <label className="loop-field">
@@ -1144,7 +1239,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             <span>{executorForTarget(executorTarget).label} executes</span>
             <span>{activeMode ? 'active automation' : 'guided/passive'}</span>
             <span>{cadence ? formatCadenceMinutes(cadence) : 'continuous'}</span>
-            <span>{commitBehavior}{pushEnabled ? ' + push' : ''}</span>
+            <span>{commitBehavior}{effectivePushEnabled ? ' + push' : ''}</span>
           </div>
 
           {error && <div className="loop-note is-error">{error}</div>}

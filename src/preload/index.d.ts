@@ -692,12 +692,39 @@ export type WorkspaceCreateResponse =
   | { ok: true; idea: ProjectIdea; project: ProjectRow; state: MacroState; workspaceDir: string }
   | { ok: false; error: string }
 
+export type LoopSyncState = 'synced' | 'ahead' | 'behind' | 'diverged' | 'dirty' | 'missing' | 'not_git' | 'no_remote' | 'unknown'
+
+export interface LoopWorkspaceStatus {
+  ok: boolean
+  workspaceDir: string
+  repositoryDir: string | null
+  branch: string | null
+  remoteUrl: string | null
+  head: string | null
+  headSubject: string | null
+  ahead: number
+  behind: number
+  dirty: boolean
+  staged: number
+  unstaged: number
+  untracked: number
+  commitCount: number
+  phaseCount: number
+  lastPhase: number
+  lastCommitAt: number | null
+  syncState: LoopSyncState
+  error?: string
+}
+
 export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
 export type MacroDeleteResponse = { ok: true } | { ok: false; error: string }
 export type MacroSummarizeResponse =
   | { ok: true; state: MacroState; summaryText?: string }
   | { ok: false; error: string; state?: MacroState }
 export type PermissionDetectResponse = { ok: true; detection: PermissionDetection } | { ok: false; error: string }
+export type LoopWorkspaceStatusResponse =
+  | { ok: true; status: LoopWorkspaceStatus }
+  | { ok: false; error: string; status?: LoopWorkspaceStatus }
 
 export interface MacroApi {
   createSession(args: MacroCreateRequest): Promise<MacroResponse>
@@ -730,6 +757,10 @@ export interface MacroApi {
   detectPermission(sessionId: string): Promise<PermissionDetectResponse>
   /** Phase 11: send a (user-approved) response to a detected permission prompt. */
   respondPermission(args: { sessionId: string; turnId: string; action: string }): Promise<MacroResponse>
+  /** Phase 24: read-only AkorithLoop git status for this loop workspace. */
+  inspectWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
+  /** Phase 24: pull/rebase and push this loop workspace to AkorithLoop. */
+  syncWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
   get(sessionId: string): Promise<MacroState | null>
   list(limit?: number): Promise<MacroSessionRow[]>
 }
