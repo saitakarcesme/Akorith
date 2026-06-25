@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 24 (Loop Completion:
-AkorithLoop sync guarantees, loop git health, and persisted run/event ledgers).
+with electron-vite, in strict numbered phases — currently through Phase 25 (Test Lab Rebuild:
+guided source/model/topic/judge flow with automatic PDF reports).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -23,7 +23,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 15.1 local-provider/workspace-context reliability polish ·
 23 general-purpose task loops · 23.1 Fully Active/Passive Loop Switch ·
 23.2 Loop Operations Center ·
-**24 Loop Completion** — all done.
+24 Loop Completion ·
+**25 Test Lab Rebuild** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -640,6 +641,18 @@ headlessly verified by `scripts/verify-workspace-loop.ts` (drives real git in a 
   `loop_events` now have typed list APIs and render as Run ledger / Event log panels, so restarts
   do not hide what happened. `npm run verify:workspace-loop` is the canonical headless check for
   Phase-N commit numbering and loop workspace inspection.
+- **Phase 25: Test Lab Rebuild.** Test Lab is now a guided user flow rather than a developer
+  control panel. The primary English path is: choose the source (saved project, folder picker, or
+  GitHub URL), choose the local Ollama model that writes the test, choose a fixed test subject
+  preset (including **General coverage**, no free-form topic required), choose the result judge
+  (Local, Claude, or ChatGPT), then run the test and automatically export a PDF. Local folders and
+  GitHub clones are copied into a temporary sandbox before generated tests are written; the source
+  repo remains read-only. Runner details stay collapsed as an escape hatch for auto-detection
+  misses. A successful run now auto-scores with the selected judge, exports the PDF, and keeps the
+  run locked until the report path is available. Historical runs can still be re-scored from the
+  Review and PDF section. The PDF template is branded as an Akorith Test Report with verdict,
+  ISAScore, metadata, objective metrics, run evidence, score breakdown, judge rationale, generated
+  test excerpts, and bounded output excerpts.
 - **No permission stalls (Phase 22.1).** The loop's headless executor launches in bypass mode —
   new `pty` command kinds `claude-auto` (`claude --dangerously-skip-permissions`) / `codex-auto`
   (`codex --dangerously-bypass-approvals-and-sandbox`); the user-driven workspace keeps the plain

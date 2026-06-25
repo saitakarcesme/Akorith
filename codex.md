@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 24: Loop
-Completion**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 25: Test
+Lab Rebuild**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -330,6 +330,10 @@ Completion**.
       commit-producing loops, show GitHub sync health in Loop detail, expose manual Sync to
       AkorithLoop, and render persisted `loop_runs` / `loop_events` as Run ledger and Event log.
       `npm run verify:workspace-loop` validates Phase-N commit numbering and workspace inspection.
+- [x] **Phase 25** - Test Lab Rebuild. Test Lab is a guided source -> Local test writer ->
+      selectable subject -> Local/Claude/ChatGPT judge -> run-and-PDF flow. Folder picker and
+      GitHub URL sources share read-only sandboxing; generated tests auto-run, auto-score, and
+      auto-export an Akorith Test Report PDF. Runner details remain collapsed for detection misses.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -360,6 +364,11 @@ Completion**.
 - **PDF reports use one main-process template.** `pdfkit` generates single and comparison
   reports under the app's `userData/reports` directory, with consistent typography, objective
   metrics, score breakdowns, judge label, rationale when present, and generated-test excerpts.
+- **Test Lab Rebuild (Phase 25):** keep the primary flow English and selection-based. The user
+  chooses source, Local/Ollama writer model, fixed test subject preset, and Local/Claude/ChatGPT
+  judge; one main action runs, evaluates, and exports PDF. The source repo remains read-only, and
+  generated tests write only to the temporary sandbox. Do not reintroduce a mandatory free-form
+  test-topic field.
 - **Macro-loop: Approval Mode is the default and is unchanged.** Planner proposals are meta
   calls and do not write `usage_event`; the user approves or edits each executor prompt before
   it is sent through the bridge path.
@@ -509,6 +518,26 @@ Ollama/Akorith once so it can bind to LAN.
 Chat composer image attachments support up to four PNG/JPEG/WebP/GIF files. Local/Ollama receives
 base64 image bytes for multimodal models; Claude/Codex CLI providers receive only attachment-name
 text because their current provider bridge is stdin text.
+
+## Phase 25 - Test Lab Rebuild
+
+Phase 25 supersedes the older narrow Test Lab wording: Test Lab is now a guided, selection-based
+flow designed for non-technical users. The happy path is source selection -> Local/Ollama test
+writer -> fixed test subject preset -> Local/Claude/ChatGPT judge -> run and PDF export. Sources
+can be saved Akorith projects, folder picker selections, or GitHub repository URLs. Test subjects
+are buttons/dropdowns, including General coverage, API/logic, UI/interaction, regression/smoke, and
+edge cases; a user should not need to type a test topic to get useful coverage.
+
+The source repo remains read-only. Akorith copies local folders and GitHub clones into its temporary
+sandbox before writing generated tests, installing dependencies, or running a command. Auto-detected
+runner details stay collapsed for detection misses and advanced overrides. The primary action keeps
+the UI running through generation, execution, scoring, and PDF export so the report path appears as
+part of the same flow.
+
+The PDF template is now intentionally readable and branded as an Akorith Test Report. It contains a
+dark report header, verdict and ISAScore, source/judge/generated metadata, objective metrics, run
+evidence, score breakdown, judge rationale, generated test code excerpts, and bounded sandbox output
+excerpts. Historical runs can still be re-scored and exported from Review and PDF.
 
 ## Rule: keep the docs current
 
