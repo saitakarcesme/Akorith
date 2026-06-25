@@ -331,3 +331,27 @@ export function setTestSourceRepo(sourceRepo: string): TestLabSettings {
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return getTestSettings()
 }
+
+export function setTestSettings(patch: Partial<TestLabSettings>): TestLabSettings {
+  const config = loadConfig()
+  const current = getTestSettings()
+  const next: TestLabSettings = {
+    sourceRepo: typeof patch.sourceRepo === 'string' ? patch.sourceRepo.slice(0, 1_000) : current.sourceRepo,
+    installDeps: typeof patch.installDeps === 'boolean' ? patch.installDeps : current.installDeps,
+    timeoutMs:
+      typeof patch.timeoutMs === 'number' && Number.isFinite(patch.timeoutMs)
+        ? Math.min(Math.max(Math.round(patch.timeoutMs), 1_000), 1_800_000)
+        : current.timeoutMs,
+    keepLastN:
+      typeof patch.keepLastN === 'number' && Number.isFinite(patch.keepLastN)
+        ? Math.min(Math.max(Math.round(patch.keepLastN), 0), 20)
+        : current.keepLastN,
+    defaultProviderId:
+      typeof patch.defaultProviderId === 'string' && patch.defaultProviderId.trim()
+        ? patch.defaultProviderId.trim().slice(0, 80)
+        : current.defaultProviderId
+  }
+  config.test = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return getTestSettings()
+}

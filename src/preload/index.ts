@@ -156,6 +156,7 @@ interface TestOutputPayload {
 const test = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('test:getSettings'),
   setSourceRepo: (dir: string): Promise<unknown> => ipcRenderer.invoke('test:setSourceRepo', dir),
+  setSettings: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('test:setSettings', patch),
   resolveSource: (source: string): Promise<unknown> => ipcRenderer.invoke('test:resolveSource', { source }),
   detect: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:detect', { sourceRepo }),
   context: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:context', { sourceRepo }),

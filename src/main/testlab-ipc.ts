@@ -8,7 +8,7 @@ import { spawn } from 'child_process'
 import { existsSync, mkdirSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { isAbsolute, join, relative, resolve } from 'path'
-import { getTestSettings, setTestSourceRepo, type TestLabSettings } from './config'
+import { getTestSettings, setTestSettings, setTestSourceRepo, type TestLabSettings } from './config'
 import { createTestRun, listTestRuns, type TestRunRow } from './db'
 import {
   buildRepoContext,
@@ -234,6 +234,11 @@ export function registerTestIpc(): void {
   ipcMain.handle('test:setSourceRepo', (_event, dir: unknown): TestLabSettings => {
     if (typeof dir !== 'string') return getTestSettings()
     return setTestSourceRepo(dir.slice(0, 1_000))
+  })
+
+  ipcMain.handle('test:setSettings', (_event, patch: unknown): TestLabSettings => {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return getTestSettings()
+    return setTestSettings(patch as Partial<TestLabSettings>)
   })
 
   ipcMain.handle('test:resolveSource', async (_event, args: { source: string }): Promise<ResolveSourceResponse> => {

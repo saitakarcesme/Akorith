@@ -366,6 +366,7 @@ export type TestResolveSourceResponse =
 export interface TestApi {
   getSettings(): Promise<TestSettings>
   setSourceRepo(dir: string): Promise<TestSettings>
+  setSettings(patch: Partial<TestSettings>): Promise<TestSettings>
   /** Accept a local repo path or a GitHub repo URL and return a local path for Test Lab. */
   resolveSource(source: string): Promise<TestResolveSourceResponse>
   /** Auto-detect framework/test/install commands for the source repo. */
