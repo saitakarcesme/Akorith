@@ -12,6 +12,7 @@ import {
   initWorkspace,
   nextPhaseNumber,
   commitPhase,
+  inspectLoopWorkspace,
   isGitRepo,
   type ProjectIdea
 } from '../src/main/workspace.ts'
@@ -57,9 +58,12 @@ try {
 } catch {
   gitOk = false
 }
-if (!gitOk) {
-  console.log('verify-workspace-loop: ok (pure only — git not available)')
-} else {
+async function main(): Promise<void> {
+  if (!gitOk) {
+    console.log('verify-workspace-loop: ok (pure only - git not available)')
+    return
+  }
+
   const dir = await mkdtemp(join(tmpdir(), 'akorith-ws-'))
   try {
     const sampleIdea: ProjectIdea = { name: 'Sample Tool', slug: 'sample-tool', summary: 'demo', firstGoal: 'build a demo' }
@@ -97,8 +101,19 @@ if (!gitOk) {
     // Numbering continues correctly for the next turn.
     assert.equal(await nextPhaseNumber(dir), 3)
 
+    const status = await inspectLoopWorkspace(dir)
+    assert.equal(status.ok, true, 'workspace status inspection succeeds')
+    assert.equal(status.commitCount, 3, 'path-scoped commit count is reported')
+    assert.equal(status.lastPhase, 2, 'latest phase number is reported')
+    assert.equal(status.syncState, 'no_remote', 'throwaway repos report missing AkorithLoop remote')
+
     console.log('verify-workspace-loop: ok')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 }
+
+void main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
