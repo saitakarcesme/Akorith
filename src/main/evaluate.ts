@@ -139,6 +139,36 @@ function cap(text: string, max: number): string {
   return text.slice(0, Math.max(0, max - 32)) + '\n... [excerpt truncated]'
 }
 
+function stripAnsi(text: string): string {
+  return text
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, '')
+}
+
+function cleanLog(text: string | null | undefined, maxChars: number): string {
+  return cap(
+    stripAnsi(text ?? '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim().length > 0)
+      .slice(-40)
+      .join('\n'),
+    maxChars
+  )
+}
+
+function compactPath(p: string, max = 64): string {
+  const normalized = p.replace(/\\/g, '/')
+  if (normalized.length <= max) return normalized
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length >= 3) {
+    const tail = parts.slice(-3).join('/')
+    if (tail.length <= max) return `.../${tail}`
+  }
+  return `...${normalized.slice(-(max - 3))}`
+}
+
 function safeDate(ts: number): string {
   return new Date(ts).toLocaleString()
 }
@@ -490,7 +520,21 @@ function scorePayload(evaluation: EvaluationRow): EvaluationScores {
 
 function sourceRepoLabel(rows: TestRunRow[]): string {
   const repos = [...new Set(rows.map((r) => r.sourceRepo))]
-  return repos.length === 1 ? repos[0] : `${repos.length} source repos`
+  if (repos.length !== 1) return `${repos.length} source repos`
+  const repo = repos[0] ?? ''
+  return basename(repo) || compactPath(repo)
+}
+
+function sourceRepoPath(rows: TestRunRow[]): string {
+  const repos = [...new Set(rows.map((r) => r.sourceRepo))]
+  return repos.length === 1 ? compactPath(repos[0] ?? '', 96) : repos.map((r) => compactPath(r, 36)).join(', ')
+}
+
+function statusColor(status: string | null | undefined): string {
+  if (status === 'passed') return '#15803d'
+  if (status === 'failed' || status === 'error' || status === 'install-failed') return '#b91c1c'
+  if (status === 'timeout' || status === 'aborted' || status === 'no-tests') return '#a16207'
+  return '#4b5563'
 }
 
 function addRule(doc: PdfDoc): void {
@@ -537,8 +581,8 @@ function renderTable(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[])
   const scores = scorePayload(evaluation)
   const runMap = new Map(rows.map((r) => [r.id, r]))
   const left = doc.page.margins.left
-  const widths = [74, 50, 54, 44, 44, 44, 44, 44, 42]
-  const headers = ['model', 'pass', 'duration', 'tokens', 'tests', 'speed', 'eff.', 'quality', 'total']
+  const widths = [108, 52, 46, 50, 44, 44, 56, 54, 46]
+  const headers = ['model', 'result', 'time', 'tokens', 'tests', 'speed', 'efficiency', 'quality', 'total']
   let y = doc.y
   ensureSpace(doc, 28 + scores.runs.length * 18)
   doc.rect(left, y - 3, widths.reduce((a, b) => a + b, 0), 16).fill('#eef2f7')
@@ -554,7 +598,7 @@ function renderTable(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[])
     x = left
     const pass = score.objective.passRate === null ? 'n/a' : `${Math.round(score.objective.passRate * 100)}%`
     const vals = [
-      `${score.rank ?? '-'} ${score.model}`,
+      `#${score.rank ?? '-'} ${score.model}`,
       pass,
       run?.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '-',
       run?.tokens != null ? String(run.tokens) : '-',
@@ -578,7 +622,7 @@ function renderBreakdown(doc: PdfDoc, evaluation: EvaluationRow): void {
   for (const run of scores.runs) {
     ensureSpace(doc, 92)
     doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(
-      `${run.model} · total ${run.totalScore.toFixed(1)}`,
+      `${run.model} - total ${run.totalScore.toFixed(1)}`,
       left(doc),
       doc.y,
       { width: contentWidth(doc) }
@@ -590,9 +634,9 @@ function renderBreakdown(doc: PdfDoc, evaluation: EvaluationRow): void {
         .fontSize(9)
         .fillColor(d.omitted ? '#6b7280' : '#111827')
         .text(
-          `${name.toUpperCase()}: ${formatScore(d.score)} · configured weight ${d.weight} · effective ${Math.round(
+          `${name.toUpperCase()}: ${formatScore(d.score)} - configured weight ${d.weight} - effective ${Math.round(
             d.effectiveWeight * 100
-          )}% · ${d.value}`,
+          )}% - ${d.value}`,
           left(doc),
           doc.y,
           { width: contentWidth(doc) }
@@ -648,31 +692,32 @@ function reportVerdict(evaluation: EvaluationRow): string {
 
 function renderHero(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[]): void {
   const pageWidth = doc.page.width
-  doc.rect(0, 0, pageWidth, 112).fill('#111827')
+  const scores = scorePayload(evaluation)
+  doc.rect(0, 0, pageWidth, 116).fill('#111827')
   doc.y = 30
   doc.font('Helvetica-Bold').fontSize(23).fillColor('#f9fafb').text('Akorith Test Report', left(doc), doc.y, {
     width: contentWidth(doc)
   })
   doc.font('Helvetica').fontSize(10).fillColor('#c7d2fe').text(
-    `${reportVerdict(evaluation)} result - ISAScore ${evaluation.totalScore.toFixed(1)} - ${evaluation.kind}`,
+    `${reportVerdict(evaluation)} result - ISAScore ${evaluation.totalScore.toFixed(1)} - ${evaluation.kind} model benchmark`,
     left(doc),
     doc.y + 5,
     { width: contentWidth(doc) }
   )
-  doc.y = 132
+  doc.y = 134
 
   const cardY = doc.y
   const gap = 10
   const cardW = (contentWidth(doc) - gap * 2) / 3
   const cards = [
     ['Source', sourceRepoLabel(rows)],
-    ['Judge', evaluation.judgeModel ?? 'objective-only'],
-    ['Generated', safeDate(Date.now())]
+    ['Runs', `${rows.length} model run${rows.length === 1 ? '' : 's'}`],
+    ['Quality', scores.qualityIncluded ? evaluation.judgeModel ?? 'judge included' : 'objective metrics only']
   ]
   for (let i = 0; i < cards.length; i++) {
     const x = left(doc) + i * (cardW + gap)
-    doc.rect(x, cardY, cardW, 52).fill('#f8fafc')
-    doc.rect(x, cardY, cardW, 52).strokeColor('#d8dee9').lineWidth(0.5).stroke()
+    doc.rect(x, cardY, cardW, 56).fill('#f8fafc')
+    doc.rect(x, cardY, cardW, 56).strokeColor('#d8dee9').lineWidth(0.5).stroke()
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#6b7280').text(cards[i][0].toUpperCase(), x + 10, cardY + 9, {
       width: cardW - 20,
       lineBreak: false,
@@ -684,7 +729,8 @@ function renderHero(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[]):
       ellipsis: true
     })
   }
-  doc.y = cardY + 68
+  doc.y = cardY + 72
+  small(doc, `Source path: ${sourceRepoPath(rows)}`)
   small(doc, `Target: ${rows[0]?.targetDesc || 'not recorded'}`)
   small(doc, `Evaluation id: ${evaluation.id}`)
 }
@@ -692,34 +738,43 @@ function renderHero(doc: PdfDoc, evaluation: EvaluationRow, rows: TestRunRow[]):
 function renderRunEvidence(doc: PdfDoc, rows: TestRunRow[]): void {
   section(doc, 'Run Evidence')
   for (const run of rows) {
-    ensureSpace(doc, 94)
+    ensureSpace(doc, 108)
     doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(modelLabel(run), left(doc), doc.y, {
       width: contentWidth(doc)
     })
-    small(
-      doc,
-      `Status: ${run.status ?? 'unknown'} - ${passSummary(run)} - duration ${
-        run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : 'n/a'
-      } - tokens ${run.tokens ?? 0}`
-    )
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .fillColor(statusColor(run.status))
+      .text(
+        `Status: ${run.status ?? 'unknown'} - ${passSummary(run)} - duration ${
+          run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : 'n/a'
+        } - tokens ${run.tokens ?? 0}`,
+        left(doc),
+        doc.y,
+        { width: contentWidth(doc) }
+      )
     if (run.rawOutput?.trim()) {
-      ensureSpace(doc, 90)
-      const excerpt = cap(run.rawOutput.trim().slice(-2_400), 2_400)
+      const excerpt = cleanLog(run.rawOutput, 2_600)
+      const lineCount = Math.max(4, Math.min(14, excerpt.split('\n').length))
+      const boxHeight = 22 + lineCount * 8
+      ensureSpace(doc, boxHeight + 20)
       const y = doc.y + 4
-      doc.rect(left(doc), y, contentWidth(doc), Math.min(130, 22 + excerpt.split('\n').length * 8)).fill('#f8fafc')
+      doc.rect(left(doc), y, contentWidth(doc), boxHeight).fill('#f8fafc')
+      doc.rect(left(doc), y, contentWidth(doc), boxHeight).strokeColor('#e5e7eb').lineWidth(0.5).stroke()
       doc.font('Courier').fontSize(7).fillColor('#111827').text(excerpt, left(doc) + 8, y + 8, {
         width: contentWidth(doc) - 16,
-        height: 112,
+        height: boxHeight - 16,
         lineGap: 1,
         ellipsis: true
       })
-      doc.y = y + 136
+      doc.y = y + boxHeight + 8
     }
     doc.moveDown(0.4)
   }
 }
 
-async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: string): Promise<void> {
+export async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: string): Promise<void> {
   mkdirSync(dirname(pdfPath), { recursive: true })
   await new Promise<void>((resolve, reject) => {
     const doc = createPdfDocument({ size: 'LETTER', margin: 48 })
@@ -731,7 +786,7 @@ async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: 
 
     const scores = scorePayload(evaluation)
     renderHero(doc, evaluation, rows)
-    if (scores.qualityFailure) small(doc, `Quality judge omitted: ${scores.qualityFailure}`)
+    if (scores.qualityFailure) small(doc, `Quality judge skipped: ${stripAnsi(scores.qualityFailure)}`)
 
     section(doc, 'Objective Metrics + ISAScore')
     renderTable(doc, evaluation, rows)
@@ -752,7 +807,7 @@ async function writePdf(evaluation: EvaluationRow, rows: TestRunRow[], pdfPath: 
 
     doc.moveDown(0.8)
     addRule(doc)
-    small(doc, 'PDF generated by Akorith Test Lab. Source repositories are copied into a temporary sandbox before execution.')
+    small(doc, 'PDF generated by Akorith Model Test Lab. Codebases are copied into a temporary sandbox before execution.')
     doc.end()
   })
 }

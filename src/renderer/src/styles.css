@@ -3585,7 +3585,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 8px;
   background: var(--bg-panel);
 }
 
@@ -3752,6 +3752,57 @@ textarea:focus-visible {
   color: var(--text);
 }
 
+.test-model-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.test-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.test-model-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.test-model-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent-strong);
+}
+
+.test-model-card input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.test-model-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 .test-actions {
   display: flex;
   align-items: center;
@@ -3818,7 +3869,7 @@ textarea:focus-visible {
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-left: 3px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .test-result.is-pass {
@@ -3905,7 +3956,7 @@ textarea:focus-visible {
   padding: 11px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3924,7 +3975,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .isa-title {
@@ -4125,12 +4176,12 @@ textarea:focus-visible {
   --bg-raised: #26262e;
   --text-dim: #b2aebd;
   --border-soft: rgba(255, 255, 255, 0.09);
-  background: #1b1b22;
+  background: #181820;
 }
 
 .test-terminal-header {
   flex: 0 0 auto;
-  padding: 8px 14px;
+  padding: 10px 14px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0;
@@ -4139,10 +4190,74 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--border-soft);
 }
 
+.test-terminal-header > div {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.test-terminal-header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+  text-transform: none;
+}
+
+.test-sandbox-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: #202029;
+}
+
+.test-sandbox-rail div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-faint);
+}
+
+.test-sandbox-rail div.is-done {
+  border-color: rgba(134, 185, 154, 0.34);
+  color: var(--success);
+}
+
+.test-sandbox-rail span {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.test-sandbox-rail strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
 .test-terminal-host {
   flex: 1 1 0;
   min-height: 0;
-  padding: 6px 8px;
+  padding: 10px 12px;
 }
 
 /* ============================================================
@@ -6452,6 +6567,9 @@ body {
   .test-choice-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .test-sandbox-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .loop-dashboard {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6482,7 +6600,9 @@ body {
 @media (max-width: 620px) {
   .test-grid,
   .test-source-tabs,
-  .test-choice-grid {
+  .test-choice-grid,
+  .test-model-grid,
+  .test-sandbox-rail {
     grid-template-columns: 1fr;
   }
   .test-row,

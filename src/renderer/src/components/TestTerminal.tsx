@@ -27,8 +27,8 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
       disableStdin: true,
       scrollback: 8000,
       fontFamily: "'Cascadia Mono', Consolas, 'Courier New', monospace",
-      fontSize: 12,
-      lineHeight: 1.2,
+      fontSize: 11,
+      lineHeight: 1.32,
       theme: {
         // Phase 14.1: lighter, more readable sandbox surface (was near-black).
         background: '#1b1b22',
@@ -41,7 +41,7 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
     terminal.loadAddon(fitAddon)
     terminal.open(host)
     fitAddon.fit()
-    terminal.write('\x1b[90m[akorith] sandbox output appears here when a run starts.\x1b[0m\r\n')
+    terminal.write('\x1b[90m[akorith] sandbox ready.\x1b[0m\r\n')
     termRef.current = terminal
     fitRef.current = fitAddon
 

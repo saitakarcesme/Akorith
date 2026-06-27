@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 26:
-Settings Center**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 27:
+Local Executor Loop**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -28,6 +28,10 @@ Settings Center**.
   CLIs via **stdin, never argv**.
 - **Single PTY write path:** everything that writes to a terminal goes through
   `bridgeSend()` → `PtyManager.write()`. Never add a second programmatic write path.
+- **Local executor invariant:** Ollama/local loop executors never receive raw shell control.
+  They return strict JSON patch attempts; Akorith validates paths, applies changes inside the
+  workspace, runs allowlisted validation commands, scores the attempt, and commits only
+  meaningful successful changes.
 - **One `usage_event` per assistant send,** written only at the `chat:send` choke point in
   `registry.ts`. Meta calls (e.g. the router's classifier) must not write one.
 - **Providers are equal:** no provider file imports another; `registry.ts` + config are the
@@ -337,6 +341,10 @@ Settings Center**.
 - [x] **Phase 26** - Settings Center. The sidebar profile opens a tabbed settings surface for
       Profile, Providers/Ollama, Workflow, Test Lab, and Data; writes still go through validated
       main-process IPC (`settings`, `ollama`, `bridge`, `digest`, `test:setSettings`).
+- [x] **Phase 27** - Local Executor Loop. Loop can use a Local/Ollama model as a structured
+      workspace-patch executor instead of a Claude/Codex PTY. Local attempts are parsed,
+      path-validated, applied with rollback, validated by allowlisted commands, scored, and only
+      then committed as the next phase. Attempts, validated changes, and commits are separate.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -560,6 +568,23 @@ uses `settings:*`; Ollama still uses `ollama:*`; bridge Auto-Enter still uses `b
 context still uses `digest:*`; and Test Lab defaults now use `test:setSettings`. The main-process
 `setTestSettings()` clamps timeout, retained sandboxes, source length, and provider id before
 writing `loopex.config.json`. Folder pickers still go through `projects:pickDirectory`.
+
+## Phase 27 - Local Executor Loop
+
+Phase 27 makes Local/Ollama models first-class loop executors without giving them raw shell
+control. A local executor returns strict `workspace_patch` JSON. `src/main/local-executor.ts`
+parses it, blocks absolute/path-traversal/protected paths, applies full-file changes inside the
+workspace with rollback data, runs only allowlisted validation commands with timeouts, strips ANSI
+from evidence, and produces a deterministic score for valid JSON, patch application, validation,
+meaningfulness, goal alignment, scope, and spam/churn.
+
+`macro_sessions` now records `executor_type`, `executor_provider`, `executor_model`, and the last
+attempt/validation/commit summaries. `runAutoLoop()` branches by executor type: `pty` keeps the
+Claude/Codex terminal path; `local` asks the selected Ollama model for a structured patch, records
+an attempt in `macro_turns`/`loop_runs`, rolls back failed or low-value attempts, commits only
+successful meaningful validated changes via path-scoped `commitPhase()`, never pushes
+automatically, and pauses after repeated local failures. The Loop UI now shows executor mode,
+local model, attempts, validated changes, commits, last validation, and last commit separately.
 
 ## Rule: keep the docs current
 

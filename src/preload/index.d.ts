@@ -499,6 +499,7 @@ export type MacroStatus =
   | 'error'
 
 export type MacroMode = 'approval' | 'auto'
+export type MacroExecutorType = 'pty' | 'local'
 
 export interface PermissionOption {
   value: string
@@ -602,6 +603,13 @@ export interface MacroSessionRow {
   safetyLevel: string | null
   latestResult: string | null
   archivedAt: number | null
+  /** Phase 27 Local Executor Loop. */
+  executorType: MacroExecutorType
+  executorProvider: string | null
+  executorModel: string | null
+  lastAttemptStatus: string | null
+  lastValidationResult: string | null
+  lastCommitMessage: string | null
 }
 
 export interface MacroTurnRow {
@@ -687,6 +695,9 @@ export interface WorkspaceCreateRequest {
   testCommands?: string
   reportFormat?: string
   safetyLevel?: string
+  executorType?: MacroExecutorType
+  executorProvider?: string
+  executorModel?: string
 }
 
 export type WorkspaceCreateResponse =
@@ -777,6 +788,9 @@ export interface MacroApi {
     plannerProvider: string
     plannerModel?: string | null
     targetTerminal?: string
+    executorType?: MacroExecutorType
+    executorProvider?: string | null
+    executorModel?: string | null
   }): Promise<MacroResponse>
   /** Phase 22: steer the next step toward a chosen direction (loop keeps running). */
   steer(sessionId: string, choice: string): Promise<MacroResponse>

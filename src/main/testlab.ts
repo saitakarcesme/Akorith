@@ -194,22 +194,23 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
     const suggestedTestPath = `loopex_generated.test.${isTs ? 'ts' : 'js'}`
 
     if (deps.vitest) {
-      return { framework: 'vitest', testCommand: 'npx vitest run', installCommand: install, lockfile, suggestedTestPath }
+      return { framework: 'vitest', testCommand: `npx vitest run ${suggestedTestPath}`, installCommand: install, lockfile, suggestedTestPath }
     }
     if (deps.jest) {
-      return { framework: 'jest', testCommand: 'npx jest', installCommand: install, lockfile, suggestedTestPath }
+      return { framework: 'jest', testCommand: `npx jest ${suggestedTestPath}`, installCommand: install, lockfile, suggestedTestPath }
     }
     if (pkg.scripts?.test && !/no test specified/i.test(pkg.scripts.test)) {
       return { framework: 'npm-test', testCommand: 'npm test', installCommand: install, lockfile, suggestedTestPath }
     }
 
     const hasUiDeps = Boolean(deps.react || deps.next || deps.vite || deps['@vitejs/plugin-react'])
+    const fallbackTestPath = `akorith.generated.test.${isTs ? (hasUiDeps ? 'tsx' : 'ts') : 'js'}`
     return {
       framework: 'vitest',
-      testCommand: `npx --yes vitest run --config ${AKORITH_VITEST_CONFIG}`,
+      testCommand: `npx --yes vitest run --config ${AKORITH_VITEST_CONFIG} ${fallbackTestPath}`,
       installCommand: install || 'npm install',
       lockfile,
-      suggestedTestPath: `akorith.generated.test.${isTs ? (hasUiDeps ? 'tsx' : 'ts') : 'js'}`,
+      suggestedTestPath: fallbackTestPath,
       note: 'No existing test runner was detected; using a temporary Vitest fallback.'
     }
   }
@@ -249,7 +250,7 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
         : ''
     return {
       framework: 'pytest',
-      testCommand: 'python3 -m pytest -q',
+      testCommand: 'python3 -m pytest -q tests/test_loopex_generated.py',
       installCommand,
       lockfile,
       suggestedTestPath: 'tests/test_loopex_generated.py'
@@ -523,16 +524,15 @@ export async function runTests(input: RunInput): Promise<RunMetrics> {
       writeFileSync(
         configPath,
         [
-          "import { defineConfig } from 'vitest/config'",
           "import { fileURLToPath } from 'node:url'",
           "import { dirname, resolve } from 'node:path'",
           '',
           'const root = dirname(fileURLToPath(import.meta.url))',
           '',
-          'export default defineConfig({',
+          'export default {',
           "  resolve: { alias: { '@': root, '~': root } },",
-          "  test: { environment: 'node', globals: false }",
-          '})',
+          "  test: { environment: 'node', globals: false, passWithNoTests: false }",
+          '}',
           ''
         ].join('\n'),
         'utf8'

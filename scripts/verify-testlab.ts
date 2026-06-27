@@ -58,8 +58,26 @@ async function main(): Promise<void> {
   writeFileSync(join(fallbackRepo, 'tsconfig.json'), '{}')
   const fallbackDet = await detectFramework(fallbackRepo)
   check('JS repo fallback uses vitest', fallbackDet.framework === 'vitest', fallbackDet.framework)
-  check('fallback command avoids prompt', fallbackDet.testCommand === 'npx --yes vitest run --config akorith.vitest.config.mjs', fallbackDet.testCommand)
+  check(
+    'fallback command avoids prompt and targets generated file',
+    fallbackDet.testCommand === 'npx --yes vitest run --config akorith.vitest.config.mjs akorith.generated.test.tsx',
+    fallbackDet.testCommand
+  )
   check('UI fallback suggests tsx test', fallbackDet.suggestedTestPath.endsWith('.tsx'), fallbackDet.suggestedTestPath)
+
+  const configBox = join(tmpBase, 'fallback-config-import')
+  mkdirSync(configBox, { recursive: true })
+  const configImport = await runTests({
+    sandbox: configBox,
+    framework: 'vitest',
+    files: [{ path: 'akorith.generated.test.ts', content: "import { describe, it, expect } from 'vitest'\n" }],
+    testCommand: "node -e \"import('./akorith.vitest.config.mjs').then(()=>console.log('Tests  1 passed (1)'))\"",
+    installDeps: false,
+    timeoutMs: 10_000,
+    signal: new AbortController().signal,
+    onOutput: sink
+  })
+  check('fallback Vitest config imports without sandbox node_modules', configImport.status === 'passed', configImport.rawOutput)
 
   const pyRepo = join(tmpBase, 'pyrepo')
   mkdirSync(join(pyRepo, 'tests'), { recursive: true })

@@ -279,6 +279,14 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'safety_level', 'TEXT')
   ensureColumn('macro_sessions', 'latest_result', 'TEXT')
   ensureColumn('macro_sessions', 'archived_at', 'INTEGER')
+  // Phase 27 Local Executor Loop: local/Ollama executors produce structured
+  // patch attempts that Akorith validates before any commit.
+  ensureColumn('macro_sessions', 'executor_type', "TEXT NOT NULL DEFAULT 'pty'")
+  ensureColumn('macro_sessions', 'executor_provider', 'TEXT')
+  ensureColumn('macro_sessions', 'executor_model', 'TEXT')
+  ensureColumn('macro_sessions', 'last_attempt_status', 'TEXT')
+  ensureColumn('macro_sessions', 'last_validation_result', 'TEXT')
+  ensureColumn('macro_sessions', 'last_commit_message', 'TEXT')
 }
 
 export function closeDb(): void {
@@ -953,11 +961,13 @@ export type MacroStatus =
   | 'summarizing'
   | 'awaiting_permission'
   | 'auto_running'
+  | 'paused'
   | 'completed'
   | 'stopped'
   | 'error'
 
 export type MacroMode = 'approval' | 'auto'
+export type MacroExecutorType = 'pty' | 'local'
 
 export interface MacroSessionRow {
   id: string
@@ -1010,6 +1020,13 @@ export interface MacroSessionRow {
   safetyLevel: string | null
   latestResult: string | null
   archivedAt: number | null
+  /** Phase 27 Local Executor Loop. */
+  executorType: MacroExecutorType
+  executorProvider: string | null
+  executorModel: string | null
+  lastAttemptStatus: string | null
+  lastValidationResult: string | null
+  lastCommitMessage: string | null
 }
 
 export interface MacroTurnRow {
@@ -1092,7 +1109,13 @@ const toMacroSession = (r: Record<string, unknown>): MacroSessionRow => ({
   reportFormat: (r.report_format as string | null) ?? null,
   safetyLevel: (r.safety_level as string | null) ?? null,
   latestResult: (r.latest_result as string | null) ?? null,
-  archivedAt: (r.archived_at as number | null) ?? null
+  archivedAt: (r.archived_at as number | null) ?? null,
+  executorType: (r.executor_type as MacroExecutorType | null) === 'local' ? 'local' : 'pty',
+  executorProvider: (r.executor_provider as string | null) ?? null,
+  executorModel: (r.executor_model as string | null) ?? null,
+  lastAttemptStatus: (r.last_attempt_status as string | null) ?? null,
+  lastValidationResult: (r.last_validation_result as string | null) ?? null,
+  lastCommitMessage: (r.last_commit_message as string | null) ?? null
 })
 
 const toMacroTurn = (r: Record<string, unknown>): MacroTurnRow => ({
@@ -1162,6 +1185,9 @@ export function createMacroSession(input: {
   reportFormat?: string | null
   safetyLevel?: string | null
   latestResult?: string | null
+  executorType?: MacroExecutorType
+  executorProvider?: string | null
+  executorModel?: string | null
 }): MacroSessionRow {
   const now = Date.now()
   const row: MacroSessionRow = {
@@ -1206,7 +1232,13 @@ export function createMacroSession(input: {
     reportFormat: input.reportFormat ?? 'summary',
     safetyLevel: input.safetyLevel ?? 'balanced',
     latestResult: input.latestResult ?? null,
-    archivedAt: null
+    archivedAt: null,
+    executorType: input.executorType === 'local' ? 'local' : 'pty',
+    executorProvider: input.executorProvider ?? (input.executorType === 'local' ? 'local' : null),
+    executorModel: input.executorModel ?? null,
+    lastAttemptStatus: null,
+    lastValidationResult: null,
+    lastCommitMessage: null
   }
   must()
     .prepare(
@@ -1216,8 +1248,9 @@ export function createMacroSession(input: {
         mode, auto_actions, pause_reason, workspace_dir, auto_commit, token_budget, tokens_used, title,
         loop_intent, cadence_minutes, loop_type, target_type, target_ref, schedule_kind, schedule_detail,
         next_run_at, stop_condition, max_runs, max_commits, run_count, commit_behavior, push_enabled,
-        test_commands, report_format, safety_level, latest_result, archived_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        test_commands, report_format, safety_level, latest_result, archived_at,
+        executor_type, executor_provider, executor_model, last_attempt_status, last_validation_result, last_commit_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -1260,7 +1293,13 @@ export function createMacroSession(input: {
       row.reportFormat,
       row.safetyLevel,
       row.latestResult,
-      row.archivedAt
+      row.archivedAt,
+      row.executorType,
+      row.executorProvider,
+      row.executorModel,
+      row.lastAttemptStatus,
+      row.lastValidationResult,
+      row.lastCommitMessage
     )
   return row
 }
@@ -1287,6 +1326,12 @@ export function updateMacroSession(
       | 'latestResult'
       | 'pushEnabled'
       | 'archivedAt'
+      | 'executorType'
+      | 'executorProvider'
+      | 'executorModel'
+      | 'lastAttemptStatus'
+      | 'lastValidationResult'
+      | 'lastCommitMessage'
     >
   >
 ): MacroSessionRow | null {
@@ -1310,7 +1355,13 @@ export function updateMacroSession(
     runCount: patch.runCount ?? current.runCount,
     latestResult: patch.latestResult !== undefined ? patch.latestResult : current.latestResult,
     pushEnabled: patch.pushEnabled ?? current.pushEnabled,
-    archivedAt: patch.archivedAt !== undefined ? patch.archivedAt : current.archivedAt
+    archivedAt: patch.archivedAt !== undefined ? patch.archivedAt : current.archivedAt,
+    executorType: patch.executorType ?? current.executorType,
+    executorProvider: patch.executorProvider !== undefined ? patch.executorProvider : current.executorProvider,
+    executorModel: patch.executorModel !== undefined ? patch.executorModel : current.executorModel,
+    lastAttemptStatus: patch.lastAttemptStatus !== undefined ? patch.lastAttemptStatus : current.lastAttemptStatus,
+    lastValidationResult: patch.lastValidationResult !== undefined ? patch.lastValidationResult : current.lastValidationResult,
+    lastCommitMessage: patch.lastCommitMessage !== undefined ? patch.lastCommitMessage : current.lastCommitMessage
   }
   must()
     .prepare(
@@ -1318,7 +1369,9 @@ export function updateMacroSession(
        SET updated_at = ?, status = ?, repo_digest_snapshot = ?, final_score = ?, stop_reason = ?,
            mode = ?, auto_actions = ?, pause_reason = ?, tokens_used = ?, pending_steering = ?,
            planner_provider = ?, planner_model = ?, target_terminal = ?, next_run_at = ?,
-           run_count = ?, latest_result = ?, push_enabled = ?, archived_at = ?
+           run_count = ?, latest_result = ?, push_enabled = ?, archived_at = ?,
+           executor_type = ?, executor_provider = ?, executor_model = ?,
+           last_attempt_status = ?, last_validation_result = ?, last_commit_message = ?
        WHERE id = ?`
     )
     .run(
@@ -1340,6 +1393,12 @@ export function updateMacroSession(
       next.latestResult,
       next.pushEnabled ? 1 : 0,
       next.archivedAt,
+      next.executorType,
+      next.executorProvider,
+      next.executorModel,
+      next.lastAttemptStatus,
+      next.lastValidationResult,
+      next.lastCommitMessage,
       sessionId
     )
   return getMacroSession(sessionId)

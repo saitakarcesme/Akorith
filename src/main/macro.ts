@@ -64,6 +64,13 @@ import {
   parsePlannerProposal
 } from './macro-core'
 import {
+  buildLocalExecutorPrompt,
+  executeLocalExecutorAttempt,
+  renderLocalValidationEvidence,
+  rollbackLocalExecutorPatch,
+  splitSuggestedCommands
+} from './local-executor'
+import {
   boundSnapshot,
   buildCriticPrompt,
   buildSummarizerPrompt,
@@ -90,6 +97,9 @@ const MAX_PROMPT_CHARS = 200_000
 const PROPOSE_TIMEOUT_MS = 600_000
 const SUMMARIZE_TIMEOUT_MS = 120_000
 const CRITIC_TIMEOUT_MS = 120_000
+const LOCAL_EXECUTOR_TIMEOUT_MS = 180_000
+const LOCAL_VALIDATION_TIMEOUT_MS = 120_000
+const LOCAL_REPEATED_FAILURE_LIMIT = 3
 const SNAPSHOT_CHARS = 8000
 const DIGEST_TIMEOUT_MS = 12_000
 const PLANNER_ATTEMPT_TIMEOUT_MS = 90_000
@@ -726,18 +736,27 @@ function setPlanner(args: {
   plannerProvider: string
   plannerModel?: string | null
   targetTerminal?: string
+  executorType?: 'pty' | 'local'
+  executorProvider?: string | null
+  executorModel?: string | null
 }): MacroResponse {
   const current = requireState(args.sessionId).session
   updateMacroSession(args.sessionId, {
     plannerProvider: args.plannerProvider,
     plannerModel: args.plannerModel || null,
-    targetTerminal: args.targetTerminal || current.targetTerminal
+    targetTerminal: args.targetTerminal || current.targetTerminal,
+    executorType: args.executorType ?? current.executorType,
+    executorProvider: args.executorProvider !== undefined ? args.executorProvider : current.executorProvider,
+    executorModel: args.executorModel !== undefined ? args.executorModel : current.executorModel
   })
   logAutoAction(args.sessionId, {
     type: 'planner_switch',
     provider: args.plannerProvider,
     model: args.plannerModel || null,
-    targetTerminal: args.targetTerminal || current.targetTerminal
+    targetTerminal: args.targetTerminal || current.targetTerminal,
+    executorType: args.executorType ?? current.executorType,
+    executorProvider: args.executorProvider !== undefined ? args.executorProvider : current.executorProvider,
+    executorModel: args.executorModel !== undefined ? args.executorModel : current.executorModel
   })
   return { ok: true, state: requireState(args.sessionId) }
 }
@@ -935,6 +954,313 @@ async function maybeAutoCommit(
     logAutoAction(sessionId, { type: 'auto_commit_skipped', reason })
     return { committed: false, reason }
   }
+}
+
+function autoCommitCount(session: MacroSessionRow): number {
+  try {
+    const list = session.autoActions ? (JSON.parse(session.autoActions) as AutoAction[]) : []
+    return Array.isArray(list) ? list.filter((action) => action.type === 'auto_commit' && typeof action.message === 'string').length : 0
+  } catch {
+    return 0
+  }
+}
+
+async function localWorkspaceContext(session: MacroSessionRow): Promise<string> {
+  if (!session.workspaceDir) return 'Workspace is not available.'
+  try {
+    const cfg = getDigestSettings()
+    return (
+      (await withTimeout(
+        buildDigest({
+          ...cfg,
+          enabled: true,
+          workingDir: session.workspaceDir,
+          maxDiffBytes: Math.min(cfg.maxDiffBytes, 12_000),
+          maxTotalBytes: Math.min(cfg.maxTotalBytes, 32_000),
+          treeDepth: Math.min(Math.max(cfg.treeDepth, 1), 4)
+        }),
+        DIGEST_TIMEOUT_MS,
+        null
+      )) ?? `Workspace: ${session.workspaceDir}`
+    )
+  } catch {
+    return `Workspace: ${session.workspaceDir}`
+  }
+}
+
+function localAttemptHistory(sessionId: string): string {
+  const runs = listLoopRuns(sessionId, 6).reverse()
+  if (runs.length === 0) return ''
+  return runs
+    .map((run) => {
+      const files = (run.filesChanged ?? []).slice(0, 8).join(', ') || 'no files'
+      return `Run ${run.runIndex}: ${run.status}; ${run.summary ?? run.error ?? 'no summary'}; files: ${files}`
+    })
+    .join('\n')
+}
+
+function localValidationSummary(results: Awaited<ReturnType<typeof executeLocalExecutorAttempt>>['commandResults']): string {
+  if (results.length === 0) return 'No validation command ran.'
+  const failed = results.find((result) => !result.allowed || !result.passed)
+  if (!failed) return `Validation passed: ${results.map((result) => result.cmd).join(', ')}.`
+  return failed.allowed ? `Validation failed: ${failed.cmd} (${failed.error ?? `exit ${failed.exitCode}`}).` : `Validation blocked: ${failed.cmd}.`
+}
+
+function localAttemptResultText(args: {
+  attempt: Awaited<ReturnType<typeof executeLocalExecutorAttempt>>
+  status: string
+  commitMessage: string | null
+  commitError: string | null
+  rolledBack: boolean
+}): string {
+  const { attempt, status, commitMessage, commitError, rolledBack } = args
+  const reasons = attempt.score.reasons.length ? attempt.score.reasons.join('; ') : 'all required checks passed'
+  const changed = attempt.changedFiles.length ? attempt.changedFiles.join(', ') : 'none'
+  const validation = localValidationSummary(attempt.commandResults)
+  return [
+    `Local executor attempt: ${attempt.action?.summary ?? 'invalid structured output'}`,
+    `Status: ${status}`,
+    `Score: ${attempt.score.score}/100 (${attempt.score.verdict})`,
+    `Changed files: ${changed}`,
+    validation,
+    commitMessage ? `Commit: ${commitMessage}` : `Commit: ${commitError ?? 'not created'}`,
+    `Rollback: ${rolledBack ? 'applied' : 'not needed'}`,
+    `Reasons: ${reasons}`,
+    '',
+    renderLocalValidationEvidence(attempt.commandResults)
+  ].join('\n')
+}
+
+function countRecentLocalFailures(sessionId: string): number {
+  let count = 0
+  for (const run of listLoopRuns(sessionId, LOCAL_REPEATED_FAILURE_LIMIT)) {
+    if (run.status === 'committed' || run.status === 'validated' || run.status === 'completed') break
+    if (run.status === 'failed' || run.status === 'no_commit' || run.status === 'needs_attention') count += 1
+    else break
+  }
+  return count
+}
+
+async function runLocalExecutorCycle(
+  sessionId: string,
+  runIndex: number,
+  runStartedAt: number,
+  signal: AbortSignal
+): Promise<'continue' | 'break'> {
+  const session = requireState(sessionId).session
+  if (!session.workspaceDir || !existsSync(session.workspaceDir)) {
+    const error = 'local executor workspace is missing'
+    updateMacroSession(sessionId, {
+      status: 'paused',
+      pauseReason: error,
+      lastAttemptStatus: 'failed',
+      lastValidationResult: error
+    })
+    recordLoopRun({
+      loopId: sessionId,
+      runIndex,
+      startedAt: runStartedAt,
+      status: 'failed',
+      providerId: session.executorProvider ?? 'local',
+      model: session.executorModel,
+      error
+    })
+    return 'break'
+  }
+
+  const providerId = session.executorProvider || 'local'
+  const model = session.executorModel || undefined
+  updateMacroSession(sessionId, {
+    status: 'auto_running',
+    pauseReason: null,
+    lastAttemptStatus: 'planning',
+    lastValidationResult: 'Preparing local executor context.'
+  })
+  recordLoopEvent({
+    loopId: sessionId,
+    type: 'local_executor_planning',
+    message: 'Preparing a structured local executor attempt.',
+    metadata: { providerId, model }
+  })
+
+  const prompt = buildLocalExecutorPrompt({
+    goal: cleanText(session.goal, MAX_GOAL_CHARS),
+    workspaceContext: await localWorkspaceContext(session),
+    previousAttempts: localAttemptHistory(sessionId),
+    validationCommands: session.testCommands ?? ''
+  })
+
+  let raw = ''
+  try {
+    const result = await sendMetaPrompt(
+      providerId,
+      model,
+      prompt,
+      AbortSignal.any([signal, AbortSignal.timeout(LOCAL_EXECUTOR_TIMEOUT_MS)])
+    )
+    raw = result.text
+    recordMetaUsage(sessionId, result.usage)
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err)
+    updateMacroSession(sessionId, {
+      lastAttemptStatus: 'failed',
+      lastValidationResult: `Local executor model failed: ${error}`
+    })
+    recordLoopRun({
+      loopId: sessionId,
+      runIndex,
+      startedAt: runStartedAt,
+      status: 'failed',
+      providerId,
+      model: model ?? null,
+      error
+    })
+    scheduleAutoRetry(sessionId, `local_executor_model_error:${error}`)
+    return 'break'
+  }
+
+  if (signal.aborted) return 'break'
+  updateMacroSession(sessionId, {
+    lastAttemptStatus: 'applying_patch',
+    lastValidationResult: 'Applying structured local patch.'
+  })
+  const attempt = await executeLocalExecutorAttempt({
+    workspaceDir: session.workspaceDir,
+    rawOutput: raw,
+    goal: session.goal,
+    extraCommands: splitSuggestedCommands(session.testCommands),
+    timeoutMs: LOCAL_VALIDATION_TIMEOUT_MS,
+    signal,
+    revertOnNoCommit: false
+  })
+
+  const turn = createMacroTurn({
+    sessionId,
+    turnIndex: runIndex,
+    status: 'completed',
+    proposal: cleanText(raw, MAX_PROMPT_CHARS),
+    plannerRationale: attempt.action?.rationale || attempt.action?.summary || undefined,
+    expectedResult: attempt.action?.expected_outcome ?? undefined,
+    confidenceScore: attempt.score.score,
+    goodEnoughScore: attempt.score.score,
+    riskLevel: attempt.score.shouldCommit ? 'low' : 'medium',
+    providerUsed: providerId,
+    modelUsed: model || undefined,
+    error: attempt.errors[0]
+  })
+
+  let status = attempt.score.shouldCommit ? 'validated' : attempt.score.verdict === 'attempt_failed' ? 'failed' : 'no_commit'
+  let commitMessage: string | null = null
+  let commitError: string | null = null
+  let rolledBack = attempt.rolledBack
+
+  if (attempt.score.shouldCommit && session.autoCommit) {
+    updateMacroSession(sessionId, {
+      lastAttemptStatus: 'committing',
+      lastValidationResult: localValidationSummary(attempt.commandResults)
+    })
+    const headline = deriveHeadline({
+      criticRationale: attempt.action?.rationale ?? null,
+      criticVerdict: 'advanced',
+      summaryStatus: attempt.action?.summary ?? null,
+      goal: session.goal
+    })
+    const committed = await commitPhase(session.workspaceDir, headline, attempt.changedFiles)
+    if (committed.committed) {
+      status = 'committed'
+      commitMessage = committed.message ?? null
+      logAutoAction(sessionId, { type: 'auto_commit', phase: committed.phase, message: committed.message, executor: 'local' })
+    } else {
+      status = 'no_commit'
+      commitError = committed.reason ?? 'commit was skipped'
+    }
+  } else if (attempt.score.shouldCommit && !session.autoCommit) {
+    commitError = 'auto-commit disabled'
+  }
+
+  if (status !== 'committed' && attempt.rollback.length > 0 && !rolledBack) {
+    rollbackLocalExecutorPatch(attempt.rollback)
+    rolledBack = true
+  }
+
+  const summaryText = localAttemptResultText({ attempt, status, commitMessage, commitError, rolledBack })
+  updateMacroTurn(turn.id, {
+    status: 'completed',
+    executorResultSummary: summaryText,
+    criticScore: attempt.score.score,
+    criticVerdict: attempt.score.verdict,
+    criticReview: JSON.stringify(attempt.score),
+    resultStatus: status === 'committed' || status === 'validated' ? 'completed' : 'needs_attention',
+    autoAction: JSON.stringify({
+      type: 'local_executor_attempt',
+      status,
+      score: attempt.score.score,
+      shouldCommit: attempt.score.shouldCommit,
+      rolledBack,
+      commitMessage,
+      commitError,
+      at: Date.now()
+    })
+  })
+
+  const attemptError = commitError || attempt.score.reasons.join('; ') || attempt.errors.join('; ') || null
+  recordLoopRun({
+    loopId: sessionId,
+    runIndex,
+    startedAt: runStartedAt,
+    status,
+    providerId,
+    model: model ?? null,
+    summary: attempt.action?.summary ?? attempt.score.reasons[0] ?? 'Local executor attempt recorded.',
+    actionsTaken: {
+      executorType: 'local',
+      score: attempt.score,
+      rolledBack,
+      commitError,
+      expectedOutcome: attempt.action?.expected_outcome ?? null
+    },
+    filesChanged: attempt.changedFiles,
+    commandsExecuted: attempt.commandResults.map((result) => result.cmd),
+    testBuildResults: renderLocalValidationEvidence(attempt.commandResults),
+    commitsCreated: commitMessage ? [commitMessage] : [],
+    nextSuggestedStep: attempt.action?.expected_outcome ?? null,
+    error: status === 'committed' ? null : attemptError
+  })
+
+  updateMacroSession(sessionId, {
+    status: 'auto_running',
+    pauseReason: null,
+    lastAttemptStatus: status,
+    lastValidationResult: localValidationSummary(attempt.commandResults),
+    lastCommitMessage: commitMessage,
+    latestResult: status === 'committed'
+      ? `Local executor committed: ${commitMessage}`
+      : `Local executor attempt ${status.replace(/_/g, ' ')}: ${attempt.score.reasons[0] ?? commitError ?? 'review recorded'}`
+  })
+
+  recordLoopEvent({
+    loopId: sessionId,
+    type: status === 'committed' ? 'local_executor_committed' : 'local_executor_attempt_recorded',
+    message: status === 'committed' ? `Committed local executor change: ${commitMessage}` : `Local executor attempt recorded as ${status}.`,
+    severity: status === 'committed' ? 'success' : status === 'validated' ? 'info' : 'warning',
+    metadata: { status, score: attempt.score.score, changedFiles: attempt.changedFiles, commitMessage, commitError, rolledBack }
+  })
+
+  const after = getMacroSession(sessionId)
+  if (after?.maxCommits && after.maxCommits > 0 && autoCommitCount(after) >= after.maxCommits) {
+    finishAuto(sessionId, 'stopped', 'max_commits')
+    return 'break'
+  }
+  if (countRecentLocalFailures(sessionId) >= LOCAL_REPEATED_FAILURE_LIMIT) {
+    updateMacroSession(sessionId, {
+      status: 'paused',
+      pauseReason: 'local_executor_repeated_failures',
+      latestResult: 'Paused after repeated local executor failures.'
+    })
+    logAutoAction(sessionId, { type: 'local_executor_paused', reason: 'local_executor_repeated_failures' })
+    return 'break'
+  }
+  return 'continue'
 }
 
 /** Approval-Mode helper: fill the turn summary from the terminal for user review. */
@@ -1176,6 +1502,26 @@ async function runAutoLoop(sessionId: string): Promise<void> {
         finishAuto(sessionId, 'stopped', 'token_budget_reached')
         break
       }
+      if (s.session.executorType === 'local') {
+        const runStartedAt = Date.now()
+        const runIndex = s.turns.length + 1
+        const localDecision = await runLocalExecutorCycle(sessionId, runIndex, runStartedAt, signal)
+        if (stopped() || localDecision === 'break') break
+        const current = getMacroSession(sessionId)
+        if (!current || current.status === 'completed' || current.status === 'stopped' || current.status === 'paused') break
+        const cadenceMinutes = Math.max(0, current.cadenceMinutes ?? 0)
+        if (cadenceMinutes > 0) {
+          logAutoAction(sessionId, { type: 'cadence_wait', minutes: cadenceMinutes })
+          updateMacroSession(sessionId, {
+            status: 'auto_running',
+            pauseReason: null,
+            latestResult: 'Waiting for the next scheduled cycle.',
+            nextRunAt: Date.now() + cadenceMinutes * 60_000
+          })
+        }
+        await interruptibleDelay(cadenceMinutes > 0 ? cadenceMinutes * 60_000 : 800, signal)
+        continue
+      }
       const executor = ensureAutoExecutor(sessionId)
       if (!executor.ok) {
         recordLoopRun({
@@ -1357,10 +1703,12 @@ function startAuto(sessionId: string): MacroResponse {
   if (s.session.status === 'completed' || s.session.status === 'stopped') {
     return { ok: false, error: 'session is finished; start a new loop', state: s }
   }
-  const executor = ensureAutoExecutor(sessionId)
-  if (!executor.ok) {
-    updateMacroSession(sessionId, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
-    return { ok: false, error: executor.error, state: requireState(sessionId) }
+  if (s.session.executorType !== 'local') {
+    const executor = ensureAutoExecutor(sessionId)
+    if (!executor.ok) {
+      updateMacroSession(sessionId, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
+      return { ok: false, error: executor.error, state: requireState(sessionId) }
+    }
   }
   updateMacroSession(sessionId, { mode: 'auto', status: 'auto_running', pauseReason: null })
   // Fire-and-forget; the renderer polls macro:get for progress.
@@ -1379,10 +1727,12 @@ export function resumeActiveAutoLoopsAtStartup(limit = 100): void {
       session.status !== 'error'
   )
   for (const session of sessions) {
-    const executor = ensureAutoExecutor(session.id)
-    if (!executor.ok) {
-      updateMacroSession(session.id, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
-      continue
+    if (session.executorType !== 'local') {
+      const executor = ensureAutoExecutor(session.id)
+      if (!executor.ok) {
+        updateMacroSession(session.id, { status: 'error', stopReason: executor.error, pauseReason: executor.error })
+        continue
+      }
     }
     updateMacroSession(session.id, { mode: 'auto', status: 'auto_running', pauseReason: null })
     void runAutoLoop(session.id)
@@ -1417,6 +1767,9 @@ interface WorkspaceCreateArgs {
   testCommands?: string
   reportFormat?: string
   safetyLevel?: string
+  executorType?: 'pty' | 'local'
+  executorProvider?: string
+  executorModel?: string
 }
 
 type WorkspaceCreateResponse =
@@ -1485,6 +1838,7 @@ function loopProfileInstruction(args: WorkspaceCreateArgs, cadenceMinutes: numbe
   const commitBehavior = safeText(args.commitBehavior, 'commit', 80)
   const reportFormat = safeText(args.reportFormat, 'summary', 80)
   const safetyLevel = safeText(args.safetyLevel, 'balanced', 80)
+  const executorType = args.executorType === 'local' ? 'Local Ollama structured patch executor' : 'Claude/Codex PTY executor'
   const testCommands = typeof args.testCommands === 'string' && args.testCommands.trim()
     ? args.testCommands.replace(/[\0\r]/g, '').trim().slice(0, 1000)
     : 'auto-detect package scripts and validation commands'
@@ -1496,6 +1850,7 @@ function loopProfileInstruction(args: WorkspaceCreateArgs, cadenceMinutes: numbe
 - Autonomy: ${autonomy}
 - Stop condition: ${stopCondition}
 - Commit behavior: ${commitBehavior}; push to GitHub is ${checkboxText(args.pushEnabled)}
+- Executor: ${executorType}
 - Validation commands: ${testCommands}
 - Report format: ${reportFormat}
 - Safety level: ${safetyLevel}
@@ -1550,7 +1905,8 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
   )
   const commitBehavior = safeText(args.commitBehavior, 'commit', 80)
   const autoCommit = commitBehavior !== 'suggest' && commitBehavior !== 'none'
-  const pushEnabled = autoCommit || args.pushEnabled === true
+  const executorType = args.executorType === 'local' ? 'local' : 'pty'
+  const pushEnabled = executorType === 'local' ? false : autoCommit || args.pushEnabled === true
   const normalizedArgs = { ...args, commitBehavior, pushEnabled }
   const rhythm = loopRhythmInstruction(loopIntent, cadenceMinutes)
   const profile = loopProfileInstruction(normalizedArgs, cadenceMinutes)
@@ -1615,7 +1971,10 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
     pushEnabled,
     testCommands: typeof args.testCommands === 'string' ? args.testCommands.slice(0, 1000) : null,
     reportFormat: safeText(args.reportFormat, 'summary', 80),
-    safetyLevel: safeText(args.safetyLevel, 'balanced', 80)
+    safetyLevel: safeText(args.safetyLevel, 'balanced', 80),
+    executorType,
+    executorProvider: executorType === 'local' ? safeText(args.executorProvider, 'local', 32) : null,
+    executorModel: executorType === 'local' ? safeText(args.executorModel, '', 120) || null : null
   })
   recordLoopEvent({
     loopId: session.id,
@@ -1628,6 +1987,9 @@ async function createWorkspaceProject(args: WorkspaceCreateArgs): Promise<Worksp
       autonomyLevel: args.autonomyLevel,
       commitBehavior,
       pushEnabled,
+      executorType,
+      executorProvider: session.executorProvider,
+      executorModel: session.executorModel,
       loopRepository: LOOP_REPOSITORY_URL,
       loopFolder: dir
     }
@@ -1678,7 +2040,10 @@ function validWorkspacePayload(args: unknown): args is WorkspaceCreateArgs {
     (a.pushEnabled === undefined || typeof a.pushEnabled === 'boolean') &&
     (a.testCommands === undefined || (typeof a.testCommands === 'string' && a.testCommands.length <= 1000)) &&
     (a.reportFormat === undefined || (typeof a.reportFormat === 'string' && a.reportFormat.length <= 80)) &&
-    (a.safetyLevel === undefined || (typeof a.safetyLevel === 'string' && a.safetyLevel.length <= 80))
+    (a.safetyLevel === undefined || (typeof a.safetyLevel === 'string' && a.safetyLevel.length <= 80)) &&
+    (a.executorType === undefined || a.executorType === 'pty' || a.executorType === 'local') &&
+    (a.executorProvider === undefined || (typeof a.executorProvider === 'string' && VALID_PROVIDER.test(a.executorProvider))) &&
+    (a.executorModel === undefined || (typeof a.executorModel === 'string' && a.executorModel.length <= 120))
   )
 }
 
@@ -1847,14 +2212,25 @@ export function registerMacroIpc(): void {
 
   ipcMain.handle(
     'macro:setPlanner',
-    (_event, args: { sessionId: string; plannerProvider: string; plannerModel?: string | null; targetTerminal?: string }): MacroResponse => {
+    (_event, args: {
+      sessionId: string
+      plannerProvider: string
+      plannerModel?: string | null
+      targetTerminal?: string
+      executorType?: 'pty' | 'local'
+      executorProvider?: string | null
+      executorModel?: string | null
+    }): MacroResponse => {
       if (
         typeof args?.sessionId !== 'string' ||
         !VALID_ID.test(args.sessionId) ||
         typeof args.plannerProvider !== 'string' ||
         !VALID_PROVIDER.test(args.plannerProvider) ||
         (args.plannerModel !== undefined && args.plannerModel !== null && (typeof args.plannerModel !== 'string' || !VALID_MODEL.test(args.plannerModel))) ||
-        (args.targetTerminal !== undefined && (typeof args.targetTerminal !== 'string' || !VALID_TERMINAL.test(args.targetTerminal)))
+        (args.targetTerminal !== undefined && (typeof args.targetTerminal !== 'string' || !VALID_TERMINAL.test(args.targetTerminal))) ||
+        (args.executorType !== undefined && args.executorType !== 'pty' && args.executorType !== 'local') ||
+        (args.executorProvider !== undefined && args.executorProvider !== null && (typeof args.executorProvider !== 'string' || !VALID_PROVIDER.test(args.executorProvider))) ||
+        (args.executorModel !== undefined && args.executorModel !== null && (typeof args.executorModel !== 'string' || args.executorModel.length > 120))
       ) {
         return { ok: false, error: 'invalid macro:setPlanner payload' }
       }

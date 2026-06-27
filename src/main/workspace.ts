@@ -171,6 +171,12 @@ export async function hasChanges(cwd: string): Promise<boolean> {
   return res.ok && res.stdout.length > 0
 }
 
+async function hasStagedChanges(cwd: string, paths?: string[]): Promise<boolean> {
+  const pathspec = paths && paths.length > 0 ? paths : ['.']
+  const res = await git(cwd, ['diff', '--cached', '--name-only', '--', ...pathspec])
+  return res.ok && res.stdout.length > 0
+}
+
 /** Next "Phase N" number for this repo: highest existing phase + 1 (min 1). */
 export async function nextPhaseNumber(cwd: string): Promise<number> {
   const res = await git(cwd, ['log', '--pretty=%s', '-n', '200', '--', '.'])
@@ -287,19 +293,24 @@ export interface CommitResult {
 }
 
 /**
- * Stage everything and commit it as the next "Phase N: <headline>". Returns
- * committed:false (not an error) when there is nothing to commit, so the loop
- * can keep going without noise.
+ * Stage changes and commit them as the next "Phase N: <headline>". Without a
+ * path list this keeps the historical "stage everything" loop behavior; local
+ * structured executors pass their touched file list so unrelated dirty user
+ * changes are never swept into the attempt commit.
  */
-export async function commitPhase(cwd: string, headline: string): Promise<CommitResult> {
+export async function commitPhase(cwd: string, headline: string, paths?: string[]): Promise<CommitResult> {
   if (!(await isGitRepo(cwd))) return { committed: false, reason: 'not a git repository' }
-  const add = await git(cwd, ['add', '-A', '--', '.'])
+  const pathspec = paths && paths.length > 0 ? paths : ['.']
+  const add = await git(cwd, ['add', '-A', '--', ...pathspec])
   if (!add.ok) return { committed: false, reason: `git add failed: ${add.stderr}` }
-  if (!(await hasChanges(cwd))) return { committed: false, reason: 'no changes to commit' }
+  if (!(await hasStagedChanges(cwd, pathspec))) return { committed: false, reason: 'no changes to commit' }
   const phase = await nextPhaseNumber(cwd)
   const message = buildPhaseCommitMessage(phase, headline)
   const commit = await git(cwd, [...GIT_IDENTITY, 'commit', '-F', '-'], message)
-  if (!commit.ok) return { committed: false, reason: `git commit failed: ${commit.stderr}` }
+  if (!commit.ok) {
+    await git(cwd, ['reset', '--', ...pathspec])
+    return { committed: false, reason: `git commit failed: ${commit.stderr}` }
+  }
   return { committed: true, phase, message }
 }
 export interface PushResult {

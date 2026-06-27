@@ -135,6 +135,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [providerId, setProviderId] = useState('')
   const [model, setModel] = useState('')
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
 
   // Resolved/overridable run config (seeded by Detect).
   const [detection, setDetection] = useState<TestDetection | null>(null)
@@ -175,6 +176,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   const localProvider = providers.find((p) => p.id === 'local')
   const selected = localProvider
+  const modelOptions = selected?.models ?? []
   const judgeProviders = providers.filter((p) => p.available.ok && (p.id === 'local' || p.id === 'claude' || p.id === 'chatgpt'))
   const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
   const projectOptions = projects.filter((project) => Boolean(project.path))
@@ -237,6 +239,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   useEffect(() => {
     setModel((cur) => (selected && selected.models.includes(cur) ? cur : (selected?.models[0] ?? '')))
   }, [selected])
+
+  useEffect(() => {
+    setSelectedModels((current) => {
+      const valid = current.filter((m) => modelOptions.includes(m))
+      if (valid.length > 0) return valid
+      return modelOptions[0] ? [modelOptions[0]] : []
+    })
+  }, [modelOptions.join('|')])
+
+  useEffect(() => {
+    if (selectedModels.length > 0 && !selectedModels.includes(model)) {
+      setModel(selectedModels[0])
+    }
+  }, [selectedModels, model])
 
   // Pick a sensible but overridable judge default. Phase 25 allows Local,
   // Claude, or ChatGPT; Local is preferred when available.
@@ -332,6 +348,14 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setPresetFocus(p?.focus ?? '')
     if (sourceRepo.trim()) await detect()
     setError(null)
+  }
+
+  const toggleModel = (modelName: string): void => {
+    const adding = !selectedModels.includes(modelName)
+    setSelectedModels((current) => {
+      return current.includes(modelName) ? current.filter((m) => m !== modelName) : [...current, modelName]
+    })
+    if (adding) setModel(modelName)
   }
 
   const effectiveTarget = (): string => presetFocus || 'the most important logic in this repository'
@@ -449,7 +473,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     !running &&
     Boolean(sourceRepo.trim()) &&
     Boolean(selected?.available.ok) &&
-    Boolean(model || selected?.models.length === 0) &&
+    selectedModels.length > 0 &&
     Boolean(judgeProviderId)
 
   const handleRun = async (): Promise<void> => {
@@ -457,6 +481,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     if (!canRun) {
       if (!sourceRepo.trim()) setError('Pick a source repo.')
       else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to generate tests.')
+      else if (selectedModels.length === 0) setError('Pick at least one local model to benchmark.')
       else if (!judgeProviderId) setError('Pick a result judge: Local, Claude, or ChatGPT.')
       return
     }
@@ -489,7 +514,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       return
     }
 
-    const models = [model]
+    const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
     setRunning(true)
     setClearKey((k) => k + 1)
     setResults(models.map((m) => ({ model: m, pending: true })))
@@ -721,12 +746,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       <div className="test-config">
         <div className="test-head">
           <div>
-            <h2 className="test-title">Test Lab</h2>
+            <h2 className="test-title">Model Test Lab</h2>
             <p className="test-sub">
-              Pick a project or GitHub repo, choose a local model, choose the test subject, then let Akorith run and export the report.
+              Compare local Ollama models on the same generated-test task, sandbox run, score, and PDF report.
             </p>
           </div>
-          <div className="test-head-badge">Sandboxed</div>
+          <div className="test-head-badge">{selectedModels.length || 0} model{selectedModels.length === 1 ? '' : 's'}</div>
         </div>
 
         <div className="test-wizard">
@@ -734,8 +759,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>1</span>
               <div>
-                <strong>Choose source</strong>
-                <p>Local folders and GitHub repos are copied into a fresh temp sandbox before tests run.</p>
+                <strong>Choose benchmark codebase</strong>
+                <p>The codebase is copied into a fresh temp sandbox for each run.</p>
               </div>
             </div>
             <div className="test-source-tabs">
@@ -813,19 +838,46 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>2</span>
               <div>
-                <strong>Choose local test writer</strong>
-                <p>Tests are generated by your Local/Ollama model, not an API key.</p>
+                <strong>Choose local models</strong>
+                <p>Each selected model gets the same prompt, file path, runner, and sandbox rules.</p>
               </div>
             </div>
-            {selected && selected.models.length > 0 ? (
-              <label className="test-field">
-                <span>Local model</span>
-                <select value={model} onChange={(e) => setModel(e.target.value)}>
-                  {selected.models.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </label>
+            {selected && modelOptions.length > 0 ? (
+              <>
+                <div className="test-model-toolbar">
+                  <button
+                    type="button"
+                    className="test-table-btn"
+                    onClick={() => {
+                      setSelectedModels(modelOptions)
+                      setModel(modelOptions[0] ?? '')
+                    }}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="test-table-btn"
+                    onClick={() => {
+                      const first = model || modelOptions[0] || ''
+                      setSelectedModels(first ? [first] : [])
+                    }}
+                  >
+                    One model
+                  </button>
+                </div>
+                <div className="test-model-grid">
+                  {modelOptions.map((m) => {
+                    const checked = selectedModels.includes(m)
+                    return (
+                      <label key={m} className={`test-model-card ${checked ? 'is-selected' : ''}`}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleModel(m)} />
+                        <span>{m}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
             ) : (
               <div className="test-error">Local (Ollama) is unavailable. Akorith will auto-start it when possible.</div>
             )}
@@ -835,8 +887,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>3</span>
               <div>
-                <strong>Choose test subject</strong>
-                <p>No writing required. Pick the intent and Akorith will choose the concrete target from the repo.</p>
+                <strong>Choose test intent</strong>
+                <p>All selected models receive the same intent and repo context.</p>
               </div>
             </div>
             <div className="test-choice-grid">
@@ -852,8 +904,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>4</span>
               <div>
-                <strong>Choose result judge</strong>
-                <p>The judge scores the finished run and the PDF records objective metrics plus quality rationale.</p>
+                <strong>Choose scoring judge</strong>
+                <p>The judge grades finished runs after objective sandbox metrics are collected.</p>
               </div>
             </div>
             <div className="test-grid">
@@ -880,9 +932,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           </section>
         </div>
 
-        {/* Advanced: auto-filled runner details, only needed when detection misses. */}
+        {/* Advanced: auto-filled sandbox runner details, only needed when detection misses. */}
         <details className="test-advanced">
-          <summary>Runner details</summary>
+          <summary>Sandbox runner details</summary>
           <div className="test-grid">
             <label className="test-field">
               <span>Framework</span>
@@ -916,7 +968,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              Run test and export PDF
+              Run benchmark and export PDF
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -1190,7 +1242,30 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       </div>
 
       <div className="test-terminal-col">
-        <div className="test-terminal-header">Sandbox output</div>
+        <div className="test-terminal-header">
+          <div>
+            <span>Sandbox output</span>
+            <strong>{phase || 'Idle'}</strong>
+          </div>
+        </div>
+        <div className="test-sandbox-rail">
+          <div className={detection ? 'is-done' : ''}>
+            <span>1</span>
+            <strong>Detect</strong>
+          </div>
+          <div className={running || results.length > 0 ? 'is-done' : ''}>
+            <span>2</span>
+            <strong>Generate</strong>
+          </div>
+          <div className={results.some((r) => r.run) ? 'is-done' : ''}>
+            <span>3</span>
+            <strong>Run</strong>
+          </div>
+          <div className={latestEvaluation ? 'is-done' : ''}>
+            <span>4</span>
+            <strong>Score</strong>
+          </div>
+        </div>
         <TestTerminal clearKey={clearKey} active={active} />
       </div>
     </div>

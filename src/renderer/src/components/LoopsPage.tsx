@@ -4,6 +4,7 @@ import { ChevronIcon, LoopIcon, PlusIcon } from './icons'
 
 type View = 'list' | 'create' | 'detail'
 type LoopIntent = 'continuous' | 'monitor' | 'daily-build' | 'custom'
+type ExecutorMode = 'pty' | 'local'
 type ExecutorTarget = 't1' | 't2'
 type LoopType =
   | 'project-improvement'
@@ -46,6 +47,11 @@ interface LoopTemplate {
 const EXECUTORS: Array<{ target: ExecutorTarget; kind: PtyCommandKind; label: string; hint: string }> = [
   { target: 't1', kind: 'claude-auto', label: 'Claude / Atlantis', hint: 'best for coding agent work' },
   { target: 't2', kind: 'codex-auto', label: 'ChatGPT / Olympus', hint: 'use when Claude is busy' }
+]
+
+const EXECUTOR_MODES: Array<{ id: ExecutorMode; label: string; detail: string }> = [
+  { id: 'local', label: 'Local structured executor', detail: 'Ollama writes JSON patch attempts; Akorith validates, applies, tests, scores, then commits.' },
+  { id: 'pty', label: 'Claude/Codex PTY agent', detail: 'The existing terminal executor flow for subscription coding agents.' }
 ]
 
 const LOOP_ACTIVITY = [
@@ -384,10 +390,14 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [plannerProvider, setPlannerProvider] = useState('')
   const [plannerModel, setPlannerModel] = useState('')
+  const [executorMode, setExecutorMode] = useState<ExecutorMode>('local')
   const [executorTarget, setExecutorTarget] = useState<ExecutorTarget>('t1')
+  const [localExecutorModel, setLocalExecutorModel] = useState('')
   const [detailProvider, setDetailProvider] = useState('')
   const [detailModel, setDetailModel] = useState('')
+  const [detailExecutorMode, setDetailExecutorMode] = useState<ExecutorMode>('pty')
   const [detailTarget, setDetailTarget] = useState<ExecutorTarget>('t1')
+  const [detailLocalModel, setDetailLocalModel] = useState('')
   const [terminalSnapshot, setTerminalSnapshot] = useState<PtySnapshot | null>(null)
   const [workspaceStatus, setWorkspaceStatus] = useState<LoopWorkspaceStatus | null>(null)
   const [loopRuns, setLoopRuns] = useState<LoopRunRow[]>([])
@@ -426,6 +436,11 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       setPlannerModel((current) => current || firstAvailable.models[0] || '')
       setExecutorTarget((current) => current || defaultExecutorForProvider(firstAvailable.id))
     }
+    const local = list.find((p) => p.id === 'local')
+    if (local) {
+      setLocalExecutorModel((current) => current || local.models[0] || '')
+      setDetailLocalModel((current) => current || local.models[0] || '')
+    }
     return list
   }, [])
 
@@ -451,7 +466,11 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         void window.api.macro.get(sid).then((d) => {
           if (!d) return
           setDetail(d)
-          void window.api.pty.snapshot(d.session.targetTerminal, 8000).then(setTerminalSnapshot).catch(() => undefined)
+          if (d.session.executorType === 'local') {
+            setTerminalSnapshot(null)
+          } else {
+            void window.api.pty.snapshot(d.session.targetTerminal, 8000).then(setTerminalSnapshot).catch(() => undefined)
+          }
         })
       }
       pull()
@@ -469,7 +488,9 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
   const createPlanner = useMemo(() => providers.find((p) => p.id === plannerProvider), [providers, plannerProvider])
   const detailPlanner = useMemo(() => providers.find((p) => p.id === detailProvider), [providers, detailProvider])
+  const localProvider = useMemo(() => providers.find((p) => p.id === 'local'), [providers])
   const createModels = createPlanner?.models ?? []
+  const localModels = localProvider?.models ?? []
 
   const ensureExecutor = useCallback(async (project: { id: string }, cwd: string, targetTerminal: string): Promise<void> => {
     const key = projectKey(project.id)
@@ -505,12 +526,18 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         setError('No AI engine is available yet. Start Ollama, Claude, or Codex and try again.')
         return
       }
+      const local = list.find((p) => p.id === 'local')
+      if (executorMode === 'local' && !local?.available.ok) {
+        setError(local?.available.reason || 'Local executor needs Ollama running with at least one model.')
+        return
+      }
       const model = selectedModel(planner, plannerModel)
+      const executorModel = executorMode === 'local' && local ? selectedModel(local, localExecutorModel) : ''
       const cadence = minutesForSchedule(scheduleKind, customMinutes)
       const intent = loopIntentFor(loopType, scheduleKind)
       const target = targetType === 'local-project' && targetRef ? targetRef : targetRef.trim()
       const mode = fullyLoopActive && autonomyLevel !== 'guided' ? 'auto' : 'approval'
-      const effectivePushEnabled = commitBehavior === 'commit' || pushEnabled
+      const effectivePushEnabled = executorMode === 'local' ? false : commitBehavior === 'commit' || pushEnabled
       setBusyNote(targetType === 'local-project' && target ? 'Binding the loop to your project...' : 'Creating the loop workspace...')
       const res = await window.api.macro.createWorkspaceProject({
         seed: text,
@@ -535,7 +562,10 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
         pushEnabled: effectivePushEnabled,
         testCommands,
         reportFormat,
-        safetyLevel
+        safetyLevel,
+        executorType: executorMode,
+        executorProvider: executorMode === 'local' ? 'local' : undefined,
+        executorModel: executorMode === 'local' ? executorModel || undefined : undefined
       })
       if (!res.ok) {
         setError(res.error)
@@ -543,9 +573,11 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       }
       let state = res.state
       if (fullyLoopActive && autonomyLevel !== 'guided') {
-        setBusyNote('Waking up the executor...')
-        await ensureExecutor(res.project, res.workspaceDir, executorTarget)
-        await new Promise((r) => setTimeout(r, 1500))
+        if (executorMode !== 'local') {
+          setBusyNote('Waking up the executor...')
+          await ensureExecutor(res.project, res.workspaceDir, executorTarget)
+          await new Promise((r) => setTimeout(r, 1500))
+        }
         setBusyNote('Starting the loop...')
         const started = await window.api.macro.startAuto(res.state.session.id)
         if (started.ok) state = started.state
@@ -569,6 +601,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     refreshProviders,
     plannerProvider,
     plannerModel,
+    executorMode,
+    localExecutorModel,
     scheduleKind,
     customMinutes,
     loopType,
@@ -628,8 +662,10 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     if (!selected) return
     setDetailProvider(selected.plannerProvider)
     setDetailModel(selected.plannerModel ?? '')
+    setDetailExecutorMode(selected.executorType)
     setDetailTarget(executorForTarget(selected.targetTerminal).target)
-  }, [selected?.id, selected?.plannerProvider, selected?.plannerModel, selected?.targetTerminal])
+    setDetailLocalModel(selected.executorModel ?? localProvider?.models[0] ?? '')
+  }, [selected?.id, selected?.plannerProvider, selected?.plannerModel, selected?.targetTerminal, selected?.executorType, selected?.executorModel, localProvider?.models])
 
   const openLoop = useCallback((id: string): void => {
     setSelectedId(id)
@@ -646,11 +682,13 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     setBusy(true)
     setError(null)
     try {
-      const allProjects = projects.length ? projects : await window.api.projects.list()
-      const project = allProjects.find((p) => p.path === session.workspaceDir)
-      if (project) {
-        await ensureExecutor(project, session.workspaceDir, session.targetTerminal)
-        await new Promise((r) => setTimeout(r, 1200))
+      if (session.executorType !== 'local') {
+        const allProjects = projects.length ? projects : await window.api.projects.list()
+        const project = allProjects.find((p) => p.path === session.workspaceDir)
+        if (project) {
+          await ensureExecutor(project, session.workspaceDir, session.targetTerminal)
+          await new Promise((r) => setTimeout(r, 1200))
+        }
       }
       const started = await window.api.macro.startAuto(session.id)
       if (!started.ok) setError(started.error)
@@ -721,21 +759,29 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       setError(planner?.available.reason || 'Selected model is not available right now.')
       return
     }
+    if (detailExecutorMode === 'local' && !localProvider?.available.ok) {
+      setError(localProvider?.available.reason || 'Local executor needs Ollama running with at least one model.')
+      return
+    }
     setSavingPlanner(true)
     setError(null)
     try {
       const model = selectedModel(planner, detailModel)
+      const executorModel = detailExecutorMode === 'local' && localProvider ? selectedModel(localProvider, detailLocalModel) : ''
       const res = await window.api.macro.setPlanner({
         sessionId: session.id,
         plannerProvider: planner.id,
         plannerModel: model || undefined,
-        targetTerminal: detailTarget
+        targetTerminal: detailExecutorMode === 'pty' ? detailTarget : session.targetTerminal,
+        executorType: detailExecutorMode,
+        executorProvider: detailExecutorMode === 'local' ? 'local' : null,
+        executorModel: detailExecutorMode === 'local' ? executorModel || null : null
       })
       if (!res.ok) {
         setError(res.error)
         return
       }
-      if (session.workspaceDir) {
+      if (session.workspaceDir && detailExecutorMode !== 'local') {
         const allProjects = projects.length ? projects : await window.api.projects.list()
         const project = allProjects.find((p) => p.path === session.workspaceDir)
         if (project) await ensureExecutor(project, session.workspaceDir, detailTarget)
@@ -746,7 +792,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     } finally {
       setSavingPlanner(false)
     }
-  }, [providers, refreshProviders, detailProvider, detailModel, detailTarget, projects, ensureExecutor])
+  }, [providers, refreshProviders, detailProvider, detailModel, detailExecutorMode, detailLocalModel, detailTarget, localProvider, projects, ensureExecutor])
 
   const syncLoopWorkspace = useCallback(async (sessionId: string): Promise<void> => {
     setWorkspaceSyncing(true)
@@ -776,12 +822,15 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     setMaxRuns(session.maxRuns || session.maxIterations || 30)
     setMaxCommits(session.maxCommits || 0)
     setCommitBehavior((session.commitBehavior as CommitBehavior) || 'commit')
-    setPushEnabled(session.pushEnabled || session.commitBehavior === 'commit')
+    setPushEnabled(session.executorType === 'local' ? false : session.pushEnabled || session.commitBehavior === 'commit')
     setTestCommands(session.testCommands ?? '')
     setReportFormat((session.reportFormat as ReportFormat) || 'summary')
     setSafetyLevel((session.safetyLevel as SafetyLevel) || 'balanced')
+    setExecutorMode(session.executorType)
+    setExecutorTarget(executorForTarget(session.targetTerminal).target)
+    setLocalExecutorModel(session.executorModel ?? localProvider?.models[0] ?? '')
     setView('create')
-  }, [])
+  }, [localProvider?.models])
 
   const dashboard = useMemo(() => {
     const activeLoops = loops.filter((l) => (l.mode === 'auto' && AUTO_ACTIVE.has(l.status)) || RUNNING.has(l.status)).length
@@ -796,6 +845,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const f = friendlyStatus(selected)
     const turns = detail?.turns ?? []
     const commits = commitsOf(selected)
+    const attemptsCount = loopRuns.length || selected.runCount || turns.length
+    const validatedCount = loopRuns.filter((run) => run.status === 'validated' || run.status === 'committed' || run.status === 'completed').length
     const actions = parseAutoActions(selected.autoActions)
     const latest = turns.length ? turns[turns.length - 1] : null
     const isRunning = (selected.mode === 'auto' && AUTO_ACTIVE.has(selected.status)) || RUNNING.has(selected.status)
@@ -823,16 +874,16 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
           <div className="loop-stats loop-stats-four">
             <div className="loop-stat">
-              <span className="loop-stat-num">{selected.runCount || turns.length}</span>
-              <span className="loop-stat-label">runs recorded</span>
+              <span className="loop-stat-num">{attemptsCount}</span>
+              <span className="loop-stat-label">attempts</span>
+            </div>
+            <div className="loop-stat">
+              <span className="loop-stat-num">{validatedCount}</span>
+              <span className="loop-stat-label">validated changes</span>
             </div>
             <div className="loop-stat">
               <span className="loop-stat-num">{commits.length}</span>
-              <span className="loop-stat-label">commits saved</span>
-            </div>
-            <div className="loop-stat">
-              <span className="loop-stat-num">{progress}%</span>
-              <span className="loop-stat-label">progress</span>
+              <span className="loop-stat-label">commits</span>
             </div>
             <div className="loop-stat">
               <span className="loop-stat-num">{fmtDuration(Date.now() - selected.createdAt)}</span>
@@ -898,20 +949,54 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                 </select>
               </label>
               <label className="loop-field">
-                <span>Executor</span>
+                <span>Executor mode</span>
                 <select
-                  value={detailTarget}
+                  value={detailExecutorMode}
                   disabled={savingPlanner}
-                  onChange={(e) => setDetailTarget(executorForTarget(e.target.value).target)}
+                  onChange={(e) => setDetailExecutorMode(e.target.value as ExecutorMode)}
                 >
-                  {EXECUTORS.map((e) => (
-                    <option key={e.target} value={e.target}>{e.label}</option>
+                  {EXECUTOR_MODES.map((e) => (
+                    <option key={e.id} value={e.id}>{e.label}</option>
                   ))}
                 </select>
               </label>
-              <button type="button" className="loop-btn" disabled={savingPlanner || !detailProvider || !detailPlanner?.available.ok} onClick={() => void saveLoopPlanner(selected)}>
+              {detailExecutorMode === 'local' ? (
+                <label className="loop-field">
+                  <span>Local executor model</span>
+                  <select
+                    value={detailLocalModel}
+                    disabled={savingPlanner || !localProvider?.available.ok || localModels.length === 0}
+                    onChange={(e) => setDetailLocalModel(e.target.value)}
+                  >
+                    {(localModels.length ? localModels : ['']).map((m) => (
+                      <option key={m || 'default'} value={m}>{m || 'Default'}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="loop-field">
+                  <span>Executor terminal</span>
+                  <select
+                    value={detailTarget}
+                    disabled={savingPlanner}
+                    onChange={(e) => setDetailTarget(executorForTarget(e.target.value).target)}
+                  >
+                    {EXECUTORS.map((e) => (
+                      <option key={e.target} value={e.target}>{e.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <button type="button" className="loop-btn" disabled={savingPlanner || !detailProvider || !detailPlanner?.available.ok || (detailExecutorMode === 'local' && !localProvider?.available.ok)} onClick={() => void saveLoopPlanner(selected)}>
                 {savingPlanner ? 'Saving...' : 'Save model'}
               </button>
+            </div>
+
+            <div className="loop-meta-strip">
+              <span>executor: {selected.executorType === 'local' ? `Local Ollama${selected.executorModel ? ` / ${selected.executorModel}` : ''}` : executorForTarget(selected.targetTerminal).label}</span>
+              <span>attempt: {selected.lastAttemptStatus?.replace(/_/g, ' ') || 'not started'}</span>
+              <span>validation: {selected.lastValidationResult || 'not run yet'}</span>
+              <span>commit: {selected.lastCommitMessage || 'none yet'}</span>
             </div>
 
             <div className="loop-meta-strip">
@@ -941,8 +1026,17 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
           <div className="loop-detail-grid">
             <section className="loop-panel loop-terminal-panel">
-              <h2>Live executor terminal</h2>
-              {terminalSnapshot?.alive ? (
+              <h2>{selected.executorType === 'local' ? 'Local executor pipeline' : 'Live executor terminal'}</h2>
+              {selected.executorType === 'local' ? (
+                <div className="loop-git-grid">
+                  <div><span>Mode</span><strong>Structured patch</strong></div>
+                  <div><span>Model</span><strong>{selected.executorModel || detailLocalModel || 'Default local model'}</strong></div>
+                  <div><span>Current state</span><strong>{selected.lastAttemptStatus?.replace(/_/g, ' ') || selected.status.replace(/_/g, ' ')}</strong></div>
+                  <div><span>Validation</span><strong>{selected.lastValidationResult || 'not run yet'}</strong></div>
+                  <div><span>Attempts</span><strong>{attemptsCount}</strong></div>
+                  <div><span>Commits</span><strong>{commits.length}</strong></div>
+                </div>
+              ) : terminalSnapshot?.alive ? (
                 <pre>{terminalText(terminalSnapshot) || 'Executor is live. Waiting for output...'}</pre>
               ) : (
                 <div className="loop-empty">Executor terminal is starting or not attached yet.</div>
@@ -986,9 +1080,10 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             <section className="loop-panel">
               <h2>Safety</h2>
               <ul className="loop-simple-list">
-                <li>Destructive commands require approval.</li>
-                <li>Secrets, .env files, and credentials must not be committed.</li>
-                <li>Validation failures are reported honestly.</li>
+                <li>Local models produce structured patch attempts, not raw shell control.</li>
+                <li>Paths must stay inside the workspace; secrets and generated folders are blocked.</li>
+                <li>Only allowlisted validation commands can run, with timeouts and captured evidence.</li>
+                <li>Failed or low-value attempts are rolled back and are not committed.</li>
                 <li>Every automatic action is persisted in history.</li>
               </ul>
             </section>
@@ -1097,7 +1192,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const cadence = minutesForSchedule(scheduleKind, customMinutes)
     const activeMode = fullyLoopActive && autonomyLevel !== 'guided'
     const selectedProjectPath = targetType === 'local-project' ? targetRef || projects[0]?.path || '' : targetRef
-    const effectivePushEnabled = commitBehavior === 'commit' || pushEnabled
+    const effectivePushEnabled = executorMode === 'local' ? false : commitBehavior === 'commit' || pushEnabled
+    const executorReady = executorMode !== 'local' || Boolean(localProvider?.available.ok && (localExecutorModel || localModels.length > 0))
 
     return (
       <div className="loops-page loop-ops">
@@ -1209,6 +1305,36 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                 </div>
               </div>
             </section>
+
+            <section className="loop-panel">
+              <h2>Who should execute?</h2>
+              <div className="loop-option-grid">
+                {EXECUTOR_MODES.map((mode) => (
+                  <button key={mode.id} type="button" className={executorMode === mode.id ? 'is-selected' : ''} disabled={busy} onClick={() => setExecutorMode(mode.id)}>
+                    <strong>{mode.label}</strong>
+                    <span>{mode.detail}</span>
+                  </button>
+                ))}
+              </div>
+              {executorMode === 'local' ? (
+                <label className="loop-field">
+                  <span>Local executor model</span>
+                  <select value={localExecutorModel} disabled={busy || !localProvider?.available.ok || localModels.length === 0} onChange={(e) => setLocalExecutorModel(e.target.value)}>
+                    {(localModels.length ? localModels : ['']).map((m) => <option key={m || 'default'} value={m}>{m || 'Default'}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <label className="loop-field">
+                  <span>PTY executor</span>
+                  <select value={executorTarget} disabled={busy} onChange={(e) => setExecutorTarget(executorForTarget(e.target.value).target)}>
+                    {EXECUTORS.map((e) => <option key={e.target} value={e.target}>{e.label}</option>)}
+                  </select>
+                </label>
+              )}
+              {executorMode === 'local' && !localProvider?.available.ok && (
+                <p className="loop-field-hint">Ollama must be running before a local executor loop can start.</p>
+              )}
+            </section>
           </div>
 
           <button type="button" className="loop-advanced-toggle" onClick={() => setShowAdvanced((v) => !v)}>
@@ -1236,12 +1362,14 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                     {(createModels.length ? createModels : ['']).map((m) => <option key={m || 'default'} value={m}>{m || 'Default'}</option>)}
                   </select>
                 </label>
-                <label className="loop-field">
-                  <span>Executor</span>
-                  <select value={executorTarget} disabled={busy} onChange={(e) => setExecutorTarget(executorForTarget(e.target.value).target)}>
-                    {EXECUTORS.map((e) => <option key={e.target} value={e.target}>{e.label}</option>)}
-                  </select>
-                </label>
+                {executorMode === 'pty' && (
+                  <label className="loop-field">
+                    <span>Executor</span>
+                    <select value={executorTarget} disabled={busy} onChange={(e) => setExecutorTarget(executorForTarget(e.target.value).target)}>
+                      {EXECUTORS.map((e) => <option key={e.target} value={e.target}>{e.label}</option>)}
+                    </select>
+                  </label>
+                )}
                 <label className="loop-field">
                   <span>Report</span>
                   <select value={reportFormat} disabled={busy} onChange={(e) => setReportFormat(e.target.value as ReportFormat)}>
@@ -1283,10 +1411,10 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                 <input
                   type="checkbox"
                   checked={effectivePushEnabled}
-                  disabled={busy || commitBehavior === 'commit'}
+                  disabled={busy || commitBehavior === 'commit' || executorMode === 'local'}
                   onChange={(e) => setPushEnabled(e.target.checked)}
                 />
-                Push every loop commit to AkorithLoop
+                {executorMode === 'local' ? 'Local executor never pushes automatically' : 'Push every loop commit to AkorithLoop'}
               </label>
 
               <label className="loop-field">
@@ -1298,7 +1426,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
           <div className="loop-meta-strip loop-create-summary">
             <span>{createPlanner ? `${createPlanner.label} plans` : 'no model selected'}</span>
-            <span>{executorForTarget(executorTarget).label} executes</span>
+            <span>{executorMode === 'local' ? `Local Ollama${localExecutorModel ? ` / ${localExecutorModel}` : ''} executes patches` : `${executorForTarget(executorTarget).label} executes`}</span>
             <span>{activeMode ? 'active automation' : 'guided/passive'}</span>
             <span>{cadence ? formatCadenceMinutes(cadence) : 'continuous'}</span>
             <span>{commitBehavior}{effectivePushEnabled ? ' + push' : ''}</span>
@@ -1308,7 +1436,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
           {createPlanner && !createPlanner.available.ok && <div className="loop-note is-error">{createPlanner.available.reason || 'This provider is unavailable right now.'}</div>}
 
           <div className="loop-actions">
-            <button type="button" className="loop-btn is-primary is-big" disabled={!description.trim() || busy || !createPlanner?.available.ok} onClick={() => void createLoop()}>
+            <button type="button" className="loop-btn is-primary is-big" disabled={!description.trim() || busy || !createPlanner?.available.ok || !executorReady} onClick={() => void createLoop()}>
               {busy ? busyNote || 'Setting up...' : 'Create Loop'}
             </button>
           </div>
@@ -1381,7 +1509,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
                 <span>{loop.loopType?.replace(/-/g, ' ') || 'custom'}</span>
               </div>
               <div className="loop-card-title">{loopTitle(loop)}</div>
-              <div className="loop-card-meta">{loop.targetType || 'target'} · {providerLabel(providers, loop.plannerProvider)} · {loop.mode === 'auto' ? 'active' : 'passive'}</div>
+              <div className="loop-card-meta">{loop.targetType || 'target'} · {providerLabel(providers, loop.plannerProvider)} plans · {loop.executorType === 'local' ? 'local patches' : 'PTY agent'} · {loop.mode === 'auto' ? 'active' : 'passive'}</div>
               <div className="loop-progress"><span style={{ width: `${progress}%` }} /></div>
               <div className="loop-card-result">{latestResult(loop)}</div>
               <div className="loop-card-foot">

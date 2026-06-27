@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 26 (Settings Center:
-detailed profile/provider/workflow/Test Lab controls).
+with electron-vite, in strict numbered phases — currently through Phase 27 (Local Executor Loop:
+Ollama/local models can execute structured, validated workspace patch attempts).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -25,7 +25,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 23.2 Loop Operations Center ·
 24 Loop Completion ·
 25 Test Lab Rebuild ·
-**26 Settings Center** — all done.
+26 Settings Center ·
+**27 Local Executor Loop** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -1479,6 +1480,36 @@ via `ollama:*`, bridge Auto-Enter via `bridge:*`, repo context via `digest:*`, a
 via the new validated `test:setSettings` IPC. `config.ts` clamps Test Lab timeout, retained sandbox
 count, source length, and provider id before writing `loopex.config.json`. Renderer folder choices
 reuse the validated `projects:pickDirectory` dialog; renderer code never writes project files.
+
+### Phase 27: Local Executor Loop
+
+Local/Ollama models are now first-class Loop executors without raw shell control. The Loop UI can
+choose `Local structured executor`, select a local Ollama model, and show attempts, validated
+changes, commits, last validation, and last commit separately from PTY executor state. PTY loops
+still use Claude/Codex through the existing `bridgeSend()`/PTY path.
+
+`src/main/local-executor.ts` is the electron-free safety core. It asks local models for strict
+`workspace_patch` JSON, validates relative paths inside the selected workspace, blocks absolute
+paths, traversal, protected folders, and secret-like files, applies full-file changes with rollback
+data, runs only allowlisted validation commands with timeouts, strips ANSI from command evidence,
+and scores structured output, patch application, validation, meaningfulness, goal alignment, scope,
+and spam/churn. Failed, malformed, no-op, unsafe, or low-value attempts are attempts only; they are
+rolled back and not committed.
+
+`macro_sessions` has `executor_type`, `executor_provider`, `executor_model`,
+`last_attempt_status`, `last_validation_result`, and `last_commit_message`. `runAutoLoop()` branches:
+`pty` preserves the previous terminal executor architecture; `local` calls the selected Ollama model
+as a meta prompt, records each attempt in `macro_turns` and `loop_runs`, validates it through the
+local executor core, commits only meaningful passing changes via path-scoped `commitPhase()`, never
+pushes automatically, and pauses after repeated local failures. `commitPhase(cwd, headline, paths)`
+keeps its old all-worktree behavior when paths are omitted, but local executor calls pass the touched
+file list so unrelated dirty user changes are not swept into a commit.
+
+`scripts/verify-local-executor.ts` covers path traversal, absolute paths, dangerous command blocks,
+valid patch acceptance, failed-validation no-commit rollback, no-op no-commit, and path-scoped local
+commits. This is also the minimal Test Lab connection for the next phase: Loop sessions now have
+separate planner/executor/critic model slots, so Test Lab benchmark winners can later be recommended
+as the executor model without changing the core loop schema.
 
 ## Conventions
 
