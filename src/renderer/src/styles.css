@@ -51,6 +51,18 @@
   --accent-dim: rgba(255, 255, 255, 0.10);
   --focus-ring: rgba(255, 255, 255, 0.32);
 
+  /* Phase 28 Agent OS foundation:
+     Future monochrome redesign tokens are defined here for later use only.
+     They are intentionally unused in this phase so the current UI does not
+     switch to the black-and-white identity before the full redesign pass. */
+  --mono-black: #000000;
+  --mono-white: #ffffff;
+  --mono-950: #080808;
+  --mono-900: #111111;
+  --mono-800: #1f1f1f;
+  --mono-border: rgba(255, 255, 255, 0.14);
+  --mono-muted: #9a9a9a;
+
   /* Status — muted, serious */
   --success: #5fb37e;
   --warning: #c9a85f;
@@ -1576,6 +1588,112 @@ textarea:focus-visible {
 .settings-chip.is-error {
   color: var(--danger);
   background: rgba(248, 113, 113, 0.12);
+}
+
+.settings-chip.is-warning {
+  color: var(--warning);
+  background: rgba(201, 168, 95, 0.12);
+}
+
+.settings-chip.is-info {
+  color: var(--info);
+  background: rgba(111, 163, 223, 0.12);
+}
+
+.agent-hub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.agent-hub-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 11px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.agent-hub-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.agent-hub-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-hub-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-hub-row p,
+.agent-note {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.agent-note {
+  color: var(--text-faint);
+}
+
+.agent-note.is-future {
+  color: var(--text-dim);
+}
+
+.agent-note.is-detection {
+  padding-top: 2px;
+  color: var(--text);
+}
+
+.agent-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.agent-capability-list span {
+  padding: 3px 6px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.agent-detect-btn {
+  align-self: start;
+  padding: 6px 9px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.agent-detect-btn:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+
+.agent-detect-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .settings-path-row {

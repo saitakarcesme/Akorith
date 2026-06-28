@@ -11,6 +11,7 @@ import { createRequire } from 'module'
 import { basename, isAbsolute, join, resolve, sep } from 'path'
 import { mkdirSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
+import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 
 let db: Database.Database | null = null
 const require = createRequire(__filename)
@@ -951,23 +952,7 @@ export function setEvaluationPdfPath(id: string, pdfPath: string): EvaluationRow
 
 // ---- macro loop sessions/turns (Phase 9) ----
 
-export type MacroStatus =
-  | 'idle'
-  | 'preparing_context'
-  | 'proposing'
-  | 'awaiting_approval'
-  | 'sending'
-  | 'awaiting_executor_result'
-  | 'summarizing'
-  | 'awaiting_permission'
-  | 'auto_running'
-  | 'paused'
-  | 'completed'
-  | 'stopped'
-  | 'error'
-
-export type MacroMode = 'approval' | 'auto'
-export type MacroExecutorType = 'pty' | 'local'
+export type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 
 export interface MacroSessionRow {
   id: string

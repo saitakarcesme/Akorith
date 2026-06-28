@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  AgentAdapterMetadata,
+  AgentDetectionResult,
+  AgentId,
+  AgentStatus,
   BridgeSettings,
   DigestSettings,
   OllamaConnectionSettings,
@@ -11,7 +15,7 @@ import type {
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
 
-type SettingsTab = 'profile' | 'providers' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -57,6 +61,20 @@ function secondsLabel(ms: number): string {
   return `${minutes}m`
 }
 
+function capabilityLabel(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function agentStatusClass(status: AgentStatus): string {
+  if (status === 'available') return 'is-ok'
+  if (status === 'unknown') return 'is-info'
+  if (status === 'disabled') return 'is-warning'
+  return 'is-error'
+}
+
 export default function SettingsCenter({
   theme,
   displayName,
@@ -78,6 +96,9 @@ export default function SettingsCenter({
   const [digestDirDraft, setDigestDirDraft] = useState('')
   const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
+  const [agentAdapters, setAgentAdapters] = useState<AgentAdapterMetadata[]>([])
+  const [agentDetections, setAgentDetections] = useState<Partial<Record<AgentId, AgentDetectionResult>>>({})
+  const [agentBusy, setAgentBusy] = useState<AgentId | 'all' | null>(null)
 
   const loadSettings = useCallback(() => {
     void window.api.bridge.getSettings().then(setBridgeSettings).catch(() => setBridgeSettings({ autoEnter: false }))
@@ -103,6 +124,7 @@ export default function SettingsCenter({
       setOllamaEndpoint('http://localhost:11434')
     })
     void window.api.ollama.getShareInfo().then(setOllamaShare).catch(() => setOllamaShare(null))
+    void window.api.agent.list().then(setAgentAdapters).catch(() => setAgentAdapters([]))
   }, [])
 
   useEffect(() => {
@@ -252,9 +274,32 @@ export default function SettingsCenter({
     await saveTestSource(res.path)
   }
 
+  const detectAgent = async (id: AgentId): Promise<void> => {
+    setAgentBusy(id)
+    try {
+      const result = await window.api.agent.detect(id)
+      setAgentDetections((current) => ({ ...current, [id]: result }))
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const detectAllAgents = async (): Promise<void> => {
+    setAgentBusy('all')
+    try {
+      const results = await window.api.agent.detectAll()
+      const next: Partial<Record<AgentId, AgentDetectionResult>> = {}
+      for (const result of results) next[result.id] = result
+      setAgentDetections((current) => ({ ...current, ...next }))
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
   const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
+    { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
@@ -451,6 +496,58 @@ export default function SettingsCenter({
                   </label>
                 </div>
               )}
+            </section>
+          )}
+
+          {activeTab === 'agents' && (
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <h2>Agent Hub</h2>
+                  <p>Read-only Agent OS foundation for current and future adapters.</p>
+                </div>
+                <button type="button" disabled={agentBusy !== null} onClick={() => void detectAllAgents()}>
+                  {agentBusy === 'all' ? 'Detecting...' : 'Detect all'}
+                </button>
+              </div>
+              <div className="agent-hub-list">
+                {agentAdapters.map((agent) => {
+                  const detection = agentDetections[agent.id]
+                  const status = detection?.status ?? agent.status
+                  return (
+                    <div className="agent-hub-row" key={agent.id}>
+                      <div className="agent-hub-main">
+                        <div className="agent-hub-title">
+                          <strong>{agent.displayName}</strong>
+                          <span className={`settings-chip ${agentStatusClass(status)}`}>{status}</span>
+                        </div>
+                        <p>{agent.description}</p>
+                        <div className="agent-capability-list">
+                          {agent.capabilities.map((capability) => (
+                            <span key={capability}>{capabilityLabel(capability)}</span>
+                          ))}
+                        </div>
+                        <div className="agent-note">{agent.currentIntegrationNotes[0]}</div>
+                        {(agent.id === 'opencode' || agent.id === 'memory') && (
+                          <div className="agent-note is-future">{agent.futureIntegrationNotes[0]}</div>
+                        )}
+                        {detection?.message && <div className="agent-note is-detection">{detection.message}</div>}
+                      </div>
+                      <button
+                        type="button"
+                        className="agent-detect-btn"
+                        disabled={agentBusy !== null}
+                        onClick={() => void detectAgent(agent.id)}
+                      >
+                        {agentBusy === agent.id ? 'Checking...' : 'Detect'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="settings-note">
+                Agent Hub detection does not send prompts, start PTYs, edit files, mutate provider config, or replace existing providers.
+              </div>
             </section>
           )}
 

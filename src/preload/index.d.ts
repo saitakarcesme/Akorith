@@ -480,6 +480,8 @@ export interface EvaluateApi {
 // ---- macro-loop orchestration (Phase 9) ----
 
 export type MacroStatus =
+  // TODO(phase 28): mirror src/main/loops/types.ts until a renderer-safe shared
+  // type package can be imported by both Electron and web builds.
   | 'draft'
   | 'scheduled'
   | 'idle'
@@ -540,7 +542,52 @@ export type AgentPermissionResponse =
   | { ok: true; detection: PermissionDetection; alive: boolean }
   | { ok: false; error: string }
 
+export type AgentId = 'claude' | 'codex' | 'ollama' | 'opencode' | 'memory'
+export type AgentKind = 'cli' | 'local' | 'memory' | 'future'
+export type AgentStatus = 'unknown' | 'available' | 'missing' | 'unauthenticated' | 'disabled' | 'error'
+export type AgentCapability =
+  | 'chat'
+  | 'terminal'
+  | 'exec'
+  | 'streaming'
+  | 'file_patch'
+  | 'test_generation'
+  | 'review'
+  | 'commit'
+  | 'memory'
+  | 'skills'
+  | 'automation'
+  | 'mission_planning'
+
+export interface AgentAdapterMetadata {
+  id: AgentId
+  displayName: string
+  kind: AgentKind
+  description: string
+  executableName?: string
+  status: AgentStatus
+  capabilities: AgentCapability[]
+  currentIntegrationNotes: string[]
+  futureIntegrationNotes: string[]
+  safetyNotes: string[]
+}
+
+export interface AgentDetectionResult {
+  id: AgentId
+  status: AgentStatus
+  version?: string
+  executablePath?: string
+  message?: string
+  checkedAt: number
+}
+
 export interface AgentApi {
+  /** Phase 28: read-only Agent OS metadata foundation. */
+  list(): Promise<AgentAdapterMetadata[]>
+  /** Phase 28: read-only agent availability detection. */
+  detect(id: AgentId): Promise<AgentDetectionResult>
+  /** Phase 28: read-only detection for every known adapter. */
+  detectAll(): Promise<AgentDetectionResult[]>
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
     terminalId: string
