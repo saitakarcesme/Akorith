@@ -18,8 +18,9 @@ import type {
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
+import MissionCenter from './MissionCenter'
 
-type SettingsTab = 'profile' | 'providers' | 'agents' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -437,6 +438,7 @@ export default function SettingsCenter({
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
     { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
+    { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
@@ -841,6 +843,12 @@ export default function SettingsCenter({
               <div className="settings-note">
                 Runtime observation intentionally avoids storing full prompts, terminal output, secrets, command contents, or hidden IPC payloads. This layer is read-only in Phase 31.
               </div>
+            </section>
+          )}
+
+          {activeTab === 'missions' && (
+            <section className="settings-section">
+              <MissionCenter />
             </section>
           )}
 

@@ -5,6 +5,8 @@ import type {
   DailyUsageRow,
   EvaluationRow,
   MacroSessionRow,
+  Mission,
+  MissionTemplate,
   ProjectRow,
   SessionRow,
   TestRunRow,
@@ -102,6 +104,8 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [evaluations, setEvaluations] = useState<EvaluationRow[]>([])
   const [loops, setLoops] = useState<MacroSessionRow[]>([])
   const [sessions, setSessions] = useState<SessionRow[]>([])
+  const [missionTemplates, setMissionTemplates] = useState<MissionTemplate[]>([])
+  const [draftMissions, setDraftMissions] = useState<Mission[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -116,7 +120,9 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         testsResult,
         evaluationsResult,
         loopsResult,
-        sessionsResult
+        sessionsResult,
+        missionTemplatesResult,
+        missionsResult
       ] = await Promise.allSettled([
         window.api.usage.summary(),
         window.api.usage.daily(HEATMAP_DAYS),
@@ -125,7 +131,9 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         window.api.test.listRuns(5),
         window.api.evaluate.list(3),
         window.api.macro.list(5),
-        window.api.history.list()
+        window.api.history.list(),
+        window.api.mission.listTemplates(),
+        window.api.mission.list()
       ])
 
       if (cancelled) return
@@ -137,6 +145,8 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
       if (evaluationsResult.status === 'fulfilled') setEvaluations(evaluationsResult.value)
       if (loopsResult.status === 'fulfilled') setLoops(loopsResult.value)
       if (sessionsResult.status === 'fulfilled') setSessions(sessionsResult.value)
+      if (missionTemplatesResult.status === 'fulfilled') setMissionTemplates(missionTemplatesResult.value)
+      if (missionsResult.status === 'fulfilled') setDraftMissions(missionsResult.value)
 
       const failures = [
         summaryResult,
@@ -146,7 +156,9 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         testsResult,
         evaluationsResult,
         loopsResult,
-        sessionsResult
+        sessionsResult,
+        missionTemplatesResult,
+        missionsResult
       ].filter((result): result is PromiseRejectedResult => result.status === 'rejected')
 
       setError(failures.length ? `Some dashboard data could not load: ${failures[0].reason}` : null)
@@ -336,6 +348,43 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         {!activeRuntime && !observedSessions && (
           <div className="dash-empty-state">
             No observed runtime yet. Run a chat provider call or open a project terminal, then inspect it in Settings, then Agents.
+          </div>
+        )}
+      </section>
+
+      <section className="dash-section dash-mission-os">
+        <div className="dash-section-head">
+          <div>
+            <h2>Mission Engine skeleton</h2>
+            <p>Preview-only planning structure for future planner, executor, reviewer, tester, and committer flows.</p>
+          </div>
+          <span>Phase 32</span>
+        </div>
+        <div className="dash-mission-grid">
+          <div>
+            <span>Templates</span>
+            <strong>{missionTemplates.length}</strong>
+            <em>Preview workflows registered in main memory</em>
+          </div>
+          <div>
+            <span>Draft missions</span>
+            <strong>{draftMissions.length}</strong>
+            <em>{draftMissions[0]?.title ?? 'Create previews in Settings, then Missions'}</em>
+          </div>
+          <div>
+            <span>Execution state</span>
+            <strong>Preview only</strong>
+            <em>No providers, terminals, tests, commits, or pushes are controlled here</em>
+          </div>
+          <div>
+            <span>Next direction</span>
+            <strong>Persistence</strong>
+            <em>Read-only mission history is the safest next layer</em>
+          </div>
+        </div>
+        {draftMissions.length === 0 && (
+          <div className="dash-empty-state">
+            No draft missions yet. Open Settings, then Missions, to create a preview mission without executing anything.
           </div>
         )}
       </section>
