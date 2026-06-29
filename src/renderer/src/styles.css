@@ -4596,16 +4596,16 @@ textarea:focus-visible {
 .heatmap {
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 11px);
-  grid-auto-columns: 11px;
+  grid-template-rows: repeat(7, 13px);
+  grid-auto-columns: 13px;
   gap: 3px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
 .hm-cell {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   border-radius: 2px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
@@ -4613,6 +4613,63 @@ textarea:focus-visible {
 
 .hm-pad {
   background: transparent;
+  border-color: transparent;
+}
+
+.hm-l0 {
+  background: var(--bg-input);
+}
+
+/* Phase 34.5: legend + summary strip fill the Usage Activity card so it no
+   longer reads as a half-empty box. */
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.hm-legend .hm-cell {
+  width: 11px;
+  height: 11px;
+}
+
+.usage-stat-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.usage-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usage-stat span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.usage-stat strong {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-stat em {
+  font-size: 10px;
+  font-style: normal;
+  color: var(--text-faint);
 }
 
 .hm-l1 {

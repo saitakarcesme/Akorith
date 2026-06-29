@@ -199,6 +199,26 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
 
   const level = (events: number): number => (events === 0 ? 0 : events <= 2 ? 1 : events <= 5 ? 2 : 3)
 
+  // Phase 34.5: summary stats from the same day cells, shown beneath the heatmap
+  // so the Usage Activity card is dense and balanced instead of half-empty.
+  const usageStats = useMemo(() => {
+    let activeDays = 0
+    let totalSends = 0
+    let peak = { key: '', events: 0 }
+    let lastActive = ''
+    for (const cell of heatmap.cells) {
+      if (cell.events > 0) {
+        activeDays += 1
+        totalSends += cell.events
+        lastActive = cell.key
+        if (cell.events > peak.events) peak = { key: cell.key, events: cell.events }
+      }
+    }
+    return { activeDays, totalSends, peak, lastActive }
+  }, [heatmap])
+
+  const shortDay = (key: string): string => (key ? key.slice(5) : '—')
+
   const barData = useMemo(() => {
     const rows = new Map<string, Record<string, number | string>>()
     const start = new Date()
@@ -409,7 +429,41 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
               />
             ))}
           </div>
-          {!hasUsage && <div className="dash-empty-state">No usage yet. Send a provider chat message to populate activity.</div>}
+          <div className="hm-legend">
+            <span>Less</span>
+            <span className="hm-cell hm-l0" />
+            <span className="hm-cell hm-l1" />
+            <span className="hm-cell hm-l2" />
+            <span className="hm-cell hm-l3" />
+            <span>More</span>
+          </div>
+          {hasUsage ? (
+            <div className="usage-stat-row">
+              <div className="usage-stat">
+                <span>Active days</span>
+                <strong>{usageStats.activeDays}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Total sends</span>
+                <strong>{usageStats.totalSends}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Total tokens</span>
+                <strong>{fmtTokens(summary?.totalTokens ?? 0)}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Peak day</span>
+                <strong>{shortDay(usageStats.peak.key)}</strong>
+                <em>{usageStats.peak.events ? `${usageStats.peak.events} sends` : ''}</em>
+              </div>
+              <div className="usage-stat">
+                <span>Last active</span>
+                <strong>{shortDay(usageStats.lastActive)}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="dash-empty-state">No usage yet. Send a provider chat message to populate activity.</div>
+          )}
         </section>
 
         <section className="dash-section">
