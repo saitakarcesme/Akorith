@@ -3,8 +3,10 @@ import { hostname, networkInterfaces } from 'os'
 import {
   getLocalProviderSettings,
   normalizeBaseUrl,
+  sanitizeRemoteProfiles,
   setLocalProviderSettings,
-  type LocalProviderSettings
+  type LocalProviderSettings,
+  type OllamaRemoteProfile
 } from './config'
 
 export type OllamaConnectionTestResult =
@@ -123,15 +125,127 @@ function describeOllamaError(baseUrl: string, err: unknown): string {
   return `Can't reach ${baseUrl}: ${raw}. Confirm Ollama is running there and reachable from this network.`
 }
 
-async function testOllamaEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult> {
+async function testOllamaEndpoint(baseUrl: string, timeoutMs = 6_000): Promise<OllamaConnectionTestResult> {
   try {
-    const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(6_000) })
+    const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
     if (!res.ok) return { ok: false, baseUrl, error: `Ollama responded with HTTP ${res.status}` }
     const body = (await res.json()) as { models?: { name?: string }[] }
     const models = (body.models ?? []).map((model) => model.name).filter((name): name is string => typeof name === 'string')
     return { ok: true, baseUrl, models, modelCount: models.length }
   } catch (err) {
     return { ok: false, baseUrl, error: describeOllamaError(baseUrl, err) }
+  }
+}
+
+// ---- Phase 33.14: auto-connect across endpoints by priority ----
+
+export interface OllamaActiveEndpoint {
+  baseUrl: string
+  source: 'configured' | 'last' | 'profile'
+  profileId?: string
+  label: string
+}
+
+export type OllamaAutoConnectResult =
+  | { ok: true; active: OllamaActiveEndpoint; models: string[]; modelCount: number; switched: boolean }
+  | { ok: false; error: string; lastSuccessfulBaseUrl?: string; triedCount: number }
+
+interface ProfileStatusPatch {
+  lastStatus: 'ok' | 'error'
+  lastError?: string
+  lastModelCount?: number
+  lastConnectedAt?: number
+  lastCheckedAt: number
+}
+
+function applyProfileUpdates(
+  profiles: OllamaRemoteProfile[],
+  updates: Map<string, ProfileStatusPatch>
+): OllamaRemoteProfile[] {
+  return profiles.map((profile) => {
+    const patch = updates.get(profile.id)
+    if (!patch) return profile
+    const next: OllamaRemoteProfile = {
+      ...profile,
+      lastStatus: patch.lastStatus,
+      lastCheckedAt: patch.lastCheckedAt
+    }
+    if (patch.lastError) next.lastError = patch.lastError
+    else delete next.lastError
+    if (patch.lastModelCount !== undefined) next.lastModelCount = patch.lastModelCount
+    if (patch.lastConnectedAt !== undefined) next.lastConnectedAt = patch.lastConnectedAt
+    return next
+  })
+}
+
+/**
+ * Try, in priority order, to reach an Ollama endpoint: the currently-configured
+ * baseUrl first (so a healthy local setup is never disturbed), then the last
+ * endpoint that answered, then each enabled remote profile by ascending
+ * priority. The first that responds wins; if it differs from the configured
+ * baseUrl we switch to it (and cache it) so remote models become available
+ * automatically. Read-only health checks (/api/tags) with short timeouts — no
+ * polling, no aggressive retries.
+ */
+async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
+  const settings = getLocalProviderSettings()
+  type Candidate = { baseUrl: string; source: OllamaActiveEndpoint['source']; profileId?: string; label: string }
+  const candidates: Candidate[] = []
+  const seen = new Set<string>()
+  const push = (candidate: Candidate): void => {
+    if (!candidate.baseUrl || seen.has(candidate.baseUrl)) return
+    seen.add(candidate.baseUrl)
+    candidates.push(candidate)
+  }
+
+  if (settings.enabled) push({ baseUrl: settings.baseUrl, source: 'configured', label: 'Local' })
+  if (settings.lastSuccessfulBaseUrl) push({ baseUrl: settings.lastSuccessfulBaseUrl, source: 'last', label: 'Last known' })
+  const profiles = [...(settings.remoteProfiles ?? [])].filter((p) => p.enabled).sort((a, b) => a.priority - b.priority)
+  for (const profile of profiles) {
+    push({ baseUrl: profile.baseUrl, source: 'profile', profileId: profile.id, label: `Remote: ${profile.name}` })
+  }
+
+  const now = Date.now()
+  const updates = new Map<string, ProfileStatusPatch>()
+  let firstError = ''
+  for (const candidate of candidates) {
+    const res = await testOllamaEndpoint(candidate.baseUrl, 4_500)
+    if (candidate.profileId) {
+      updates.set(candidate.profileId, {
+        lastStatus: res.ok ? 'ok' : 'error',
+        lastError: res.ok ? undefined : res.error,
+        lastModelCount: res.ok ? res.modelCount : undefined,
+        lastConnectedAt: res.ok ? now : undefined,
+        lastCheckedAt: now
+      })
+    }
+    if (res.ok) {
+      const switched = candidate.baseUrl !== settings.baseUrl
+      const patch: Partial<LocalProviderSettings> = { lastSuccessfulBaseUrl: candidate.baseUrl }
+      if (switched) patch.baseUrl = candidate.baseUrl
+      if (updates.size && settings.remoteProfiles) {
+        patch.remoteProfiles = applyProfileUpdates(settings.remoteProfiles, updates)
+      }
+      setLocalProviderSettings(patch)
+      return {
+        ok: true,
+        active: { baseUrl: candidate.baseUrl, source: candidate.source, profileId: candidate.profileId, label: candidate.label },
+        models: res.models,
+        modelCount: res.modelCount,
+        switched
+      }
+    }
+    if (!firstError) firstError = res.error
+  }
+
+  if (updates.size && settings.remoteProfiles) {
+    setLocalProviderSettings({ remoteProfiles: applyProfileUpdates(settings.remoteProfiles, updates) })
+  }
+  return {
+    ok: false,
+    error: firstError || 'No Ollama endpoint is reachable right now.',
+    lastSuccessfulBaseUrl: settings.lastSuccessfulBaseUrl,
+    triedCount: candidates.length
   }
 }
 
@@ -144,6 +258,9 @@ export function registerOllamaConnectionIpc(): void {
     const baseUrl = endpointFromArgs(args) ?? getLocalProviderSettings().baseUrl
     return testOllamaEndpoint(baseUrl)
   })
+
+  // Phase 33.14: try configured → last → enabled remote profiles, pick first healthy.
+  ipcMain.handle('ollama:autoConnect', async (): Promise<OllamaAutoConnectResult> => autoConnectOllama())
 
   ipcMain.handle('ollama:setSettings', (_event, args: unknown): OllamaSettingsResponse => {
     if (!args || typeof args !== 'object') {
@@ -160,7 +277,9 @@ export function registerOllamaConnectionIpc(): void {
       ...(input.autoStart !== undefined ? { autoStart: boolPatch(input.autoStart) } : {}),
       ...(input.exposeLan !== undefined ? { exposeLan: boolPatch(input.exposeLan) } : {}),
       ...(input.lanDiscovery !== undefined ? { lanDiscovery: boolPatch(input.lanDiscovery) } : {}),
-      ...(typeof input.ollamaHost === 'string' ? { ollamaHost: input.ollamaHost } : {})
+      ...(typeof input.ollamaHost === 'string' ? { ollamaHost: input.ollamaHost } : {}),
+      // Phase 33.13: remote profiles are validated/sanitized in config.
+      ...(input.remoteProfiles !== undefined ? { remoteProfiles: sanitizeRemoteProfiles(input.remoteProfiles) } : {})
     })
     return { ok: true, settings }
   })

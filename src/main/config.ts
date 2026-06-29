@@ -12,6 +12,26 @@ export interface BridgeSettings {
   autoEnter: boolean
 }
 
+/** Phase 33.13: a saved remote Ollama endpoint. Akorith stores only this
+ *  connection config — never secrets. Reaching a remote PC across networks is
+ *  the user's responsibility (Tailscale/VPN/LAN/SSH tunnel); we just remember
+ *  the endpoints to try and their last health result. */
+export interface OllamaRemoteProfile {
+  id: string
+  name: string
+  baseUrl: string
+  /** Lower runs first during auto-connect. */
+  priority: number
+  enabled: boolean
+  /** Optional free-text hint, e.g. "Tailscale" or "home LAN". */
+  networkHint?: string
+  lastStatus?: 'ok' | 'error' | 'unknown'
+  lastError?: string
+  lastModelCount?: number
+  lastConnectedAt?: number
+  lastCheckedAt?: number
+}
+
 export interface LocalProviderSettings {
   enabled: boolean
   baseUrl: string
@@ -19,6 +39,10 @@ export interface LocalProviderSettings {
   exposeLan: boolean
   lanDiscovery: boolean
   ollamaHost?: string
+  /** Phase 33.13: saved remote endpoints tried (by priority) on auto-connect. */
+  remoteProfiles?: OllamaRemoteProfile[]
+  /** Phase 33.14: last endpoint that answered, cached to try first next time. */
+  lastSuccessfulBaseUrl?: string
 }
 
 /** UI color theme (Phase 15). Mirrored here so the main-process splash window
@@ -177,6 +201,43 @@ function normalizeOllamaHost(value: unknown): string | undefined {
   return /^[a-z0-9_.:[\]-]+$/i.test(trimmed) ? trimmed : undefined
 }
 
+function safeString(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > max || /[\0\r\n]/.test(trimmed)) return undefined
+  return trimmed
+}
+
+/** Validate/normalize an array of remote Ollama profiles read from disk or sent
+ *  by the renderer. Drops anything without a valid http(s) baseUrl. Caps the
+ *  list so a malformed config can't balloon. */
+export function sanitizeRemoteProfiles(value: unknown): OllamaRemoteProfile[] {
+  if (!Array.isArray(value)) return []
+  const out: OllamaRemoteProfile[] = []
+  for (const raw of value.slice(0, 24)) {
+    if (!raw || typeof raw !== 'object') continue
+    const entry = raw as Record<string, unknown>
+    const baseUrl = normalizeBaseUrl(entry.baseUrl, '')
+    if (!baseUrl) continue
+    const id = safeString(entry.id, 64) ?? `rp-${out.length}-${baseUrl.length}`
+    const status = entry.lastStatus === 'ok' || entry.lastStatus === 'error' ? entry.lastStatus : undefined
+    out.push({
+      id,
+      name: safeString(entry.name, 80) ?? 'Remote Ollama',
+      baseUrl,
+      priority: Number.isFinite(entry.priority) ? Math.max(0, Math.trunc(entry.priority as number)) : out.length,
+      enabled: entry.enabled !== false,
+      ...(safeString(entry.networkHint, 80) ? { networkHint: safeString(entry.networkHint, 80) } : {}),
+      ...(status ? { lastStatus: status } : {}),
+      ...(safeString(entry.lastError, 400) ? { lastError: safeString(entry.lastError, 400) } : {}),
+      ...(Number.isFinite(entry.lastModelCount) ? { lastModelCount: Math.max(0, Math.trunc(entry.lastModelCount as number)) } : {}),
+      ...(Number.isFinite(entry.lastConnectedAt) ? { lastConnectedAt: entry.lastConnectedAt as number } : {}),
+      ...(Number.isFinite(entry.lastCheckedAt) ? { lastCheckedAt: entry.lastCheckedAt as number } : {})
+    })
+  }
+  return out
+}
+
 export function configPath(): string {
   return join(app.getPath('userData'), 'loopex.config.json')
 }
@@ -213,13 +274,17 @@ export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
 export function getLocalProviderSettings(): LocalProviderSettings {
   const entry = loadConfig().providers.local ?? DEFAULT_LOCAL_PROVIDER
   const ollamaHost = normalizeOllamaHost(entry.ollamaHost)
+  const remoteProfiles = sanitizeRemoteProfiles(entry.remoteProfiles)
+  const lastSuccessfulBaseUrl = normalizeBaseUrl(entry.lastSuccessfulBaseUrl, '')
   return {
     enabled: entry.enabled !== false,
     baseUrl: normalizeBaseUrl(entry.baseUrl),
     autoStart: entry.autoStart !== false,
     exposeLan: entry.exposeLan !== false,
     lanDiscovery: entry.lanDiscovery !== false,
-    ...(ollamaHost ? { ollamaHost } : {})
+    ...(ollamaHost ? { ollamaHost } : {}),
+    ...(remoteProfiles.length ? { remoteProfiles } : {}),
+    ...(lastSuccessfulBaseUrl ? { lastSuccessfulBaseUrl } : {})
   }
 }
 
@@ -227,6 +292,12 @@ export function setLocalProviderSettings(patch: Partial<LocalProviderSettings>):
   const config = loadConfig()
   const current = getLocalProviderSettings()
   const ollamaHost = patch.ollamaHost === undefined ? current.ollamaHost : normalizeOllamaHost(patch.ollamaHost)
+  const remoteProfiles =
+    patch.remoteProfiles === undefined ? current.remoteProfiles : sanitizeRemoteProfiles(patch.remoteProfiles)
+  const lastSuccessfulBaseUrl =
+    patch.lastSuccessfulBaseUrl === undefined
+      ? current.lastSuccessfulBaseUrl
+      : normalizeBaseUrl(patch.lastSuccessfulBaseUrl, '') || undefined
   const next: LocalProviderSettings = {
     ...current,
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -234,13 +305,17 @@ export function setLocalProviderSettings(patch: Partial<LocalProviderSettings>):
     autoStart: typeof patch.autoStart === 'boolean' ? patch.autoStart : current.autoStart,
     exposeLan: typeof patch.exposeLan === 'boolean' ? patch.exposeLan : current.exposeLan,
     lanDiscovery: typeof patch.lanDiscovery === 'boolean' ? patch.lanDiscovery : current.lanDiscovery,
-    ...(ollamaHost ? { ollamaHost } : {})
+    ...(ollamaHost ? { ollamaHost } : {}),
+    ...(remoteProfiles && remoteProfiles.length ? { remoteProfiles } : {}),
+    ...(lastSuccessfulBaseUrl ? { lastSuccessfulBaseUrl } : {})
   }
   config.providers = {
     ...config.providers,
     local: next
   }
   if (!ollamaHost) delete config.providers.local.ollamaHost
+  if (!remoteProfiles || !remoteProfiles.length) delete config.providers.local.remoteProfiles
+  if (!lastSuccessfulBaseUrl) delete config.providers.local.lastSuccessfulBaseUrl
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return next
 }

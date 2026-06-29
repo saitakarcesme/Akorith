@@ -256,7 +256,9 @@ const ollama = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('ollama:getSettings'),
   getShareInfo: (): Promise<unknown> => ipcRenderer.invoke('ollama:getShareInfo'),
   setSettings: (args: unknown): Promise<unknown> => ipcRenderer.invoke('ollama:setSettings', args),
-  testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl })
+  testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl }),
+  // Phase 33.14: resolve the first healthy endpoint (configured → last → profiles).
+  autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect')
 })
 
 const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama })

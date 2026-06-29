@@ -58,6 +58,10 @@ export interface ProviderConfigEntry {
   lanDiscovery?: boolean
   /** Local provider: optional OLLAMA_HOST override, e.g. "0.0.0.0:11434". */
   ollamaHost?: string
+  /** Phase 33.13: Local provider saved remote Ollama endpoints (auto-connect). */
+  remoteProfiles?: unknown
+  /** Phase 33.14: Local provider last endpoint that answered, tried first next. */
+  lastSuccessfulBaseUrl?: string
   /** Override the provider's model list. */
   models?: string[]
   /** Advanced: path to an external module exporting a Provider factory. */

@@ -1183,6 +1183,20 @@ export interface SettingsApi {
   setTheme(theme: AppTheme): Promise<AppTheme>
 }
 
+export interface OllamaRemoteProfile {
+  id: string
+  name: string
+  baseUrl: string
+  priority: number
+  enabled: boolean
+  networkHint?: string
+  lastStatus?: 'ok' | 'error' | 'unknown'
+  lastError?: string
+  lastModelCount?: number
+  lastConnectedAt?: number
+  lastCheckedAt?: number
+}
+
 export interface OllamaConnectionSettings {
   enabled: boolean
   baseUrl: string
@@ -1190,7 +1204,20 @@ export interface OllamaConnectionSettings {
   exposeLan: boolean
   lanDiscovery: boolean
   ollamaHost?: string
+  remoteProfiles?: OllamaRemoteProfile[]
+  lastSuccessfulBaseUrl?: string
 }
+
+export interface OllamaActiveEndpoint {
+  baseUrl: string
+  source: 'configured' | 'last' | 'profile'
+  profileId?: string
+  label: string
+}
+
+export type OllamaAutoConnectResult =
+  | { ok: true; active: OllamaActiveEndpoint; models: string[]; modelCount: number; switched: boolean }
+  | { ok: false; error: string; lastSuccessfulBaseUrl?: string; triedCount: number }
 
 export type OllamaConnectionTestResult =
   | { ok: true; baseUrl: string; models: string[]; modelCount: number }
@@ -1219,6 +1246,7 @@ export interface OllamaApi {
   getShareInfo(): Promise<OllamaShareInfo>
   setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
   testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
+  autoConnect(): Promise<OllamaAutoConnectResult>
 }
 
 export interface PreloadApi {
