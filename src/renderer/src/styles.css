@@ -182,9 +182,9 @@ textarea:focus-visible {
   /* Phase 33: black-heavy monochrome command surface. Window goes near-black;
      panels/raised surfaces step up in tiny luminance increments so depth comes
      from surface contrast rather than borders. Text stays high-contrast. */
-  --bg: #060607;            /* window base — near-black */
-  --bg-panel: #0d0e10;      /* cards, panels, popovers */
-  --bg-raised: #17181b;     /* raised / selected surfaces */
+  --bg: #050506;            /* window base — near-black */
+  --bg-panel: #101114;      /* cards, panels, popovers — reads without a border */
+  --bg-raised: #191a1e;     /* raised / selected surfaces */
   --bg-soft: #0a0b0c;
   --bg-input: #121316;      /* inputs */
   --bg-chat: #060607;
@@ -4277,8 +4277,8 @@ textarea:focus-visible {
   flex: 0 0 auto;
   padding: 6px 10px;
   color: var(--text-dim);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  border: 0;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -4299,7 +4299,7 @@ textarea:focus-visible {
   gap: 7px;
   padding: 14px;
   background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: 6px;
 }
 
@@ -4355,7 +4355,7 @@ textarea:focus-visible {
   margin-bottom: 20px;
   padding: 16px;
   background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: 6px;
   min-width: 0;
 }
@@ -5588,7 +5588,9 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   background: var(--bg-composer);
-  border: 1px solid var(--border-soft);
+  /* Phase 33.11: borderless — the composer reads via its raised surface tone,
+     not a 1px outline. A focus ring still appears on focus-within (below). */
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
   transition: border-color var(--fast), background-color var(--fast);
 }
@@ -5691,7 +5693,7 @@ textarea:focus-visible {
   padding: 5px 9px;
   color: var(--text);
   background: var(--bg-raised);
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -5902,7 +5904,7 @@ textarea:focus-visible {
   display: inline-flex;
   padding: 2px;
   background: var(--bg-raised);
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: 999px;
 }
 .route-seg button {
@@ -5927,14 +5929,14 @@ textarea:focus-visible {
   padding: 5px 10px;
   font-size: 11px;
   color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  border: 0;
   border-radius: 999px;
   cursor: pointer;
 }
 .composer-chip:hover:not(:disabled) {
   color: var(--text);
-  background: var(--hover);
+  background: var(--hover-strong);
 }
 .composer-chip:disabled {
   opacity: 0.5;
