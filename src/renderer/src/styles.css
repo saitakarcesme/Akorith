@@ -7843,6 +7843,91 @@ textarea:focus-visible {
   background: var(--hover-strong);
 }
 
+/* ---- Phase 37.3/37.4: project-row hover actions (new-chat icon + ⋯ menu) ---- */
+.project-row-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+}
+
+/* Override the legacy auto-margin now that overflow lives inside the actions group. */
+.project-row-actions .project-overflow {
+  margin-left: 0;
+}
+
+.project-newchat-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.project-newchat-icon:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* Actions appear on hover / active / when the row's menu is open. */
+.project-row:hover .project-newchat-icon,
+.project-row.is-active .project-newchat-icon,
+.project-row.is-menu-open .project-newchat-icon {
+  opacity: 1;
+}
+
+/* Per-chat ⋯ overflow (mirrors the project overflow). */
+.project-chat-overflow {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.project-chat:hover .project-chat-overflow,
+.project-chat.is-active .project-chat-overflow,
+.project-chat.is-menu-open .project-chat-overflow {
+  opacity: 1;
+}
+
+.project-chat-overflow:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* When the chat overflow is visible it takes the right edge from the timestamp. */
+.project-chat:hover .project-chat-time,
+.project-chat.is-menu-open .project-chat-time {
+  display: none;
+}
+
+.project-chats-empty {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 /* ---- Phase 33.5/33.6: project-first tree (expandable chats per project) ---- */
 .project-group {
   display: flex;
