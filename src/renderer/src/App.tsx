@@ -103,6 +103,21 @@ export default function App(): JSX.Element {
     setActiveSessionId(null)
   }, [selectHistory])
 
+  // Phase 33.6: start a FRESH chat inside a specific project (multiple chats per
+  // project). Keeps the project active so its agents/cwd stay bound, but opens an
+  // empty workspace thread instead of loading the project's latest session. The
+  // new session is persisted on first message via history.create(projectId).
+  const startNewProjectChat = useCallback(
+    (project: ProjectRow): void => {
+      setActiveProject(project)
+      setView('workspace')
+      setAgentStatus({})
+      selectHistory(null, 'workspace')
+      setActiveSessionId(null)
+    },
+    [selectHistory]
+  )
+
   // Phase 13: workspace continuity. On launch, restore the last active project so
   // the app resumes previous work instead of opening empty. Restoring a project
   // re-starts its Codex/Claude terminals through the existing safe PTY startup
@@ -224,6 +239,7 @@ export default function App(): JSX.Element {
         onSelectSession={(id, project, providerId) => selectSession(id, project, providerId)}
         onNewChat={(providerId) => void openGeneralChat(providerId)}
         onNewGeneralChat={startNewGeneralChat}
+        onNewProjectChat={startNewProjectChat}
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
       />

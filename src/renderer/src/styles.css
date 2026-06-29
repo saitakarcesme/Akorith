@@ -6368,6 +6368,165 @@ textarea:focus-visible {
   background: var(--hover-strong);
 }
 
+/* ---- Phase 33.5/33.6: project-first tree (expandable chats per project) ---- */
+.project-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Disclosure chevron toggles the project's chat list independent of selection. */
+.project-disclosure {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+  margin-left: -2px;
+  padding: 0;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.project-disclosure:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+/* Chat count badge — neutral monochrome, pushed to the right edge. */
+.project-chat-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 16px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+  color: var(--text-faint);
+  background: var(--hover);
+  border-radius: 999px;
+}
+
+.project-row:hover .project-chat-count,
+.project-row.is-active .project-chat-count {
+  color: var(--text-dim);
+}
+
+/* When the overflow button is shown it owns the right edge, so the count drops
+   its auto-margin to sit just before it. */
+.project-row:hover .project-chat-count + .project-overflow,
+.project-row.is-active .project-chat-count + .project-overflow,
+.project-row.is-menu-open .project-chat-count + .project-overflow {
+  margin-left: 6px;
+}
+
+.project-row:hover .project-chat-count,
+.project-row.is-menu-open .project-chat-count {
+  margin-left: auto;
+}
+
+/* Indented chat threads under a project. A single muted guide line gives the
+   tree structure without per-row borders. */
+.project-chats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px 17px;
+  padding-left: 9px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.project-chat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 4px 7px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.project-chat > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.project-chat:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.project-chat.is-active {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.project-chat-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-chat .sidebar-item-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 4px;
+  opacity: 0;
+}
+
+.project-chat:hover .sidebar-item-actions,
+.project-chat.is-active .sidebar-item-actions {
+  opacity: 1;
+}
+
+.project-chat .sidebar-item-actions button {
+  padding: 1px 5px;
+  font-size: 11px;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.project-chat .sidebar-item-actions button:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.project-chat .sidebar-item-actions button.is-danger:hover {
+  color: var(--danger);
+}
+
+/* "New chat" affordance for the project — calm dashed-free row, just text. */
+.project-newchat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 7px;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-newchat:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
 /* Fixed-position row menu (anchored in JS) — escapes the list's overflow clip. */
 .project-row-menu {
   position: fixed;
