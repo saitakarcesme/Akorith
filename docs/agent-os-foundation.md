@@ -77,6 +77,8 @@ Phase 29 lives on `feature/phase-29-universal-agent-adapter`.
 
 Phase 30 lives on `feature/phase-30-runtime-session-observation`.
 
+Phase 31 lives on `feature/phase-31-runtime-inspector-dashboard-polish`.
+
 `main` must remain untouched until this branch is reviewed and merged later.
 
 ## Phase 29: Universal Agent Adapter Foundation
@@ -234,6 +236,80 @@ Phase 30 gives the future Mission Engine a safer map of the current runtime befo
 - Observation failures are swallowed so provider sends keep their existing behavior.
 - The `bridgeSend()` to `PtyManager.write()` invariant remains unchanged.
 
-### Next Phase
+## Phase 31: Runtime Inspector And Dashboard Polish
 
-The next phase should add a narrow read-only session detail view or a single low-risk attach flow from Agent Hub to existing sessions. It should still avoid provider/model selection changes, automatic prompt sending, terminal-output parsing, and Mission Engine control until observation has proven stable.
+Phase 31 makes the Agent OS visibility layer more useful without adding execution or control paths. Agent Hub becomes a read-only runtime/session inspector, and Dashboard becomes a calmer Agent OS command surface. Existing providers, PTYs, macro/workspace loops, Test Lab behavior, usage accounting, and provider prompt construction remain unchanged.
+
+### Agent Hub Inspector
+
+The Settings Agent Hub now shows clearer cards for each adapter:
+
+- display name, detection status, integration stage, runtime capability summary, and capabilities
+- current observed runtime state such as idle, active provider call, active terminal, local runtime available, metadata only, or future memory/skills
+- short current and future integration notes for every adapter
+- a compact Runtime Observation summary with observed sessions, active provider calls, active PTY sessions, Ollama status, last checked time, and a read-only refresh button
+
+The session inspector expands observed sessions in memory only. It shows safe fields:
+
+- shortened session id
+- agent id, mode, origin, and status
+- project path when already available
+- created, updated, and last activity timestamps
+- linked runtime attachment count
+- error summary when present
+
+Runtime attachment rows show safe fields only:
+
+- kind, agent id, and status
+- shortened external id
+- source file label
+- project path when already available
+- timestamps
+- filtered metadata summaries
+
+The metadata summary deliberately filters suspicious key names such as prompt, content, text, output, secret, token, password, env, and command.
+
+### Privacy And Safety
+
+Phase 31 still does not store or display full prompts, assistant outputs, streamed token contents, terminal output, terminal scrollback, secrets, command contents, raw environment variables, or hidden IPC payloads. Runtime sessions and attachments remain process-memory only. No SQLite tables or migrations were added.
+
+No control or execution APIs were added. In particular, Phase 31 does not add `sendMessage`, `execute`, `startRealSession`, `routeToProvider`, `stopRealSession`, `killPty`, `writeToPty`, `rerunProvider`, `startLoop`, or commit buttons.
+
+### Dashboard Polish
+
+Dashboard now reads existing local data once and presents it as a cleaner command surface:
+
+- active workspace/project summary from the current App state
+- runtime observation summary from the Phase 30 read-only snapshot
+- provider usage totals from existing usage IPC
+- recent Test Lab signal from existing test run history
+- recent evaluation/report signal from existing evaluation history
+- recent loop activity from existing macro loop list
+- Agent OS visibility preview with registered adapters, connected existing runtime paths, observed sessions, local runtime status, and recent chat activity
+
+The Dashboard styling moves toward the future black-and-white Agent OS direction with neutral cards, restrained provider indicators, better spacing, clearer headings, and useful empty states. This is not the full monochrome redesign: logo assets, sidebar behavior, provider colors elsewhere, terminal theme, chat UI, Test Lab, and loop pages are intentionally not globally redesigned.
+
+### Current Active Runtime After Phase 31
+
+```text
+Existing chat, provider, PTY, macro, workspace loop, and Test Lab execution
+  -> unchanged runtime behavior
+
+Existing runtime metadata
+  -> read-only Agent OS observation
+  -> Settings Agent Hub inspector and Dashboard preview
+```
+
+### Recommended Next Phase
+
+Phase 32 should add a Mission Engine skeleton only:
+
+- `Mission`
+- `MissionStep`
+- `MissionPlanner`
+- `MissionExecutor`
+- `MissionReviewer`
+- `MissionCommitPolicy`
+- read-only UI skeleton
+
+Phase 32 should still avoid execution routing. It should define typed mission shapes and read-only planning surfaces before any adapter starts controlling providers, PTYs, tests, reviews, or commits.
