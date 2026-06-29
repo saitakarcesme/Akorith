@@ -1290,6 +1290,70 @@ export interface GpuApi {
   getStatus(): Promise<GpuStatusResult>
 }
 
+export interface ControllerStatus {
+  enabled: boolean
+  running: boolean
+  host: string
+  port: number
+  baseUrl: string
+  readOnly: boolean
+  sseEnabled: boolean
+  allowLan: boolean
+  hasToken: boolean
+  tokenMasked: string
+  connectedClients: number
+  lastStartedAt?: number
+  lastError?: string
+}
+
+export interface ControllerConfigView {
+  enabled: boolean
+  host: string
+  port: number
+  allowLan: boolean
+  readOnly: boolean
+  sseEnabled: boolean
+  allowedOrigins?: string[]
+  lastStartedAt?: number
+  lastError?: string
+  hasToken: boolean
+  tokenMasked: string
+}
+
+export interface ControllerEndpoint {
+  method: 'GET' | 'POST'
+  path: string
+  summary: string
+  auth: boolean
+}
+
+export interface ControllerDocs {
+  app: string
+  readOnly: boolean
+  endpoints: ControllerEndpoint[]
+}
+
+export interface ControllerConfigPatch {
+  enabled?: boolean
+  host?: string
+  port?: number
+  allowLan?: boolean
+  sseEnabled?: boolean
+  allowedOrigins?: string[]
+}
+
+export interface ControllerApi {
+  getConfig(): Promise<ControllerConfigView>
+  updateConfig(patch: ControllerConfigPatch): Promise<ControllerStatus>
+  getStatus(): Promise<ControllerStatus>
+  start(): Promise<ControllerStatus>
+  stop(): Promise<ControllerStatus>
+  restart(): Promise<ControllerStatus>
+  regenerateToken(): Promise<ControllerStatus>
+  revealToken(): Promise<string>
+  getDocs(): Promise<ControllerDocs>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1308,6 +1372,7 @@ export interface PreloadApi {
   ollama: OllamaApi
   git: GitApi
   gpu: GpuApi
+  controller: ControllerApi
 }
 
 declare global {

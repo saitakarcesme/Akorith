@@ -95,7 +95,7 @@ function ollamaInfo(): GpuOllamaInfo {
   }
 }
 
-async function getGpuStatus(): Promise<GpuStatusResult> {
+export async function getGpuStatus(): Promise<GpuStatusResult> {
   const plat = platform()
   const ollama = ollamaInfo()
 

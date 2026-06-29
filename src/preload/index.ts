@@ -271,6 +271,19 @@ const gpu = Object.freeze({
   getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus')
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu })
+// Phase 35: optional local controller API (read-only, loopback-default, token-gated).
+const controller = Object.freeze({
+  getConfig: (): Promise<unknown> => ipcRenderer.invoke('controller:getConfig'),
+  updateConfig: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('controller:updateConfig', patch),
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('controller:getStatus'),
+  start: (): Promise<unknown> => ipcRenderer.invoke('controller:start'),
+  stop: (): Promise<unknown> => ipcRenderer.invoke('controller:stop'),
+  restart: (): Promise<unknown> => ipcRenderer.invoke('controller:restart'),
+  regenerateToken: (): Promise<unknown> => ipcRenderer.invoke('controller:regenerateToken'),
+  revealToken: (): Promise<unknown> => ipcRenderer.invoke('controller:revealToken'),
+  getDocs: (): Promise<unknown> => ipcRenderer.invoke('controller:getDocs')
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, controller })
 
 contextBridge.exposeInMainWorld('api', api)

@@ -509,6 +509,14 @@ export function listProjects(): ProjectRow[] {
   ).map(toProject)
 }
 
+/** Phase 35: read-only session list for the controller API (metadata only). */
+export function listSessions(): SessionRow[] {
+  if (!ready()) return []
+  return (must().prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]).map(
+    toSession
+  )
+}
+
 export function createProject(input: {
   name: string
   path?: string | null
