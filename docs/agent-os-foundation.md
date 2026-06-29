@@ -75,6 +75,8 @@ Phase 28 lives on `feature/phase-28-agent-os-foundation`.
 
 Phase 29 lives on `feature/phase-29-universal-agent-adapter`.
 
+Phase 30 lives on `feature/phase-30-runtime-session-observation`.
+
 `main` must remain untouched until this branch is reviewed and merged later.
 
 ## Phase 29: Universal Agent Adapter Foundation
@@ -161,6 +163,77 @@ Memory / Skills remains an internal future adapter. Phase 29 gives it placeholde
 
 The existing providers and PTY manager are working runtime code with important safety and product invariants. Replacing them during this foundation phase would risk regressions in chat, terminals, macro loops, Test Lab, local executor, and workspace loops. Phase 29 only adds typed rails beside them.
 
+## Phase 30: Runtime Session Observation
+
+Phase 30 attaches the Agent OS foundation to the existing runtime as read-only observation. It does not make AgentSession the source of execution. Existing chat sends, PTY lifecycle, Ollama usage, macro loops, workspace loops, and Test Lab execution remain on their current paths.
+
+### Added In Phase 30
+
+- `src/main/agents/observation.ts` defines runtime attachment and snapshot types.
+- `src/main/agents/session-manager.ts` can create in-memory observed sessions and attach runtime metadata to them.
+- `src/main/providers/registry.ts` wraps existing provider sends with best-effort observation around the unchanged `provider.send(...)` call.
+- `src/main/pty.ts` exposes a metadata-only `listSessionSnapshots()` method for live PTY sessions.
+- `src/main/agents/registry.ts` exposes read-only runtime snapshot IPC through the existing `agent` namespace.
+- `src/preload/index.ts` and `src/preload/index.d.ts` expose `window.api.agent.getRuntimeSnapshot()`, `refreshRuntimeSnapshot()`, and runtime attachment readers.
+- `src/renderer/src/components/SettingsCenter.tsx` shows a small Runtime Observation panel in Agent Hub.
+- `src/renderer/src/styles.css` styles the new panel without changing the broader UI theme.
+
+### Observation Model
+
+Provider calls are observed in memory only. The observation records structural metadata such as provider id, model id, whether images were present, whether repo digest was enabled, and the associated project path when available. It does not store the user prompt, generated answer text, streamed tokens, images, or secrets.
+
+PTY sessions are observed as metadata snapshots only. The snapshot includes the terminal id, logical terminal, command kind, cwd, project key, timestamps, and inferred agent id for Claude or Codex terminal roles. It does not expose terminal scrollback, command contents, prompts, passwords, or permission prompt text.
+
+Ollama is observed with the same conservative detection path used by the Agent OS adapter. Refreshing the Runtime Observation panel may check local Ollama availability, but it does not start models, send prompts, or mutate Ollama settings.
+
+### Current Active Runtime
+
+```text
+Renderer
+  -> existing chat/provider IPC
+  -> src/main/providers/registry.ts
+  -> src/main/providers/claude.ts, chatgpt.ts, local.ts
+  -> Claude CLI, Codex CLI, Ollama HTTP API
+
+Renderer
+  -> existing PTY IPC / bridgeSend()
+  -> src/main/pty.ts
+  -> live Claude, Codex, or shell terminals
+```
+
+### Phase 30 Observation Path
+
+```text
+Existing provider sends and PTY metadata
+  -> observation hooks and snapshots
+  -> AgentSessionManager in-memory sessions and attachments
+  -> agent IPC
+  -> Settings Agent Hub Runtime Observation
+```
+
+This path is intentionally one-way. It observes active runtime state but cannot send prompts, write to terminals, start sessions, edit files, or commit changes.
+
+### Future Runtime
+
+```text
+Mission Engine
+  -> AgentRegistry
+  -> AgentSessionManager
+  -> AgentAdapter runtime methods
+  -> provider, PTY, tool, memory, test, review, and commit execution
+```
+
+Phase 30 gives the future Mission Engine a safer map of the current runtime before any control surface is added.
+
+### Privacy And Safety Boundaries
+
+- No full prompts are stored in AgentSession metadata.
+- No assistant outputs or streamed token contents are stored in AgentSession metadata.
+- No terminal output or scrollback is exposed through runtime observation.
+- No SQLite migration was added; observed sessions remain process-memory only.
+- Observation failures are swallowed so provider sends keep their existing behavior.
+- The `bridgeSend()` to `PtyManager.write()` invariant remains unchanged.
+
 ### Next Phase
 
-The next phase should introduce a narrow bridge from AgentSession to existing runtime paths for one low-risk adapter, likely read-only/session attachment first. It should still preserve the `bridgeSend()` to `PtyManager.write()` invariant and should avoid changing provider/model selection until the Agent Hub runtime is proven.
+The next phase should add a narrow read-only session detail view or a single low-risk attach flow from Agent Hub to existing sessions. It should still avoid provider/model selection changes, automatic prompt sending, terminal-output parsing, and Mission Engine control until observation has proven stable.

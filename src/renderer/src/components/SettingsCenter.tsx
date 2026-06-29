@@ -3,6 +3,7 @@ import type {
   AgentAdapterInfo,
   AgentDetectionResult,
   AgentId,
+  AgentRuntimeSnapshot,
   AgentSession,
   AgentSessionMode,
   AgentStatus,
@@ -95,11 +96,31 @@ function runtimeSummary(agent: AgentAdapterInfo): string {
   return bits.join(' · ') || 'metadata only'
 }
 
+function relativeTime(ts?: number): string {
+  if (!ts) return 'not checked'
+  const seconds = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  if (seconds < 5) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.round(minutes / 60)}h ago`
+}
+
 function placeholderModeForAgent(agent: AgentAdapterInfo): AgentSessionMode {
   if (agent.id === 'memory') return 'memory'
   if (agent.id === 'ollama') return 'chat'
   if (agent.id === 'codex') return 'exec'
   return 'terminal'
+}
+
+function observedRuntimeState(agent: AgentAdapterInfo, snapshot: AgentRuntimeSnapshot | null): string {
+  if (!snapshot) return 'not checked'
+  if (snapshot.activeProviderCalls.some((attachment) => attachment.agentId === agent.id)) return 'active provider call'
+  if (snapshot.activePtySessions.some((attachment) => attachment.agentId === agent.id)) return 'active terminal'
+  if (agent.id === 'ollama' && snapshot.ollamaStatus?.status === 'observed') return 'local runtime available'
+  if (agent.id === 'opencode') return 'metadata / detection only'
+  if (agent.id === 'memory') return 'future memory / skills'
+  return 'idle'
 }
 
 export default function SettingsCenter({
@@ -126,6 +147,7 @@ export default function SettingsCenter({
   const [agentAdapters, setAgentAdapters] = useState<AgentAdapterInfo[]>([])
   const [agentDetections, setAgentDetections] = useState<Partial<Record<AgentId, AgentDetectionResult>>>({})
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([])
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<AgentRuntimeSnapshot | null>(null)
   const [agentBusy, setAgentBusy] = useState<string | null>(null)
 
   const loadSettings = useCallback(() => {
@@ -154,6 +176,7 @@ export default function SettingsCenter({
     void window.api.ollama.getShareInfo().then(setOllamaShare).catch(() => setOllamaShare(null))
     void window.api.agent.list().then(setAgentAdapters).catch(() => setAgentAdapters([]))
     void window.api.agent.listSessions().then(setAgentSessions).catch(() => setAgentSessions([]))
+    void window.api.agent.getRuntimeSnapshot().then(setRuntimeSnapshot).catch(() => setRuntimeSnapshot(null))
   }, [])
 
   useEffect(() => {
@@ -335,6 +358,17 @@ export default function SettingsCenter({
         title: `${agent.displayName} placeholder`,
         metadata: { integrationStage: agent.integrationStage }
       })
+      setAgentSessions(await window.api.agent.listSessions())
+      setRuntimeSnapshot(await window.api.agent.getRuntimeSnapshot())
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const refreshRuntimeSnapshot = async (): Promise<void> => {
+    setAgentBusy('runtime')
+    try {
+      setRuntimeSnapshot(await window.api.agent.refreshRuntimeSnapshot())
       setAgentSessions(await window.api.agent.listSessions())
     } finally {
       setAgentBusy(null)
@@ -570,6 +604,7 @@ export default function SettingsCenter({
                           <span>{integrationStageLabel(agent.integrationStage)}</span>
                           <em>{runtimeSummary(agent)}</em>
                         </div>
+                        <div className="agent-note is-detection">Observed runtime: {observedRuntimeState(agent, runtimeSnapshot)}</div>
                         <p>{agent.description}</p>
                         <div className="agent-capability-list">
                           {agent.capabilities.map((capability) => (
@@ -605,9 +640,42 @@ export default function SettingsCenter({
                 })}
               </div>
               <div className="settings-divider" />
+              <div className="agent-runtime-panel">
+                <div className="agent-runtime-head">
+                  <div>
+                    <strong>Runtime Observation</strong>
+                    <span>Checked {relativeTime(runtimeSnapshot?.checkedAt)}</span>
+                  </div>
+                  <button type="button" disabled={agentBusy !== null} onClick={() => void refreshRuntimeSnapshot()}>
+                    {agentBusy === 'runtime' ? 'Checking...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="agent-runtime-grid">
+                  <div>
+                    <span>Provider calls</span>
+                    <strong>{runtimeSnapshot?.activeProviderCalls.length ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>PTY sessions</span>
+                    <strong>{runtimeSnapshot?.activePtySessions.length ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Ollama</span>
+                    <strong>{runtimeSnapshot?.ollamaStatus?.status ?? 'unknown'}</strong>
+                  </div>
+                </div>
+                {runtimeSnapshot?.activePtySessions.slice(0, 4).map((attachment) => (
+                  <div className="agent-runtime-row" key={attachment.id}>
+                    <span>{attachment.title ?? attachment.externalId ?? attachment.kind}</span>
+                    <em>{attachment.status} · {attachment.agentId ?? 'system'}</em>
+                  </div>
+                ))}
+                {runtimeSnapshot?.notes?.map((note) => <div className="agent-note" key={note}>{note}</div>)}
+              </div>
+              <div className="settings-divider" />
               <div className="agent-session-panel">
                 <div>
-                  <strong>Placeholder sessions</strong>
+                  <strong>In-memory sessions</strong>
                   <span>{agentSessions.length ? `${agentSessions.length} in memory` : 'None yet'}</span>
                 </div>
                 {agentSessions.slice(0, 5).map((session) => (
@@ -618,7 +686,7 @@ export default function SettingsCenter({
                 ))}
               </div>
               <div className="settings-note">
-                Phase 29 does not route live chat through AgentSession. Agent Hub detection and placeholder sessions do not send prompts, start PTYs, edit files, mutate provider config, or replace existing providers.
+                Phase 30 observes existing runtime activity in memory only. Agent Hub detection and placeholder sessions do not send prompts, start PTYs, edit files, mutate provider config, or replace existing providers.
               </div>
             </section>
           )}

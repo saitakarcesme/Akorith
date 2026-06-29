@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto'
 import type { AgentSessionEvent, AgentSessionEventInput } from './events'
 import type {
+  AgentRuntimeAttachment,
+  AgentRuntimeAttachmentCreateInput,
+  AgentRuntimeAttachmentPatch,
+  AgentRuntimeSnapshot
+} from './observation'
+import type {
   AgentSession,
   AgentSessionCreateInput,
   AgentSessionId,
@@ -24,9 +30,17 @@ function cloneEvent(event: AgentSessionEvent): AgentSessionEvent {
   }
 }
 
+function cloneAttachment(attachment: AgentRuntimeAttachment): AgentRuntimeAttachment {
+  return {
+    ...attachment,
+    metadata: attachment.metadata ? { ...attachment.metadata } : undefined
+  }
+}
+
 export class AgentSessionManager {
   private readonly sessions = new Map<AgentSessionId, AgentSession>()
   private readonly events = new Map<AgentSessionId, AgentSessionEvent[]>()
+  private readonly runtimeAttachments = new Map<string, AgentRuntimeAttachment>()
 
   createPlaceholderSession(input: AgentSessionCreateInput): AgentSession {
     const now = Date.now()
@@ -58,6 +72,43 @@ export class AgentSessionManager {
     return cloneSession(session)
   }
 
+  createObservedSession(
+    input: AgentSessionCreateInput & {
+      status?: AgentSessionStatus
+      lastActivityAt?: number
+      error?: string
+    }
+  ): AgentSession {
+    const now = Date.now()
+    const session: AgentSession = {
+      id: randomUUID(),
+      agentId: input.agentId,
+      mode: input.mode,
+      origin: input.origin,
+      status: input.status ?? 'running',
+      projectPath: input.projectPath,
+      title: input.title,
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: input.lastActivityAt ?? now,
+      metadata: {
+        ...(input.metadata ?? {}),
+        observed: true,
+        runtime: 'phase-30-runtime-observation'
+      },
+      error: input.error
+    }
+    this.sessions.set(session.id, session)
+    this.appendSessionEvent({
+      sessionId: session.id,
+      agentId: session.agentId,
+      type: 'created',
+      message: 'Observed AgentSession created from existing runtime activity.',
+      metadata: { mode: session.mode, origin: session.origin, status: session.status }
+    })
+    return cloneSession(session)
+  }
+
   listSessions(): AgentSession[] {
     return [...this.sessions.values()]
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -79,7 +130,7 @@ export class AgentSessionManager {
       status,
       updatedAt: now,
       lastActivityAt: patch.lastActivityAt ?? now,
-      metadata: patch.metadata ? { ...patch.metadata } : current.metadata
+      metadata: patch.metadata ? { ...current.metadata, ...patch.metadata } : current.metadata
     }
     this.sessions.set(id, next)
     this.appendSessionEvent({
@@ -107,6 +158,103 @@ export class AgentSessionManager {
     if (list.length > MAX_EVENTS) list.splice(0, list.length - MAX_EVENTS)
     this.events.set(input.sessionId, list)
     return cloneEvent(event)
+  }
+
+  attachRuntime(sessionId: AgentSessionId, input: AgentRuntimeAttachmentCreateInput): AgentRuntimeAttachment | null {
+    const session = this.sessions.get(sessionId)
+    if (!session) return null
+    const now = Date.now()
+    const attachment: AgentRuntimeAttachment = {
+      id: randomUUID(),
+      sessionId,
+      kind: input.kind,
+      agentId: input.agentId ?? session.agentId,
+      externalId: input.externalId,
+      status: input.status,
+      sourceFile: input.sourceFile,
+      projectPath: input.projectPath,
+      title: input.title,
+      startedAt: input.startedAt ?? now,
+      updatedAt: now,
+      lastActivityAt: input.lastActivityAt ?? now,
+      metadata: input.metadata ? { ...input.metadata } : undefined,
+      error: input.error
+    }
+    this.runtimeAttachments.set(attachment.id, attachment)
+    this.appendSessionEvent({
+      sessionId,
+      agentId: attachment.agentId ?? session.agentId,
+      type: 'snapshot',
+      message: `Observed ${attachment.kind}.`,
+      metadata: { attachmentId: attachment.id, status: attachment.status }
+    })
+    return cloneAttachment(attachment)
+  }
+
+  updateRuntimeAttachment(id: string, patch: AgentRuntimeAttachmentPatch): AgentRuntimeAttachment | null {
+    const current = this.runtimeAttachments.get(id)
+    if (!current) return null
+    const now = Date.now()
+    const next: AgentRuntimeAttachment = {
+      ...current,
+      ...patch,
+      updatedAt: now,
+      lastActivityAt: patch.lastActivityAt ?? now,
+      metadata: patch.metadata ? { ...current.metadata, ...patch.metadata } : current.metadata
+    }
+    this.runtimeAttachments.set(id, next)
+    if (next.sessionId) {
+      const session = this.sessions.get(next.sessionId)
+      const agentId = next.agentId ?? current.agentId ?? session?.agentId
+      if (!agentId) return cloneAttachment(next)
+      this.appendSessionEvent({
+        sessionId: next.sessionId,
+        agentId,
+        type: next.status === 'failed' ? 'error' : 'snapshot',
+        message: `Runtime attachment ${next.kind} is ${next.status}.`,
+        metadata: { attachmentId: next.id, status: next.status }
+      })
+    }
+    return cloneAttachment(next)
+  }
+
+  listRuntimeAttachments(): AgentRuntimeAttachment[] {
+    return [...this.runtimeAttachments.values()]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(cloneAttachment)
+  }
+
+  listRuntimeAttachmentsForSession(sessionId: AgentSessionId): AgentRuntimeAttachment[] {
+    return this.listRuntimeAttachments().filter((attachment) => attachment.sessionId === sessionId)
+  }
+
+  getRuntimeSnapshot(input: {
+    activePtySessions?: AgentRuntimeAttachment[]
+    ollamaStatus?: AgentRuntimeAttachment
+    notes?: string[]
+  } = {}): AgentRuntimeSnapshot {
+    const attachments = this.listRuntimeAttachments()
+    const activeProviderCalls = attachments.filter(
+      (attachment) =>
+        attachment.kind === 'provider_call' &&
+        (attachment.status === 'active' || attachment.status === 'busy')
+    )
+    return {
+      checkedAt: Date.now(),
+      activeProviderCalls,
+      activePtySessions: input.activePtySessions ?? [],
+      ollamaStatus: input.ollamaStatus,
+      observedSessions: this.listSessions().filter((session) => session.metadata?.observed === true),
+      notes: input.notes
+    }
+  }
+
+  markObservedSessionCompleted(sessionId: AgentSessionId, patch: AgentSessionPatch = {}): AgentSession | null {
+    return this.updateSessionStatus(sessionId, 'completed', patch)
+  }
+
+  markObservedSessionFailed(sessionId: AgentSessionId, error: string): AgentSession | null {
+    return this.updateSessionStatus(sessionId, 'failed', { error })
   }
 
   listSessionEvents(sessionId: AgentSessionId): AgentSessionEvent[] {

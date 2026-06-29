@@ -1725,6 +1725,105 @@ textarea:focus-visible {
   cursor: default;
 }
 
+.agent-runtime-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.agent-runtime-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-runtime-head > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-runtime-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.agent-runtime-head span,
+.agent-runtime-row em,
+.agent-runtime-grid span {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.agent-runtime-head button {
+  padding: 6px 9px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.agent-runtime-head button:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+
+.agent-runtime-head button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.agent-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.agent-runtime-grid > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.agent-runtime-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-runtime-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.agent-runtime-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-session-panel {
   display: flex;
   flex-direction: column;

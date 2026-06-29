@@ -220,6 +220,11 @@ const agent = Object.freeze({
   getSession: (id: string): Promise<unknown> => ipcRenderer.invoke('agent:getSession', { id }),
   listSessionEvents: (sessionId: string): Promise<unknown> =>
     ipcRenderer.invoke('agent:listSessionEvents', { sessionId }),
+  listRuntimeAttachments: (): Promise<unknown> => ipcRenderer.invoke('agent:listRuntimeAttachments'),
+  listRuntimeAttachmentsForSession: (sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('agent:listRuntimeAttachmentsForSession', { sessionId }),
+  getRuntimeSnapshot: (): Promise<unknown> => ipcRenderer.invoke('agent:getRuntimeSnapshot'),
+  refreshRuntimeSnapshot: (): Promise<unknown> => ipcRenderer.invoke('agent:refreshRuntimeSnapshot'),
   createPlaceholderSession: (args: unknown): Promise<unknown> =>
     ipcRenderer.invoke('agent:createPlaceholderSession', args),
   // Phase 13.2: read a terminal snapshot and summarize it into chat (meta call).
