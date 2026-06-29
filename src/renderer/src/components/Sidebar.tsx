@@ -1,4 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
@@ -655,54 +656,59 @@ export default function Sidebar({
                                 ⋯
                               </button>
                             </span>
-                            {projectRowMenu?.id === project.id && (
-                              <>
-                                <div
-                                  className="popover-backdrop"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    setProjectRowMenu(null)
-                                  }}
-                                />
-                                <div
-                                  className="project-menu project-row-menu"
-                                  role="menu"
-                                  style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
-                                    <span>Rename</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    disabled={!project.path}
-                                    onClick={() => void revealProject(project)}
-                                  >
-                                    <span>Reveal in Finder</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    disabled={!project.path}
-                                    onClick={() => void copyProjectPath(project)}
-                                  >
-                                    <span>Copy path</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    className="is-danger"
-                                    onClick={() => {
+                            {/* Phase 38.4: portal to <body> so the fixed menu escapes
+                                .sidebar-surface (will-change:transform makes it a
+                                containing block, and overflow:hidden would clip it). */}
+                            {projectRowMenu?.id === project.id &&
+                              createPortal(
+                                <>
+                                  <div
+                                    className="popover-backdrop"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
                                       setProjectRowMenu(null)
-                                      setConfirmRemoveProject(project)
                                     }}
+                                  />
+                                  <div
+                                    className="project-menu project-row-menu"
+                                    role="menu"
+                                    style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
+                                    onClick={(event) => event.stopPropagation()}
                                   >
-                                    <span>Remove from Akorith</span>
-                                  </button>
-                                </div>
-                              </>
-                            )}
+                                    <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
+                                      <span>Rename</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      disabled={!project.path}
+                                      onClick={() => void revealProject(project)}
+                                    >
+                                      <span>Reveal in Finder</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      disabled={!project.path}
+                                      onClick={() => void copyProjectPath(project)}
+                                    >
+                                      <span>Copy path</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      className="is-danger"
+                                      onClick={() => {
+                                        setProjectRowMenu(null)
+                                        setConfirmRemoveProject(project)
+                                      }}
+                                    >
+                                      <span>Remove from Akorith</span>
+                                    </button>
+                                  </div>
+                                </>,
+                                document.body
+                              )}
                           </div>
                           {isExpanded && (
                             <div className="project-chats">
@@ -749,46 +755,48 @@ export default function Sidebar({
                                     >
                                       ⋯
                                     </button>
-                                    {chatRowMenu?.id === chat.id && (
-                                      <>
-                                        <div
-                                          className="popover-backdrop"
-                                          onClick={(event) => {
-                                            event.stopPropagation()
-                                            setChatRowMenu(null)
-                                          }}
-                                        />
-                                        <div
-                                          className="project-menu project-row-menu"
-                                          role="menu"
-                                          style={{ position: 'fixed', top: chatRowMenu.top, right: chatRowMenu.right }}
-                                          onClick={(event) => event.stopPropagation()}
-                                        >
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            onClick={() => {
+                                    {chatRowMenu?.id === chat.id &&
+                                      createPortal(
+                                        <>
+                                          <div
+                                            className="popover-backdrop"
+                                            onClick={(event) => {
+                                              event.stopPropagation()
                                               setChatRowMenu(null)
-                                              setRenamingId(chat.id)
-                                              setRenameValue(chat.title)
                                             }}
+                                          />
+                                          <div
+                                            className="project-menu project-row-menu"
+                                            role="menu"
+                                            style={{ position: 'fixed', top: chatRowMenu.top, right: chatRowMenu.right }}
+                                            onClick={(event) => event.stopPropagation()}
                                           >
-                                            <span>Rename</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            className="is-danger"
-                                            onClick={() => {
-                                              setChatRowMenu(null)
-                                              void deleteSession(chat)
-                                            }}
-                                          >
-                                            <span>Delete chat</span>
-                                          </button>
-                                        </div>
-                                      </>
-                                    )}
+                                            <button
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => {
+                                                setChatRowMenu(null)
+                                                setRenamingId(chat.id)
+                                                setRenameValue(chat.title)
+                                              }}
+                                            >
+                                              <span>Rename</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              role="menuitem"
+                                              className="is-danger"
+                                              onClick={() => {
+                                                setChatRowMenu(null)
+                                                void deleteSession(chat)
+                                              }}
+                                            >
+                                              <span>Delete chat</span>
+                                            </button>
+                                          </div>
+                                        </>,
+                                        document.body
+                                      )}
                                   </div>
                                 )
                               )}
