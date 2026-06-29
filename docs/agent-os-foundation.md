@@ -410,3 +410,99 @@ This gives Akorith a typed place for multi-agent planning, planner/executor/revi
 Recommended Phase 33: Mission Engine persistence and read-only history.
 
 That is the safest next step because Phase 32 missions are useful for previewing structure but disappear on restart. A persistence phase can add durable mission history, read-only inspection, and migration planning without routing mission steps to providers, PTYs, Test Lab, macro loops, commits, or pushes yet.
+
+## Phase 33 — UI Command Surface Overhaul
+
+Phase 33 is a UI/UX-first phase that turns Akorith into a serious, black-heavy,
+technical Agent-OS command surface (Codex / OpenCode inspired), with no change to
+provider runtime, PTY behaviour, macro/workspace loops, Test Lab, token accounting,
+usage logging, the `bridgeSend → PtyManager.write` invariant, the `loopex.db` /
+`loopex.config.json` filenames, or AkorithLoop. See
+`docs/phase-33-ui-command-surface.md` for the full audit and commit plan.
+
+### Monochrome, borderless, sharper direction
+
+- Black-heavy monochrome token palette: near-black window with small surface-tone
+  steps for depth instead of borders; provider identity reduced to neutral grays
+  (no orange/blue/purple blocks) — provider names survive as text/labels.
+- Sharper geometry: smaller radius scale (sm 3 / 5 / lg 8 / xl 10) and a mapped-down
+  pass over hardcoded radii (status pills and circles preserved).
+- Borderless pass on composer, dashboard cards, model picker, chips, segmented
+  controls — surface contrast and type hierarchy carry structure.
+
+### Sidebar: project-first navigation
+
+- Provider folders (Claude / Codex / Local) removed from the sidebar.
+- Projects is a section heading; each project is an expandable group revealing its
+  chat threads inline (grouped from existing sessions by `projectId` — no migration),
+  with per-chat rename/delete and a per-project "New chat". A "Chats" section lists
+  general threads and surfaces orphaned chats so no history disappears.
+- The sidebar now vanishes/appears (opacity + tiny scale) instead of sliding.
+
+### Multiple chats per project
+
+`SessionRow.projectId` already supported this at the DB layer; Phase 33 exposes it.
+`App.startNewProjectChat` keeps the project (and its agents/cwd) active while opening
+an empty thread, persisted on first message via the existing `history.create`.
+
+### Composer-integrated model picker
+
+- Provider/model selection moved out of the top bar into a custom dark popover
+  listbox (`ModelPicker`) in the composer — provider-grouped, keyboard + mouse
+  friendly, source-labelled, opens upward near the composer. No native white
+  dropdown on the dark UI.
+
+### Settings as a real page
+
+- `SettingsCenter` is now a full-window page (fixed host + centred max-width column)
+  with its existing left-tab navigation, instead of a centred modal card. All
+  settings functionality (Profile / Providers / Agents / Missions / Workflow / Test /
+  Safety) is preserved.
+
+### Usage chart polish
+
+- Thicker daily-usage bars, a chunkier donut ring, and higher-contrast gridlines and
+  axis labels — monochrome, no new chart dependency.
+
+### Remote Ollama auto-connect
+
+- `LocalProviderSettings` additively gains `remoteProfiles[]` (id, name, baseUrl,
+  priority, enabled, network hint, last health status/error/model count/timestamps)
+  and `lastSuccessfulBaseUrl`, persisted with a strict sanitizer (valid http(s) only,
+  capped count, never secrets).
+- `ollama:autoConnect` tries configured → last successful → enabled remote profiles by
+  priority, picks the first healthy endpoint (read-only `/api/tags`, short timeouts, no
+  polling), switches the active endpoint only when the current one is unreachable, and
+  records per-profile health. ChatPanel runs it once on launch and labels local-provider
+  models with their source (Local / Remote: profile). Settings → Providers gains a
+  remote-endpoints editor with Auto-connect, plus the private-route security note
+  (Tailscale/VPN/SSH; never public exposure).
+
+### Terminal docking + bottom workbench
+
+- Agent terminals dock three ways (right Drawer / bottom Dock / Focus view) via a header
+  switcher; switching modes only changes the container class, so PTYs are never
+  remounted.
+- A bottom workbench (`BottomWorkbench`) docks under the chat with read-only tabs:
+  Changes (a new bounded, read-only `git:status` IPC — branch, file list, `diff --stat`;
+  never stages/commits/pushes; path must be a managed project), Runtime (observation
+  snapshot counts), and Missions (draft overview). No mission execution, no Run buttons.
+
+### Codex / OpenCode inspirations borrowed
+
+- Composer-integrated model picker, command-palette-style dark listbox, project→chats
+  tree sidebar, a bottom workbench with a read-only changes panel, dockable terminals,
+  a compact full-page settings view, and stronger monochrome usage graphics.
+
+### Intentionally unchanged
+
+Provider runtime/prompts/returns, token accounting, usage logging, PTY command kinds,
+`bridgeSend → PtyManager.write`, macro/workspace loops, Test Lab, Agent Hub/Mission
+preview behaviour, `loopex.db`, `loopex.config.json`, and AkorithLoop.
+
+### Recommended Phase 34
+
+Phase 34: Mission Engine persistence and read-only history (still the safest next
+backend step — Phase 33 deliberately avoided deeper Mission work). Strong alternatives
+once persistence lands: a real OpenCode adapter integration, or deeper bottom-workbench
+git features (per-file diff view) building on the read-only `git:status` IPC.

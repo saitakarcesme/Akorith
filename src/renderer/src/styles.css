@@ -6187,6 +6187,18 @@ textarea:focus-visible {
   min-height: 0;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
+  animation: workbench-in 160ms var(--ease);
+}
+
+@keyframes workbench-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .workbench-tabs {
@@ -7061,10 +7073,11 @@ textarea:focus-visible {
   background: var(--hover);
 }
 
-/* Active project: subtle gray fill (not the loud accent card). */
+/* Active project: subtle gray fill with a thin left accent (Codex-like). */
 .project-row.is-active {
   color: var(--text);
   background: var(--hover-strong);
+  box-shadow: inset 2px 0 0 var(--accent-strong);
 }
 
 .project-row-ico {
