@@ -6593,6 +6593,9 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
+  /* Phase 36.4: each card sizes to its own content — expanding one card's
+     details no longer stretches its row neighbours to match height. */
+  align-items: start;
 }
 
 .plugin-card {
