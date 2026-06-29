@@ -103,9 +103,16 @@ export function PlusIcon(props: IconProps): JSX.Element {
   )
 }
 
-export function ChevronIcon(props: IconProps & { direction?: 'left' | 'right' | 'down' }): JSX.Element {
+export function ChevronIcon(props: IconProps & { direction?: 'left' | 'right' | 'down' | 'up' }): JSX.Element {
   const direction = props.direction ?? 'right'
-  const path = direction === 'left' ? 'M15 18l-6-6 6-6' : direction === 'down' ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'
+  const path =
+    direction === 'left'
+      ? 'M15 18l-6-6 6-6'
+      : direction === 'down'
+        ? 'M6 9l6 6 6-6'
+        : direction === 'up'
+          ? 'M18 15l-6-6-6 6'
+          : 'M9 6l6 6-6 6'
   return (
     <IconShell {...props}>
       <path d={path} />

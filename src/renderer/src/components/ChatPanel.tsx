@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
+import ModelPicker from './ModelPicker'
 
 interface ChatMessage {
   id: string
@@ -643,6 +644,21 @@ export default function ChatPanel({
     setSuggestion(null)
   }
 
+  // Phase 33.8: single entry point for the composer model picker. Changing the
+  // provider mid-conversation starts a fresh thread (a session belongs to one
+  // provider), mirroring the old top-bar select behaviour; a model-only change
+  // keeps the current thread.
+  const selectModel = (nextProviderId: string, nextModel: string): void => {
+    if (nextProviderId !== providerId && (activeSessionId || messages.length > 0)) {
+      setMessages([])
+      setActiveSessionId(null)
+      onActiveSession(null)
+      setContextInfo(null)
+    }
+    setProviderId(nextProviderId)
+    setModel(nextModel)
+  }
+
   const handleSelectionMouseUp = (): void => {
     // Defer so the browser settles the selection first.
     setTimeout(() => {
@@ -1018,6 +1034,13 @@ export default function ChatPanel({
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
+            <ModelPicker
+              providers={providers}
+              providerId={providerId}
+              model={model}
+              onSelect={selectModel}
+              onRefresh={() => void loadProviders()}
+            />
             <input
               ref={imageInputRef}
               type="file"
@@ -1119,44 +1142,9 @@ export default function ChatPanel({
           )}
         </div>
         <div className="ws-topbar-right">
-          <div className={`model-switcher ${!selected?.available.ok ? 'is-unavailable' : ''}`} title="Provider and model for this chat">
-            <span className="model-switcher-label">Model</span>
-            <select
-              className="model-select is-provider"
-              value={providerId}
-              onChange={(event) => {
-                const next = event.target.value
-                if (next !== providerId && (activeSessionId || messages.length > 0)) {
-                  setMessages([])
-                  setActiveSessionId(null)
-                  onActiveSession(null)
-                  setContextInfo(null)
-                }
-                setProviderId(next)
-              }}
-              aria-label="Provider"
-              disabled={!providers?.length}
-            >
-              {!providers?.length && <option value="">No providers</option>}
-              {providers?.map((p) => (
-                <option key={p.id} value={p.id} disabled={!p.available.ok}>
-                  {p.available.ok ? p.label : `${p.label} — unavailable`}
-                </option>
-              ))}
-            </select>
-            {selected && selected.models.length > 0 && (
-              <select className="model-select" value={model} onChange={(event) => setModel(event.target.value)} aria-label="Model">
-                {selected.models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <button type="button" className="icon-button" title="Refresh providers" onClick={() => void loadProviders()}>
-            ↻
-          </button>
+          {/* Phase 33.8: provider/model selection moved into the composer's
+              ModelPicker (a custom dark listbox). The top bar keeps only the
+              scope/agent controls. */}
           {hasProject && (
             <button
               type="button"
