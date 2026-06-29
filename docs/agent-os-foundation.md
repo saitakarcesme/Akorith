@@ -557,3 +557,52 @@ Plugin system architecture (turn the static registry into a real, sandboxed,
 permission-gated plugin loader) — it now has a UI to grow into. Strong alternatives:
 a Remote GPU Telemetry companion (secured endpoint feeding the new GPU card for remote
 machines), Mission Engine persistence/read-only history, or a real OpenCode adapter.
+
+## Phase 35 — Controller API · Real Plugin Foundation · vLLM Studio Gap
+
+Phase 35 adds an **optional** local controller HTTP API, turns the static Plugins page
+into a real permission-gated plugin foundation with honest diagnostics, and records a
+gap analysis vs. Local Studio (`docs/vllm-studio-gap-analysis.md`). Akorith stays
+local-first and provider-API-key-free; the controller is a separate, opt-in surface.
+
+### Controller API (`docs/controller-api.md`)
+- `src/main/controller/` — pure, unit-testable Node `http` server factory (no electron/
+  config imports) + an electron bootstrap. **Disabled by default, loopback-only,
+  token-protected, read-only.** Non-loopback host requires an explicit Allow-LAN toggle;
+  never binds `0.0.0.0` implicitly; token never logged.
+- Endpoints: `/health` (no auth) + token-gated `/v1/status|agents|runtime|projects|chats
+  (summaries)|missions|plugins|gpu|ollama|events (SSE)|docs` and a single safe
+  `POST /v1/controller/refresh`. No execution/write endpoints.
+- Settings → API tab: enable, host/port, base URL + token (reveal/copy), Allow-LAN +
+  warning, start/stop/restart, regenerate token, example curl, endpoint catalogue.
+- Verified by `npm run verify:controller` (ephemeral loopback port; auth + read checks).
+
+### Plugin foundation (`docs/plugin-system.md`)
+- `src/main/plugins/` — types, permissions, diagnostics (read-only CLI/path checks),
+  built-in manifests, and a config-only manager. **No execution runtime.**
+- Built-ins: OpenCode Agent, GitHub Workbench, Remote Ollama Telemetry, Hermes Memory,
+  Chroma Memory, Browser/Chrome Automation, Test Lab Extensions, Mission Runners,
+  Controller API. Live diagnostics via `opencode/gh/ollama --version`, `python3`+`chromadb`,
+  and Chrome path detection (no browser data). Chroma: no ingestion/embeddings; Browser:
+  detection only.
+- Plugins page reads the live registry: status badges, diagnostics, config-only
+  enable/disable, per-plugin Check, category filters, sensitive-permission highlighting,
+  details with safety notes, and an optional Chroma endpoint placeholder.
+- Dashboard gains a Controller-API-and-plugins card.
+
+### vLLM Studio gap
+Local Studio (formerly `0xSero/vllm-studio`) is a model-serving control panel; Akorith
+adopted its **controller-API backbone, loopback+token security model, SSE stream, and a
+diagnostics/doctor concept**, and deliberately skipped the OpenAI-compatible proxy, model
+lifecycle, recipes, and remote deploy scripts (different identity).
+
+### Intentionally unchanged
+Provider runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, PTY command kinds, macro/workspace loops, Test Lab,
+Agent Hub / Mission preview, `loopex.db`, `loopex.config.json`, AkorithLoop. Controller and
+plugins are read-only; no secrets exposed, no hardcoded IPs, no privileged telemetry.
+
+### Recommended Phase 36
+An Akorith **CLI** that talks to the controller (status/plugins/gpu) — the single most
+valuable Local-Studio idea still missing. Alternatives: a secured **remote GPU telemetry
+companion**, the sandboxed **plugin execution runtime**, or **Mission persistence**.
