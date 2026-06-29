@@ -606,3 +606,57 @@ plugins are read-only; no secrets exposed, no hardcoded IPs, no privileged telem
 An Akorith **CLI** that talks to the controller (status/plugins/gpu) — the single most
 valuable Local-Studio idea still missing. Alternatives: a secured **remote GPU telemetry
 companion**, the sandboxed **plugin execution runtime**, or **Mission persistence**.
+
+## Phase 36 — UI Fixes · Remote GPU Telemetry · Right Dock · macOS App Refresh
+
+Targeted product-polish from screenshot feedback plus a real remote GPU telemetry path.
+Full plan: `docs/phase-36-ui-gpu-right-dock-mac-app.md`.
+
+### Sidebar / project-chat polish
+- "Projects" is now a plain heading (count + add button), **not** a collapsible folder —
+  the list is always visible.
+- Project rows, project chat rows, and general chat rows have **no selected pill**, fill,
+  left-accent bar, or border. Active = brighter/heavier text; background on hover only.
+
+### Plugins card layout
+- `align-items: start` on the plugins grid so expanding one card's Details no longer
+  stretches its row neighbours.
+
+### Test Lab output
+- `convertEol` on the sandbox xterm fixes the `\n`-only staircase/misalignment; long npm
+  logs wrap cleanly at the terminal width (execution/scoring/PDF unchanged).
+
+### Agent Activity right dock
+- Fourth mode, **Right**, beside the chat (not overlaying): the chat shrinks by the dock
+  width via a `--agent-right-width` CSS var; draggable left-edge handle (320 / 460 / 60vw,
+  persisted). PTYs are never remounted on mode switch; they refit via ResizeObserver.
+
+### Remote GPU telemetry (read the PC's GPU on the Mac)
+- New remote telemetry profiles point at a **remote Akorith Controller** (the PC running
+  Ollama, Controller API on + Allow-LAN over Tailscale/VPN). `src/main/remote-telemetry.ts`
+  calls the remote read-only `/v1/gpu` and `/v1/ollama` with the bearer token (timeouts).
+- `telemetry:getStatus` picks the first healthy enabled profile by priority, else honest
+  local GPU. The Dashboard "GPU / Local model runtime" card is source-aware: **Remote PC:
+  <profile>** with the PC's GPU name/utilization/VRAM/temperature, else **Local Mac**, else
+  an honest unavailable state + setup CTA. Tokens masked in the UI, never logged, never
+  sent to the renderer except an explicit local reveal. Controller security unchanged.
+
+### How to show the PC GPU on the Mac
+On the PC: Settings → API → enable Controller API, turn on Allow-LAN (trusted private
+network only), copy its base URL + token. On the Mac: Settings → API → Remote telemetry
+profiles → add the PC's URL + token → Test → Save. The Dashboard then shows the PC GPU.
+
+### macOS app refresh
+`scripts/refresh-macos-app.sh` backs up old `Akorith.app` copies to a timestamped Desktop
+folder (never `rm -rf`), quits a running Akorith, and installs the freshly `pack:mac`-built
+app to `/Applications` (falls back to `~/Applications`). User config/data untouched.
+
+### Intentionally unchanged
+Provider runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, PTY command kinds, Test Lab execution/scoring/PDF,
+`loopex.db`/`loopex.config.json`, AkorithLoop, controller security defaults.
+
+### Recommended Phase 37
+The Akorith **CLI** over the controller (status/plugins/gpu/telemetry), or a packaged
+**remote telemetry companion** preset for the PC. Alternatives: sandboxed plugin runtime,
+or per-file diff in the bottom workbench.

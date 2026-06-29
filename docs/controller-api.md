@@ -71,7 +71,18 @@ heartbeat ticks only while at least one client is connected.
 - Verified by `npm run verify:controller` (boots on an ephemeral loopback port, checks
   auth + read endpoints, shuts down).
 
-## Not in Phase 35 (deliberately)
+## Remote telemetry (Phase 36)
+
+The read-only `/v1/gpu` and `/v1/ollama` endpoints are the basis for **remote GPU
+telemetry**: a Mac reads the GPU of a PC running local models by adding a remote telemetry
+profile (Settings → API → Remote telemetry profiles) pointing at the PC's controller
+`baseUrl` + token. The PC must have the Controller API enabled with **Allow-LAN** on, over
+a trusted private network (Tailscale/VPN/LAN) — never public. The Mac stores
+`{ name, baseUrl, token, enabled, priority }` locally (token masked in the UI, never
+logged), and `telemetry:getStatus` picks the first healthy profile by priority, else
+honest local GPU. No new controller endpoints and no change to controller security.
+
+## Not in Phase 35/36 (deliberately)
 
 No execution/write tier, no OpenAI-compatible proxy, no model lifecycle, no CLI/TUI yet.
 A future Akorith CLI talking to this controller is the recommended next step.
