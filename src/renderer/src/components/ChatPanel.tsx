@@ -19,12 +19,13 @@ interface ComposerImage extends ChatImageAttachment {
   previewUrl: string
 }
 
-// Olympus = Codex (t2), Atlantis = Claude (t1).
+// Olympus = Codex (t2), Gaia = OpenCode (t3), Atlantis = Claude (t1).
 const TERMINALS = [
   { id: 't2', label: 'Olympus' },
+  { id: 't3', label: 'Gaia' },
   { id: 't1', label: 'Atlantis' }
 ] as const
-const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t1: 'Claude' }
+const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t3: 'OpenCode', t1: 'Claude' }
 // Bounded auto-summary watcher: first look after this long, then poll until the
 // terminal output stabilizes or the max wait elapses (agents keep streaming).
 const AUTO_SUMMARY_FIRST_DELAY_MS = 3500
@@ -65,15 +66,20 @@ interface ChatPanelProps {
   onActiveSession: (sessionId: string | null) => void
 }
 
-const AGENT_LABELS: Record<'t1' | 't2', string> = { t1: 'Claude', t2: 'Codex' }
+const AGENT_LABELS: Record<'t1' | 't2' | 't3', string> = { t1: 'Claude', t2: 'Codex', t3: 'OpenCode' }
 
-/** Compact readiness summary for the header chip from the two agents' statuses. */
+/** Compact readiness summary for the header chip from the three agents' statuses. */
 function agentSummary(status: AgentStatusMap): { label: string; tone: 'ready' | 'starting' | 'idle' | 'warn' } {
-  const vals = [status.t2, status.t1]
+  const vals = [status.t2, status.t3, status.t1]
   if (vals.every((v) => !v)) return { label: 'Agents starting…', tone: 'starting' }
   const live = vals.filter((v) => v?.status === 'live').length
   const anyShellFallback = vals.some((v) => v && v.status === 'live' && v.role === 'shell')
-  if (live === 2) return { label: anyShellFallback ? 'Agents running (shell fallback)' : 'Codex & Claude running', tone: anyShellFallback ? 'warn' : 'ready' }
+  if (live >= 2) {
+    return {
+      label: anyShellFallback ? `Agents running (shell fallback)` : `${live} agents running`,
+      tone: anyShellFallback ? 'warn' : 'ready'
+    }
+  }
   if (vals.some((v) => v?.status === 'exited')) return { label: 'An agent exited', tone: 'warn' }
   return { label: 'Agents starting…', tone: 'starting' }
 }
@@ -1122,7 +1128,7 @@ export default function ChatPanel({
                     type="button"
                     className={bridgeTarget === t.id ? 'is-active' : ''}
                     onClick={() => setBridgeTarget(t.id)}
-                    title={`Bridge sends go to ${t.label} (${t.id === 't2' ? 'Codex' : 'Claude'})`}
+                    title={`Bridge sends go to ${t.label} (${AGENT_ROLE[t.id] ?? 'Agent'})`}
                   >
                     {t.label}
                   </button>
@@ -1228,7 +1234,7 @@ export default function ChatPanel({
         <div className="ws-hero">
           <div className="ws-hero-inner">
             <h1 className="ws-hero-title">What should we work on?</h1>
-            <p className="ws-hero-sub">Open or create a project from the sidebar to start Codex and Claude.</p>
+            <p className="ws-hero-sub">Open or create a project from the sidebar to start Codex, OpenCode, and Claude.</p>
             <div className="ws-hero-actions">
               <button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}>
                 <FolderIcon size={16} />
@@ -1249,7 +1255,7 @@ export default function ChatPanel({
           <div className="ws-hero-inner is-wide">
             <h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : `Welcome back, ${displayName}`}</h1>
             <p className="ws-hero-sub">
-              {hasProject ? 'Type a task — Akorith plans it and drives Codex and Claude for you.' : 'Pick a model and start a fresh conversation.'}
+              {hasProject ? 'Type a task — Akorith plans it and drives Codex, OpenCode, and Claude for you.' : 'Pick a model and start a fresh conversation.'}
             </p>
             {composer}
             {selected && !selected.available.ok && (

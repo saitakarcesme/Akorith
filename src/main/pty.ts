@@ -22,7 +22,16 @@ export interface PtyCreateOptions {
 // `*-auto` kinds launch the agent CLI in non-interactive / bypass-permission
 // mode, used by the autonomous Loop section so it never stops to ask. The plain
 // kinds keep their normal interactive prompts for the user-driven workspace.
-export type PtyCommandKind = 'shell' | 'codex' | 'claude' | 'claude-auto' | 'codex-auto'
+export type PtyCommandKind =
+  | 'shell'
+  | 'codex'
+  | 'claude'
+  | 'claude-auto'
+  | 'codex-auto'
+  // Phase 37: Gaia = OpenCode. `opencode-auto` reserved for future loop use; it
+  // currently launches the same interactive TUI (OpenCode has no bypass flag).
+  | 'opencode'
+  | 'opencode-auto'
 
 export type PtyCreateResponse =
   | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string; reused?: boolean }
@@ -83,7 +92,7 @@ function safeCwd(cwd: unknown): string | null {
   }
 }
 
-function resolveExecutable(command: 'codex' | 'claude'): string | null {
+function resolveExecutable(command: string): string | null {
   const pathDirs = (process.env['PATH'] ?? '').split(delimiter).filter(Boolean)
   const suffixes =
     process.platform === 'win32'
@@ -123,6 +132,21 @@ function commandSpec(kind: PtyCommandKind): { command: string; args: string[]; s
       args: [],
       started: 'shell',
       message: `[akorith] ${label} CLI was not found on PATH. Started a shell in the project folder instead.\r\n`
+    }
+  }
+  // Phase 37: Gaia = OpenCode. Launch the interactive `opencode` TUI in the
+  // project folder, exactly like the Codex/Claude panes.
+  if (kind === 'opencode' || kind === 'opencode-auto') {
+    const resolved = resolveExecutable('opencode')
+    if (resolved) {
+      return { command: resolved, args: [], started: kind }
+    }
+    return {
+      command: resolveDefaultShell(),
+      args: [],
+      started: 'shell',
+      message:
+        '[akorith] OpenCode CLI (Gaia) was not found on PATH. Install it with:  npm i -g opencode-ai  then reopen this panel. Sign in with:  opencode auth login  . Started a shell in the project folder instead.\r\n'
     }
   }
   return { command: resolveDefaultShell(), args: [], started: 'shell' }
@@ -190,6 +214,7 @@ export interface PtySessionSnapshot {
 function agentIdForPtyKind(kind: PtyCommandKind): AgentId | undefined {
   if (kind === 'claude' || kind === 'claude-auto') return 'claude'
   if (kind === 'codex' || kind === 'codex-auto') return 'codex'
+  if (kind === 'opencode' || kind === 'opencode-auto') return 'opencode'
   return undefined
 }
 
@@ -409,7 +434,15 @@ class PtyManager {
 export const ptyManager = new PtyManager()
 
 export function registerPtyIpc(): void {
-  const VALID_KINDS = new Set<string>(['shell', 'codex', 'claude', 'claude-auto', 'codex-auto'])
+  const VALID_KINDS = new Set<string>([
+    'shell',
+    'codex',
+    'claude',
+    'claude-auto',
+    'codex-auto',
+    'opencode',
+    'opencode-auto'
+  ])
   ipcMain.handle('pty:create', (event, args: { id: string } & PtyCreateOptions): PtyCreateResponse => {
     if (
       typeof args?.id !== 'string' ||

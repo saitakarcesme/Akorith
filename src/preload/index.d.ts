@@ -8,7 +8,14 @@ export interface PtyCreateOptions {
   commandKind?: PtyCommandKind
 }
 
-export type PtyCommandKind = 'shell' | 'codex' | 'claude' | 'claude-auto' | 'codex-auto'
+export type PtyCommandKind =
+  | 'shell'
+  | 'codex'
+  | 'claude'
+  | 'claude-auto'
+  | 'codex-auto'
+  | 'opencode'
+  | 'opencode-auto'
 
 export type PtyCreateResponse =
   | { ok: true; started: PtyCommandKind; fallback?: boolean; message?: string; reused?: boolean }

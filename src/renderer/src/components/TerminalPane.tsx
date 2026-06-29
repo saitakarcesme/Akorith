@@ -3,10 +3,10 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { PtyCommandKind } from '../../../preload/index.d'
-import { MountainIcon, WaveIcon } from './icons'
+import { GlobeIcon, MountainIcon, WaveIcon } from './icons'
 
 type PaneStatus = 'connecting' | 'live' | 'exited'
-type TerminalRole = 'shell' | 'claude' | 'codex'
+type TerminalRole = 'shell' | 'claude' | 'codex' | 'opencode'
 
 export interface AgentStatusInfo {
   status: PaneStatus
@@ -17,9 +17,9 @@ interface TerminalPaneProps {
   /** PTY session id ("t1", "t2") — routes IPC streams to this pane only. */
   id: string
   title: string
-  identity: 'olympus' | 'atlantis'
+  identity: 'olympus' | 'atlantis' | 'gaia'
   cwd: string
-  commandKind: Extract<PtyCommandKind, 'codex' | 'claude'>
+  commandKind: Extract<PtyCommandKind, 'codex' | 'claude' | 'opencode'>
   /** Bubble status/role up so the chat can show "Codex ready" without the
    *  terminal being visible (the pane keeps running inside the hidden drawer). */
   onStatus?: (info: AgentStatusInfo) => void
@@ -32,7 +32,8 @@ interface TerminalPaneProps {
 const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'shell', label: 'Shell' },
   { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' }
+  { id: 'codex', label: 'Codex' },
+  { id: 'opencode', label: 'OpenCode' }
 ]
 
 export default function TerminalPane({
@@ -100,7 +101,15 @@ export default function TerminalPane({
         if (disposed) return
         if (res.ok) {
           // Map any auto kind back to its base role (workspace panes show base roles).
-          setRole(res.started === 'claude-auto' ? 'claude' : res.started === 'codex-auto' ? 'codex' : res.started)
+          setRole(
+            res.started === 'claude-auto'
+              ? 'claude'
+              : res.started === 'codex-auto'
+                ? 'codex'
+                : res.started === 'opencode-auto'
+                  ? 'opencode'
+                  : res.started
+          )
           setStatus('live')
           if (res.reused) {
             // Re-attaching to a still-running session (e.g. switched back to this
@@ -150,7 +159,7 @@ export default function TerminalPane({
 
   const statusLabel =
     status === 'connecting' ? 'Starting...' : status === 'live' ? 'Live' : `Exited (${exitCode ?? '?'})`
-  const IdentityIcon = identity === 'olympus' ? MountainIcon : WaveIcon
+  const IdentityIcon = identity === 'olympus' ? MountainIcon : identity === 'gaia' ? GlobeIcon : WaveIcon
 
   return (
     <section className={`terminal-pane ${collapsed ? 'is-collapsed' : ''}`}>

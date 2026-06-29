@@ -9,7 +9,8 @@ import { planBridgeWrites } from './bridge-core'
 
 const TERMINAL_LABELS: Record<string, string> = {
   t1: 'Atlantis',
-  t2: 'Olympus'
+  t2: 'Olympus',
+  t3: 'Gaia'
 }
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/

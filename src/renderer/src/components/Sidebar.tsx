@@ -559,7 +559,7 @@ export default function Sidebar({
                 <div className="project-list">
                   {projects.length === 0 ? (
                     <div className="sidebar-empty-state">
-                      <p>No projects yet. Pick a folder — Akorith starts Codex and Claude there.</p>
+                      <p>No projects yet. Pick a folder — Akorith starts Codex, OpenCode, and Claude there.</p>
                       <div className="sidebar-empty-actions">
                         <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
                           <FolderIcon size={14} />
@@ -800,7 +800,7 @@ export default function Sidebar({
                     })
                   )}
                 </div>
-                {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
+                {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus, Gaia, and Atlantis start in this folder.</div>}
               </>
           </section>
 

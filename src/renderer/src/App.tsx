@@ -22,7 +22,7 @@ export interface HistorySelection {
   nonce: number
 }
 
-export type AgentStatusMap = Partial<Record<'t1' | 't2', AgentStatusInfo>>
+export type AgentStatusMap = Partial<Record<'t1' | 't2' | 't3', AgentStatusInfo>>
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
@@ -210,7 +210,7 @@ export default function App(): JSX.Element {
     [selectHistory]
   )
 
-  const handleAgentStatus = useCallback((id: 't1' | 't2', info: AgentStatusInfo) => {
+  const handleAgentStatus = useCallback((id: 't1' | 't2' | 't3', info: AgentStatusInfo) => {
     setAgentStatus((prev) => ({ ...prev, [id]: info }))
   }, [])
 

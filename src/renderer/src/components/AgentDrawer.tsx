@@ -11,7 +11,8 @@ interface AgentDrawerProps {
   activeProject: ProjectRow | null
   open: boolean
   onClose: () => void
-  onAgentStatus: (id: 't1' | 't2', info: AgentStatusInfo) => void
+  /** Phase 37: t3 = Gaia (OpenCode), between Olympus (t2) and Atlantis (t1). */
+  onAgentStatus: (id: 't1' | 't2' | 't3', info: AgentStatusInfo) => void
 }
 
 function storageMode(key: string, fallback: AgentDockMode): AgentDockMode {
@@ -85,6 +86,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const [split, setSplit] = useState(() => sanitizeSplit(storageNumber('akorith.terminalSplit', 50)))
   const [width, setWidth] = useState(() => clamp(storageNumber('akorith.drawerWidth', 620), WIDTH_MIN, WIDTH_MAX))
   const [olympusCollapsed, setOlympusCollapsed] = useState(() => storageBoolean('akorith.olympusCollapsed', false))
+  const [gaiaCollapsed, setGaiaCollapsed] = useState(() => storageBoolean('akorith.gaiaCollapsed', false))
   const [atlantisCollapsed, setAtlantisCollapsed] = useState(() => storageBoolean('akorith.atlantisCollapsed', false))
   const [mode, setMode] = useState<AgentDockMode>(() => storageMode('akorith.agentDockMode', 'drawer'))
   const [dockHeight, setDockHeight] = useState(() =>
@@ -132,6 +134,9 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   useEffect(() => {
     localStorage.setItem('akorith.olympusCollapsed', String(olympusCollapsed))
   }, [olympusCollapsed])
+  useEffect(() => {
+    localStorage.setItem('akorith.gaiaCollapsed', String(gaiaCollapsed))
+  }, [gaiaCollapsed])
   useEffect(() => {
     localStorage.setItem('akorith.atlantisCollapsed', String(atlantisCollapsed))
   }, [atlantisCollapsed])
@@ -209,15 +214,17 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   // No project folder → no agents to host; the drawer simply isn't mounted.
   if (!activeProject?.path) return null
 
-  const bothExpanded = !olympusCollapsed && !atlantisCollapsed
-  // A collapsed pane shrinks to just its header; the expanded one fills the rest.
-  const olympusGrow = olympusCollapsed ? 0 : bothExpanded ? split : 1
-  const atlantisGrow = atlantisCollapsed ? 0 : bothExpanded ? 100 - split : 1
+  // Phase 37: three panes share the height equally; each collapsed pane shrinks
+  // to just its header so the expanded ones fill the rest.
+  const olympusGrow = olympusCollapsed ? 0 : 1
+  const gaiaGrow = gaiaCollapsed ? 0 : 1
+  const atlantisGrow = atlantisCollapsed ? 0 : 1
 
   // Per-project session keys (Phase 13.3): each project keeps its own live
-  // Codex/Claude session, so switching projects and back reuses them.
+  // Codex/Claude/OpenCode session, so switching projects and back reuses them.
   const projectKey = activeProject.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)
   const olympusId = `t2::${projectKey}`
+  const gaiaId = `t3::${projectKey}`
   const atlantisId = `t1::${projectKey}`
 
   const modeButtons: { id: AgentDockMode; label: string; title: string }[] = [
@@ -293,14 +300,22 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
               onStatus={(info) => onAgentStatus('t2', info)}
             />
           </div>
-          {bothExpanded && (
-            <div
-              className="terminal-split-resizer"
-              role="separator"
-              aria-orientation="horizontal"
-              onPointerDown={startSplitResize}
+          <div
+            className={`terminal-slot ${gaiaCollapsed ? 'is-collapsed' : ''}`}
+            style={{ flexGrow: gaiaGrow, flexBasis: 0, flexShrink: gaiaCollapsed ? 0 : 1 }}
+          >
+            <TerminalPane
+              key={gaiaId}
+              id={gaiaId}
+              title="Gaia"
+              identity="gaia"
+              cwd={activeProject.path}
+              commandKind="opencode"
+              collapsed={gaiaCollapsed}
+              onToggleCollapse={() => setGaiaCollapsed((v) => !v)}
+              onStatus={(info) => onAgentStatus('t3', info)}
             />
-          )}
+          </div>
           <div
             className={`terminal-slot ${atlantisCollapsed ? 'is-collapsed' : ''}`}
             style={{ flexGrow: atlantisGrow, flexBasis: 0, flexShrink: atlantisCollapsed ? 0 : 1 }}

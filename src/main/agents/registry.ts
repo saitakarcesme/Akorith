@@ -114,8 +114,22 @@ function validSessionId(value: unknown): value is string {
 }
 
 function ptyAttachmentTitle(snapshot: PtySessionSnapshot): string {
-  const terminal = snapshot.logicalId === 't2' ? 'Olympus' : snapshot.logicalId === 't1' ? 'Atlantis' : snapshot.logicalId
-  const role = snapshot.agentId === 'codex' ? 'Codex' : snapshot.agentId === 'claude' ? 'Claude' : 'Shell'
+  const terminal =
+    snapshot.logicalId === 't2'
+      ? 'Olympus'
+      : snapshot.logicalId === 't3'
+        ? 'Gaia'
+        : snapshot.logicalId === 't1'
+          ? 'Atlantis'
+          : snapshot.logicalId
+  const role =
+    snapshot.agentId === 'codex'
+      ? 'Codex'
+      : snapshot.agentId === 'claude'
+        ? 'Claude'
+        : snapshot.agentId === 'opencode'
+          ? 'OpenCode'
+          : 'Shell'
   return `${terminal} ${role}`
 }
 
