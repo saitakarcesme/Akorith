@@ -570,9 +570,9 @@ export default function Sidebar({
                             >
                               <ChevronIcon size={12} direction={isExpanded ? 'down' : 'right'} />
                             </button>
-                            <span className="project-row-ico">
-                              <FolderIcon size={15} />
-                            </span>
+                            {/* Phase 34.2: no folder icon / no path subtitle — a calm,
+                                text-focused row. The full path lives in the row's
+                                hover title (set on the row above). */}
                             <span className="project-text">
                               {renamingProjectId === project.id ? (
                                 <input
@@ -588,10 +588,7 @@ export default function Sidebar({
                                   onBlur={() => void commitProjectRename(project)}
                                 />
                               ) : (
-                                <>
-                                  <span>{project.name}</span>
-                                  {project.path && <em>{project.path}</em>}
-                                </>
+                                <span className="project-name">{project.name}</span>
                               )}
                             </span>
                             {chats.length > 0 && <span className="project-chat-count">{chats.length}</span>}

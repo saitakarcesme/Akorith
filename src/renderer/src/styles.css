@@ -1160,6 +1160,16 @@ textarea:focus-visible {
   line-height: 1.15;
 }
 
+/* Phase 34.2: calm single-line project name (path lives in the hover title). */
+.project-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
 .project-text em,
 .recent-chat-text em,
 .profile-button em {
@@ -7057,9 +7067,10 @@ textarea:focus-visible {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
-  padding: 3px 7px;
+  /* Phase 34.2: thinner, calmer rows (no folder icon / path subtitle). */
+  padding: 4px 6px;
   color: var(--text-dim);
   background: transparent;
   border: 0;
