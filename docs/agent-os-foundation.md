@@ -506,3 +506,54 @@ Phase 34: Mission Engine persistence and read-only history (still the safest nex
 backend step — Phase 33 deliberately avoided deeper Mission work). Strong alternatives
 once persistence lands: a real OpenCode adapter integration, or deeper bottom-workbench
 git features (per-file diff view) building on the read-only `git:status` IPC.
+
+## Phase 34 — UI Refinement · GPU Telemetry · Plugins Foundation
+
+Phase 34 acts on the user's Phase 33 screenshot feedback plus two safe, read-only
+system-observation additions. No Mission/provider execution, no backend architecture
+changes. Full plan: `docs/phase-34-ui-refinement-gpu-plugins.md`.
+
+### Sidebar + project/chat hierarchy
+- Project rows are calmer and Codex-like: no folder icon, no long path subtitle (path
+  → hover title), thinner rows, single-line ellipsised names.
+- Chat rows under a project show a compact relative age ("3d", "1w") from the existing
+  `updatedAt`, dropping the per-row icon; the timestamp yields to hover actions.
+
+### Composer focus
+- The visible focus border/ring on the composer is gone; focus shows only as a subtle
+  surface lift (no outline, no layout shift). Keyboard affordances elsewhere unchanged.
+
+### Usage Activity card
+- Filled the half-empty card: larger heatmap cells, a Less/More legend, and a summary
+  stat strip (active days, total sends, total tokens, peak day, last active).
+
+### GPU / Local runtime telemetry (honest, read-only)
+- `src/main/gpu-status.ts` + `gpu:getStatus` (`window.api.gpu.getStatus`). NVIDIA
+  (Win/Linux) via read-only `nvidia-smi` with a timeout; macOS and unsupported
+  platforms return `unavailable` with a clear reason — **never fabricated**. Reports the
+  configured Ollama endpoint as Local/Remote; remote GPU telemetry is explicitly noted
+  as unavailable via the Ollama API (future: companion/SSH/secured telemetry endpoint).
+- Dashboard "GPU / Local runtime" card: per-GPU name, utilization %, VRAM, temperature;
+  honest unavailable state; loads on mount + manual Refresh; no polling.
+
+### Plugins foundation
+- First-class Plugins view (sidebar nav + route), **static metadata only**: category
+  filter, plugin cards (name, category, status, description, permissions preview,
+  disabled "Coming soon"). No execution, install, remote code, marketplace, or DB tables.
+
+### Resizable bottom agent dock
+- Bottom-dock mode gains a draggable top handle (min 180 / default 360 / max 75vh,
+  persisted, double-click reset). Terminals refit via their existing ResizeObserver —
+  no remount, no PTY restart. Drawer/Focus modes unchanged.
+
+### Intentionally unchanged
+Provider runtime/prompts/returns, token accounting, usage logging, PTY command kinds,
+`bridgeSend → PtyManager.write`, macro/workspace loops, Test Lab, Agent Hub / Mission
+preview, `loopex.db`, `loopex.config.json`, AkorithLoop. GPU + plugin surfaces are
+read-only; no secrets, no hardcoded IPs, no polling, no privileged telemetry.
+
+### Recommended Phase 35
+Plugin system architecture (turn the static registry into a real, sandboxed,
+permission-gated plugin loader) — it now has a UI to grow into. Strong alternatives:
+a Remote GPU Telemetry companion (secured endpoint feeding the new GPU card for remote
+machines), Mission Engine persistence/read-only history, or a real OpenCode adapter.
