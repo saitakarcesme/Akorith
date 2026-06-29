@@ -91,7 +91,8 @@
   --radius-xl: 10px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 140ms var(--ease);
-  --sidebar-slide: 240ms var(--ease);
+  /* Phase 33.7: drives the sidebar vanish/appear fade (opacity + tiny scale). */
+  --sidebar-slide: 170ms var(--ease);
   --font-ui:
     -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono:
@@ -336,13 +337,18 @@ textarea:focus-visible {
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
-  transform: translateX(0);
+  /* Phase 33.7: the sidebar vanishes/appears (opacity + tiny scale) rather than
+     sliding in from the edge. No horizontal translate. */
+  opacity: 1;
+  transform: none;
+  transform-origin: left center;
   transition:
+    opacity var(--sidebar-slide),
     transform var(--sidebar-slide),
     box-shadow var(--sidebar-slide),
     background-color var(--fast),
     border-color var(--fast);
-  will-change: transform;
+  will-change: opacity, transform;
 }
 
 .sidebar.is-collapsed {
@@ -361,19 +367,23 @@ textarea:focus-visible {
   width: min(var(--sidebar-peek-width), calc(100vw - 24px));
   min-width: 0;
   height: 100vh;
-  background: #111113;
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
   border-radius: 0 8px 8px 0;
   box-shadow: none;
   overflow: hidden;
+  /* Vanished: faded out and slightly contracted in place — never parked
+     off-screen, so revealing it reads as an appear, not a slide-in. */
   pointer-events: none;
-  transform: translateX(calc(-100% - 8px));
+  opacity: 0;
+  transform: scale(0.985);
 }
 
 .sidebar.is-peeking .sidebar-surface {
-  box-shadow: 22px 0 60px rgba(0, 0, 0, 0.42);
+  box-shadow: 22px 0 60px rgba(0, 0, 0, 0.55);
   pointer-events: auto;
-  transform: translateX(0);
+  opacity: 1;
+  transform: none;
 }
 
 .sidebar-hover-zone {
