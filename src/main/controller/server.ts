@@ -85,6 +85,11 @@ export function createControllerServer(deps: ControllerDeps): ControllerServer {
       res.end()
       return
     }
+    // Only GET/POST are ever served; reject everything else early.
+    if (method !== 'GET' && method !== 'POST') {
+      sendJson(res, 405, { error: 'method not allowed' })
+      return
+    }
 
     let url: URL
     try {
@@ -105,14 +110,19 @@ export function createControllerServer(deps: ControllerDeps): ControllerServer {
         sendJson(res, 401, { error: 'unauthorized' })
         return
       }
+      // Check the client cap before committing SSE response headers.
+      if (controllerEvents.count() >= 32) {
+        sendJson(res, 503, { error: 'too many sse clients' })
+        return
+      }
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-store',
         Connection: 'keep-alive',
         'X-Content-Type-Options': 'nosniff'
       })
-      res.write(`event: heartbeat\ndata: ${JSON.stringify({ type: 'heartbeat', at: Date.now() })}\n\n`)
       controllerEvents.addClient(res)
+      res.write(`event: heartbeat\ndata: ${JSON.stringify({ type: 'heartbeat', at: Date.now() })}\n\n`)
       return
     }
 
