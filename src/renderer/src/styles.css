@@ -4509,6 +4509,135 @@ textarea:focus-visible {
   min-width: 0;
 }
 
+/* ---- Phase 34.7: GPU / Local runtime card ---- */
+.dash-refresh {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.dash-refresh:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.dash-refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dash-gpu-source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dash-gpu-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 3px 9px;
+  background: var(--bg-raised);
+  border-radius: 999px;
+}
+
+.dash-gpu-source em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-faint);
+}
+
+.dash-gpu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.dash-gpu-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+
+.dash-gpu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dash-gpu-util {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.dash-gpu-util strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-gpu-util span {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.dash-gpu-bar {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dash-gpu-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent-strong);
+  border-radius: 999px;
+}
+
+.dash-gpu-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.dash-gpu-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.dash-gpu-note {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 .dash-section-head {
   display: flex;
   align-items: flex-start;

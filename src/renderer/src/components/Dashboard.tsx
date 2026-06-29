@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AgentAdapterInfo,
   AgentRuntimeSnapshot,
   DailyUsageRow,
   EvaluationRow,
+  GpuStatusResult,
   MacroSessionRow,
   Mission,
   MissionTemplate,
@@ -106,7 +107,26 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [missionTemplates, setMissionTemplates] = useState<MissionTemplate[]>([])
   const [draftMissions, setDraftMissions] = useState<Mission[]>([])
+  const [gpu, setGpu] = useState<GpuStatusResult | null>(null)
+  const [gpuBusy, setGpuBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Phase 34.7: read GPU/local-runtime telemetry on demand (load + manual refresh).
+  // No background polling.
+  const loadGpu = useCallback(async (): Promise<void> => {
+    setGpuBusy(true)
+    try {
+      setGpu(await window.api.gpu.getStatus())
+    } catch {
+      setGpu(null)
+    } finally {
+      setGpuBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadGpu()
+  }, [loadGpu])
 
   useEffect(() => {
     let cancelled = false
@@ -405,6 +425,56 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         {draftMissions.length === 0 && (
           <div className="dash-empty-state">
             No draft missions yet. Open Settings, then Missions, to create a preview mission without executing anything.
+          </div>
+        )}
+      </section>
+
+      <section className="dash-section dash-gpu">
+        <div className="dash-section-head">
+          <div>
+            <h2>GPU / Local runtime</h2>
+            <p>Read-only telemetry from this machine. Honest when unavailable; remote endpoints can&apos;t report GPU via Ollama.</p>
+          </div>
+          <button type="button" className="dash-refresh" disabled={gpuBusy} onClick={() => void loadGpu()}>
+            {gpuBusy ? 'Reading…' : 'Refresh'}
+          </button>
+        </div>
+        <div className="dash-gpu-source">
+          <span className={`dash-gpu-chip is-${gpu?.ollama.endpointKind ?? 'local'}`}>
+            Model source: {gpu ? (gpu.ollama.endpointKind === 'local' ? 'Local' : 'Remote') : '—'}
+          </span>
+          {gpu && <em>{gpu.ollama.configuredBaseUrl}</em>}
+        </div>
+        {gpu && gpu.status === 'observed' && gpu.gpus.length > 0 ? (
+          <div className="dash-gpu-grid">
+            {gpu.gpus.map((device, index) => (
+              <div className="dash-gpu-card" key={`${device.name}-${index}`}>
+                <div className="dash-gpu-name" title={device.name}>{device.name}</div>
+                <div className="dash-gpu-util">
+                  <strong>{device.utilizationPercent ?? '—'}</strong>
+                  <span>% GPU</span>
+                </div>
+                {device.utilizationPercent !== undefined && (
+                  <div className="dash-gpu-bar" aria-hidden="true">
+                    <span style={{ width: `${Math.max(0, Math.min(100, device.utilizationPercent))}%` }} />
+                  </div>
+                )}
+                <div className="dash-gpu-meta">
+                  <span>
+                    VRAM{' '}
+                    {device.memoryUsedMb !== undefined && device.memoryTotalMb !== undefined
+                      ? `${(device.memoryUsedMb / 1024).toFixed(1)} / ${(device.memoryTotalMb / 1024).toFixed(1)} GB`
+                      : '—'}
+                  </span>
+                  {device.temperatureC !== undefined && <span>{device.temperatureC}°C</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="dash-empty-hint dash-gpu-unavailable">
+            {gpu?.reason ?? 'GPU telemetry has not been read yet.'}
+            {gpu?.ollama.note && <span className="dash-gpu-note">{gpu.ollama.note}</span>}
           </div>
         )}
       </section>
