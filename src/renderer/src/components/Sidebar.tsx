@@ -7,6 +7,7 @@ import {
   ChevronIcon,
   FlaskIcon,
   FolderIcon,
+  FolderOpenIcon,
   LoopIcon,
   PanelsIcon,
   PluginIcon,
@@ -598,6 +599,9 @@ export default function Sidebar({
                               }
                             }}
                           >
+                            {/* Phase 38.6: a folder icon (open when expanded) replaces the
+                                chevron — the row reads as a folder, and the icon toggles
+                                the chat list. */}
                             <button
                               type="button"
                               className="project-disclosure"
@@ -608,7 +612,7 @@ export default function Sidebar({
                                 toggleProjectExpanded(project.id)
                               }}
                             >
-                              <ChevronIcon size={12} direction={isExpanded ? 'down' : 'right'} />
+                              {isExpanded ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
                             </button>
                             {/* Phase 34.2: no folder icon / no path subtitle — a calm,
                                 text-focused row. The full path lives in the row's
@@ -631,7 +635,7 @@ export default function Sidebar({
                                 <span className="project-name">{project.name}</span>
                               )}
                             </span>
-                            {chats.length > 0 && <span className="project-chat-count">{chats.length}</span>}
+                            {/* Phase 38.5: per-project chat count badge removed. */}
                             <span className="project-row-actions">
                               <button
                                 type="button"

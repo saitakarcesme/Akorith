@@ -8073,13 +8073,14 @@ textarea:focus-visible {
 
 /* Indented chat threads under a project. A single muted guide line gives the
    tree structure without per-row borders. */
+/* Phase 38.5: indentation only — no vertical guide line before chat children. */
 .project-chats {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 1px 0 4px 17px;
-  padding-left: 9px;
-  border-left: 1px solid var(--border-soft);
+  margin: 1px 0 6px 18px;
+  padding-left: 10px;
+  border-left: 0;
 }
 
 .project-chat {

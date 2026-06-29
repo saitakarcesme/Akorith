@@ -166,6 +166,16 @@ export function WaveIcon(props: IconProps): JSX.Element {
   )
 }
 
+/** Phase 38: open-folder glyph for an expanded project row. */
+export function FolderOpenIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M3 7a1 1 0 0 1 1-1h4l2 2h6a1 1 0 0 1 1 1v1" />
+      <path d="M3 7v11a1 1 0 0 0 1 1h12.5a1 1 0 0 0 .95-.68L21 10H6.2a1 1 0 0 0-.95.68z" />
+    </IconShell>
+  )
+}
+
 /** Phase 37: Gaia = Earth. A globe glyph for the OpenCode agent. */
 export function GlobeIcon(props: IconProps): JSX.Element {
   return (
