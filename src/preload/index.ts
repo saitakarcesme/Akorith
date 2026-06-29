@@ -284,6 +284,18 @@ const controller = Object.freeze({
   getDocs: (): Promise<unknown> => ipcRenderer.invoke('controller:getDocs')
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, controller })
+// Phase 35: plugin foundation (read-only registry + diagnostics; no execution).
+const plugins = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('plugins:list'),
+  getDiagnostics: (): Promise<unknown> => ipcRenderer.invoke('plugins:getDiagnostics'),
+  check: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:check', id),
+  checkAll: (): Promise<unknown> => ipcRenderer.invoke('plugins:checkAll'),
+  enable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:enable', id),
+  disable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:disable', id),
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('plugins:getSettings'),
+  setChromaEndpoint: (endpoint: string): Promise<unknown> => ipcRenderer.invoke('plugins:setChromaEndpoint', endpoint)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, controller, plugins })
 
 contextBridge.exposeInMainWorld('api', api)

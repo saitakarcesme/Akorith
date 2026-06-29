@@ -1354,6 +1354,77 @@ export interface ControllerApi {
   getDocs(): Promise<ControllerDocs>
 }
 
+export type PluginKind =
+  | 'agent'
+  | 'tool'
+  | 'workbench'
+  | 'automation'
+  | 'model_provider'
+  | 'integration'
+  | 'memory'
+  | 'browser'
+  | 'telemetry'
+
+export type PluginStatus = 'built_in' | 'available' | 'unavailable' | 'disabled' | 'planned' | 'error'
+
+export type PluginPermission =
+  | 'filesystem_read'
+  | 'filesystem_write'
+  | 'terminal_read'
+  | 'terminal_write'
+  | 'network'
+  | 'git_read'
+  | 'git_write'
+  | 'browser'
+  | 'memory_read'
+  | 'memory_write'
+  | 'model_runtime'
+  | 'controller_api'
+  | 'secrets'
+
+export interface PluginDiagnostic {
+  pluginId: string
+  available: boolean
+  status: PluginStatus
+  message: string
+  checkedAt: number
+  details?: string
+}
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  kind: PluginKind
+  description: string
+  status: PluginStatus
+  permissions: PluginPermission[]
+  entry?: string
+  settingsSchema?: Record<string, unknown>
+  safetyNotes: string[]
+  docsUrl?: string
+  builtIn: boolean
+  enabled: boolean
+  effectiveStatus: PluginStatus
+  diagnostic?: PluginDiagnostic
+}
+
+export interface PluginSettingsView {
+  disabled: string[]
+  chromaEndpoint?: string
+}
+
+export interface PluginsApi {
+  list(): Promise<PluginInfo[]>
+  getDiagnostics(): Promise<PluginDiagnostic[]>
+  check(id: string): Promise<PluginDiagnostic | null>
+  checkAll(): Promise<PluginInfo[]>
+  enable(id: string): Promise<PluginInfo[]>
+  disable(id: string): Promise<PluginInfo[]>
+  getSettings(): Promise<PluginSettingsView>
+  setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1373,6 +1444,7 @@ export interface PreloadApi {
   git: GitApi
   gpu: GpuApi
   controller: ControllerApi
+  plugins: PluginsApi
 }
 
 declare global {

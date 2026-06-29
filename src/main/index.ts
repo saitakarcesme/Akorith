@@ -16,6 +16,7 @@ import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
 import { registerGpuStatusIpc } from './gpu-status'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
+import { registerPluginIpc } from './plugins/manager'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, initDb, registerDbIpc } from './db'
@@ -324,6 +325,7 @@ app.whenReady().then(() => {
   registerGitStatusIpc()
   registerGpuStatusIpc()
   registerControllerIpc()
+  registerPluginIpc()
   registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()
