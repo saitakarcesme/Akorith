@@ -356,6 +356,36 @@ textarea:focus-visible {
     min-width var(--sidebar-slide);
 }
 
+/* Phase 38.3: right-edge resize handle for the open sidebar. */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 60;
+  width: 7px;
+  cursor: col-resize;
+}
+
+.sidebar-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background-color var(--fast);
+}
+
+.sidebar-resize-handle:hover::after {
+  background: var(--sidebar-border-strong, var(--border));
+}
+
+.sidebar.is-collapsed .sidebar-resize-handle {
+  display: none;
+}
+
 .sidebar-surface {
   width: var(--sidebar-width);
   height: 100%;

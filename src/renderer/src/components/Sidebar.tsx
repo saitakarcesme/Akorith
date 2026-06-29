@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
@@ -65,6 +65,24 @@ function storageString(key: string, fallback: string): string {
   }
 }
 
+function storageNumber(key: string, fallback: number): number {
+  try {
+    const raw = Number(localStorage.getItem(key))
+    return Number.isFinite(raw) && raw > 0 ? raw : fallback
+  } catch {
+    return fallback
+  }
+}
+
+// Phase 38.3: keep the sidebar between a usable min and a cap that never crowds
+// the workspace (the smaller of 520px / 40vw).
+const SIDEBAR_MIN = 260
+const SIDEBAR_DEFAULT = 320
+function clampSidebarWidth(value: number): number {
+  const max = Math.min(520, Math.round((typeof window !== 'undefined' ? window.innerWidth : 1280) * 0.4))
+  return Math.min(Math.max(value, SIDEBAR_MIN), Math.max(max, SIDEBAR_MIN))
+}
+
 function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
   return providers.some((provider) =>
     provider.id === 'local' &&
@@ -128,6 +146,8 @@ export default function Sidebar({
   })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
   const [sidebarPeeking, setSidebarPeeking] = useState(false)
+  // Phase 38.3: user-resizable sidebar width (persisted, bounded).
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebarWidth(storageNumber('akorith.sidebarWidth', 320)))
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -192,6 +212,30 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.sidebarWidth', String(sidebarWidth))
+  }, [sidebarWidth])
+
+  // Phase 38.3: drag the right edge to resize the open sidebar.
+  const startSidebarResize = (event: ReactMouseEvent): void => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = sidebarWidth
+    const move = (moveEvent: MouseEvent): void => {
+      setSidebarWidth(clampSidebarWidth(startWidth + (moveEvent.clientX - startX)))
+    }
+    const stop = (): void => {
+      document.body.style.removeProperty('cursor')
+      document.body.style.removeProperty('user-select')
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', stop)
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', stop)
+  }
 
   useEffect(() => {
     localStorage.setItem('akorith.expandedProjects', JSON.stringify(expandedProjects))
@@ -461,10 +505,21 @@ export default function Sidebar({
 
       <aside
         className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
+        style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
         onMouseEnter={revealSidebar}
         onPointerEnter={revealSidebar}
         onMouseLeave={handleSidebarLeave}
       >
+        {!sidebarCollapsed && (
+          <div
+            className="sidebar-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize · double-click to reset"
+            onMouseDown={startSidebarResize}
+            onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT)}
+          />
+        )}
         <div
           className="sidebar-surface"
           aria-hidden={sidebarCollapsed && !sidebarPeeking}
