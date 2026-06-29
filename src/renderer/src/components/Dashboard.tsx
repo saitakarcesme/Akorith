@@ -5,9 +5,9 @@ import type {
   ControllerStatus,
   DailyUsageRow,
   EvaluationRow,
-  GpuStatusResult,
   MacroSessionRow,
   PluginInfo,
+  TelemetryStatus,
   Mission,
   MissionTemplate,
   ProjectRow,
@@ -109,7 +109,8 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [missionTemplates, setMissionTemplates] = useState<MissionTemplate[]>([])
   const [draftMissions, setDraftMissions] = useState<Mission[]>([])
-  const [gpu, setGpu] = useState<GpuStatusResult | null>(null)
+  const [telemetry, setTelemetry] = useState<TelemetryStatus | null>(null)
+  const [hasRemoteProfiles, setHasRemoteProfiles] = useState(false)
   const [gpuBusy, setGpuBusy] = useState(false)
   const [controller, setController] = useState<ControllerStatus | null>(null)
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
@@ -121,14 +122,14 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
     void window.api.plugins.list().then(setPlugins).catch(() => setPlugins(null))
   }, [])
 
-  // Phase 34.7: read GPU/local-runtime telemetry on demand (load + manual refresh).
-  // No background polling.
+  // Phase 36.8: source-aware GPU telemetry — prefers a healthy remote controller
+  // (the PC running Ollama), else honest local. Load + manual refresh; no polling.
   const loadGpu = useCallback(async (): Promise<void> => {
     setGpuBusy(true)
     try {
-      setGpu(await window.api.gpu.getStatus())
+      setTelemetry(await window.api.telemetry.getStatus())
     } catch {
-      setGpu(null)
+      setTelemetry(null)
     } finally {
       setGpuBusy(false)
     }
@@ -136,6 +137,10 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
 
   useEffect(() => {
     void loadGpu()
+    void window.api.telemetry
+      .getProfiles()
+      .then((profiles) => setHasRemoteProfiles(profiles.length > 0))
+      .catch(() => setHasRemoteProfiles(false))
   }, [loadGpu])
 
   useEffect(() => {
@@ -442,22 +447,31 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
       <section className="dash-section dash-gpu">
         <div className="dash-section-head">
           <div>
-            <h2>GPU / Local runtime</h2>
-            <p>Read-only telemetry from this machine. Honest when unavailable; remote endpoints can&apos;t report GPU via Ollama.</p>
+            <h2>GPU / Local model runtime</h2>
+            <p>Shows the GPU of the machine running your local models — the remote PC controller if configured, else this Mac. Never fabricated.</p>
           </div>
           <button type="button" className="dash-refresh" disabled={gpuBusy} onClick={() => void loadGpu()}>
             {gpuBusy ? 'Reading…' : 'Refresh'}
           </button>
         </div>
         <div className="dash-gpu-source">
-          <span className={`dash-gpu-chip is-${gpu?.ollama.endpointKind ?? 'local'}`}>
-            Model source: {gpu ? (gpu.ollama.endpointKind === 'local' ? 'Local' : 'Remote') : '—'}
+          <span className={`dash-gpu-chip is-${telemetry?.source === 'remote' ? 'remote' : 'local'}`}>
+            {telemetry
+              ? telemetry.source === 'remote'
+                ? `Remote PC: ${telemetry.profile?.name ?? 'controller'}`
+                : 'Local Mac'
+              : '—'}
           </span>
-          {gpu && <em>{gpu.ollama.configuredBaseUrl}</em>}
+          {telemetry?.source === 'remote' && <em>{telemetry.profile?.baseUrl}</em>}
+          {telemetry?.source === 'local' && telemetry.gpu.ollama?.configuredBaseUrl && (
+            <em>{telemetry.gpu.ollama.configuredBaseUrl}</em>
+          )}
+          {telemetry && <span className="dash-gpu-checked">checked {relativeTime(telemetry.checkedAt)}</span>}
         </div>
-        {gpu && gpu.status === 'observed' && gpu.gpus.length > 0 ? (
+        {telemetry?.remoteError && <div className="dash-gpu-note is-error">Remote telemetry failed: {telemetry.remoteError}</div>}
+        {telemetry && telemetry.gpu.status === 'observed' && telemetry.gpu.gpus.length > 0 ? (
           <div className="dash-gpu-grid">
-            {gpu.gpus.map((device, index) => (
+            {telemetry.gpu.gpus.map((device, index) => (
               <div className="dash-gpu-card" key={`${device.name}-${index}`}>
                 <div className="dash-gpu-name" title={device.name}>{device.name}</div>
                 <div className="dash-gpu-util">
@@ -483,8 +497,14 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
           </div>
         ) : (
           <div className="dash-empty-hint dash-gpu-unavailable">
-            {gpu?.reason ?? 'GPU telemetry has not been read yet.'}
-            {gpu?.ollama.note && <span className="dash-gpu-note">{gpu.ollama.note}</span>}
+            {telemetry?.gpu.reason ?? 'GPU telemetry has not been read yet.'}
+            {!hasRemoteProfiles && (
+              <span className="dash-gpu-note">
+                Your local models run on the PC, not this Mac. Configure a remote telemetry profile in Settings → API to
+                show the PC&apos;s GPU here (enable the Controller API on the PC over Tailscale/VPN, then add its URL + token).
+              </span>
+            )}
+            {telemetry?.gpu.ollama?.note && <span className="dash-gpu-note">{telemetry.gpu.ollama.note}</span>}
           </div>
         )}
       </section>
