@@ -2760,6 +2760,115 @@ textarea:focus-visible {
   color: var(--danger);
 }
 
+.ollama-status.is-info {
+  color: var(--text-dim);
+}
+
+/* ---- Phase 33.13/33.14: remote Ollama endpoints editor ---- */
+.ollama-remote-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.ollama-remote-empty {
+  padding: 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+
+.ollama-remote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ollama-remote-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg-soft);
+  border-left: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.ollama-remote-card.is-ok {
+  border-left-color: var(--success);
+}
+
+.ollama-remote-card.is-error {
+  border-left-color: var(--danger);
+}
+
+.ollama-remote-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ollama-remote-row input[type='text'],
+.ollama-remote-name,
+.ollama-remote-url,
+.ollama-remote-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ollama-remote-priority {
+  flex: 0 0 64px;
+  width: 64px;
+}
+
+.ollama-remote-enabled {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.ollama-remote-remove {
+  flex: 0 0 auto;
+}
+
+.ollama-remote-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.ollama-remote-card.is-ok .ollama-remote-meta {
+  color: var(--success);
+}
+
+.ollama-remote-card.is-error .ollama-remote-meta {
+  color: var(--danger);
+}
+
+.ollama-remote-error {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
+.ollama-remote-note {
+  margin-top: 4px;
+}
+
 .settings-checks {
   display: flex;
   flex-direction: column;

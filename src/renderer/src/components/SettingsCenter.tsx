@@ -12,6 +12,7 @@ import type {
   DigestSettings,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
+  OllamaRemoteProfile,
   OllamaShareInfo,
   ProviderInfo,
   TestSettings
@@ -195,6 +196,9 @@ export default function SettingsCenter({
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
   const [ollamaBusy, setOllamaBusy] = useState<'test' | 'save' | null>(null)
   const [ollamaStatus, setOllamaStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 33.14: auto-connect (configured → last → remote profiles by priority).
+  const [autoConnectBusy, setAutoConnectBusy] = useState(false)
+  const [autoConnectInfo, setAutoConnectInfo] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [digestDirDraft, setDigestDirDraft] = useState('')
   const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
@@ -318,6 +322,82 @@ export default function SettingsCenter({
       setOllamaStatus({ kind: 'ok', text: `Copied ${shortEndpointLabel(endpoint.baseUrl)}` })
     } catch {
       setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
+    }
+  }
+
+  // ---- Phase 33.13/33.14: remote Ollama profiles + auto-connect ----
+  const remoteProfiles = ollamaSettings?.remoteProfiles ?? []
+
+  const setRemoteProfiles = (profiles: OllamaRemoteProfile[]): void => updateOllamaSetting('remoteProfiles', profiles)
+
+  const addRemoteProfile = (): void => {
+    setRemoteProfiles([
+      ...remoteProfiles,
+      {
+        id: `rp-${Date.now()}-${remoteProfiles.length}`,
+        name: 'PC Ollama',
+        baseUrl: 'http://100.0.0.0:11434',
+        priority: remoteProfiles.length,
+        enabled: true,
+        networkHint: 'Tailscale / VPN'
+      }
+    ])
+  }
+
+  const updateRemoteProfile = (id: string, patch: Partial<OllamaRemoteProfile>): void =>
+    setRemoteProfiles(remoteProfiles.map((profile) => (profile.id === id ? { ...profile, ...patch } : profile)))
+
+  const removeRemoteProfile = (id: string): void => setRemoteProfiles(remoteProfiles.filter((profile) => profile.id !== id))
+
+  const saveRemoteProfiles = async (): Promise<void> => {
+    setOllamaBusy('save')
+    setOllamaStatus(null)
+    try {
+      const response = await window.api.ollama.setSettings({ remoteProfiles })
+      setOllamaSettings(response.settings)
+      setOllamaStatus(
+        response.ok
+          ? { kind: 'ok', text: 'Saved remote endpoints' }
+          : { kind: 'error', text: response.error }
+      )
+    } catch (err) {
+      setOllamaStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setOllamaBusy(null)
+    }
+  }
+
+  const runAutoConnect = async (): Promise<void> => {
+    setAutoConnectBusy(true)
+    setAutoConnectInfo(null)
+    try {
+      const result = await window.api.ollama.autoConnect()
+      if (result.ok) {
+        setAutoConnectInfo({
+          kind: 'ok',
+          text: `Connected via ${result.active.label} — ${shortEndpointLabel(result.active.baseUrl)} · ${result.modelCount} model${result.modelCount === 1 ? '' : 's'}${result.switched ? ' · active endpoint switched' : ''}`
+        })
+        try {
+          localStorage.setItem('akorith.ollamaActive', JSON.stringify({ label: result.active.label, baseUrl: result.active.baseUrl }))
+        } catch {
+          /* ignore */
+        }
+        const refreshed = await window.api.ollama.getSettings()
+        setOllamaSettings(refreshed)
+        setOllamaEndpoint(refreshed.baseUrl)
+        onRefreshProviders()
+      } else {
+        setAutoConnectInfo({
+          kind: 'error',
+          text: `${result.error}${result.lastSuccessfulBaseUrl ? ` (last working: ${shortEndpointLabel(result.lastSuccessfulBaseUrl)})` : ''}`
+        })
+        const refreshed = await window.api.ollama.getSettings()
+        setOllamaSettings(refreshed)
+      }
+    } catch (err) {
+      setAutoConnectInfo({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setAutoConnectBusy(false)
     }
   }
 
@@ -648,6 +728,109 @@ export default function SettingsCenter({
                   </label>
                 </div>
               )}
+
+              {/* Phase 33.13/33.14: remote endpoints + auto-connect */}
+              <div className="settings-divider" />
+              <div className="settings-field is-stacked">
+                <div className="ollama-remote-head">
+                  <span>Remote Ollama endpoints</span>
+                  <div className="settings-action-row">
+                    <button type="button" disabled={autoConnectBusy} onClick={() => void runAutoConnect()}>
+                      {autoConnectBusy ? 'Connecting…' : 'Auto-connect'}
+                    </button>
+                    <button type="button" onClick={addRemoteProfile}>
+                      Add endpoint
+                    </button>
+                  </div>
+                </div>
+                <p className="settings-hint">
+                  Akorith tries your local Ollama first, then the last endpoint that answered, then these
+                  remote endpoints by priority (lowest first), and uses the first that responds.
+                </p>
+                {autoConnectInfo && <div className={`ollama-status is-${autoConnectInfo.kind}`}>{autoConnectInfo.text}</div>}
+
+                {remoteProfiles.length === 0 ? (
+                  <div className="ollama-remote-empty">
+                    No remote endpoints yet. Add your PC&apos;s Tailscale/VPN address (e.g. http://100.x.x.x:11434)
+                    so its models are reachable when you&apos;re on another network.
+                  </div>
+                ) : (
+                  <div className="ollama-remote-list">
+                    {remoteProfiles.map((profile) => (
+                      <div className={`ollama-remote-card ${profile.lastStatus ? `is-${profile.lastStatus}` : ''}`} key={profile.id}>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-name"
+                            value={profile.name}
+                            placeholder="Name"
+                            onChange={(event) => updateRemoteProfile(profile.id, { name: event.target.value })}
+                          />
+                          <label className="ollama-remote-enabled" title="Include in auto-connect">
+                            <input
+                              type="checkbox"
+                              checked={profile.enabled}
+                              onChange={(event) => updateRemoteProfile(profile.id, { enabled: event.target.checked })}
+                            />
+                            <span>Enabled</span>
+                          </label>
+                          <button type="button" className="ollama-remote-remove" onClick={() => removeRemoteProfile(profile.id)}>
+                            Remove
+                          </button>
+                        </div>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-url"
+                            value={profile.baseUrl}
+                            spellCheck={false}
+                            placeholder="http://100.x.x.x:11434"
+                            onChange={(event) => updateRemoteProfile(profile.id, { baseUrl: event.target.value })}
+                          />
+                          <input
+                            className="ollama-remote-priority"
+                            type="number"
+                            min={0}
+                            value={profile.priority}
+                            title="Priority (lower runs first)"
+                            onChange={(event) => updateRemoteProfile(profile.id, { priority: Number(event.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-hint"
+                            value={profile.networkHint ?? ''}
+                            placeholder="Network hint (Tailscale, home LAN, …)"
+                            onChange={(event) => updateRemoteProfile(profile.id, { networkHint: event.target.value })}
+                          />
+                          <span className="ollama-remote-meta">
+                            {profile.lastStatus === 'ok'
+                              ? `✓ reachable${profile.lastModelCount !== undefined ? ` · ${profile.lastModelCount} models` : ''}`
+                              : profile.lastStatus === 'error'
+                                ? '✕ unreachable'
+                                : 'not checked'}
+                          </span>
+                        </div>
+                        {profile.lastStatus === 'error' && profile.lastError && (
+                          <div className="ollama-remote-error">{profile.lastError}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {remoteProfiles.length > 0 && (
+                  <div className="settings-action-row">
+                    <button type="button" className="is-primary" disabled={ollamaBusy !== null} onClick={() => void saveRemoteProfiles()}>
+                      {ollamaBusy === 'save' ? 'Saving…' : 'Save remote endpoints'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="settings-note ollama-remote-note">
+                  For a different network, use a private route — Tailscale, a VPN, or an SSH tunnel — and point the
+                  endpoint at that address. Do not expose Ollama directly to the public internet without
+                  authentication and a firewall. Akorith stores only endpoint config here, never secrets.
+                </div>
+              </div>
             </section>
           )}
 
