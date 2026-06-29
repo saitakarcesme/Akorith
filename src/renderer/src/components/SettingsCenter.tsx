@@ -13,6 +13,7 @@ import type {
   ControllerConfigView,
   ControllerDocs,
   ControllerStatus,
+  RemoteTelemetryProfileView,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
@@ -199,6 +200,11 @@ export default function SettingsCenter({
   const [ctrlToken, setCtrlToken] = useState<string | null>(null)
   const [ctrlPortDraft, setCtrlPortDraft] = useState('')
   const [ctrlNotice, setCtrlNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 36: remote telemetry profiles (point at a remote controller / the PC).
+  const [telProfiles, setTelProfiles] = useState<RemoteTelemetryProfileView[]>([])
+  const [telTokenDrafts, setTelTokenDrafts] = useState<Record<string, string>>({})
+  const [telBusy, setTelBusy] = useState(false)
+  const [telNotice, setTelNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
   const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
@@ -428,7 +434,65 @@ export default function SettingsCenter({
     if (activeTab !== 'api') return
     void refreshController()
     if (!ctrlDocs) void window.api.controller.getDocs().then(setCtrlDocs).catch(() => setCtrlDocs(null))
+    void window.api.telemetry.getProfiles().then(setTelProfiles).catch(() => setTelProfiles([]))
   }, [activeTab, refreshController, ctrlDocs])
+
+  // ---- Phase 36: remote telemetry profiles ----
+  const telToInput = (profile: RemoteTelemetryProfileView): import('../../../preload/index.d').TelemetryProfileInput => ({
+    id: profile.id,
+    name: profile.name,
+    baseUrl: profile.baseUrl,
+    token: telTokenDrafts[profile.id] ?? '',
+    enabled: profile.enabled,
+    priority: profile.priority
+  })
+
+  const updateTelProfile = (id: string, patch: Partial<RemoteTelemetryProfileView>): void =>
+    setTelProfiles((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+
+  const addTelProfile = (): void =>
+    setTelProfiles((list) => [
+      ...list,
+      {
+        id: `rt-${Date.now()}-${list.length}`,
+        name: 'PC runtime',
+        baseUrl: 'http://100.0.0.0:47832',
+        enabled: true,
+        priority: list.length,
+        hasToken: false,
+        tokenMasked: ''
+      }
+    ])
+
+  const removeTelProfile = (id: string): void => setTelProfiles((list) => list.filter((p) => p.id !== id))
+
+  const saveTelProfiles = async (): Promise<void> => {
+    setTelBusy(true)
+    setTelNotice(null)
+    try {
+      const saved = await window.api.telemetry.saveProfiles(telProfiles.map(telToInput))
+      setTelProfiles(saved)
+      setTelTokenDrafts({})
+      setTelNotice({ kind: 'ok', text: 'Saved remote telemetry profiles' })
+    } catch (err) {
+      setTelNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setTelBusy(false)
+    }
+  }
+
+  const testTelProfile = async (profile: RemoteTelemetryProfileView): Promise<void> => {
+    setTelBusy(true)
+    setTelNotice(null)
+    try {
+      const res = await window.api.telemetry.testProfile(telToInput(profile))
+      setTelNotice({ kind: res.ok ? 'ok' : 'error', text: `${profile.name}: ${res.message}` })
+    } catch (err) {
+      setTelNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setTelBusy(false)
+    }
+  }
 
   const controllerAction = async (action: () => Promise<ControllerStatus>, okText?: string): Promise<void> => {
     setCtrlBusy(true)
@@ -1259,6 +1323,102 @@ export default function SettingsCenter({
                     The token is stored in local config (loopex.config.json), not an OS keychain. It is never logged.
                     Phase 35 exposes read-only endpoints only — no command, terminal, file, git, prompt-send, or mission
                     execution.
+                  </div>
+
+                  {/* Phase 36: remote telemetry profiles (read the PC's GPU on the Mac) */}
+                  <div className="settings-divider" />
+                  <div className="settings-field is-stacked">
+                    <div className="ollama-remote-head">
+                      <span>Remote telemetry profiles</span>
+                      <button type="button" onClick={addTelProfile}>
+                        Add remote runtime
+                      </button>
+                    </div>
+                    <p className="settings-hint">
+                      Point at another Akorith Controller (e.g. the PC running Ollama, with the Controller API enabled and
+                      Allow-LAN on over Tailscale/VPN). The Dashboard then shows that machine&apos;s GPU. Read-only; token
+                      required.
+                    </p>
+                    {telNotice && <div className={`ollama-status is-${telNotice.kind}`}>{telNotice.text}</div>}
+
+                    {telProfiles.length === 0 ? (
+                      <div className="ollama-remote-empty">
+                        No remote telemetry yet. Add the PC controller&apos;s base URL (e.g. http://100.x.x.x:47832) and its
+                        token to show the PC&apos;s GPU on this Mac.
+                      </div>
+                    ) : (
+                      <div className="ollama-remote-list">
+                        {telProfiles.map((profile) => (
+                          <div className={`ollama-remote-card ${profile.lastStatus ? `is-${profile.lastStatus}` : ''}`} key={profile.id}>
+                            <div className="ollama-remote-row">
+                              <input
+                                className="ollama-remote-name"
+                                value={profile.name}
+                                placeholder="Name"
+                                onChange={(event) => updateTelProfile(profile.id, { name: event.target.value })}
+                              />
+                              <label className="ollama-remote-enabled">
+                                <input
+                                  type="checkbox"
+                                  checked={profile.enabled}
+                                  onChange={(event) => updateTelProfile(profile.id, { enabled: event.target.checked })}
+                                />
+                                <span>Enabled</span>
+                              </label>
+                              <button type="button" className="ollama-remote-remove" onClick={() => removeTelProfile(profile.id)}>
+                                Remove
+                              </button>
+                            </div>
+                            <div className="ollama-remote-row">
+                              <input
+                                className="ollama-remote-url"
+                                value={profile.baseUrl}
+                                spellCheck={false}
+                                placeholder="http://100.x.x.x:47832"
+                                onChange={(event) => updateTelProfile(profile.id, { baseUrl: event.target.value })}
+                              />
+                              <input
+                                className="ollama-remote-priority"
+                                type="number"
+                                min={0}
+                                value={profile.priority}
+                                title="Priority (lower runs first)"
+                                onChange={(event) => updateTelProfile(profile.id, { priority: Number(event.target.value) || 0 })}
+                              />
+                            </div>
+                            <div className="ollama-remote-row">
+                              <input
+                                className="ollama-remote-url"
+                                type="password"
+                                value={telTokenDrafts[profile.id] ?? ''}
+                                placeholder={profile.hasToken ? `token saved (${profile.tokenMasked}) — leave blank to keep` : 'controller token (required)'}
+                                onChange={(event) => setTelTokenDrafts((d) => ({ ...d, [profile.id]: event.target.value }))}
+                              />
+                              <button type="button" disabled={telBusy} onClick={() => void testTelProfile(profile)}>
+                                Test
+                              </button>
+                            </div>
+                            {profile.lastStatus === 'error' && profile.lastError && (
+                              <div className="ollama-remote-error">{profile.lastError}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {telProfiles.length > 0 && (
+                      <div className="settings-action-row">
+                        <button type="button" className="is-primary" disabled={telBusy} onClick={() => void saveTelProfiles()}>
+                          {telBusy ? 'Saving…' : 'Save telemetry profiles'}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="settings-note">
+                      On the PC: enable the Controller API, turn on Allow-LAN only on a trusted private network (Tailscale/
+                      VPN/LAN), and copy its base URL + token. On this Mac: add a profile with that URL and token. Never
+                      expose the controller publicly.
+                    </div>
                   </div>
                 </>
               ) : (
