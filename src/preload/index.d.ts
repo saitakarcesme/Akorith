@@ -1263,6 +1263,33 @@ export interface GitApi {
   status(path: string): Promise<GitStatusResult>
 }
 
+export interface GpuDevice {
+  name: string
+  utilizationPercent?: number
+  memoryUsedMb?: number
+  memoryTotalMb?: number
+  temperatureC?: number
+}
+
+export interface GpuOllamaInfo {
+  configuredBaseUrl: string
+  endpointKind: 'local' | 'remote'
+  note?: string
+}
+
+export interface GpuStatusResult {
+  status: 'observed' | 'unavailable'
+  reason?: string
+  platform: string
+  source: 'nvidia-smi' | 'none'
+  gpus: GpuDevice[]
+  ollama: GpuOllamaInfo
+}
+
+export interface GpuApi {
+  getStatus(): Promise<GpuStatusResult>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1280,6 +1307,7 @@ export interface PreloadApi {
   settings: SettingsApi
   ollama: OllamaApi
   git: GitApi
+  gpu: GpuApi
 }
 
 declare global {

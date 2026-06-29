@@ -266,6 +266,11 @@ const git = Object.freeze({
   status: (path: string): Promise<unknown> => ipcRenderer.invoke('git:status', { path })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git })
+// Phase 34.6: read-only GPU / local-runtime telemetry (no writes, no polling).
+const gpu = Object.freeze({
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus')
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu })
 
 contextBridge.exposeInMainWorld('api', api)
