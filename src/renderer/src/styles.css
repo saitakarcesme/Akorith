@@ -6526,8 +6526,32 @@ textarea:focus-visible {
 
 /* The right-edge scrim is fine for drawer/full; for the bottom dock we don't
    dim the workspace (the dock is a persistent surface, not a modal). */
-.agent-drawer-scrim.mode-dock {
+.agent-drawer-scrim.mode-dock,
+.agent-drawer-scrim.mode-right {
   display: none;
+}
+
+/* ---- Phase 36.6: right dock — beside the chat, not overlaying it ---- */
+.agent-drawer.mode-right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  height: auto;
+  border-left: 1px solid var(--border);
+  border-top: 0;
+  box-shadow: -18px 0 50px rgba(0, 0, 0, 0.4);
+  transform: translateX(100%);
+}
+.agent-drawer.mode-right.is-open {
+  transform: translateX(0);
+}
+
+/* The chat shrinks by the dock width so the agents sit beside it (the width is
+   set as --agent-right-width on the .workspace by AgentDrawer). */
+.workspace.has-agent-right .chat-panel {
+  margin-right: var(--agent-right-width, 0);
+  transition: margin-right 120ms var(--ease);
 }
 
 /* ---- Phase 33.17: bottom workbench (read-only Changes / Runtime / Missions) ---- */

@@ -5,7 +5,7 @@ import TerminalPane, { type AgentStatusInfo } from './TerminalPane'
 /** Phase 33.16: where the agent terminals are docked. Switching modes never
  *  remounts the TerminalPanes (same component tree, only the container class
  *  changes), so the PTYs and their buffers keep running. */
-export type AgentDockMode = 'drawer' | 'dock' | 'full'
+export type AgentDockMode = 'drawer' | 'dock' | 'full' | 'right'
 
 interface AgentDrawerProps {
   activeProject: ProjectRow | null
@@ -17,7 +17,7 @@ interface AgentDrawerProps {
 function storageMode(key: string, fallback: AgentDockMode): AgentDockMode {
   try {
     const v = localStorage.getItem(key)
-    return v === 'drawer' || v === 'dock' || v === 'full' ? v : fallback
+    return v === 'drawer' || v === 'dock' || v === 'full' || v === 'right' ? v : fallback
   } catch {
     return fallback
   }
@@ -64,6 +64,13 @@ function dockMax(): number {
   return Math.round((typeof window !== 'undefined' ? window.innerHeight : 900) * 0.75)
 }
 
+// Phase 36.6: right-dock horizontal resize bounds (beside the chat).
+const RIGHT_MIN = 320
+const RIGHT_DEFAULT = 460
+function rightMax(): number {
+  return Math.round((typeof window !== 'undefined' ? window.innerWidth : 1200) * 0.6)
+}
+
 /**
  * The agent activity drawer. Terminals (Olympus=Codex, Atlantis=Claude) live here
  * and run in the background: this panel is ALWAYS mounted while a project with a
@@ -74,6 +81,7 @@ function dockMax(): number {
  */
 export default function AgentDrawer({ activeProject, open, onClose, onAgentStatus }: AgentDrawerProps): JSX.Element | null {
   const bodyRef = useRef<HTMLDivElement>(null)
+  const asideRef = useRef<HTMLElement>(null)
   const [split, setSplit] = useState(() => sanitizeSplit(storageNumber('akorith.terminalSplit', 50)))
   const [width, setWidth] = useState(() => clamp(storageNumber('akorith.drawerWidth', 620), WIDTH_MIN, WIDTH_MAX))
   const [olympusCollapsed, setOlympusCollapsed] = useState(() => storageBoolean('akorith.olympusCollapsed', false))
@@ -82,6 +90,9 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const [dockHeight, setDockHeight] = useState(() =>
     clamp(storageNumber('akorith.agentDockHeight', DOCK_DEFAULT), DOCK_MIN, dockMax())
   )
+  const [rightWidth, setRightWidth] = useState(() =>
+    clamp(storageNumber('akorith.agentRightWidth', RIGHT_DEFAULT), RIGHT_MIN, rightMax())
+  )
 
   useEffect(() => {
     localStorage.setItem('akorith.agentDockMode', mode)
@@ -89,6 +100,28 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   useEffect(() => {
     localStorage.setItem('akorith.agentDockHeight', String(dockHeight))
   }, [dockHeight])
+  useEffect(() => {
+    localStorage.setItem('akorith.agentRightWidth', String(rightWidth))
+  }, [rightWidth])
+
+  // Phase 36.6: in right mode, push the chat over by the dock width (via a CSS
+  // var + class on the parent .workspace) so the agents sit BESIDE the chat
+  // instead of overlaying it. Cleared whenever right mode isn't active/open.
+  useEffect(() => {
+    const ws = asideRef.current?.parentElement
+    if (!ws) return
+    if (mode === 'right' && open) {
+      ws.style.setProperty('--agent-right-width', `${rightWidth}px`)
+      ws.classList.add('has-agent-right')
+    } else {
+      ws.classList.remove('has-agent-right')
+      ws.style.removeProperty('--agent-right-width')
+    }
+    return () => {
+      ws.classList.remove('has-agent-right')
+      ws.style.removeProperty('--agent-right-width')
+    }
+  }, [mode, open, rightWidth])
 
   useEffect(() => {
     localStorage.setItem('akorith.terminalSplit', String(split))
@@ -156,6 +189,23 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
 
   const resetDockHeight = (): void => setDockHeight(clamp(DOCK_DEFAULT, DOCK_MIN, dockMax()))
 
+  // Phase 36.6: drag the left edge of the right dock to resize it horizontally.
+  // Dragging left widens it. Terminals refit via their ResizeObserver — no remount.
+  const startRightResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidthPx = rightWidth
+    const move = (moveEvent: PointerEvent): void => {
+      setRightWidth(clamp(startWidthPx + (startX - moveEvent.clientX), RIGHT_MIN, rightMax()))
+    }
+    const stop = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
   // No project folder → no agents to host; the drawer simply isn't mounted.
   if (!activeProject?.path) return null
 
@@ -171,21 +221,30 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const atlantisId = `t1::${projectKey}`
 
   const modeButtons: { id: AgentDockMode; label: string; title: string }[] = [
-    { id: 'drawer', label: 'Drawer', title: 'Dock as a right-side drawer' },
+    { id: 'drawer', label: 'Drawer', title: 'Dock as a right-side overlay drawer' },
     { id: 'dock', label: 'Bottom', title: 'Dock to the bottom workbench' },
+    { id: 'right', label: 'Right', title: 'Dock to the right, beside the chat' },
     { id: 'full', label: 'Focus', title: 'Expand to a focus view' }
   ]
+
+  const asideStyle =
+    mode === 'drawer' ? { width } : mode === 'dock' ? { height: dockHeight } : mode === 'right' ? { width: rightWidth } : undefined
 
   return (
     <>
       <div className={`agent-drawer-scrim ${open ? 'is-open' : ''} mode-${mode}`} onClick={onClose} />
       <aside
+        ref={asideRef}
         className={`agent-drawer ${open ? 'is-open' : ''} mode-${mode}`}
-        style={mode === 'drawer' ? { width } : mode === 'dock' ? { height: dockHeight } : undefined}
+        style={asideStyle}
         aria-hidden={!open}
       >
-        {mode === 'drawer' && (
-          <div className="agent-drawer-resizer" onPointerDown={startWidthResize} title="Drag to resize" />
+        {(mode === 'drawer' || mode === 'right') && (
+          <div
+            className="agent-drawer-resizer"
+            onPointerDown={mode === 'right' ? startRightResize : startWidthResize}
+            title="Drag to resize"
+          />
         )}
         {mode === 'dock' && (
           <div
