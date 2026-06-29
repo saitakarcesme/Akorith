@@ -79,6 +79,8 @@ Phase 30 lives on `feature/phase-30-runtime-session-observation`.
 
 Phase 31 lives on `feature/phase-31-runtime-inspector-dashboard-polish`.
 
+Phase 32 lives on `feature/phase-32-mission-engine-skeleton`.
+
 `main` must remain untouched until this branch is reviewed and merged later.
 
 ## Phase 29: Universal Agent Adapter Foundation
@@ -300,7 +302,7 @@ Existing runtime metadata
   -> Settings Agent Hub inspector and Dashboard preview
 ```
 
-### Recommended Next Phase
+### Phase 31 Handoff
 
 Phase 32 should add a Mission Engine skeleton only:
 
@@ -313,3 +315,98 @@ Phase 32 should add a Mission Engine skeleton only:
 - read-only UI skeleton
 
 Phase 32 should still avoid execution routing. It should define typed mission shapes and read-only planning surfaces before any adapter starts controlling providers, PTYs, tests, reviews, or commits.
+
+## Phase 32: Mission Engine Skeleton
+
+Phase 32 adds a preview-only Mission Engine foundation for the future Agent OS direction. Akorith can now describe, create, list, and inspect in-memory draft missions and mission steps, but it still does not execute missions through the new engine.
+
+### Added In Phase 32
+
+- `src/main/missions/types.ts` defines `Mission`, `MissionStep`, `MissionEvent`, `MissionPolicy`, template, preview-plan, risk, status, role, and permission-mode types.
+- `src/main/missions/policies.ts` defines read-only and manual-only non-executing default policies.
+- `src/main/missions/templates.ts` defines preview templates for repository health review, feature implementation loops, test coverage improvement, release prep, documentation improvement, local model benchmark visualization, and autonomous project creation preview.
+- `src/main/missions/store.ts` adds an in-memory mission and event store.
+- `src/main/missions/engine.ts` adds `createDraftMission`, `listMissions`, `getMission`, `listMissionEvents`, `updateMissionStatus`, `createMissionFromTemplate`, and `createSafePreviewPlan`.
+- `src/main/missions/inspector.ts` registers safe mission IPC channels.
+- `src/main/index.ts` registers the mission IPC namespace.
+- `src/preload/index.ts` and `src/preload/index.d.ts` expose `window.api.mission`.
+- `src/renderer/src/components/MissionCenter.tsx` adds a preview-only Mission Center under Settings.
+- `src/renderer/src/components/Dashboard.tsx` shows Mission Engine skeleton visibility on Dashboard.
+- `src/renderer/src/styles.css` adds scoped Mission Center and Dashboard mission styles.
+
+### Mission Engine Boundaries
+
+Missions and mission events are process-memory only. Restarting the app clears draft missions. Phase 32 adds no SQLite migrations and does not change `loopex.db`.
+
+Default policies are non-executing:
+
+- no provider calls
+- no PTY writes
+- no file writes
+- no tests
+- no commits
+- no pushes
+- no background loops
+
+Mission templates are preview-only. Steps such as execute, test, handoff, review, and commit can be represented in the timeline, but execution-capable steps are marked unsupported until a later phase deliberately adds a permissioned control path.
+
+### Mission Center UI
+
+The Settings Mission Center shows:
+
+- available mission templates
+- template details and safe step previews
+- "Create preview" and "Blank preview" actions that create in-memory drafts only
+- draft mission list
+- selected mission detail
+- step timeline
+- risk, status, permission, role, and preferred-agent badges
+- safe mission event metadata
+- explicit "Preview only" and safety notes
+
+It intentionally does not show a Run Mission button or any execute, stop, commit, push, test, terminal, or provider-control action.
+
+### Dashboard Visibility
+
+Dashboard now includes a compact Mission Engine skeleton card with:
+
+- template count
+- in-memory draft mission count
+- preview-only execution state
+- recommended next direction
+
+This is still not the full black-and-white redesign. The Dashboard remains monochrome-ready and calm, but logo assets, sidebar behavior, provider colors outside this surface, terminal theme, chat UI, Test Lab, and loop pages are not globally redesigned.
+
+### Relationship To Existing Runtime
+
+Phase 32 does not replace or route through the existing runtime. These paths remain unchanged:
+
+- Claude, Codex, and Ollama providers in `src/main/providers/*`
+- provider prompt construction and return values
+- token accounting and usage logging
+- PTY lifecycle and command kinds in `src/main/pty.ts`
+- `bridgeSend()` to `PtyManager.write()`
+- macro loop and workspace loop execution in `src/main/macro.ts` and `src/main/workspace.ts`
+- Test Lab behavior in `src/main/testlab.ts` and `src/main/testlab-ipc.ts`
+- runtime observation and Agent Hub session inspection
+- AkorithLoop as a separate repository/product surface
+
+### Future Preparation
+
+The skeleton prepares the future orchestration layer:
+
+```text
+Mission
+  -> MissionStep timeline
+  -> MissionPolicy safety gates
+  -> Agent roles: planner, executor, reviewer, tester, committer, memory, observer
+  -> Future AgentAdapter sessions for Claude, Codex, OpenCode, Ollama, and Memory / Skills
+```
+
+This gives Akorith a typed place for multi-agent planning, planner/executor/reviewer/tester/committer pipelines, OpenCode integration, Hermes-style memory/skills, and the future loop-engine upgrade before any execution routing is introduced.
+
+### Recommended Phase 33
+
+Recommended Phase 33: Mission Engine persistence and read-only history.
+
+That is the safest next step because Phase 32 missions are useful for previewing structure but disappear on restart. A persistence phase can add durable mission history, read-only inspection, and migration planning without routing mission steps to providers, PTYs, Test Lab, macro loops, commits, or pushes yet.

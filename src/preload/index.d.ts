@@ -995,6 +995,184 @@ export interface MacroApi {
   list(limit?: number): Promise<MacroSessionRow[]>
 }
 
+// ---- Mission Engine skeleton (Phase 32: preview-only, in-memory) ----
+
+export type MissionId = string
+export type MissionStatus =
+  | 'draft'
+  | 'ready'
+  | 'planning'
+  | 'awaiting_user_choice'
+  | 'running'
+  | 'paused'
+  | 'reviewing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'unsupported'
+
+export type MissionStepId = string
+export type MissionStepKind =
+  | 'inspect'
+  | 'plan'
+  | 'execute'
+  | 'test'
+  | 'review'
+  | 'commit'
+  | 'handoff'
+  | 'memory'
+  | 'user_choice'
+  | 'report'
+
+export type MissionStepStatus =
+  | 'pending'
+  | 'ready'
+  | 'running'
+  | 'blocked'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'unsupported'
+
+export type MissionAgentRole =
+  | 'planner'
+  | 'executor'
+  | 'reviewer'
+  | 'tester'
+  | 'committer'
+  | 'memory'
+  | 'observer'
+
+export type MissionRiskLevel = 'low' | 'medium' | 'high' | 'destructive'
+export type MissionPermissionMode =
+  | 'read_only'
+  | 'ask_before_write'
+  | 'allow_safe_writes'
+  | 'allow_commits'
+  | 'manual_only'
+export type MissionOrigin = 'dashboard' | 'loop' | 'agent_hub' | 'workspace' | 'system'
+
+export interface MissionStep {
+  id: MissionStepId
+  missionId: MissionId
+  index: number
+  title: string
+  kind: MissionStepKind
+  status: MissionStepStatus
+  agentRole?: MissionAgentRole
+  preferredAgentId?: AgentId
+  dependsOn?: MissionStepId[]
+  riskLevel: MissionRiskLevel
+  permissionMode: MissionPermissionMode
+  createdAt: number
+  updatedAt: number
+  summary?: string
+  safePreview?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface Mission {
+  id: MissionId
+  title: string
+  description?: string
+  status: MissionStatus
+  projectPath?: string
+  createdAt: number
+  updatedAt: number
+  origin: MissionOrigin
+  permissionMode: MissionPermissionMode
+  riskLevel: MissionRiskLevel
+  steps: MissionStep[]
+  metadata?: Record<string, unknown>
+  notes?: string[]
+}
+
+export interface MissionEvent {
+  id: string
+  missionId: MissionId
+  stepId?: MissionStepId
+  type: string
+  message: string
+  timestamp: number
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionPolicy {
+  id: string
+  name: string
+  permissionMode: MissionPermissionMode
+  allowProviderCalls: boolean
+  allowPtyWrites: boolean
+  allowFileWrites: boolean
+  allowTests: boolean
+  allowCommits: boolean
+  allowPush: boolean
+  requireUserApprovalForRiskAbove?: MissionRiskLevel
+}
+
+export interface MissionCreateInput {
+  title?: string
+  description?: string
+  projectPath?: string
+  origin?: MissionOrigin
+  permissionMode?: MissionPermissionMode
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionTemplateStep {
+  title: string
+  kind: MissionStepKind
+  agentRole?: MissionAgentRole
+  preferredAgentId?: AgentId
+  dependsOn?: number[]
+  riskLevel?: MissionRiskLevel
+  permissionMode?: MissionPermissionMode
+  status?: MissionStepStatus
+  summary?: string
+  safePreview?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionTemplate {
+  id: string
+  title: string
+  description: string
+  riskLevel: MissionRiskLevel
+  permissionMode: MissionPermissionMode
+  steps: MissionTemplateStep[]
+  notes?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionPreviewPlan {
+  title: string
+  description?: string
+  origin: MissionOrigin
+  permissionMode: MissionPermissionMode
+  riskLevel: MissionRiskLevel
+  policy: MissionPolicy
+  steps: MissionStep[]
+  warnings: string[]
+  notes: string[]
+}
+
+export interface MissionApi {
+  /** Phase 32: list preview-only mission templates. */
+  listTemplates(): Promise<MissionTemplate[]>
+  /** Phase 32: create an in-memory draft mission only. Does not execute. */
+  createDraft(args: MissionCreateInput): Promise<Mission>
+  /** Phase 32: create an in-memory draft mission from a preview template only. */
+  createFromTemplate(templateId: string, input?: MissionCreateInput): Promise<Mission | null>
+  /** Phase 32: list in-memory draft/preview missions. */
+  list(): Promise<Mission[]>
+  /** Phase 32: read one in-memory mission. */
+  get(id: MissionId): Promise<Mission | null>
+  /** Phase 32: read mission event metadata. No prompts, commands, or terminal output are exposed. */
+  listEvents(missionId: MissionId): Promise<MissionEvent[]>
+  /** Phase 32: build a safe preview plan without storing or executing it. */
+  createSafePreviewPlan(args: MissionCreateInput): Promise<MissionPreviewPlan>
+}
+
 // ---- app settings (Phase 15: theme mirrored for the startup splash) ----
 
 export type AppTheme = 'dark' | 'light'
@@ -1056,6 +1234,7 @@ export interface PreloadApi {
   evaluate: EvaluateApi
   macro: MacroApi
   agent: AgentApi
+  mission: MissionApi
   settings: SettingsApi
   ollama: OllamaApi
 }

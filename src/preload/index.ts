@@ -234,6 +234,17 @@ const agent = Object.freeze({
     ipcRenderer.invoke('agent:detectPermission', { terminalId })
 })
 
+const mission = Object.freeze({
+  listTemplates: (): Promise<unknown> => ipcRenderer.invoke('mission:listTemplates'),
+  createDraft: (args: unknown): Promise<unknown> => ipcRenderer.invoke('mission:createDraft', args),
+  createFromTemplate: (templateId: string, input?: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('mission:createFromTemplate', { templateId, input }),
+  list: (): Promise<unknown> => ipcRenderer.invoke('mission:list'),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('mission:get', { id }),
+  listEvents: (missionId: string): Promise<unknown> => ipcRenderer.invoke('mission:listEvents', { missionId }),
+  createSafePreviewPlan: (args: unknown): Promise<unknown> => ipcRenderer.invoke('mission:createSafePreviewPlan', args)
+})
+
 // App-level settings mirrored to config (currently the UI theme, so the
 // startup splash can match the selected light/dark background).
 const settings = Object.freeze({
@@ -248,6 +259,6 @@ const ollama = Object.freeze({
   testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl })
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, settings, ollama })
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama })
 
 contextBridge.exposeInMainWorld('api', api)

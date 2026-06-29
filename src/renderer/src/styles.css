@@ -2036,6 +2036,373 @@ textarea:focus-visible {
   font-size: 10px;
 }
 
+.mission-center {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mission-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+
+.mission-hero span,
+.mission-panel-head span,
+.mission-card-meta span,
+.mission-readonly-grid span {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 740;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.mission-hero h2 {
+  margin: 4px 0 5px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.mission-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mission-hero > strong {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.mission-safety-note,
+.mission-alert {
+  padding: 10px 12px;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  border: 1px dashed var(--border-soft);
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mission-alert {
+  color: var(--danger);
+  border-style: solid;
+}
+
+.mission-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+}
+
+.mission-layout-secondary {
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.mission-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+
+.mission-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mission-panel-head > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mission-panel-head strong,
+.mission-template-detail h3,
+.mission-detail-title h3,
+.mission-events > strong {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.mission-panel-head button,
+.mission-template-actions button {
+  padding: 6px 9px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mission-panel-head button:hover:not(:disabled),
+.mission-template-actions button:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+
+.mission-panel-head button:disabled,
+.mission-template-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.mission-template-actions button.is-primary {
+  color: var(--text);
+  background: var(--accent-dim);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.mission-template-list,
+.mission-draft-list,
+.mission-step-list,
+.mission-timeline,
+.mission-events,
+.mission-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mission-template-list,
+.mission-template-detail .mission-step-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.mission-template-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.mission-template-card.is-active,
+.mission-draft-row.is-active {
+  border-color: var(--text-faint);
+  background: var(--bg-raised);
+}
+
+.mission-template-main,
+.mission-draft-row {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.mission-template-main span,
+.mission-draft-row span,
+.mission-step-row strong,
+.mission-step-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 740;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-template-main em,
+.mission-draft-row em,
+.mission-timeline-row em,
+.mission-event-row em {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.mission-card-meta,
+.mission-template-actions,
+.mission-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mission-template-detail,
+.mission-detail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mission-template-detail p,
+.mission-detail-title p,
+.mission-step-row p,
+.mission-timeline-row p,
+.mission-note-list span {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mission-step-row,
+.mission-timeline-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  padding: 9px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+
+.mission-step-row > div:last-child,
+.mission-timeline-row > div:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mission-step-row span {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mission-step-index {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.mission-empty-state {
+  padding: 12px;
+  color: var(--text-faint);
+  background: var(--bg-soft);
+  border: 1px dashed var(--border-soft);
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mission-draft-row {
+  padding: 9px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+
+.mission-detail-title,
+.mission-step-title {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mission-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mission-readonly-grid > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.mission-readonly-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-timeline-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.mission-events {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.mission-events > span,
+.mission-event-row span {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.mission-event-row {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.mission-note-list {
+  padding: 10px;
+  background: var(--bg-soft);
+  border: 1px dashed var(--border-soft);
+  border-radius: 10px;
+}
+
 .settings-path-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -3848,7 +4215,8 @@ textarea:focus-visible {
 
 .dash-command-card span,
 .dash-agent-grid span,
-.dash-ops-grid span {
+.dash-ops-grid span,
+.dash-mission-grid span {
   color: var(--text-faint);
   font-size: 10px;
   font-weight: 760;
@@ -3931,7 +4299,8 @@ textarea:focus-visible {
 }
 
 .dash-agent-grid,
-.dash-ops-grid {
+.dash-ops-grid,
+.dash-mission-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
@@ -3942,7 +4311,8 @@ textarea:focus-visible {
 }
 
 .dash-agent-grid > div,
-.dash-ops-grid > div {
+.dash-ops-grid > div,
+.dash-mission-grid > div {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -3954,7 +4324,8 @@ textarea:focus-visible {
 }
 
 .dash-agent-grid strong,
-.dash-ops-grid strong {
+.dash-ops-grid strong,
+.dash-mission-grid strong {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
@@ -3965,7 +4336,8 @@ textarea:focus-visible {
 }
 
 .dash-agent-grid em,
-.dash-ops-grid em {
+.dash-ops-grid em,
+.dash-mission-grid em {
   min-width: 0;
   overflow: hidden;
   color: var(--text-faint);
@@ -6587,7 +6959,10 @@ body {
   .settings-two-col,
   .agent-runtime-grid,
   .agent-session-fields,
-  .agent-attachment-row {
+  .agent-attachment-row,
+  .mission-layout,
+  .mission-layout-secondary,
+  .mission-readonly-grid {
     grid-template-columns: 1fr;
   }
   .settings-path-row {
@@ -7157,7 +7532,8 @@ body {
   }
   .dash-grid,
   .dash-agent-grid,
-  .dash-ops-grid {
+  .dash-ops-grid,
+  .dash-mission-grid {
     grid-template-columns: 1fr;
   }
   .dash-hero {
