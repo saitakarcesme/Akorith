@@ -60,14 +60,6 @@ function storageString(key: string, fallback: string): string {
   }
 }
 
-function providerTone(id: string): string {
-  const normalized = id.toLowerCase()
-  if (normalized.includes('claude')) return 'tone-claude'
-  if (normalized.includes('chatgpt') || normalized.includes('codex')) return 'tone-codex'
-  if (normalized.includes('local') || normalized.includes('ollama')) return 'tone-local'
-  return 'tone-neutral'
-}
-
 function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
   return providers.some((provider) =>
     provider.id === 'local' &&
@@ -101,16 +93,6 @@ export default function Sidebar({
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
-  // Provider groups default to collapsed for a cleaner first load; explicit
-  // toggles persist per provider id. A provider absent from the map is collapsed.
-  const [providerCollapsed, setProviderCollapsed] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem('akorith.providerCollapsed')
-      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
-    } catch {
-      return {}
-    }
-  })
   // The Projects group is a collapsible folder like the provider folders below.
   // Defaults to expanded since the workspace is the primary entry point.
   const [projectsCollapsed, setProjectsCollapsed] = useState(() => storageBoolean('akorith.projectsCollapsed', false))
@@ -184,10 +166,6 @@ export default function Sidebar({
   }, [projectsCollapsed])
 
   useEffect(() => {
-    localStorage.setItem('akorith.providerCollapsed', JSON.stringify(providerCollapsed))
-  }, [providerCollapsed])
-
-  useEffect(() => {
     localStorage.setItem('akorith.displayName', displayName)
   }, [displayName])
 
@@ -204,14 +182,6 @@ export default function Sidebar({
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const recentSessions = sessions
-  const generalSessions = sessions.filter((s) => !s.projectId)
-
-  // Registry providers first (in registry order), then any orphaned provider
-  // ids that still have sessions but are gone from config.
-  const folderIds = [
-    ...providers.map((p) => p.id),
-    ...[...new Set(generalSessions.map((s) => s.providerId))].filter((id) => !providers.some((p) => p.id === id))
-  ]
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
 
   const refreshProjects = async (): Promise<void> => {
@@ -624,108 +594,10 @@ export default function Sidebar({
             )}
           </section>
 
-          {folderIds.map((providerId) => {
-            const items = generalSessions.filter((s) => s.providerId === providerId)
-            const isCollapsed = providerCollapsed[providerId] ?? true
-            return (
-              <section className={`sidebar-section provider-section ${providerTone(providerId)}`} key={providerId}>
-                <div className="sidebar-section-header provider-header">
-                  <button
-                    type="button"
-                    className="sidebar-fold"
-                    onClick={() => setProviderCollapsed((c) => ({ ...c, [providerId]: !isCollapsed }))}
-                    title={isCollapsed ? 'Expand' : 'Collapse'}
-                  >
-                    <ChevronIcon size={13} direction={isCollapsed ? 'right' : 'down'} />
-                    <FolderIcon size={15} />
-                    {labelOf(providerId)}
-                    {items.length > 0 && <span className="sidebar-count">{items.length}</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className="sidebar-add"
-                    title={`New ${labelOf(providerId)} chat`}
-                    onClick={() => onNewChat(providerId)}
-                  >
-                    <PlusIcon size={14} />
-                  </button>
-                </div>
-                {!isCollapsed &&
-                  (items.length === 0 ? (
-                    <div className="sidebar-item is-empty">
-                      <MessageIcon size={13} />
-                      <span>No general chats yet</span>
-                    </div>
-                  ) : (
-                    items.map((s) =>
-                      renamingId === s.id ? (
-                        <div className="sidebar-item" key={s.id}>
-                          <input
-                            className="sidebar-rename-input"
-                            value={renameValue}
-                            autoFocus
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') void commitRename(s.id)
-                              if (e.key === 'Escape') setRenamingId(null)
-                            }}
-                            onBlur={() => void commitRename(s.id)}
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className={`sidebar-item is-session ${s.id === activeSessionId ? 'is-active' : ''}`}
-                          key={s.id}
-                          onClick={() => selectSession(s)}
-                          title={s.title}
-                        >
-                          <span className="sidebar-item-title">{s.title}</span>
-                          <span className="sidebar-item-actions">
-                            <button
-                              type="button"
-                              title="Rename"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setRenamingId(s.id)
-                                setRenameValue(s.title)
-                                setConfirmDeleteId(null)
-                              }}
-                            >
-                              Edit
-                            </button>
-                            {confirmDeleteId === s.id ? (
-                              <button
-                                type="button"
-                                className="is-danger"
-                                title="Click again to delete"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void deleteSession(s)
-                                }}
-                              >
-                                Delete?
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setConfirmDeleteId(s.id)
-                                  setTimeout(() => setConfirmDeleteId((id) => (id === s.id ? null : id)), 2500)
-                                }}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </span>
-                        </div>
-                      )
-                    )
-                  ))}
-              </section>
-            )
-          })}
+          {/* Phase 33.4: provider folders (Claude / Codex / Local) are removed from
+              the sidebar. The sidebar is project-first now; provider/model choice
+              lives in the composer model picker, Agent Hub, and Settings. General
+              chats are listed in their own borderless section below. */}
         </div>
 
         <section className="sidebar-section recent-section">
