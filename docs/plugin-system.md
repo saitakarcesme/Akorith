@@ -33,7 +33,7 @@ exercised in Phase 35** — they describe what a future plugin runtime would req
 
 | Plugin | Kind | Diagnostic (read-only) |
 |---|---|---|
-| OpenCode Agent | agent | `opencode --version` |
+| OpenCode Agent (Gaia) | agent | `opencode --version` + safe `opencode auth list` sign-in status (Phase 37: runs as the Gaia terminal between Olympus and Atlantis) |
 | GitHub Workbench | integration | `gh --version` |
 | Remote Ollama Telemetry | telemetry | `ollama --version` + configured remote profiles |
 | Hermes Memory / Skills | memory | planned (no check) |

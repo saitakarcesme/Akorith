@@ -660,3 +660,46 @@ Provider runtime/prompts/returns, token accounting, usage logging,
 The Akorith **CLI** over the controller (status/plugins/gpu/telemetry), or a packaged
 **remote telemetry companion** preset for the PC. Alternatives: sandboxed plugin runtime,
 or per-file diff in the bottom workbench.
+
+## Phase 37 — Sidebar Actions · Chat Polish · Thinking State · OpenCode "Gaia"
+
+Sidebar/chat polish from screenshot feedback plus OpenCode as a third agent terminal.
+Full plan: `docs/phase-37-sidebar-chat-opencode-gaia.md`.
+
+### Sidebar / project rows
+- Project ⋯ menu works (Rename / Reveal in Finder / Copy path / Remove-with-confirm),
+  fixed-anchored, Escape/outside-click close. A small **new-chat (+) icon** appears on the
+  project row (hover/active) — the "+ New chat" text row is gone. Chat rows replace inline
+  "Edit/Remove" text with a per-chat ⋯ menu (Rename / Delete). Hover-only; no selected pill.
+
+### Chat
+- User messages are a **white, right-aligned, rounded bubble** (dark theme; inverted dark
+  bubble in light theme for contrast); assistant/output style unchanged.
+- The **thinking state persists across navigation**: the history-reload effect is skipped
+  when re-selecting the session already shown while a request is in flight, so the run keeps
+  streaming. The placeholder is a calm monochrome **"Thinking…"** indicator (pulsing dots,
+  reduced-motion aware) until the first tokens arrive.
+
+### Gaia = OpenCode (third agent)
+- Agent order is **Olympus (Codex, t2) · Gaia (OpenCode, t3) · Atlantis (Claude, t1)**.
+- New `opencode` / `opencode-auto` PTY command kinds launch the `opencode` TUI in the
+  project folder (shell + install/login guidance if the CLI is missing). `AgentDrawer`
+  hosts three panes with per-pane collapse; mode/collapse switches never remount PTYs.
+- The composer target control gains Gaia; prompts route to logical `t3` via the unchanged
+  `bridgeSend → PtyManager.write`; auto-enter, snapshot, and **"Summarize output"** work for
+  Gaia through the existing terminal-id flow, surfacing OpenCode output into chat.
+- Install: `npm i -g opencode-ai` (done on this machine — v1.17.11). **Login is interactive:
+  `opencode auth login`** (OpenCode Go). Akorith reports CLI version + a safe signed-in/out
+  status from `opencode auth list` (credential count only) — it never reads/stores/prints
+  tokens. The OpenCode plugin shows Available with that status.
+
+### Intentionally unchanged
+Claude/Codex/Ollama provider runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, existing PTY kinds, controller security, `loopex.db`/
+`loopex.config.json`, AkorithLoop. No mission execution, no unsafe plugin execution, no
+secrets stored.
+
+### Recommended Phase 38
+A real OpenCode (Gaia) **executor loop** using `opencode run` for non-interactive turns and
+structured result capture, or the Akorith **CLI** over the controller. Alternatives:
+sandboxed plugin runtime, or remote-telemetry companion packaging.
