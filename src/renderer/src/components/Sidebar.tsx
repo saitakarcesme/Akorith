@@ -8,6 +8,7 @@ import {
   FolderIcon,
   LoopIcon,
   PanelsIcon,
+  PluginIcon,
   PlusIcon,
   SettingsIcon,
   UserIcon
@@ -42,7 +43,8 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
   { view: 'loops', label: 'Loop', icon: LoopIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
-  { view: 'test', label: 'Test', icon: FlaskIcon }
+  { view: 'test', label: 'Test', icon: FlaskIcon },
+  { view: 'plugins', label: 'Plugins', icon: PluginIcon }
 ]
 
 function storageBoolean(key: string, fallback: boolean): boolean {

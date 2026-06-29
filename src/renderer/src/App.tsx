@@ -4,13 +4,14 @@ import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
+import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import LoopsPage from './components/LoopsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -287,6 +288,7 @@ export default function App(): JSX.Element {
         <LoopsPage active={view === 'loops'} />
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
+      {view === 'plugins' && <Plugins />}
     </div>
   )
 }
