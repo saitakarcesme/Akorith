@@ -6115,13 +6115,24 @@ textarea:focus-visible {
   line-height: 1.62;
   color: var(--text);
 }
+/* Phase 38.2: user messages right-align as a white rounded bubble (this rule is
+   the effective one — it previously forced align-self: stretch which left the
+   bubble full-width / left-aligned). The column is a flex column, so flex-end
+   right-aligns it. Assistant rows stay stretched/left. */
 .chat-msg.user {
-  align-self: stretch;
-  padding: 12px 14px;
+  align-self: flex-end;
+  max-width: 74%;
+  padding: 11px 15px;
   background: var(--bubble-user);
   color: var(--bubble-user-text);
-  border-radius: var(--radius);
+  border-radius: 18px 18px 6px 18px;
   border: 0;
+}
+
+.chat-msg.user code {
+  color: var(--bubble-user-text);
+  background: rgba(0, 0, 0, 0.07);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 .chat-msg.assistant {
   align-self: stretch;
