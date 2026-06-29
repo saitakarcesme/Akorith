@@ -127,6 +127,32 @@ textarea {
   font: inherit;
 }
 
+/* Phase 33.19: readable defaults for any native control not otherwise styled
+   (Test Lab / Loops selects, misc inputs) so no white dropdown or low-contrast
+   field appears on the dark surface. color-scheme keeps the popup list dark. */
+select,
+input:not([type]),
+input[type='text'],
+input[type='search'],
+input[type='number'],
+input[type='url'],
+textarea {
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+select option {
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+::placeholder {
+  color: var(--text-faint);
+}
+
 button,
 select,
 input,
