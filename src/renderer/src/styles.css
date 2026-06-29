@@ -4486,16 +4486,18 @@ textarea:focus-visible {
   overflow: visible;
 }
 
+/* Phase 33.12: stronger gridlines + axis labels for a more legible chart. */
 .dash-chart-grid {
-  stroke: var(--border-soft);
+  stroke: var(--border);
   stroke-width: 1;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .dash-chart-axis {
-  fill: var(--text-faint);
+  fill: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
 .dash-chart-legend {

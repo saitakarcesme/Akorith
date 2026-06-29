@@ -427,10 +427,10 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
                 {donutSlices.map((slice) => (
                   <path
                     key={slice.providerId}
-                    d={donutSlicePath(120, 120, 94, 58, slice.startAngle, slice.endAngle)}
+                    d={donutSlicePath(120, 120, 100, 50, slice.startAngle, slice.endAngle)}
                     fill={fillOf(slice.providerId)}
                     stroke="var(--bg-panel)"
-                    strokeWidth={2}
+                    strokeWidth={1.5}
                   >
                     <title>{slice.name}: {fmtTokens(slice.value)} tokens</title>
                   </path>
@@ -476,7 +476,8 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
           })}
           {barData.map((row, index) => {
             const step = 580 / Math.max(barData.length, 1)
-            const width = Math.max(5, step * 0.62)
+            // Phase 33.12: thicker bars (OpenCode-style chunky usage columns).
+            const width = Math.max(7, step * 0.82)
             const x = 48 + index * step + (step - width) / 2
             let stackBottom = 206
             return (
@@ -484,11 +485,11 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
                 {providerIds.map((id) => {
                   const value = Number(row[id] ?? 0)
                   if (value <= 0 || maxBarTotal <= 0) return null
-                  const height = Math.max(1, (value / maxBarTotal) * 188)
+                  const height = Math.max(2, (value / maxBarTotal) * 188)
                   const y = stackBottom - height
                   stackBottom = y
                   return (
-                    <rect key={id} x={x} y={y} width={width} height={height} rx={2} fill={fillOf(id)}>
+                    <rect key={id} x={x} y={y} width={width} height={height} rx={1} fill={fillOf(id)}>
                       <title>{row.day} - {id}: {fmtTokens(value)} tokens</title>
                     </rect>
                   )
