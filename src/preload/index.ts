@@ -216,6 +216,12 @@ const agent = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('agent:list'),
   detect: (id: string): Promise<unknown> => ipcRenderer.invoke('agent:detect', { id }),
   detectAll: (): Promise<unknown> => ipcRenderer.invoke('agent:detectAll'),
+  listSessions: (): Promise<unknown> => ipcRenderer.invoke('agent:listSessions'),
+  getSession: (id: string): Promise<unknown> => ipcRenderer.invoke('agent:getSession', { id }),
+  listSessionEvents: (sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('agent:listSessionEvents', { sessionId }),
+  createPlaceholderSession: (args: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('agent:createPlaceholderSession', args),
   // Phase 13.2: read a terminal snapshot and summarize it into chat (meta call).
   summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args),
   // Phase 14.1: read-only detection of a pending terminal permission/confirm prompt.

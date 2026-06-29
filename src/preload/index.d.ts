@@ -572,6 +572,29 @@ export interface AgentAdapterMetadata {
   safetyNotes: string[]
 }
 
+export type AgentIntegrationStage =
+  | 'metadata-only'
+  | 'detection-ready'
+  | 'session-placeholder-ready'
+  | 'runtime-connected-existing-provider'
+  | 'future-runtime'
+
+export interface AgentRuntimeCapability {
+  canCreateSession: boolean
+  canSendMessage: boolean
+  canStream: boolean
+  canExecute: boolean
+  canAttachToPty: boolean
+  canUseExistingProvider: boolean
+  canUseExistingTerminal: boolean
+  isPlaceholder: boolean
+}
+
+export interface AgentAdapterInfo extends AgentAdapterMetadata {
+  runtimeCapabilities: AgentRuntimeCapability
+  integrationStage: AgentIntegrationStage
+}
+
 export interface AgentDetectionResult {
   id: AgentId
   status: AgentStatus
@@ -581,13 +604,72 @@ export interface AgentDetectionResult {
   checkedAt: number
 }
 
+export type AgentSessionId = string
+export type AgentSessionMode = 'chat' | 'terminal' | 'exec' | 'loop' | 'review' | 'memory'
+export type AgentSessionStatus =
+  | 'created'
+  | 'starting'
+  | 'running'
+  | 'idle'
+  | 'busy'
+  | 'waiting_for_permission'
+  | 'completed'
+  | 'stopped'
+  | 'failed'
+  | 'unsupported'
+export type AgentSessionOrigin = 'agent_hub' | 'chat' | 'terminal' | 'loop' | 'test_lab' | 'system'
+
+export interface AgentSession {
+  id: AgentSessionId
+  agentId: AgentId
+  mode: AgentSessionMode
+  origin: AgentSessionOrigin
+  status: AgentSessionStatus
+  projectPath?: string
+  title?: string
+  createdAt: number
+  updatedAt: number
+  lastActivityAt?: number
+  metadata?: Record<string, unknown>
+  error?: string
+}
+
+export interface AgentSessionCreateInput {
+  agentId: AgentId
+  mode: AgentSessionMode
+  origin: AgentSessionOrigin
+  projectPath?: string
+  title?: string
+  metadata?: Record<string, unknown>
+}
+
+export type AgentSessionEventType = 'created' | 'status_changed' | 'stopped' | 'snapshot' | 'error' | 'note'
+
+export interface AgentSessionEvent {
+  id: string
+  sessionId: AgentSessionId
+  agentId: AgentId
+  type: AgentSessionEventType
+  message?: string
+  timestamp: number
+  metadata?: Record<string, unknown>
+}
+
 export interface AgentApi {
   /** Phase 28: read-only Agent OS metadata foundation. */
-  list(): Promise<AgentAdapterMetadata[]>
+  list(): Promise<AgentAdapterInfo[]>
   /** Phase 28: read-only agent availability detection. */
   detect(id: AgentId): Promise<AgentDetectionResult>
   /** Phase 28: read-only detection for every known adapter. */
   detectAll(): Promise<AgentDetectionResult[]>
+  /** Phase 29: in-memory placeholder AgentSession list; no runtime processes. */
+  listSessions(): Promise<AgentSession[]>
+  /** Phase 29: read one in-memory placeholder AgentSession. */
+  getSession(id: AgentSessionId): Promise<AgentSession | null>
+  /** Phase 29: read placeholder session events. */
+  listSessionEvents(sessionId: AgentSessionId): Promise<AgentSessionEvent[]>
+  /** Phase 29: create a placeholder session only; does not call providers, PTYs, or CLIs. */
+  createPlaceholderSession(args: AgentSessionCreateInput): Promise<AgentSession>
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
     terminalId: string

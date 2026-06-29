@@ -1648,6 +1648,29 @@ textarea:focus-visible {
   line-height: 1.4;
 }
 
+.agent-hub-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 7px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.agent-hub-stage span {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.agent-hub-stage em {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
 .agent-note {
   color: var(--text-faint);
 }
@@ -1677,8 +1700,14 @@ textarea:focus-visible {
   font-weight: 650;
 }
 
-.agent-detect-btn {
+.agent-hub-actions {
   align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-detect-btn {
   padding: 6px 9px;
   color: var(--text);
   background: var(--bg-raised);
@@ -1694,6 +1723,52 @@ textarea:focus-visible {
 .agent-detect-btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.agent-session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.agent-session-panel > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-session-panel strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.agent-session-panel span,
+.agent-session-row em {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.agent-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.agent-session-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-path-row {

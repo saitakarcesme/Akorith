@@ -1,4 +1,5 @@
 import { staticAgentDetection } from '../status'
+import { PLACEHOLDER_RUNTIME_CAPABILITY } from '../runtime'
 import type { AgentAdapter, AgentAdapterMetadata } from '../types'
 
 const metadata: AgentAdapterMetadata = {
@@ -29,5 +30,9 @@ export const memoryAgentAdapter: AgentAdapter = {
       'memory',
       'available',
       'Internal memory foundation is registered; durable skill memory is not implemented yet.'
-    )
+    ),
+  getRuntimeCapabilities: () => ({
+    ...PLACEHOLDER_RUNTIME_CAPABILITY,
+    canCreateSession: true
+  })
 }

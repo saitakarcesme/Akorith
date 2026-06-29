@@ -71,6 +71,96 @@ Akorith is expected to move toward a radical black-and-white identity: mostly bl
 
 ## Branch Strategy
 
-This work lives on `feature/phase-28-agent-os-foundation`.
+Phase 28 lives on `feature/phase-28-agent-os-foundation`.
+
+Phase 29 lives on `feature/phase-29-universal-agent-adapter`.
 
 `main` must remain untouched until this branch is reviewed and merged later.
+
+## Phase 29: Universal Agent Adapter Foundation
+
+Phase 29 adds typed Universal Agent Adapter rails behind the Phase 28 registry. The current active runtime is intentionally unchanged.
+
+Universal Agent Adapter means Akorith can describe an agent's metadata, detection behavior, current integration stage, runtime capabilities, and placeholder sessions through one internal shape. It does not mean all live chat, PTY, loop, or test execution has moved to AgentSession yet.
+
+### Added In Phase 29
+
+- `src/main/agents/runtime.ts` defines `AgentRuntimeCapability`.
+- `src/main/agents/session.ts` defines `AgentSession`, mode, origin, status, and create-input types.
+- `src/main/agents/events.ts` defines `AgentSessionEvent`.
+- `src/main/agents/session-manager.ts` adds an in-memory `AgentSessionManager`.
+- `src/main/agents/types.ts` now allows optional runtime methods on `AgentAdapter`.
+- `src/main/agents/registry.ts` now reports integration stage and runtime capabilities.
+- The existing `window.api.agent` namespace now includes read-only session inspection and low-risk placeholder session creation.
+- The Settings Agent Hub shows runtime capability summaries, integration stage, and in-memory placeholder sessions.
+
+### What AgentSession Means Now
+
+`AgentSession` is a typed placeholder for future orchestration. In Phase 29 it can be created in memory from the Agent Hub, listed, inspected, and given events. Creating one does not start a process, attach a terminal, call a provider, send a prompt, edit a file, or write to SQLite.
+
+The in-memory manager supports:
+
+- `createPlaceholderSession`
+- `listSessions`
+- `getSession`
+- `updateSessionStatus`
+- `appendSessionEvent`
+- `listSessionEvents`
+- `stopSession`
+
+No session persistence or database migration was added.
+
+### Current Active Runtime
+
+```text
+Renderer
+  -> existing provider / PTY IPC
+  -> src/main/providers/* or src/main/pty.ts
+  -> Claude, Codex, Ollama
+```
+
+Claude still uses `src/main/providers/claude.ts` for provider calls and `src/main/pty.ts` for Atlantis terminal sessions.
+
+Codex still uses `src/main/providers/chatgpt.ts` for provider calls and `src/main/pty.ts` for Olympus terminal sessions.
+
+Ollama still uses `src/main/providers/local.ts`, `src/main/ollama-connection.ts`, and the existing local executor path.
+
+### New Foundation Runtime
+
+```text
+Renderer
+  -> agent IPC
+  -> AgentRegistry
+  -> AgentAdapter metadata, detection, runtime capability metadata
+  -> AgentSessionManager placeholder sessions
+```
+
+This foundation is intentionally parallel to the active runtime. It is safe to inspect and safe to create placeholder sessions because it has no prompt-sending or process-starting path.
+
+### Future Runtime
+
+```text
+Mission Engine
+  -> AgentRegistry
+  -> AgentSessionManager
+  -> AgentAdapter runtime methods
+  -> provider, PTY, tool, memory, and review execution
+```
+
+The future Mission Engine can use the same registry to pick Claude, Codex, OpenCode, Ollama, or Memory/Skills by capability instead of hardcoding each tool in loop code.
+
+### OpenCode Preparation
+
+OpenCode remains detection-only. Phase 29 gives it runtime capability metadata and placeholder sessions, but no chat execution, PTY integration, loop execution, or file-editing path.
+
+### Memory And Skills Preparation
+
+Memory / Skills remains an internal future adapter. Phase 29 gives it placeholder sessions and capability metadata, but it does not replace conversation summaries, SQLite history, or repo context digests.
+
+### Why Providers Were Not Replaced
+
+The existing providers and PTY manager are working runtime code with important safety and product invariants. Replacing them during this foundation phase would risk regressions in chat, terminals, macro loops, Test Lab, local executor, and workspace loops. Phase 29 only adds typed rails beside them.
+
+### Next Phase
+
+The next phase should introduce a narrow bridge from AgentSession to existing runtime paths for one low-risk adapter, likely read-only/session attachment first. It should still preserve the `bridgeSend()` to `PtyManager.write()` invariant and should avoid changing provider/model selection until the Agent Hub runtime is proven.

@@ -1,4 +1,5 @@
 import { detectCliAgent } from '../status'
+import { PLACEHOLDER_RUNTIME_CAPABILITY } from '../runtime'
 import type { AgentAdapter, AgentAdapterMetadata } from '../types'
 
 const metadata: AgentAdapterMetadata = {
@@ -25,5 +26,6 @@ const metadata: AgentAdapterMetadata = {
 
 export const opencodeAgentAdapter: AgentAdapter = {
   metadata,
-  detect: () => detectCliAgent({ id: 'opencode', executableName: 'opencode' })
+  detect: () => detectCliAgent({ id: 'opencode', executableName: 'opencode' }),
+  getRuntimeCapabilities: () => PLACEHOLDER_RUNTIME_CAPABILITY
 }

@@ -1,4 +1,5 @@
 import { detectCliAgent } from '../status'
+import { existingProviderRuntimeCapability } from '../runtime'
 import type { AgentAdapter, AgentAdapterMetadata } from '../types'
 
 const metadata: AgentAdapterMetadata = {
@@ -26,5 +27,10 @@ const metadata: AgentAdapterMetadata = {
 
 export const codexAgentAdapter: AgentAdapter = {
   metadata,
-  detect: () => detectCliAgent({ id: 'codex', executableName: 'codex' })
+  detect: () => detectCliAgent({ id: 'codex', executableName: 'codex' }),
+  getRuntimeCapabilities: () =>
+    existingProviderRuntimeCapability({
+      canExecute: true,
+      canUseExistingTerminal: true
+    })
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
-  AgentAdapterMetadata,
+  AgentAdapterInfo,
   AgentDetectionResult,
   AgentId,
+  AgentSession,
+  AgentSessionMode,
   AgentStatus,
   BridgeSettings,
   DigestSettings,
@@ -75,6 +77,31 @@ function agentStatusClass(status: AgentStatus): string {
   return 'is-error'
 }
 
+function integrationStageLabel(value: string): string {
+  return value
+    .split('-')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function runtimeSummary(agent: AgentAdapterInfo): string {
+  const runtime = agent.runtimeCapabilities
+  const bits: string[] = []
+  if (runtime.canUseExistingProvider) bits.push('existing provider active')
+  if (runtime.canUseExistingTerminal) bits.push('existing terminal active')
+  if (runtime.canStream) bits.push('streaming available in current runtime')
+  if (runtime.canExecute) bits.push('exec available in current runtime')
+  if (runtime.isPlaceholder) bits.push('AgentSession runtime is placeholder only')
+  return bits.join(' · ') || 'metadata only'
+}
+
+function placeholderModeForAgent(agent: AgentAdapterInfo): AgentSessionMode {
+  if (agent.id === 'memory') return 'memory'
+  if (agent.id === 'ollama') return 'chat'
+  if (agent.id === 'codex') return 'exec'
+  return 'terminal'
+}
+
 export default function SettingsCenter({
   theme,
   displayName,
@@ -96,9 +123,10 @@ export default function SettingsCenter({
   const [digestDirDraft, setDigestDirDraft] = useState('')
   const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
-  const [agentAdapters, setAgentAdapters] = useState<AgentAdapterMetadata[]>([])
+  const [agentAdapters, setAgentAdapters] = useState<AgentAdapterInfo[]>([])
   const [agentDetections, setAgentDetections] = useState<Partial<Record<AgentId, AgentDetectionResult>>>({})
-  const [agentBusy, setAgentBusy] = useState<AgentId | 'all' | null>(null)
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>([])
+  const [agentBusy, setAgentBusy] = useState<string | null>(null)
 
   const loadSettings = useCallback(() => {
     void window.api.bridge.getSettings().then(setBridgeSettings).catch(() => setBridgeSettings({ autoEnter: false }))
@@ -125,6 +153,7 @@ export default function SettingsCenter({
     })
     void window.api.ollama.getShareInfo().then(setOllamaShare).catch(() => setOllamaShare(null))
     void window.api.agent.list().then(setAgentAdapters).catch(() => setAgentAdapters([]))
+    void window.api.agent.listSessions().then(setAgentSessions).catch(() => setAgentSessions([]))
   }, [])
 
   useEffect(() => {
@@ -291,6 +320,22 @@ export default function SettingsCenter({
       const next: Partial<Record<AgentId, AgentDetectionResult>> = {}
       for (const result of results) next[result.id] = result
       setAgentDetections((current) => ({ ...current, ...next }))
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const createPlaceholderSession = async (agent: AgentAdapterInfo): Promise<void> => {
+    setAgentBusy(`session:${agent.id}`)
+    try {
+      await window.api.agent.createPlaceholderSession({
+        agentId: agent.id,
+        mode: placeholderModeForAgent(agent),
+        origin: 'agent_hub',
+        title: `${agent.displayName} placeholder`,
+        metadata: { integrationStage: agent.integrationStage }
+      })
+      setAgentSessions(await window.api.agent.listSessions())
     } finally {
       setAgentBusy(null)
     }
@@ -521,6 +566,10 @@ export default function SettingsCenter({
                           <strong>{agent.displayName}</strong>
                           <span className={`settings-chip ${agentStatusClass(status)}`}>{status}</span>
                         </div>
+                        <div className="agent-hub-stage">
+                          <span>{integrationStageLabel(agent.integrationStage)}</span>
+                          <em>{runtimeSummary(agent)}</em>
+                        </div>
                         <p>{agent.description}</p>
                         <div className="agent-capability-list">
                           {agent.capabilities.map((capability) => (
@@ -533,20 +582,43 @@ export default function SettingsCenter({
                         )}
                         {detection?.message && <div className="agent-note is-detection">{detection.message}</div>}
                       </div>
-                      <button
-                        type="button"
-                        className="agent-detect-btn"
-                        disabled={agentBusy !== null}
-                        onClick={() => void detectAgent(agent.id)}
-                      >
-                        {agentBusy === agent.id ? 'Checking...' : 'Detect'}
-                      </button>
+                      <div className="agent-hub-actions">
+                        <button
+                          type="button"
+                          className="agent-detect-btn"
+                          disabled={agentBusy !== null}
+                          onClick={() => void detectAgent(agent.id)}
+                        >
+                          {agentBusy === agent.id ? 'Checking...' : 'Detect'}
+                        </button>
+                        <button
+                          type="button"
+                          className="agent-detect-btn"
+                          disabled={agentBusy !== null}
+                          onClick={() => void createPlaceholderSession(agent)}
+                        >
+                          {agentBusy === `session:${agent.id}` ? 'Creating...' : 'Placeholder'}
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
               </div>
+              <div className="settings-divider" />
+              <div className="agent-session-panel">
+                <div>
+                  <strong>Placeholder sessions</strong>
+                  <span>{agentSessions.length ? `${agentSessions.length} in memory` : 'None yet'}</span>
+                </div>
+                {agentSessions.slice(0, 5).map((session) => (
+                  <div className="agent-session-row" key={session.id}>
+                    <span>{session.title ?? session.agentId}</span>
+                    <em>{session.mode} · {session.status}</em>
+                  </div>
+                ))}
+              </div>
               <div className="settings-note">
-                Agent Hub detection does not send prompts, start PTYs, edit files, mutate provider config, or replace existing providers.
+                Phase 29 does not route live chat through AgentSession. Agent Hub detection and placeholder sessions do not send prompts, start PTYs, edit files, mutate provider config, or replace existing providers.
               </div>
             </section>
           )}

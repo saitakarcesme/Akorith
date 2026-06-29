@@ -1,4 +1,5 @@
 import { loadConfig } from '../../config'
+import { existingProviderRuntimeCapability } from '../runtime'
 import type { AgentAdapter, AgentAdapterMetadata, AgentDetectionResult } from '../types'
 
 const DEFAULT_BASE_URL = 'http://localhost:11434'
@@ -81,5 +82,9 @@ const metadata: AgentAdapterMetadata = {
 
 export const ollamaAgentAdapter: AgentAdapter = {
   metadata,
-  detect: detectOllama
+  detect: detectOllama,
+  getRuntimeCapabilities: () =>
+    existingProviderRuntimeCapability({
+      canStream: true
+    })
 }
