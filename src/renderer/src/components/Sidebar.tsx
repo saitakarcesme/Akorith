@@ -7,7 +7,6 @@ import {
   FlaskIcon,
   FolderIcon,
   LoopIcon,
-  MessageIcon,
   PanelsIcon,
   PlusIcon,
   SettingsIcon,
@@ -72,6 +71,23 @@ function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
 
 function formatDate(ts: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts))
+}
+
+// Phase 34.3: compact relative age for chat rows (Codex-like "3d", "1w").
+function relativeShort(ts: number): string {
+  const seconds = Math.max(0, (Date.now() - ts) / 1000)
+  if (seconds < 60) return 'now'
+  const minutes = seconds / 60
+  if (minutes < 60) return `${Math.round(minutes)}m`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.round(hours)}h`
+  const days = hours / 24
+  if (days < 7) return `${Math.round(days)}d`
+  const weeks = days / 7
+  if (weeks < 5) return `${Math.round(weeks)}w`
+  const months = days / 30
+  if (months < 12) return `${Math.round(months)}mo`
+  return `${Math.round(days / 365)}y`
 }
 
 export default function Sidebar({
@@ -675,8 +691,8 @@ export default function Sidebar({
                                       }
                                     }}
                                   >
-                                    <MessageIcon size={12} />
                                     <span className="project-chat-title">{chat.title}</span>
+                                    <span className="project-chat-time">{relativeShort(chat.updatedAt)}</span>
                                     <span className="sidebar-item-actions">
                                       <button
                                         type="button"

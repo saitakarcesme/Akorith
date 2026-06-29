@@ -7211,9 +7211,9 @@ textarea:focus-visible {
 .project-chat {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
-  padding: 4px 7px;
+  padding: 3px 7px;
   color: var(--text-dim);
   background: transparent;
   border: 0;
@@ -7224,6 +7224,20 @@ textarea:focus-visible {
 .project-chat > svg {
   flex: 0 0 auto;
   color: var(--text-faint);
+}
+
+/* Phase 34.3: compact relative age on the right of each chat row; it hides
+   when the hover actions take over so the row never gets crowded. */
+.project-chat-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.project-chat:hover .project-chat-time,
+.project-chat.is-active .project-chat-time {
+  display: none;
 }
 
 .project-chat:hover {
