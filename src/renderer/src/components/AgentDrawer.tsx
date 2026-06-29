@@ -2,11 +2,25 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { ProjectRow } from '../../../preload/index.d'
 import TerminalPane, { type AgentStatusInfo } from './TerminalPane'
 
+/** Phase 33.16: where the agent terminals are docked. Switching modes never
+ *  remounts the TerminalPanes (same component tree, only the container class
+ *  changes), so the PTYs and their buffers keep running. */
+export type AgentDockMode = 'drawer' | 'dock' | 'full'
+
 interface AgentDrawerProps {
   activeProject: ProjectRow | null
   open: boolean
   onClose: () => void
   onAgentStatus: (id: 't1' | 't2', info: AgentStatusInfo) => void
+}
+
+function storageMode(key: string, fallback: AgentDockMode): AgentDockMode {
+  try {
+    const v = localStorage.getItem(key)
+    return v === 'drawer' || v === 'dock' || v === 'full' ? v : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function storageNumber(key: string, fallback: number): number {
@@ -57,6 +71,11 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const [width, setWidth] = useState(() => clamp(storageNumber('akorith.drawerWidth', 620), WIDTH_MIN, WIDTH_MAX))
   const [olympusCollapsed, setOlympusCollapsed] = useState(() => storageBoolean('akorith.olympusCollapsed', false))
   const [atlantisCollapsed, setAtlantisCollapsed] = useState(() => storageBoolean('akorith.atlantisCollapsed', false))
+  const [mode, setMode] = useState<AgentDockMode>(() => storageMode('akorith.agentDockMode', 'drawer'))
+
+  useEffect(() => {
+    localStorage.setItem('akorith.agentDockMode', mode)
+  }, [mode])
 
   useEffect(() => {
     localStorage.setItem('akorith.terminalSplit', String(split))
@@ -118,14 +137,39 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const olympusId = `t2::${projectKey}`
   const atlantisId = `t1::${projectKey}`
 
+  const modeButtons: { id: AgentDockMode; label: string; title: string }[] = [
+    { id: 'drawer', label: 'Drawer', title: 'Dock as a right-side drawer' },
+    { id: 'dock', label: 'Bottom', title: 'Dock to the bottom workbench' },
+    { id: 'full', label: 'Focus', title: 'Expand to a focus view' }
+  ]
+
   return (
     <>
-      <div className={`agent-drawer-scrim ${open ? 'is-open' : ''}`} onClick={onClose} />
-      <aside className={`agent-drawer ${open ? 'is-open' : ''}`} style={{ width }} aria-hidden={!open}>
-        <div className="agent-drawer-resizer" onPointerDown={startWidthResize} title="Drag to resize" />
+      <div className={`agent-drawer-scrim ${open ? 'is-open' : ''} mode-${mode}`} onClick={onClose} />
+      <aside
+        className={`agent-drawer ${open ? 'is-open' : ''} mode-${mode}`}
+        style={mode === 'drawer' ? { width } : undefined}
+        aria-hidden={!open}
+      >
+        {mode === 'drawer' && (
+          <div className="agent-drawer-resizer" onPointerDown={startWidthResize} title="Drag to resize" />
+        )}
         <header className="agent-drawer-header">
           <div className="agent-drawer-title">Agent activity</div>
           <div className="agent-drawer-cwd" title={activeProject.path}>{activeProject.path}</div>
+          <div className="agent-dock-seg" role="group" aria-label="Terminal dock mode">
+            {modeButtons.map((button) => (
+              <button
+                key={button.id}
+                type="button"
+                className={mode === button.id ? 'is-active' : ''}
+                title={button.title}
+                onClick={() => setMode(button.id)}
+              >
+                {button.label}
+              </button>
+            ))}
+          </div>
           <button type="button" className="agent-drawer-close" onClick={onClose} title="Hide agents">
             ✕
           </button>

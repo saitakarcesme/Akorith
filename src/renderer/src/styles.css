@@ -6101,6 +6101,76 @@ textarea:focus-visible {
   transform: translateX(0);
 }
 
+/* ---- Phase 33.16: dock modes (PTYs are never remounted on mode change) ---- */
+/* Bottom workbench dock: full-width panel anchored to the bottom edge. */
+.agent-drawer.mode-dock {
+  top: auto;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  width: auto !important;
+  height: min(46vh, 560px);
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5);
+  transform: translateY(100%);
+}
+.agent-drawer.mode-dock.is-open {
+  transform: translateY(0);
+}
+
+/* Focus view: large inset panel that fades/scales in. */
+.agent-drawer.mode-full {
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  width: auto !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  transform: scale(0.99);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms var(--ease), opacity 180ms var(--ease);
+}
+.agent-drawer.mode-full.is-open {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The right-edge scrim is fine for drawer/full; for the bottom dock we don't
+   dim the workspace (the dock is a persistent surface, not a modal). */
+.agent-drawer-scrim.mode-dock {
+  display: none;
+}
+
+.agent-dock-seg {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+}
+.agent-dock-seg button {
+  padding: 3px 9px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.agent-dock-seg button:hover {
+  color: var(--text);
+}
+.agent-dock-seg button.is-active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .agent-drawer-header {
   flex: 0 0 auto;
   display: flex;
