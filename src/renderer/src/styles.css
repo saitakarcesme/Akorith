@@ -1373,16 +1373,50 @@ textarea:focus-visible {
   border-top: 1px solid var(--border-soft);
 }
 
+/* Phase 38.8: balanced profile footer — [avatar] [name/role, grows] [settings]. */
 .profile-button {
+  display: flex;
   width: 100%;
-  gap: 9px;
+  align-items: center;
+  gap: 10px;
   justify-content: flex-start;
-  padding: 8px;
+  padding: 8px 10px;
   color: var(--text-dim);
   background: var(--hover);
   border: 0;
   border-radius: 8px;
   cursor: pointer;
+}
+
+.profile-button:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* Avatar mark in a small square so the row reads evenly. */
+.profile-button > svg:first-child {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border-radius: 7px;
+}
+
+.profile-button > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.profile-button > svg:last-child {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.profile-button:hover > svg:last-child {
+  color: var(--text-dim);
 }
 
 .profile-button:hover {
