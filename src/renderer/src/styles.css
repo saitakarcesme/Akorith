@@ -6766,6 +6766,16 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
+.plugin-chroma {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.plugin-chroma > span {
+  color: var(--text-faint);
+}
+
 .plugins-note {
   font-size: 11px;
   line-height: 1.5;

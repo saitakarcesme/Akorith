@@ -55,6 +55,7 @@ export default function Plugins(): JSX.Element {
   const [filter, setFilter] = useState<'all' | PluginKind>('all')
   const [checking, setChecking] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [chromaEndpoint, setChromaEndpoint] = useState('')
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -78,7 +79,20 @@ export default function Plugins(): JSX.Element {
   // Load the registry, then run availability diagnostics once on open.
   useEffect(() => {
     void load().then(() => runChecks())
+    void window.api.plugins
+      .getSettings()
+      .then((settings) => setChromaEndpoint(settings.chromaEndpoint ?? ''))
+      .catch(() => setChromaEndpoint(''))
   }, [load, runChecks])
+
+  const saveChromaEndpoint = async (): Promise<void> => {
+    try {
+      const settings = await window.api.plugins.setChromaEndpoint(chromaEndpoint.trim())
+      setChromaEndpoint(settings.chromaEndpoint ?? '')
+    } catch {
+      /* ignore */
+    }
+  }
 
   const toggle = async (plugin: PluginInfo): Promise<void> => {
     try {
@@ -199,6 +213,25 @@ export default function Plugins(): JSX.Element {
                         <div key={index}>• {note}</div>
                       ))}
                     </div>
+                    {plugin.id === 'chroma-memory' && (
+                      <div className="plugin-chroma">
+                        <span>Chroma HTTP endpoint (optional, no ingestion yet)</span>
+                        <div className="settings-path-row">
+                          <input
+                            value={chromaEndpoint}
+                            placeholder="http://127.0.0.1:8000"
+                            spellCheck={false}
+                            onChange={(event) => setChromaEndpoint(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') void saveChromaEndpoint()
+                            }}
+                          />
+                          <button type="button" onClick={() => void saveChromaEndpoint()}>
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
