@@ -6,6 +6,7 @@ import { listProjects, listSessions } from '../db'
 import { missionStore } from '../missions/store'
 import { getGpuStatus } from '../gpu-status'
 import { createControllerServer, ENDPOINTS, type ControllerServer } from './server'
+import { controllerEvents } from './events'
 import type { ControllerData } from './routes'
 
 // Phase 35: electron-side controller bootstrap. This file owns the electron/config/db
@@ -82,6 +83,25 @@ const controllerData: ControllerData = {
 }
 
 let server: ControllerServer | null = null
+let heartbeat: ReturnType<typeof setInterval> | null = null
+
+// Gentle SSE keep-alive: only ticks while at least one client is listening, so
+// there is no background work when nobody is connected.
+function ensureHeartbeat(): void {
+  if (heartbeat) return
+  heartbeat = setInterval(() => {
+    if (controllerEvents.count() > 0) {
+      controllerEvents.emit({ type: 'heartbeat', at: Date.now() })
+    }
+  }, 25_000)
+}
+
+function stopHeartbeat(): void {
+  if (heartbeat) {
+    clearInterval(heartbeat)
+    heartbeat = null
+  }
+}
 
 function getServer(): ControllerServer {
   if (!server) {
@@ -102,8 +122,10 @@ async function applyConfig(patch: Partial<ControllerSettings>): Promise<void> {
   if (next.enabled) {
     if (srv.isRunning()) await srv.restart()
     else await srv.start()
+    ensureHeartbeat()
   } else if (srv.isRunning()) {
     await srv.stop()
+    stopHeartbeat()
   }
 }
 
@@ -132,12 +154,14 @@ export function registerControllerIpc(): void {
   ipcMain.handle('controller:start', async () => {
     setControllerSettings({ enabled: true })
     const res = await srv.start()
+    ensureHeartbeat()
     return res.status
   })
 
   ipcMain.handle('controller:stop', async () => {
     setControllerSettings({ enabled: false })
     const res = await srv.stop()
+    stopHeartbeat()
     return res.status
   })
 
@@ -154,11 +178,13 @@ export async function startControllerIfEnabled(): Promise<void> {
   if (!getControllerSettings().enabled) return
   try {
     await getServer().start()
+    ensureHeartbeat()
   } catch {
     /* never block app startup on the optional controller */
   }
 }
 
 export async function stopController(): Promise<void> {
+  stopHeartbeat()
   if (server?.isRunning()) await server.stop()
 }

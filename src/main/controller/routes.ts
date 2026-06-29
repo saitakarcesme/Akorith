@@ -1,3 +1,4 @@
+import { controllerEvents } from './events'
 import type { ControllerEndpoint, ControllerStatus } from './types'
 
 // Phase 35: read-only route handlers for the controller API. Every handler returns
@@ -128,6 +129,12 @@ const routes: Route[] = [
     summary: 'Re-run read-only snapshots and emit an SSE runtime_snapshot (no execution).',
     handler: async (ctx) => {
       const runtime = await ctx.data.runtime()
+      // Emit a safe runtime_snapshot to any SSE listeners (counts/shape only).
+      controllerEvents.emit({
+        type: 'runtime_snapshot',
+        at: Date.now(),
+        data: { observed: Array.isArray((runtime as { observedSessions?: unknown[] })?.observedSessions) }
+      })
       return { body: { ok: true, refreshedAt: Date.now(), runtime } }
     }
   }
