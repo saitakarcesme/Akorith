@@ -584,6 +584,27 @@ textarea:focus-visible {
   color: var(--text-faint);
 }
 
+/* Phase 36.2: "Projects" plain heading (not a collapsible folder). */
+.projects-heading {
+  padding: 2px 6px 6px;
+}
+
+.projects-heading-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.projects-heading-label .sidebar-count {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .sidebar-fold {
   display: flex;
   align-items: center;

@@ -114,9 +114,6 @@ export default function Sidebar({
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
-  // The Projects group is a collapsible folder like the provider folders below.
-  // Defaults to expanded since the workspace is the primary entry point.
-  const [projectsCollapsed, setProjectsCollapsed] = useState(() => storageBoolean('akorith.projectsCollapsed', false))
   // Phase 33.5: which projects are expanded to reveal their chats. Persisted so
   // the tree shape survives reloads. A project absent from the map is collapsed.
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>(() => {
@@ -191,10 +188,6 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
-
-  useEffect(() => {
-    localStorage.setItem('akorith.projectsCollapsed', String(projectsCollapsed))
-  }, [projectsCollapsed])
 
   useEffect(() => {
     localStorage.setItem('akorith.expandedProjects', JSON.stringify(expandedProjects))
@@ -490,18 +483,13 @@ export default function Sidebar({
       <div className="sidebar-scroll">
         <div className="sidebar-fixed-groups">
           <section className="sidebar-section project-section">
-            <div className="sidebar-section-header provider-header">
-              <button
-                type="button"
-                className="sidebar-fold"
-                onClick={() => setProjectsCollapsed((value) => !value)}
-                title={projectsCollapsed ? 'Expand' : 'Collapse'}
-              >
-                <ChevronIcon size={13} direction={projectsCollapsed ? 'right' : 'down'} />
-                <FolderIcon size={15} />
+            {/* Phase 36.2: "Projects" is a plain heading, not a collapsible folder.
+                The list below is always visible inside the scroll area. */}
+            <div className="sidebar-section-header projects-heading">
+              <div className="projects-heading-label">
                 Projects
                 {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
-              </button>
+              </div>
               <div className="sidebar-add-wrap">
                 <button
                   type="button"
@@ -531,8 +519,7 @@ export default function Sidebar({
                 )}
               </div>
             </div>
-            {!projectsCollapsed && (
-              <>
+            <>
                 {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
                 {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
                 <div className="project-list">
@@ -755,7 +742,6 @@ export default function Sidebar({
                 </div>
                 {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus and Atlantis start in this folder.</div>}
               </>
-            )}
           </section>
 
           {/* Phase 33.4: provider folders (Claude / Codex / Local) are removed from
