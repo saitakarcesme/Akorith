@@ -1066,8 +1066,18 @@ textarea:focus-visible {
   border-radius: 4px;
 }
 
-.recent-section .recent-chat:hover,
+/* Phase 36.3: hover-only background; active chat is brighter/heavier text. */
+.recent-section .recent-chat:hover {
+  background: var(--hover) !important;
+}
+
 .recent-section .recent-chat.is-active {
+  background: transparent !important;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.recent-section .recent-chat.is-active:hover {
   background: var(--hover) !important;
 }
 
@@ -7722,11 +7732,16 @@ textarea:focus-visible {
   background: var(--hover);
 }
 
-/* Active project: subtle gray fill with a thin left accent (Codex-like). */
+/* Phase 36.3: no selected pill — active is just brighter/heavier text. Hover is
+   the only background change. No fill, no left accent bar, no border. */
 .project-row.is-active {
   color: var(--text);
-  background: var(--hover-strong);
-  box-shadow: inset 2px 0 0 var(--accent-strong);
+  font-weight: 600;
+  background: transparent;
+}
+
+.project-row.is-active:hover {
+  background: var(--hover);
 }
 
 .project-row-ico {
@@ -7883,9 +7898,15 @@ textarea:focus-visible {
   background: var(--hover);
 }
 
+/* Phase 36.3: active chat = brighter/heavier text only, no selected rectangle. */
 .project-chat.is-active {
   color: var(--text);
-  background: var(--hover-strong);
+  font-weight: 600;
+  background: transparent;
+}
+
+.project-chat.is-active:hover {
+  background: var(--hover);
 }
 
 .project-chat-title {
@@ -8043,8 +8064,18 @@ body {
   box-shadow: none !important;
 }
 
-.recent-section .recent-chat:hover,
+/* Phase 36.3: hover-only background; active chat is brighter/heavier text. */
+.recent-section .recent-chat:hover {
+  background: var(--hover) !important;
+}
+
 .recent-section .recent-chat.is-active {
+  background: transparent !important;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.recent-section .recent-chat.is-active:hover {
   background: var(--hover) !important;
 }
 
