@@ -375,6 +375,11 @@ export default function ChatPanel({
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
+    // Phase 37.6: navigating away and back re-selects the current session. If a
+    // request is still streaming into THIS session, don't reload from the DB —
+    // that would wipe the in-flight assistant message and its thinking indicator.
+    // The run keeps going; we just keep showing it.
+    if (busyRequestId && historySel.sessionId && historySel.sessionId === activeSessionId) return
     // A fresh session/thread always opens scrolled to the bottom.
     nearBottomRef.current = true
     setConfirmingClear(false)
@@ -1298,8 +1303,19 @@ export default function ChatPanel({
                         ) : renderProse(seg.content, `${m.id}-text-${i}`)
                       )}
                     </div>
+                  ) : m.status === 'streaming' && !m.text ? (
+                    // Phase 37.7: a calm monochrome "Thinking" indicator until the
+                    // first tokens arrive (persists while the request is pending).
+                    <div className="chat-thinking" role="status" aria-live="polite">
+                      <span className="chat-thinking-dots">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span className="chat-thinking-label">Thinking…</span>
+                    </div>
                   ) : (
-                    <div className="chat-msg-text">{m.text || (m.status === 'streaming' ? '…' : '')}</div>
+                    <div className="chat-msg-text">{m.text}</div>
                   )}
                   {m.role === 'assistant' && Boolean(m.text.trim()) && !m.summary && (
                     <div className="chat-msg-meta">
