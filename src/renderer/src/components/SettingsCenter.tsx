@@ -10,8 +10,12 @@ import type {
   AgentStatus,
   BridgeSettings,
   DigestSettings,
+  ControllerConfigView,
+  ControllerDocs,
+  ControllerStatus,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
+  OllamaRemoteProfile,
   OllamaShareInfo,
   ProviderInfo,
   TestSettings
@@ -20,7 +24,7 @@ import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
 
-type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -187,6 +191,14 @@ export default function SettingsCenter({
   onClose
 }: SettingsCenterProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
+  // Phase 35: controller API state.
+  const [ctrlConfig, setCtrlConfig] = useState<ControllerConfigView | null>(null)
+  const [ctrlStatus, setCtrlStatus] = useState<ControllerStatus | null>(null)
+  const [ctrlDocs, setCtrlDocs] = useState<ControllerDocs | null>(null)
+  const [ctrlBusy, setCtrlBusy] = useState(false)
+  const [ctrlToken, setCtrlToken] = useState<string | null>(null)
+  const [ctrlPortDraft, setCtrlPortDraft] = useState('')
+  const [ctrlNotice, setCtrlNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
   const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
@@ -195,6 +207,9 @@ export default function SettingsCenter({
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
   const [ollamaBusy, setOllamaBusy] = useState<'test' | 'save' | null>(null)
   const [ollamaStatus, setOllamaStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 33.14: auto-connect (configured → last → remote profiles by priority).
+  const [autoConnectBusy, setAutoConnectBusy] = useState(false)
+  const [autoConnectInfo, setAutoConnectInfo] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [digestDirDraft, setDigestDirDraft] = useState('')
   const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
@@ -321,6 +336,155 @@ export default function SettingsCenter({
     }
   }
 
+  // ---- Phase 33.13/33.14: remote Ollama profiles + auto-connect ----
+  const remoteProfiles = ollamaSettings?.remoteProfiles ?? []
+
+  const setRemoteProfiles = (profiles: OllamaRemoteProfile[]): void => updateOllamaSetting('remoteProfiles', profiles)
+
+  const addRemoteProfile = (): void => {
+    setRemoteProfiles([
+      ...remoteProfiles,
+      {
+        id: `rp-${Date.now()}-${remoteProfiles.length}`,
+        name: 'PC Ollama',
+        baseUrl: 'http://100.0.0.0:11434',
+        priority: remoteProfiles.length,
+        enabled: true,
+        networkHint: 'Tailscale / VPN'
+      }
+    ])
+  }
+
+  const updateRemoteProfile = (id: string, patch: Partial<OllamaRemoteProfile>): void =>
+    setRemoteProfiles(remoteProfiles.map((profile) => (profile.id === id ? { ...profile, ...patch } : profile)))
+
+  const removeRemoteProfile = (id: string): void => setRemoteProfiles(remoteProfiles.filter((profile) => profile.id !== id))
+
+  const saveRemoteProfiles = async (): Promise<void> => {
+    setOllamaBusy('save')
+    setOllamaStatus(null)
+    try {
+      const response = await window.api.ollama.setSettings({ remoteProfiles })
+      setOllamaSettings(response.settings)
+      setOllamaStatus(
+        response.ok
+          ? { kind: 'ok', text: 'Saved remote endpoints' }
+          : { kind: 'error', text: response.error }
+      )
+    } catch (err) {
+      setOllamaStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setOllamaBusy(null)
+    }
+  }
+
+  const runAutoConnect = async (): Promise<void> => {
+    setAutoConnectBusy(true)
+    setAutoConnectInfo(null)
+    try {
+      const result = await window.api.ollama.autoConnect()
+      if (result.ok) {
+        setAutoConnectInfo({
+          kind: 'ok',
+          text: `Connected via ${result.active.label} — ${shortEndpointLabel(result.active.baseUrl)} · ${result.modelCount} model${result.modelCount === 1 ? '' : 's'}${result.switched ? ' · active endpoint switched' : ''}`
+        })
+        try {
+          localStorage.setItem('akorith.ollamaActive', JSON.stringify({ label: result.active.label, baseUrl: result.active.baseUrl }))
+        } catch {
+          /* ignore */
+        }
+        const refreshed = await window.api.ollama.getSettings()
+        setOllamaSettings(refreshed)
+        setOllamaEndpoint(refreshed.baseUrl)
+        onRefreshProviders()
+      } else {
+        setAutoConnectInfo({
+          kind: 'error',
+          text: `${result.error}${result.lastSuccessfulBaseUrl ? ` (last working: ${shortEndpointLabel(result.lastSuccessfulBaseUrl)})` : ''}`
+        })
+        const refreshed = await window.api.ollama.getSettings()
+        setOllamaSettings(refreshed)
+      }
+    } catch (err) {
+      setAutoConnectInfo({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setAutoConnectBusy(false)
+    }
+  }
+
+  // ---- Phase 35: controller API ----
+  const refreshController = useCallback(async (): Promise<void> => {
+    try {
+      const [config, status] = await Promise.all([window.api.controller.getConfig(), window.api.controller.getStatus()])
+      setCtrlConfig(config)
+      setCtrlStatus(status)
+      setCtrlPortDraft(String(config.port))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'api') return
+    void refreshController()
+    if (!ctrlDocs) void window.api.controller.getDocs().then(setCtrlDocs).catch(() => setCtrlDocs(null))
+  }, [activeTab, refreshController, ctrlDocs])
+
+  const controllerAction = async (action: () => Promise<ControllerStatus>, okText?: string): Promise<void> => {
+    setCtrlBusy(true)
+    setCtrlNotice(null)
+    try {
+      const status = await action()
+      setCtrlStatus(status)
+      await refreshController()
+      if (status.lastError) setCtrlNotice({ kind: 'error', text: status.lastError })
+      else if (okText) setCtrlNotice({ kind: 'ok', text: okText })
+    } catch (err) {
+      setCtrlNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setCtrlBusy(false)
+    }
+  }
+
+  const toggleController = (enabled: boolean): Promise<void> =>
+    controllerAction(
+      () => window.api.controller.updateConfig({ enabled }),
+      enabled ? 'Controller starting…' : 'Controller stopped'
+    )
+
+  const saveControllerPort = (): Promise<void> => {
+    const port = Number(ctrlPortDraft)
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      setCtrlNotice({ kind: 'error', text: 'Enter a port between 1024 and 65535.' })
+      return Promise.resolve()
+    }
+    return controllerAction(() => window.api.controller.updateConfig({ port }), 'Port saved')
+  }
+
+  const toggleControllerLan = (allowLan: boolean): Promise<void> =>
+    controllerAction(() => window.api.controller.updateConfig({ allowLan }), allowLan ? 'LAN access allowed' : 'Loopback only')
+
+  const regenerateControllerToken = (): Promise<void> =>
+    controllerAction(() => window.api.controller.regenerateToken(), 'New token generated')
+
+  const revealControllerToken = async (): Promise<void> => {
+    try {
+      const token = await window.api.controller.revealToken()
+      setCtrlToken(token)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const copyText = async (text: string, label: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCtrlNotice({ kind: 'ok', text: `Copied ${label}` })
+    } catch {
+      setCtrlNotice({ kind: 'info', text: `Copy failed — select manually.` })
+    }
+  }
+
   const toggleAutoEnter = async (): Promise<void> => {
     const next = !(bridgeSettings?.autoEnter ?? false)
     setSaving('bridge')
@@ -439,6 +603,7 @@ export default function SettingsCenter({
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
     { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
+    { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
@@ -459,18 +624,18 @@ export default function SettingsCenter({
 
   return (
     <div
-      className="settings-popover settings-center"
-      role="dialog"
-      aria-modal="true"
+      className="settings-popover settings-center settings-page"
+      role="region"
       aria-label="Settings"
       onClick={(event) => event.stopPropagation()}
     >
+      <div className="settings-page-inner">
       <div className="settings-header">
         <div>
           <div className="settings-title">Settings</div>
           <div className="settings-subtitle">Akorith workspace controls</div>
         </div>
-        <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Close">
+        <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Back to workspace">
           <CloseIcon size={16} />
         </button>
       </div>
@@ -648,6 +813,109 @@ export default function SettingsCenter({
                   </label>
                 </div>
               )}
+
+              {/* Phase 33.13/33.14: remote endpoints + auto-connect */}
+              <div className="settings-divider" />
+              <div className="settings-field is-stacked">
+                <div className="ollama-remote-head">
+                  <span>Remote Ollama endpoints</span>
+                  <div className="settings-action-row">
+                    <button type="button" disabled={autoConnectBusy} onClick={() => void runAutoConnect()}>
+                      {autoConnectBusy ? 'Connecting…' : 'Auto-connect'}
+                    </button>
+                    <button type="button" onClick={addRemoteProfile}>
+                      Add endpoint
+                    </button>
+                  </div>
+                </div>
+                <p className="settings-hint">
+                  Akorith tries your local Ollama first, then the last endpoint that answered, then these
+                  remote endpoints by priority (lowest first), and uses the first that responds.
+                </p>
+                {autoConnectInfo && <div className={`ollama-status is-${autoConnectInfo.kind}`}>{autoConnectInfo.text}</div>}
+
+                {remoteProfiles.length === 0 ? (
+                  <div className="ollama-remote-empty">
+                    No remote endpoints yet. Add your PC&apos;s Tailscale/VPN address (e.g. http://100.x.x.x:11434)
+                    so its models are reachable when you&apos;re on another network.
+                  </div>
+                ) : (
+                  <div className="ollama-remote-list">
+                    {remoteProfiles.map((profile) => (
+                      <div className={`ollama-remote-card ${profile.lastStatus ? `is-${profile.lastStatus}` : ''}`} key={profile.id}>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-name"
+                            value={profile.name}
+                            placeholder="Name"
+                            onChange={(event) => updateRemoteProfile(profile.id, { name: event.target.value })}
+                          />
+                          <label className="ollama-remote-enabled" title="Include in auto-connect">
+                            <input
+                              type="checkbox"
+                              checked={profile.enabled}
+                              onChange={(event) => updateRemoteProfile(profile.id, { enabled: event.target.checked })}
+                            />
+                            <span>Enabled</span>
+                          </label>
+                          <button type="button" className="ollama-remote-remove" onClick={() => removeRemoteProfile(profile.id)}>
+                            Remove
+                          </button>
+                        </div>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-url"
+                            value={profile.baseUrl}
+                            spellCheck={false}
+                            placeholder="http://100.x.x.x:11434"
+                            onChange={(event) => updateRemoteProfile(profile.id, { baseUrl: event.target.value })}
+                          />
+                          <input
+                            className="ollama-remote-priority"
+                            type="number"
+                            min={0}
+                            value={profile.priority}
+                            title="Priority (lower runs first)"
+                            onChange={(event) => updateRemoteProfile(profile.id, { priority: Number(event.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="ollama-remote-row">
+                          <input
+                            className="ollama-remote-hint"
+                            value={profile.networkHint ?? ''}
+                            placeholder="Network hint (Tailscale, home LAN, …)"
+                            onChange={(event) => updateRemoteProfile(profile.id, { networkHint: event.target.value })}
+                          />
+                          <span className="ollama-remote-meta">
+                            {profile.lastStatus === 'ok'
+                              ? `✓ reachable${profile.lastModelCount !== undefined ? ` · ${profile.lastModelCount} models` : ''}`
+                              : profile.lastStatus === 'error'
+                                ? '✕ unreachable'
+                                : 'not checked'}
+                          </span>
+                        </div>
+                        {profile.lastStatus === 'error' && profile.lastError && (
+                          <div className="ollama-remote-error">{profile.lastError}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {remoteProfiles.length > 0 && (
+                  <div className="settings-action-row">
+                    <button type="button" className="is-primary" disabled={ollamaBusy !== null} onClick={() => void saveRemoteProfiles()}>
+                      {ollamaBusy === 'save' ? 'Saving…' : 'Save remote endpoints'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="settings-note ollama-remote-note">
+                  For a different network, use a private route — Tailscale, a VPN, or an SSH tunnel — and point the
+                  endpoint at that address. Do not expose Ollama directly to the public internet without
+                  authentication and a firewall. Akorith stores only endpoint config here, never secrets.
+                </div>
+              </div>
             </section>
           )}
 
@@ -852,6 +1120,153 @@ export default function SettingsCenter({
             </section>
           )}
 
+          {activeTab === 'api' && (
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <h2>Controller API</h2>
+                  <p>
+                    Optional local HTTP API for scripts, CLIs, and plugins. Disabled by default, loopback-only,
+                    token-protected, and read-only in this phase.
+                  </p>
+                </div>
+                {ctrlStatus && (
+                  <span className={`ctrl-pill ${ctrlStatus.running ? 'is-running' : 'is-stopped'}`}>
+                    {ctrlStatus.running ? 'Running' : 'Stopped'}
+                  </span>
+                )}
+              </div>
+
+              {ctrlConfig && ctrlStatus ? (
+                <>
+                  <div className="settings-toggle-row">
+                    <label className="ctrl-switch">
+                      <input
+                        type="checkbox"
+                        checked={ctrlConfig.enabled}
+                        disabled={ctrlBusy}
+                        onChange={(event) => void toggleController(event.target.checked)}
+                      />
+                      <span>Enable controller API</span>
+                    </label>
+                    <span className="ctrl-readonly">Read-only · {ctrlStatus.sseEnabled ? 'SSE on' : 'SSE off'}</span>
+                  </div>
+
+                  <div className="ctrl-grid">
+                    <div className="ctrl-field">
+                      <span>Host</span>
+                      <code>{ctrlConfig.host}</code>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Port</span>
+                      <div className="settings-path-row">
+                        <input
+                          value={ctrlPortDraft}
+                          inputMode="numeric"
+                          onChange={(event) => setCtrlPortDraft(event.target.value.replace(/[^0-9]/g, ''))}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') void saveControllerPort()
+                          }}
+                        />
+                        <button type="button" disabled={ctrlBusy} onClick={() => void saveControllerPort()}>
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Base URL</span>
+                      <div className="settings-path-row">
+                        <code>{ctrlStatus.baseUrl}</code>
+                        <button type="button" onClick={() => void copyText(ctrlStatus.baseUrl, 'base URL')}>
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Token</span>
+                      <div className="settings-path-row">
+                        <code>{ctrlToken ?? (ctrlConfig.hasToken ? ctrlConfig.tokenMasked : 'none yet')}</code>
+                        <button type="button" onClick={() => void revealControllerToken()}>
+                          {ctrlToken ? 'Shown' : 'Reveal'}
+                        </button>
+                        {ctrlToken && (
+                          <button type="button" onClick={() => void copyText(ctrlToken, 'token')}>
+                            Copy
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-checks">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={ctrlConfig.allowLan}
+                        disabled={ctrlBusy}
+                        onChange={(event) => void toggleControllerLan(event.target.checked)}
+                      />
+                      <span>Allow LAN access (binds a non-loopback host — trusted private networks only)</span>
+                    </label>
+                  </div>
+                  {ctrlConfig.allowLan && (
+                    <div className="ollama-status is-error">
+                      Warning: LAN access is enabled. Only use this on a trusted private network (e.g. Tailscale/VPN).
+                      Never expose the controller to the public internet.
+                    </div>
+                  )}
+
+                  <div className="settings-action-row">
+                    <button type="button" disabled={ctrlBusy} onClick={() => void controllerAction(() => window.api.controller.restart(), 'Controller restarted')}>
+                      Restart
+                    </button>
+                    <button type="button" disabled={ctrlBusy} onClick={() => void regenerateControllerToken()}>
+                      Regenerate token
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyText(`curl -H "Authorization: Bearer <token>" ${ctrlStatus.baseUrl}/health`, 'example curl')}
+                    >
+                      Copy example curl
+                    </button>
+                  </div>
+
+                  {ctrlNotice && <div className={`ollama-status is-${ctrlNotice.kind}`}>{ctrlNotice.text}</div>}
+                  {ctrlStatus.lastStartedAt && (
+                    <div className="settings-hint">Last started {new Date(ctrlStatus.lastStartedAt).toLocaleString()}</div>
+                  )}
+
+                  {ctrlDocs && (
+                    <>
+                      <div className="settings-divider" />
+                      <div className="settings-field is-stacked">
+                        <span>Endpoints ({ctrlDocs.endpoints.length})</span>
+                        <div className="ctrl-endpoints">
+                          {ctrlDocs.endpoints.map((endpoint) => (
+                            <div className="ctrl-endpoint" key={`${endpoint.method}-${endpoint.path}`}>
+                              <span className="ctrl-method">{endpoint.method}</span>
+                              <code>{endpoint.path}</code>
+                              <em>{endpoint.summary}</em>
+                              {!endpoint.auth && <span className="ctrl-open">no auth</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="settings-note">
+                    The token is stored in local config (loopex.config.json), not an OS keychain. It is never logged.
+                    Phase 35 exposes read-only endpoints only — no command, terminal, file, git, prompt-send, or mission
+                    execution.
+                  </div>
+                </>
+              ) : (
+                <div className="settings-hint">Loading controller status…</div>
+              )}
+            </section>
+          )}
+
           {activeTab === 'workflow' && (
             <section className="settings-section">
               <div className="settings-section-head">
@@ -1004,6 +1419,7 @@ export default function SettingsCenter({
             </section>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

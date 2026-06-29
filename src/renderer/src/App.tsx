@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
+import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
+import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import LoopsPage from './components/LoopsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -38,6 +40,8 @@ export default function App(): JSX.Element {
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
   // Phase 13.1: terminals are hidden by default behind an activity drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [agentStatus, setAgentStatus] = useState<AgentStatusMap>({})
   // Lets the center empty-state "Create Project" button open the sidebar modal.
   const [createSignal, setCreateSignal] = useState(0)
@@ -102,6 +106,21 @@ export default function App(): JSX.Element {
     selectHistory(null, 'general')
     setActiveSessionId(null)
   }, [selectHistory])
+
+  // Phase 33.6: start a FRESH chat inside a specific project (multiple chats per
+  // project). Keeps the project active so its agents/cwd stay bound, but opens an
+  // empty workspace thread instead of loading the project's latest session. The
+  // new session is persisted on first message via history.create(projectId).
+  const startNewProjectChat = useCallback(
+    (project: ProjectRow): void => {
+      setActiveProject(project)
+      setView('workspace')
+      setAgentStatus({})
+      selectHistory(null, 'workspace')
+      setActiveSessionId(null)
+    },
+    [selectHistory]
+  )
 
   // Phase 13: workspace continuity. On launch, restore the last active project so
   // the app resumes previous work instead of opening empty. Restoring a project
@@ -224,6 +243,7 @@ export default function App(): JSX.Element {
         onSelectSession={(id, project, providerId) => selectSession(id, project, providerId)}
         onNewChat={(providerId) => void openGeneralChat(providerId)}
         onNewGeneralChat={startNewGeneralChat}
+        onNewProjectChat={startNewProjectChat}
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
       />
@@ -237,10 +257,17 @@ export default function App(): JSX.Element {
           agentStatus={agentStatus}
           drawerOpen={drawerOpen}
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
+          workbenchOpen={workbenchOpen}
+          onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
+        />
+        <BottomWorkbench
+          activeProject={view === 'general' ? null : activeProject}
+          open={workbenchOpen}
+          onClose={() => setWorkbenchOpen(false)}
         />
         {view === 'workspace' && (
           <AgentDrawer
@@ -261,6 +288,7 @@ export default function App(): JSX.Element {
         <LoopsPage active={view === 'loops'} />
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
+      {view === 'plugins' && <Plugins />}
     </div>
   )
 }

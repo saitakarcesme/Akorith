@@ -1183,6 +1183,20 @@ export interface SettingsApi {
   setTheme(theme: AppTheme): Promise<AppTheme>
 }
 
+export interface OllamaRemoteProfile {
+  id: string
+  name: string
+  baseUrl: string
+  priority: number
+  enabled: boolean
+  networkHint?: string
+  lastStatus?: 'ok' | 'error' | 'unknown'
+  lastError?: string
+  lastModelCount?: number
+  lastConnectedAt?: number
+  lastCheckedAt?: number
+}
+
 export interface OllamaConnectionSettings {
   enabled: boolean
   baseUrl: string
@@ -1190,7 +1204,20 @@ export interface OllamaConnectionSettings {
   exposeLan: boolean
   lanDiscovery: boolean
   ollamaHost?: string
+  remoteProfiles?: OllamaRemoteProfile[]
+  lastSuccessfulBaseUrl?: string
 }
+
+export interface OllamaActiveEndpoint {
+  baseUrl: string
+  source: 'configured' | 'last' | 'profile'
+  profileId?: string
+  label: string
+}
+
+export type OllamaAutoConnectResult =
+  | { ok: true; active: OllamaActiveEndpoint; models: string[]; modelCount: number; switched: boolean }
+  | { ok: false; error: string; lastSuccessfulBaseUrl?: string; triedCount: number }
 
 export type OllamaConnectionTestResult =
   | { ok: true; baseUrl: string; models: string[]; modelCount: number }
@@ -1219,6 +1246,183 @@ export interface OllamaApi {
   getShareInfo(): Promise<OllamaShareInfo>
   setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
   testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
+  autoConnect(): Promise<OllamaAutoConnectResult>
+}
+
+export interface GitChangeFile {
+  status: string
+  path: string
+}
+
+export type GitStatusResult =
+  | { ok: true; isRepo: true; branch: string; files: GitChangeFile[]; truncated: boolean; stat: string; clean: boolean }
+  | { ok: true; isRepo: false }
+  | { ok: false; error: string }
+
+export interface GitApi {
+  status(path: string): Promise<GitStatusResult>
+}
+
+export interface GpuDevice {
+  name: string
+  utilizationPercent?: number
+  memoryUsedMb?: number
+  memoryTotalMb?: number
+  temperatureC?: number
+}
+
+export interface GpuOllamaInfo {
+  configuredBaseUrl: string
+  endpointKind: 'local' | 'remote'
+  note?: string
+}
+
+export interface GpuStatusResult {
+  status: 'observed' | 'unavailable'
+  reason?: string
+  platform: string
+  source: 'nvidia-smi' | 'none'
+  gpus: GpuDevice[]
+  ollama: GpuOllamaInfo
+}
+
+export interface GpuApi {
+  getStatus(): Promise<GpuStatusResult>
+}
+
+export interface ControllerStatus {
+  enabled: boolean
+  running: boolean
+  host: string
+  port: number
+  baseUrl: string
+  readOnly: boolean
+  sseEnabled: boolean
+  allowLan: boolean
+  hasToken: boolean
+  tokenMasked: string
+  connectedClients: number
+  lastStartedAt?: number
+  lastError?: string
+}
+
+export interface ControllerConfigView {
+  enabled: boolean
+  host: string
+  port: number
+  allowLan: boolean
+  readOnly: boolean
+  sseEnabled: boolean
+  allowedOrigins?: string[]
+  lastStartedAt?: number
+  lastError?: string
+  hasToken: boolean
+  tokenMasked: string
+}
+
+export interface ControllerEndpoint {
+  method: 'GET' | 'POST'
+  path: string
+  summary: string
+  auth: boolean
+}
+
+export interface ControllerDocs {
+  app: string
+  readOnly: boolean
+  endpoints: ControllerEndpoint[]
+}
+
+export interface ControllerConfigPatch {
+  enabled?: boolean
+  host?: string
+  port?: number
+  allowLan?: boolean
+  sseEnabled?: boolean
+  allowedOrigins?: string[]
+}
+
+export interface ControllerApi {
+  getConfig(): Promise<ControllerConfigView>
+  updateConfig(patch: ControllerConfigPatch): Promise<ControllerStatus>
+  getStatus(): Promise<ControllerStatus>
+  start(): Promise<ControllerStatus>
+  stop(): Promise<ControllerStatus>
+  restart(): Promise<ControllerStatus>
+  regenerateToken(): Promise<ControllerStatus>
+  revealToken(): Promise<string>
+  getDocs(): Promise<ControllerDocs>
+}
+
+export type PluginKind =
+  | 'agent'
+  | 'tool'
+  | 'workbench'
+  | 'automation'
+  | 'model_provider'
+  | 'integration'
+  | 'memory'
+  | 'browser'
+  | 'telemetry'
+
+export type PluginStatus = 'built_in' | 'available' | 'unavailable' | 'disabled' | 'planned' | 'error'
+
+export type PluginPermission =
+  | 'filesystem_read'
+  | 'filesystem_write'
+  | 'terminal_read'
+  | 'terminal_write'
+  | 'network'
+  | 'git_read'
+  | 'git_write'
+  | 'browser'
+  | 'memory_read'
+  | 'memory_write'
+  | 'model_runtime'
+  | 'controller_api'
+  | 'secrets'
+
+export interface PluginDiagnostic {
+  pluginId: string
+  available: boolean
+  status: PluginStatus
+  message: string
+  checkedAt: number
+  details?: string
+}
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  kind: PluginKind
+  description: string
+  status: PluginStatus
+  permissions: PluginPermission[]
+  entry?: string
+  settingsSchema?: Record<string, unknown>
+  safetyNotes: string[]
+  docsUrl?: string
+  builtIn: boolean
+  enabled: boolean
+  effectiveStatus: PluginStatus
+  diagnostic?: PluginDiagnostic
+}
+
+export interface PluginSettingsView {
+  disabled: string[]
+  chromaEndpoint?: string
+}
+
+export interface PluginsApi {
+  list(): Promise<PluginInfo[]>
+  getDiagnostics(): Promise<PluginDiagnostic[]>
+  check(id: string): Promise<PluginDiagnostic | null>
+  checkAll(): Promise<PluginInfo[]>
+  enable(id: string): Promise<PluginInfo[]>
+  disable(id: string): Promise<PluginInfo[]>
+  getSettings(): Promise<PluginSettingsView>
+  setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
 }
 
 export interface PreloadApi {
@@ -1237,6 +1441,10 @@ export interface PreloadApi {
   mission: MissionApi
   settings: SettingsApi
   ollama: OllamaApi
+  git: GitApi
+  gpu: GpuApi
+  controller: ControllerApi
+  plugins: PluginsApi
 }
 
 declare global {

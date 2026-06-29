@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AgentAdapterInfo,
   AgentRuntimeSnapshot,
+  ControllerStatus,
   DailyUsageRow,
   EvaluationRow,
+  GpuStatusResult,
   MacroSessionRow,
+  PluginInfo,
   Mission,
   MissionTemplate,
   ProjectRow,
@@ -106,7 +109,34 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [missionTemplates, setMissionTemplates] = useState<MissionTemplate[]>([])
   const [draftMissions, setDraftMissions] = useState<Mission[]>([])
+  const [gpu, setGpu] = useState<GpuStatusResult | null>(null)
+  const [gpuBusy, setGpuBusy] = useState(false)
+  const [controller, setController] = useState<ControllerStatus | null>(null)
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Phase 35: read-only controller status + plugin registry for the Dashboard.
+  useEffect(() => {
+    void window.api.controller.getStatus().then(setController).catch(() => setController(null))
+    void window.api.plugins.list().then(setPlugins).catch(() => setPlugins(null))
+  }, [])
+
+  // Phase 34.7: read GPU/local-runtime telemetry on demand (load + manual refresh).
+  // No background polling.
+  const loadGpu = useCallback(async (): Promise<void> => {
+    setGpuBusy(true)
+    try {
+      setGpu(await window.api.gpu.getStatus())
+    } catch {
+      setGpu(null)
+    } finally {
+      setGpuBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadGpu()
+  }, [loadGpu])
 
   useEffect(() => {
     let cancelled = false
@@ -198,6 +228,26 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   }, [daily])
 
   const level = (events: number): number => (events === 0 ? 0 : events <= 2 ? 1 : events <= 5 ? 2 : 3)
+
+  // Phase 34.5: summary stats from the same day cells, shown beneath the heatmap
+  // so the Usage Activity card is dense and balanced instead of half-empty.
+  const usageStats = useMemo(() => {
+    let activeDays = 0
+    let totalSends = 0
+    let peak = { key: '', events: 0 }
+    let lastActive = ''
+    for (const cell of heatmap.cells) {
+      if (cell.events > 0) {
+        activeDays += 1
+        totalSends += cell.events
+        lastActive = cell.key
+        if (cell.events > peak.events) peak = { key: cell.key, events: cell.events }
+      }
+    }
+    return { activeDays, totalSends, peak, lastActive }
+  }, [heatmap])
+
+  const shortDay = (key: string): string => (key ? key.slice(5) : '—')
 
   const barData = useMemo(() => {
     const rows = new Map<string, Record<string, number | string>>()
@@ -389,6 +439,88 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
         )}
       </section>
 
+      <section className="dash-section dash-gpu">
+        <div className="dash-section-head">
+          <div>
+            <h2>GPU / Local runtime</h2>
+            <p>Read-only telemetry from this machine. Honest when unavailable; remote endpoints can&apos;t report GPU via Ollama.</p>
+          </div>
+          <button type="button" className="dash-refresh" disabled={gpuBusy} onClick={() => void loadGpu()}>
+            {gpuBusy ? 'Reading…' : 'Refresh'}
+          </button>
+        </div>
+        <div className="dash-gpu-source">
+          <span className={`dash-gpu-chip is-${gpu?.ollama.endpointKind ?? 'local'}`}>
+            Model source: {gpu ? (gpu.ollama.endpointKind === 'local' ? 'Local' : 'Remote') : '—'}
+          </span>
+          {gpu && <em>{gpu.ollama.configuredBaseUrl}</em>}
+        </div>
+        {gpu && gpu.status === 'observed' && gpu.gpus.length > 0 ? (
+          <div className="dash-gpu-grid">
+            {gpu.gpus.map((device, index) => (
+              <div className="dash-gpu-card" key={`${device.name}-${index}`}>
+                <div className="dash-gpu-name" title={device.name}>{device.name}</div>
+                <div className="dash-gpu-util">
+                  <strong>{device.utilizationPercent ?? '—'}</strong>
+                  <span>% GPU</span>
+                </div>
+                {device.utilizationPercent !== undefined && (
+                  <div className="dash-gpu-bar" aria-hidden="true">
+                    <span style={{ width: `${Math.max(0, Math.min(100, device.utilizationPercent))}%` }} />
+                  </div>
+                )}
+                <div className="dash-gpu-meta">
+                  <span>
+                    VRAM{' '}
+                    {device.memoryUsedMb !== undefined && device.memoryTotalMb !== undefined
+                      ? `${(device.memoryUsedMb / 1024).toFixed(1)} / ${(device.memoryTotalMb / 1024).toFixed(1)} GB`
+                      : '—'}
+                  </span>
+                  {device.temperatureC !== undefined && <span>{device.temperatureC}°C</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="dash-empty-hint dash-gpu-unavailable">
+            {gpu?.reason ?? 'GPU telemetry has not been read yet.'}
+            {gpu?.ollama.note && <span className="dash-gpu-note">{gpu.ollama.note}</span>}
+          </div>
+        )}
+      </section>
+
+      <section className="dash-section dash-control-os">
+        <div className="dash-section-head">
+          <div>
+            <h2>Controller API and plugins</h2>
+            <p>Optional local API (read-only, loopback by default) and the plugin foundation. Manage both in Settings.</p>
+          </div>
+          <span>{controller ? (controller.running ? `running · ${controller.baseUrl}` : 'stopped') : 'not checked'}</span>
+        </div>
+        <div className="dash-agent-grid">
+          <div>
+            <span>Controller</span>
+            <strong>{controller ? (controller.running ? 'Running' : controller.enabled ? 'Enabled' : 'Disabled') : '—'}</strong>
+            <em>{controller ? `${controller.readOnly ? 'Read-only' : 'Read/write'} · ${controller.allowLan ? 'LAN allowed' : 'loopback only'}` : 'Open Settings, then API'}</em>
+          </div>
+          <div>
+            <span>SSE clients</span>
+            <strong>{controller?.connectedClients ?? 0}</strong>
+            <em>{controller?.sseEnabled ? 'Event stream enabled' : 'Event stream off'}</em>
+          </div>
+          <div>
+            <span>Plugins ready</span>
+            <strong>{plugins ? plugins.filter((p) => p.effectiveStatus === 'available' || p.effectiveStatus === 'built_in').length : 0}</strong>
+            <em>{plugins ? `of ${plugins.length} registered` : 'Loading…'}</em>
+          </div>
+          <div>
+            <span>Plugin foundation</span>
+            <strong>Read-only</strong>
+            <em>No plugin executes or loads remote code yet</em>
+          </div>
+        </div>
+      </section>
+
       <div className="dash-grid">
         <section className="dash-section">
           <div className="dash-section-head">
@@ -409,7 +541,41 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
               />
             ))}
           </div>
-          {!hasUsage && <div className="dash-empty-state">No usage yet. Send a provider chat message to populate activity.</div>}
+          <div className="hm-legend">
+            <span>Less</span>
+            <span className="hm-cell hm-l0" />
+            <span className="hm-cell hm-l1" />
+            <span className="hm-cell hm-l2" />
+            <span className="hm-cell hm-l3" />
+            <span>More</span>
+          </div>
+          {hasUsage ? (
+            <div className="usage-stat-row">
+              <div className="usage-stat">
+                <span>Active days</span>
+                <strong>{usageStats.activeDays}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Total sends</span>
+                <strong>{usageStats.totalSends}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Total tokens</span>
+                <strong>{fmtTokens(summary?.totalTokens ?? 0)}</strong>
+              </div>
+              <div className="usage-stat">
+                <span>Peak day</span>
+                <strong>{shortDay(usageStats.peak.key)}</strong>
+                <em>{usageStats.peak.events ? `${usageStats.peak.events} sends` : ''}</em>
+              </div>
+              <div className="usage-stat">
+                <span>Last active</span>
+                <strong>{shortDay(usageStats.lastActive)}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="dash-empty-state">No usage yet. Send a provider chat message to populate activity.</div>
+          )}
         </section>
 
         <section className="dash-section">
@@ -427,10 +593,10 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
                 {donutSlices.map((slice) => (
                   <path
                     key={slice.providerId}
-                    d={donutSlicePath(120, 120, 94, 58, slice.startAngle, slice.endAngle)}
+                    d={donutSlicePath(120, 120, 100, 50, slice.startAngle, slice.endAngle)}
                     fill={fillOf(slice.providerId)}
                     stroke="var(--bg-panel)"
-                    strokeWidth={2}
+                    strokeWidth={1.5}
                   >
                     <title>{slice.name}: {fmtTokens(slice.value)} tokens</title>
                   </path>
@@ -476,7 +642,8 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
           })}
           {barData.map((row, index) => {
             const step = 580 / Math.max(barData.length, 1)
-            const width = Math.max(5, step * 0.62)
+            // Phase 33.12: thicker bars (OpenCode-style chunky usage columns).
+            const width = Math.max(7, step * 0.82)
             const x = 48 + index * step + (step - width) / 2
             let stackBottom = 206
             return (
@@ -484,11 +651,11 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
                 {providerIds.map((id) => {
                   const value = Number(row[id] ?? 0)
                   if (value <= 0 || maxBarTotal <= 0) return null
-                  const height = Math.max(1, (value / maxBarTotal) * 188)
+                  const height = Math.max(2, (value / maxBarTotal) * 188)
                   const y = stackBottom - height
                   stackBottom = y
                   return (
-                    <rect key={id} x={x} y={y} width={width} height={height} rx={2} fill={fillOf(id)}>
+                    <rect key={id} x={x} y={y} width={width} height={height} rx={1} fill={fillOf(id)}>
                       <title>{row.day} - {id}: {fmtTokens(value)} tokens</title>
                     </rect>
                   )

@@ -13,6 +13,10 @@ import { registerTestIpc } from './testlab-ipc'
 import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
+import { registerGitStatusIpc } from './git-status'
+import { registerGpuStatusIpc } from './gpu-status'
+import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
+import { registerPluginIpc } from './plugins/manager'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, initDb, registerDbIpc } from './db'
@@ -318,6 +322,10 @@ app.whenReady().then(() => {
   registerMissionIpc()
   registerMacroIpc()
   registerOllamaConnectionIpc()
+  registerGitStatusIpc()
+  registerGpuStatusIpc()
+  registerControllerIpc()
+  registerPluginIpc()
   registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()
@@ -336,6 +344,8 @@ app.whenReady().then(() => {
       }
     }
     warmLocalProviderAtStartup()
+    // Phase 35: optional controller API — starts only if the user enabled it.
+    void startControllerIfEnabled()
   }, 1_000)
 
   app.on('activate', () => {
@@ -347,6 +357,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   ptyManager.killAll()
   closeDb()
+  void stopController()
 })
 
 app.on('window-all-closed', () => {

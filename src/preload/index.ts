@@ -256,9 +256,46 @@ const ollama = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('ollama:getSettings'),
   getShareInfo: (): Promise<unknown> => ipcRenderer.invoke('ollama:getShareInfo'),
   setSettings: (args: unknown): Promise<unknown> => ipcRenderer.invoke('ollama:setSettings', args),
-  testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl })
+  testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl }),
+  // Phase 33.14: resolve the first healthy endpoint (configured → last → profiles).
+  autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect')
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama })
+// Phase 33.17: read-only git surface for the bottom workbench Changes panel.
+const git = Object.freeze({
+  status: (path: string): Promise<unknown> => ipcRenderer.invoke('git:status', { path })
+})
+
+// Phase 34.6: read-only GPU / local-runtime telemetry (no writes, no polling).
+const gpu = Object.freeze({
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus')
+})
+
+// Phase 35: optional local controller API (read-only, loopback-default, token-gated).
+const controller = Object.freeze({
+  getConfig: (): Promise<unknown> => ipcRenderer.invoke('controller:getConfig'),
+  updateConfig: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('controller:updateConfig', patch),
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('controller:getStatus'),
+  start: (): Promise<unknown> => ipcRenderer.invoke('controller:start'),
+  stop: (): Promise<unknown> => ipcRenderer.invoke('controller:stop'),
+  restart: (): Promise<unknown> => ipcRenderer.invoke('controller:restart'),
+  regenerateToken: (): Promise<unknown> => ipcRenderer.invoke('controller:regenerateToken'),
+  revealToken: (): Promise<unknown> => ipcRenderer.invoke('controller:revealToken'),
+  getDocs: (): Promise<unknown> => ipcRenderer.invoke('controller:getDocs')
+})
+
+// Phase 35: plugin foundation (read-only registry + diagnostics; no execution).
+const plugins = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('plugins:list'),
+  getDiagnostics: (): Promise<unknown> => ipcRenderer.invoke('plugins:getDiagnostics'),
+  check: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:check', id),
+  checkAll: (): Promise<unknown> => ipcRenderer.invoke('plugins:checkAll'),
+  enable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:enable', id),
+  disable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:disable', id),
+  getSettings: (): Promise<unknown> => ipcRenderer.invoke('plugins:getSettings'),
+  setChromaEndpoint: (endpoint: string): Promise<unknown> => ipcRenderer.invoke('plugins:setChromaEndpoint', endpoint)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, controller, plugins })
 
 contextBridge.exposeInMainWorld('api', api)

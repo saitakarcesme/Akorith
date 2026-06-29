@@ -12,6 +12,26 @@ export interface BridgeSettings {
   autoEnter: boolean
 }
 
+/** Phase 33.13: a saved remote Ollama endpoint. Akorith stores only this
+ *  connection config — never secrets. Reaching a remote PC across networks is
+ *  the user's responsibility (Tailscale/VPN/LAN/SSH tunnel); we just remember
+ *  the endpoints to try and their last health result. */
+export interface OllamaRemoteProfile {
+  id: string
+  name: string
+  baseUrl: string
+  /** Lower runs first during auto-connect. */
+  priority: number
+  enabled: boolean
+  /** Optional free-text hint, e.g. "Tailscale" or "home LAN". */
+  networkHint?: string
+  lastStatus?: 'ok' | 'error' | 'unknown'
+  lastError?: string
+  lastModelCount?: number
+  lastConnectedAt?: number
+  lastCheckedAt?: number
+}
+
 export interface LocalProviderSettings {
   enabled: boolean
   baseUrl: string
@@ -19,6 +39,10 @@ export interface LocalProviderSettings {
   exposeLan: boolean
   lanDiscovery: boolean
   ollamaHost?: string
+  /** Phase 33.13: saved remote endpoints tried (by priority) on auto-connect. */
+  remoteProfiles?: OllamaRemoteProfile[]
+  /** Phase 33.14: last endpoint that answered, cached to try first next time. */
+  lastSuccessfulBaseUrl?: string
 }
 
 /** UI color theme (Phase 15). Mirrored here so the main-process splash window
@@ -90,6 +114,33 @@ export interface IsaScoreSettings {
   weights: IsaScoreWeights
 }
 
+/** Phase 35: optional local controller HTTP API. Disabled by default,
+ *  loopback-only, token-protected, read-only. Stored in local config (not an OS
+ *  keychain) — documented in docs/controller-api.md. */
+export interface ControllerSettings {
+  enabled: boolean
+  host: string
+  port: number
+  /** Bearer token; empty means "generate on first start". Never logged. */
+  token: string
+  /** Must be explicitly true to bind a non-loopback host. */
+  allowLan: boolean
+  /** Phase 35 keeps the API read-only; kept for forward config compatibility. */
+  readOnly: boolean
+  sseEnabled: boolean
+  allowedOrigins?: string[]
+  lastStartedAt?: number
+  lastError?: string
+}
+
+/** Phase 35: plugin foundation enable/disable state (config-only; never executes). */
+export interface PluginSettings {
+  /** Plugin ids the user has explicitly disabled. Built-ins default enabled. */
+  disabled: string[]
+  /** Optional Chroma memory endpoint placeholder (no ingestion in Phase 35). */
+  chromaEndpoint?: string
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
@@ -97,6 +148,8 @@ export interface LoopexConfig {
   digest?: Partial<DigestSettings>
   test?: Partial<TestLabSettings>
   isascore?: Partial<IsaScoreSettings>
+  controller?: Partial<ControllerSettings>
+  plugins?: Partial<PluginSettings>
   /** Last theme selected in the renderer; read by the splash at startup. */
   theme?: AppTheme
 }
@@ -144,6 +197,20 @@ export const DEFAULT_LOCAL_PROVIDER: LocalProviderSettings = {
   lanDiscovery: true
 }
 
+export const DEFAULT_CONTROLLER: ControllerSettings = {
+  enabled: false,
+  host: '127.0.0.1',
+  port: 47832,
+  token: '',
+  allowLan: false,
+  readOnly: true,
+  sseEnabled: true
+}
+
+export const DEFAULT_PLUGINS: PluginSettings = {
+  disabled: []
+}
+
 export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
@@ -154,7 +221,9 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   router: DEFAULT_ROUTER,
   digest: DEFAULT_DIGEST,
   test: DEFAULT_TEST,
-  isascore: DEFAULT_ISASCORE
+  isascore: DEFAULT_ISASCORE,
+  controller: DEFAULT_CONTROLLER,
+  plugins: DEFAULT_PLUGINS
 }
 
 export function normalizeBaseUrl(value: unknown, fallback = DEFAULT_LOCAL_PROVIDER.baseUrl): string {
@@ -175,6 +244,43 @@ function normalizeOllamaHost(value: unknown): string | undefined {
   const trimmed = value.trim()
   if (!trimmed || trimmed.length > 200 || /[\0\r\n]/.test(trimmed)) return undefined
   return /^[a-z0-9_.:[\]-]+$/i.test(trimmed) ? trimmed : undefined
+}
+
+function safeString(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > max || /[\0\r\n]/.test(trimmed)) return undefined
+  return trimmed
+}
+
+/** Validate/normalize an array of remote Ollama profiles read from disk or sent
+ *  by the renderer. Drops anything without a valid http(s) baseUrl. Caps the
+ *  list so a malformed config can't balloon. */
+export function sanitizeRemoteProfiles(value: unknown): OllamaRemoteProfile[] {
+  if (!Array.isArray(value)) return []
+  const out: OllamaRemoteProfile[] = []
+  for (const raw of value.slice(0, 24)) {
+    if (!raw || typeof raw !== 'object') continue
+    const entry = raw as Record<string, unknown>
+    const baseUrl = normalizeBaseUrl(entry.baseUrl, '')
+    if (!baseUrl) continue
+    const id = safeString(entry.id, 64) ?? `rp-${out.length}-${baseUrl.length}`
+    const status = entry.lastStatus === 'ok' || entry.lastStatus === 'error' ? entry.lastStatus : undefined
+    out.push({
+      id,
+      name: safeString(entry.name, 80) ?? 'Remote Ollama',
+      baseUrl,
+      priority: Number.isFinite(entry.priority) ? Math.max(0, Math.trunc(entry.priority as number)) : out.length,
+      enabled: entry.enabled !== false,
+      ...(safeString(entry.networkHint, 80) ? { networkHint: safeString(entry.networkHint, 80) } : {}),
+      ...(status ? { lastStatus: status } : {}),
+      ...(safeString(entry.lastError, 400) ? { lastError: safeString(entry.lastError, 400) } : {}),
+      ...(Number.isFinite(entry.lastModelCount) ? { lastModelCount: Math.max(0, Math.trunc(entry.lastModelCount as number)) } : {}),
+      ...(Number.isFinite(entry.lastConnectedAt) ? { lastConnectedAt: entry.lastConnectedAt as number } : {}),
+      ...(Number.isFinite(entry.lastCheckedAt) ? { lastCheckedAt: entry.lastCheckedAt as number } : {})
+    })
+  }
+  return out
 }
 
 export function configPath(): string {
@@ -203,6 +309,103 @@ export function getBridgeSettings(): BridgeSettings {
   return { autoEnter: loadConfig().bridge?.autoEnter ?? false }
 }
 
+// ---- Phase 35: controller API + plugin settings ----
+
+function safePort(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isInteger(n) && n >= 1024 && n <= 65535 ? n : fallback
+}
+
+function safeHost(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_CONTROLLER.host
+  const trimmed = value.trim()
+  // hostnames, IPv4, or bracketless IPv6 — no spaces/control chars/paths.
+  if (!trimmed || trimmed.length > 120 || /[\s/\\\0]/.test(trimmed)) return DEFAULT_CONTROLLER.host
+  return trimmed
+}
+
+export function getControllerSettings(): ControllerSettings {
+  const c = loadConfig().controller ?? {}
+  const origins = Array.isArray(c.allowedOrigins)
+    ? c.allowedOrigins.filter((o): o is string => typeof o === 'string').slice(0, 16)
+    : undefined
+  return {
+    enabled: c.enabled === true,
+    host: safeHost(c.host),
+    port: safePort(c.port, DEFAULT_CONTROLLER.port),
+    token: typeof c.token === 'string' ? c.token : '',
+    allowLan: c.allowLan === true,
+    readOnly: c.readOnly !== false, // read-only unless explicitly false (Phase 35 keeps true)
+    sseEnabled: c.sseEnabled !== false,
+    ...(origins && origins.length ? { allowedOrigins: origins } : {}),
+    ...(typeof c.lastStartedAt === 'number' ? { lastStartedAt: c.lastStartedAt } : {}),
+    ...(typeof c.lastError === 'string' ? { lastError: c.lastError } : {})
+  }
+}
+
+export function setControllerSettings(patch: Partial<ControllerSettings>): ControllerSettings {
+  const config = loadConfig()
+  const current = getControllerSettings()
+  const next: ControllerSettings = {
+    enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
+    host: patch.host === undefined ? current.host : safeHost(patch.host),
+    port: patch.port === undefined ? current.port : safePort(patch.port, current.port),
+    token: typeof patch.token === 'string' ? patch.token : current.token,
+    allowLan: typeof patch.allowLan === 'boolean' ? patch.allowLan : current.allowLan,
+    readOnly: typeof patch.readOnly === 'boolean' ? patch.readOnly : current.readOnly,
+    sseEnabled: typeof patch.sseEnabled === 'boolean' ? patch.sseEnabled : current.sseEnabled,
+    ...(patch.allowedOrigins !== undefined
+      ? { allowedOrigins: patch.allowedOrigins }
+      : current.allowedOrigins
+        ? { allowedOrigins: current.allowedOrigins }
+        : {}),
+    ...(patch.lastStartedAt !== undefined
+      ? { lastStartedAt: patch.lastStartedAt }
+      : current.lastStartedAt
+        ? { lastStartedAt: current.lastStartedAt }
+        : {}),
+    ...(patch.lastError !== undefined
+      ? patch.lastError
+        ? { lastError: patch.lastError }
+        : {}
+      : current.lastError
+        ? { lastError: current.lastError }
+        : {})
+  }
+  config.controller = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
+}
+
+export function getPluginSettings(): PluginSettings {
+  const p = loadConfig().plugins ?? {}
+  const disabled = Array.isArray(p.disabled)
+    ? p.disabled.filter((id): id is string => typeof id === 'string').slice(0, 128)
+    : []
+  const chromaEndpoint = typeof p.chromaEndpoint === 'string' ? p.chromaEndpoint.trim() : undefined
+  return { disabled, ...(chromaEndpoint ? { chromaEndpoint } : {}) }
+}
+
+export function setPluginSettings(patch: Partial<PluginSettings>): PluginSettings {
+  const config = loadConfig()
+  const current = getPluginSettings()
+  const next: PluginSettings = {
+    disabled: Array.isArray(patch.disabled)
+      ? [...new Set(patch.disabled.filter((id) => typeof id === 'string'))].slice(0, 128)
+      : current.disabled,
+    ...(patch.chromaEndpoint !== undefined
+      ? patch.chromaEndpoint
+        ? { chromaEndpoint: patch.chromaEndpoint.trim() }
+        : {}
+      : current.chromaEndpoint
+        ? { chromaEndpoint: current.chromaEndpoint }
+        : {})
+  }
+  config.plugins = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
+}
+
 export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
   const config = loadConfig()
   config.bridge = { ...config.bridge, autoEnter }
@@ -213,13 +416,17 @@ export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
 export function getLocalProviderSettings(): LocalProviderSettings {
   const entry = loadConfig().providers.local ?? DEFAULT_LOCAL_PROVIDER
   const ollamaHost = normalizeOllamaHost(entry.ollamaHost)
+  const remoteProfiles = sanitizeRemoteProfiles(entry.remoteProfiles)
+  const lastSuccessfulBaseUrl = normalizeBaseUrl(entry.lastSuccessfulBaseUrl, '')
   return {
     enabled: entry.enabled !== false,
     baseUrl: normalizeBaseUrl(entry.baseUrl),
     autoStart: entry.autoStart !== false,
     exposeLan: entry.exposeLan !== false,
     lanDiscovery: entry.lanDiscovery !== false,
-    ...(ollamaHost ? { ollamaHost } : {})
+    ...(ollamaHost ? { ollamaHost } : {}),
+    ...(remoteProfiles.length ? { remoteProfiles } : {}),
+    ...(lastSuccessfulBaseUrl ? { lastSuccessfulBaseUrl } : {})
   }
 }
 
@@ -227,6 +434,12 @@ export function setLocalProviderSettings(patch: Partial<LocalProviderSettings>):
   const config = loadConfig()
   const current = getLocalProviderSettings()
   const ollamaHost = patch.ollamaHost === undefined ? current.ollamaHost : normalizeOllamaHost(patch.ollamaHost)
+  const remoteProfiles =
+    patch.remoteProfiles === undefined ? current.remoteProfiles : sanitizeRemoteProfiles(patch.remoteProfiles)
+  const lastSuccessfulBaseUrl =
+    patch.lastSuccessfulBaseUrl === undefined
+      ? current.lastSuccessfulBaseUrl
+      : normalizeBaseUrl(patch.lastSuccessfulBaseUrl, '') || undefined
   const next: LocalProviderSettings = {
     ...current,
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -234,13 +447,17 @@ export function setLocalProviderSettings(patch: Partial<LocalProviderSettings>):
     autoStart: typeof patch.autoStart === 'boolean' ? patch.autoStart : current.autoStart,
     exposeLan: typeof patch.exposeLan === 'boolean' ? patch.exposeLan : current.exposeLan,
     lanDiscovery: typeof patch.lanDiscovery === 'boolean' ? patch.lanDiscovery : current.lanDiscovery,
-    ...(ollamaHost ? { ollamaHost } : {})
+    ...(ollamaHost ? { ollamaHost } : {}),
+    ...(remoteProfiles && remoteProfiles.length ? { remoteProfiles } : {}),
+    ...(lastSuccessfulBaseUrl ? { lastSuccessfulBaseUrl } : {})
   }
   config.providers = {
     ...config.providers,
     local: next
   }
   if (!ollamaHost) delete config.providers.local.ollamaHost
+  if (!remoteProfiles || !remoteProfiles.length) delete config.providers.local.remoteProfiles
+  if (!lastSuccessfulBaseUrl) delete config.providers.local.lastSuccessfulBaseUrl
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return next
 }

@@ -410,3 +410,199 @@ This gives Akorith a typed place for multi-agent planning, planner/executor/revi
 Recommended Phase 33: Mission Engine persistence and read-only history.
 
 That is the safest next step because Phase 32 missions are useful for previewing structure but disappear on restart. A persistence phase can add durable mission history, read-only inspection, and migration planning without routing mission steps to providers, PTYs, Test Lab, macro loops, commits, or pushes yet.
+
+## Phase 33 — UI Command Surface Overhaul
+
+Phase 33 is a UI/UX-first phase that turns Akorith into a serious, black-heavy,
+technical Agent-OS command surface (Codex / OpenCode inspired), with no change to
+provider runtime, PTY behaviour, macro/workspace loops, Test Lab, token accounting,
+usage logging, the `bridgeSend → PtyManager.write` invariant, the `loopex.db` /
+`loopex.config.json` filenames, or AkorithLoop. See
+`docs/phase-33-ui-command-surface.md` for the full audit and commit plan.
+
+### Monochrome, borderless, sharper direction
+
+- Black-heavy monochrome token palette: near-black window with small surface-tone
+  steps for depth instead of borders; provider identity reduced to neutral grays
+  (no orange/blue/purple blocks) — provider names survive as text/labels.
+- Sharper geometry: smaller radius scale (sm 3 / 5 / lg 8 / xl 10) and a mapped-down
+  pass over hardcoded radii (status pills and circles preserved).
+- Borderless pass on composer, dashboard cards, model picker, chips, segmented
+  controls — surface contrast and type hierarchy carry structure.
+
+### Sidebar: project-first navigation
+
+- Provider folders (Claude / Codex / Local) removed from the sidebar.
+- Projects is a section heading; each project is an expandable group revealing its
+  chat threads inline (grouped from existing sessions by `projectId` — no migration),
+  with per-chat rename/delete and a per-project "New chat". A "Chats" section lists
+  general threads and surfaces orphaned chats so no history disappears.
+- The sidebar now vanishes/appears (opacity + tiny scale) instead of sliding.
+
+### Multiple chats per project
+
+`SessionRow.projectId` already supported this at the DB layer; Phase 33 exposes it.
+`App.startNewProjectChat` keeps the project (and its agents/cwd) active while opening
+an empty thread, persisted on first message via the existing `history.create`.
+
+### Composer-integrated model picker
+
+- Provider/model selection moved out of the top bar into a custom dark popover
+  listbox (`ModelPicker`) in the composer — provider-grouped, keyboard + mouse
+  friendly, source-labelled, opens upward near the composer. No native white
+  dropdown on the dark UI.
+
+### Settings as a real page
+
+- `SettingsCenter` is now a full-window page (fixed host + centred max-width column)
+  with its existing left-tab navigation, instead of a centred modal card. All
+  settings functionality (Profile / Providers / Agents / Missions / Workflow / Test /
+  Safety) is preserved.
+
+### Usage chart polish
+
+- Thicker daily-usage bars, a chunkier donut ring, and higher-contrast gridlines and
+  axis labels — monochrome, no new chart dependency.
+
+### Remote Ollama auto-connect
+
+- `LocalProviderSettings` additively gains `remoteProfiles[]` (id, name, baseUrl,
+  priority, enabled, network hint, last health status/error/model count/timestamps)
+  and `lastSuccessfulBaseUrl`, persisted with a strict sanitizer (valid http(s) only,
+  capped count, never secrets).
+- `ollama:autoConnect` tries configured → last successful → enabled remote profiles by
+  priority, picks the first healthy endpoint (read-only `/api/tags`, short timeouts, no
+  polling), switches the active endpoint only when the current one is unreachable, and
+  records per-profile health. ChatPanel runs it once on launch and labels local-provider
+  models with their source (Local / Remote: profile). Settings → Providers gains a
+  remote-endpoints editor with Auto-connect, plus the private-route security note
+  (Tailscale/VPN/SSH; never public exposure).
+
+### Terminal docking + bottom workbench
+
+- Agent terminals dock three ways (right Drawer / bottom Dock / Focus view) via a header
+  switcher; switching modes only changes the container class, so PTYs are never
+  remounted.
+- A bottom workbench (`BottomWorkbench`) docks under the chat with read-only tabs:
+  Changes (a new bounded, read-only `git:status` IPC — branch, file list, `diff --stat`;
+  never stages/commits/pushes; path must be a managed project), Runtime (observation
+  snapshot counts), and Missions (draft overview). No mission execution, no Run buttons.
+
+### Codex / OpenCode inspirations borrowed
+
+- Composer-integrated model picker, command-palette-style dark listbox, project→chats
+  tree sidebar, a bottom workbench with a read-only changes panel, dockable terminals,
+  a compact full-page settings view, and stronger monochrome usage graphics.
+
+### Intentionally unchanged
+
+Provider runtime/prompts/returns, token accounting, usage logging, PTY command kinds,
+`bridgeSend → PtyManager.write`, macro/workspace loops, Test Lab, Agent Hub/Mission
+preview behaviour, `loopex.db`, `loopex.config.json`, and AkorithLoop.
+
+### Recommended Phase 34
+
+Phase 34: Mission Engine persistence and read-only history (still the safest next
+backend step — Phase 33 deliberately avoided deeper Mission work). Strong alternatives
+once persistence lands: a real OpenCode adapter integration, or deeper bottom-workbench
+git features (per-file diff view) building on the read-only `git:status` IPC.
+
+## Phase 34 — UI Refinement · GPU Telemetry · Plugins Foundation
+
+Phase 34 acts on the user's Phase 33 screenshot feedback plus two safe, read-only
+system-observation additions. No Mission/provider execution, no backend architecture
+changes. Full plan: `docs/phase-34-ui-refinement-gpu-plugins.md`.
+
+### Sidebar + project/chat hierarchy
+- Project rows are calmer and Codex-like: no folder icon, no long path subtitle (path
+  → hover title), thinner rows, single-line ellipsised names.
+- Chat rows under a project show a compact relative age ("3d", "1w") from the existing
+  `updatedAt`, dropping the per-row icon; the timestamp yields to hover actions.
+
+### Composer focus
+- The visible focus border/ring on the composer is gone; focus shows only as a subtle
+  surface lift (no outline, no layout shift). Keyboard affordances elsewhere unchanged.
+
+### Usage Activity card
+- Filled the half-empty card: larger heatmap cells, a Less/More legend, and a summary
+  stat strip (active days, total sends, total tokens, peak day, last active).
+
+### GPU / Local runtime telemetry (honest, read-only)
+- `src/main/gpu-status.ts` + `gpu:getStatus` (`window.api.gpu.getStatus`). NVIDIA
+  (Win/Linux) via read-only `nvidia-smi` with a timeout; macOS and unsupported
+  platforms return `unavailable` with a clear reason — **never fabricated**. Reports the
+  configured Ollama endpoint as Local/Remote; remote GPU telemetry is explicitly noted
+  as unavailable via the Ollama API (future: companion/SSH/secured telemetry endpoint).
+- Dashboard "GPU / Local runtime" card: per-GPU name, utilization %, VRAM, temperature;
+  honest unavailable state; loads on mount + manual Refresh; no polling.
+
+### Plugins foundation
+- First-class Plugins view (sidebar nav + route), **static metadata only**: category
+  filter, plugin cards (name, category, status, description, permissions preview,
+  disabled "Coming soon"). No execution, install, remote code, marketplace, or DB tables.
+
+### Resizable bottom agent dock
+- Bottom-dock mode gains a draggable top handle (min 180 / default 360 / max 75vh,
+  persisted, double-click reset). Terminals refit via their existing ResizeObserver —
+  no remount, no PTY restart. Drawer/Focus modes unchanged.
+
+### Intentionally unchanged
+Provider runtime/prompts/returns, token accounting, usage logging, PTY command kinds,
+`bridgeSend → PtyManager.write`, macro/workspace loops, Test Lab, Agent Hub / Mission
+preview, `loopex.db`, `loopex.config.json`, AkorithLoop. GPU + plugin surfaces are
+read-only; no secrets, no hardcoded IPs, no polling, no privileged telemetry.
+
+### Recommended Phase 35
+Plugin system architecture (turn the static registry into a real, sandboxed,
+permission-gated plugin loader) — it now has a UI to grow into. Strong alternatives:
+a Remote GPU Telemetry companion (secured endpoint feeding the new GPU card for remote
+machines), Mission Engine persistence/read-only history, or a real OpenCode adapter.
+
+## Phase 35 — Controller API · Real Plugin Foundation · vLLM Studio Gap
+
+Phase 35 adds an **optional** local controller HTTP API, turns the static Plugins page
+into a real permission-gated plugin foundation with honest diagnostics, and records a
+gap analysis vs. Local Studio (`docs/vllm-studio-gap-analysis.md`). Akorith stays
+local-first and provider-API-key-free; the controller is a separate, opt-in surface.
+
+### Controller API (`docs/controller-api.md`)
+- `src/main/controller/` — pure, unit-testable Node `http` server factory (no electron/
+  config imports) + an electron bootstrap. **Disabled by default, loopback-only,
+  token-protected, read-only.** Non-loopback host requires an explicit Allow-LAN toggle;
+  never binds `0.0.0.0` implicitly; token never logged.
+- Endpoints: `/health` (no auth) + token-gated `/v1/status|agents|runtime|projects|chats
+  (summaries)|missions|plugins|gpu|ollama|events (SSE)|docs` and a single safe
+  `POST /v1/controller/refresh`. No execution/write endpoints.
+- Settings → API tab: enable, host/port, base URL + token (reveal/copy), Allow-LAN +
+  warning, start/stop/restart, regenerate token, example curl, endpoint catalogue.
+- Verified by `npm run verify:controller` (ephemeral loopback port; auth + read checks).
+
+### Plugin foundation (`docs/plugin-system.md`)
+- `src/main/plugins/` — types, permissions, diagnostics (read-only CLI/path checks),
+  built-in manifests, and a config-only manager. **No execution runtime.**
+- Built-ins: OpenCode Agent, GitHub Workbench, Remote Ollama Telemetry, Hermes Memory,
+  Chroma Memory, Browser/Chrome Automation, Test Lab Extensions, Mission Runners,
+  Controller API. Live diagnostics via `opencode/gh/ollama --version`, `python3`+`chromadb`,
+  and Chrome path detection (no browser data). Chroma: no ingestion/embeddings; Browser:
+  detection only.
+- Plugins page reads the live registry: status badges, diagnostics, config-only
+  enable/disable, per-plugin Check, category filters, sensitive-permission highlighting,
+  details with safety notes, and an optional Chroma endpoint placeholder.
+- Dashboard gains a Controller-API-and-plugins card.
+
+### vLLM Studio gap
+Local Studio (formerly `0xSero/vllm-studio`) is a model-serving control panel; Akorith
+adopted its **controller-API backbone, loopback+token security model, SSE stream, and a
+diagnostics/doctor concept**, and deliberately skipped the OpenAI-compatible proxy, model
+lifecycle, recipes, and remote deploy scripts (different identity).
+
+### Intentionally unchanged
+Provider runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, PTY command kinds, macro/workspace loops, Test Lab,
+Agent Hub / Mission preview, `loopex.db`, `loopex.config.json`, AkorithLoop. Controller and
+plugins are read-only; no secrets exposed, no hardcoded IPs, no privileged telemetry.
+
+### Recommended Phase 36
+An Akorith **CLI** that talks to the controller (status/plugins/gpu) — the single most
+valuable Local-Studio idea still missing. Alternatives: a secured **remote GPU telemetry
+companion**, the sandboxed **plugin execution runtime**, or **Mission persistence**.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon } from './icons'
+import ModelPicker from './ModelPicker'
 
 interface ChatMessage {
   id: string
@@ -53,6 +54,9 @@ interface ChatPanelProps {
   agentStatus: AgentStatusMap
   drawerOpen: boolean
   onToggleDrawer: () => void
+  /** Phase 33.17: bottom workbench (Changes / Runtime / Missions) toggle. */
+  workbenchOpen?: boolean
+  onToggleWorkbench?: () => void
   /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
@@ -220,6 +224,8 @@ export default function ChatPanel({
   agentStatus,
   drawerOpen,
   onToggleDrawer,
+  workbenchOpen,
+  onToggleWorkbench,
   onOpenProject,
   onCreateProject,
   onHistoryChange,
@@ -291,6 +297,18 @@ export default function ChatPanel({
     }
   }, [])
 
+  // Phase 33.15: which Ollama endpoint is currently active (for model-picker
+  // source labels: "Local" vs "Remote: <profile>"). Seeded from the last known
+  // value so the label is correct before auto-connect resolves.
+  const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(() => {
+    try {
+      const raw = localStorage.getItem('akorith.ollamaActive')
+      return raw ? (JSON.parse(raw) as { label: string; baseUrl: string }) : null
+    } catch {
+      return null
+    }
+  })
+
   useEffect(() => {
     void loadProviders()
     void window.api.bridge.getSettings().then((s) => setAutoEnter(s.autoEnter))
@@ -301,6 +319,38 @@ export default function ChatPanel({
       clearTimeout(autoSummaryTimer.current)
     }
   }, [loadProviders])
+
+  // Phase 33.14: once on launch, try local → last → remote Ollama endpoints by
+  // priority and pick the first healthy one. If it switched the active endpoint,
+  // reload providers so the model picker shows the now-reachable models.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.ollama
+      .autoConnect()
+      .then((res) => {
+        if (cancelled || !res.ok) return
+        const active = { label: res.active.label, baseUrl: res.active.baseUrl }
+        setOllamaActive(active)
+        try {
+          localStorage.setItem('akorith.ollamaActive', JSON.stringify(active))
+        } catch {
+          /* ignore */
+        }
+        if (res.switched) void loadProviders()
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [loadProviders])
+
+  const modelSource = useCallback(
+    (pid: string): string | undefined => {
+      if (pid === 'local' || pid.toLowerCase().includes('ollama')) return ollamaActive?.label ?? 'Local'
+      return undefined
+    },
+    [ollamaActive]
+  )
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -641,6 +691,21 @@ export default function ChatPanel({
     setProviderId(suggestion.providerId)
     setModel(suggestion.model ?? '')
     setSuggestion(null)
+  }
+
+  // Phase 33.8: single entry point for the composer model picker. Changing the
+  // provider mid-conversation starts a fresh thread (a session belongs to one
+  // provider), mirroring the old top-bar select behaviour; a model-only change
+  // keeps the current thread.
+  const selectModel = (nextProviderId: string, nextModel: string): void => {
+    if (nextProviderId !== providerId && (activeSessionId || messages.length > 0)) {
+      setMessages([])
+      setActiveSessionId(null)
+      onActiveSession(null)
+      setContextInfo(null)
+    }
+    setProviderId(nextProviderId)
+    setModel(nextModel)
   }
 
   const handleSelectionMouseUp = (): void => {
@@ -1018,6 +1083,14 @@ export default function ChatPanel({
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
+            <ModelPicker
+              providers={providers}
+              providerId={providerId}
+              model={model}
+              onSelect={selectModel}
+              onRefresh={() => void loadProviders()}
+              modelSource={modelSource}
+            />
             <input
               ref={imageInputRef}
               type="file"
@@ -1119,44 +1192,19 @@ export default function ChatPanel({
           )}
         </div>
         <div className="ws-topbar-right">
-          <div className={`model-switcher ${!selected?.available.ok ? 'is-unavailable' : ''}`} title="Provider and model for this chat">
-            <span className="model-switcher-label">Model</span>
-            <select
-              className="model-select is-provider"
-              value={providerId}
-              onChange={(event) => {
-                const next = event.target.value
-                if (next !== providerId && (activeSessionId || messages.length > 0)) {
-                  setMessages([])
-                  setActiveSessionId(null)
-                  onActiveSession(null)
-                  setContextInfo(null)
-                }
-                setProviderId(next)
-              }}
-              aria-label="Provider"
-              disabled={!providers?.length}
+          {/* Phase 33.8: provider/model selection moved into the composer's
+              ModelPicker (a custom dark listbox). The top bar keeps only the
+              scope/agent controls. */}
+          {onToggleWorkbench && (
+            <button
+              type="button"
+              className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
+              onClick={onToggleWorkbench}
+              title="Toggle the bottom workbench (changes, runtime, missions)"
             >
-              {!providers?.length && <option value="">No providers</option>}
-              {providers?.map((p) => (
-                <option key={p.id} value={p.id} disabled={!p.available.ok}>
-                  {p.available.ok ? p.label : `${p.label} — unavailable`}
-                </option>
-              ))}
-            </select>
-            {selected && selected.models.length > 0 && (
-              <select className="model-select" value={model} onChange={(event) => setModel(event.target.value)} aria-label="Model">
-                {selected.models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <button type="button" className="icon-button" title="Refresh providers" onClick={() => void loadProviders()}>
-            ↻
-          </button>
+              Workbench
+            </button>
+          )}
           {hasProject && (
             <button
               type="button"

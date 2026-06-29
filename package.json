@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "verify:workspace-loop": "tsx scripts/verify-workspace-loop.ts",
     "verify:local-executor": "node --experimental-strip-types scripts/verify-local-executor.ts",
+    "verify:controller": "tsx scripts/verify-controller.ts",
     "pack": "npm run build && electron-builder --dir",
     "pack:mac": "npm run build && electron-builder --mac --dir",
     "dist": "npm run build && electron-builder",
