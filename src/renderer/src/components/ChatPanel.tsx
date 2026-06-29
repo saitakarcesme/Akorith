@@ -64,6 +64,9 @@ interface ChatPanelProps {
   /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
+  /** Phase 38.9: App-owned "request in flight" set (durable across navigation). */
+  pendingSessions?: Set<string>
+  onPendingChange?: (sessionId: string, pending: boolean) => void
 }
 
 const AGENT_LABELS: Record<'t1' | 't2' | 't3', string> = { t1: 'Claude', t2: 'Codex', t3: 'OpenCode' }
@@ -235,7 +238,9 @@ export default function ChatPanel({
   onOpenProject,
   onCreateProject,
   onHistoryChange,
-  onActiveSession
+  onActiveSession,
+  pendingSessions,
+  onPendingChange
 }: ChatPanelProps): JSX.Element {
   // Everything below is driven by the registry — never a hardcoded backend list.
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
@@ -381,11 +386,16 @@ export default function ChatPanel({
   // Sidebar instructions: load a stored session, or start a fresh thread.
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
-    // Phase 37.6: navigating away and back re-selects the current session. If a
-    // request is still streaming into THIS session, don't reload from the DB —
-    // that would wipe the in-flight assistant message and its thinking indicator.
-    // The run keeps going; we just keep showing it.
-    if (busyRequestId && historySel.sessionId && historySel.sessionId === activeSessionId) return
+    // Phase 38.9: don't reload (and wipe the in-flight assistant message + its
+    // thinking indicator) when re-selecting a session that still has a request in
+    // flight. Pending state is App-owned, so this holds across any navigation —
+    // not just while this component's local busyRequestId is set.
+    if (
+      historySel.sessionId &&
+      (pendingSessions?.has(historySel.sessionId) || (busyRequestId && historySel.sessionId === activeSessionId))
+    ) {
+      return
+    }
     // A fresh session/thread always opens scrolled to the bottom.
     nearBottomRef.current = true
     setConfirmingClear(false)
@@ -806,6 +816,9 @@ export default function ChatPanel({
     setDraft('')
     setAttachedImages([])
     setBusyRequestId(requestId)
+    // Phase 38.9: mark this session pending at App level so the thinking state
+    // survives navigation. Cleared in finally (success/error/cancel).
+    if (sessionId) onPendingChange?.(sessionId, true)
     setMessages((prev) => [
       ...prev,
       { id: newId(), role: 'user', text: prompt, status: 'done', images },
@@ -855,6 +868,7 @@ export default function ChatPanel({
     } finally {
       offToken()
       setBusyRequestId(null)
+      if (sessionId) onPendingChange?.(sessionId, false)
       onHistoryChange() // updated_at moved this session up the sidebar
       void refreshContextInfo(sessionId) // memory indicator now includes this turn
     }

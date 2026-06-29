@@ -45,6 +45,18 @@ export default function App(): JSX.Element {
   const [agentStatus, setAgentStatus] = useState<AgentStatusMap>({})
   // Lets the center empty-state "Create Project" button open the sidebar modal.
   const [createSignal, setCreateSignal] = useState(0)
+  // Phase 38.9: durable "a request is in flight for this session" set, owned by
+  // App so it survives ChatPanel re-selection/navigation. Keyed by session id.
+  const [pendingSessions, setPendingSessions] = useState<Set<string>>(() => new Set())
+  const setSessionPending = useCallback((sessionId: string, pending: boolean) => {
+    setPendingSessions((prev) => {
+      if (pending === prev.has(sessionId)) return prev
+      const next = new Set(prev)
+      if (pending) next.add(sessionId)
+      else next.delete(sessionId)
+      return next
+    })
+  }, [])
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
   const bumpProjects = useCallback(() => setProjectVersion((v) => v + 1), [])
@@ -263,6 +275,8 @@ export default function App(): JSX.Element {
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
+          pendingSessions={pendingSessions}
+          onPendingChange={setSessionPending}
         />
         <BottomWorkbench
           activeProject={view === 'general' ? null : activeProject}
