@@ -703,3 +703,38 @@ secrets stored.
 A real OpenCode (Gaia) **executor loop** using `opencode run` for non-interactive turns and
 structured result capture, or the Akorith **CLI** over the controller. Alternatives:
 sandboxed plugin runtime, or remote-telemetry companion packaging.
+
+## Phase 38 — UI Regression Fixes · Persistent Thinking · OpenCode Auth
+
+Targeted fixes for regressions found after Phase 37. Full plan + auth status:
+`docs/phase-38-ui-regression-opencode-auth.md`.
+
+- **User bubbles** right-align (white, dark text, 18px radius, max-width 74%) — a later
+  `align-self: stretch` override was forcing them full-width/left; assistant rows unchanged.
+- **Project + chat ⋯ menus** now work: they were clipped because `.sidebar-surface`'s
+  `will-change: transform` made it the containing block for the `position: fixed` menus and
+  `overflow: hidden` cut them off. Both menus now render through a **portal to
+  `document.body`** (Rename / Reveal / Copy path / Remove for projects; Rename / Delete for
+  chats), Escape/outside-click close, stopPropagation so the row doesn't select/expand.
+- **Resizable sidebar**: drag the right edge (min 260 / default 320 / max min(520px,40vw),
+  persisted, double-click reset); collapse/vanish unchanged.
+- **Sidebar cleanup**: folder icon (open when expanded) instead of a chevron; per-project
+  count badge removed; vertical guide line before chats removed (indentation only).
+- **Loop page** matches the dark app surface (it was showing the lighter `:root` `--bg`
+  fallback through a transparent wrapper); the **composer top separator line** is removed.
+- **Profile footer** rebalanced (avatar tile · name/role grows · settings flush right).
+- **Thinking state persists** across navigation via an App-owned pending-session Set; the
+  history-reload that wiped the in-flight message is skipped while a session is pending.
+- **OpenCode auth**: installed v1.17.11, `0 credentials` (not signed in). Login is
+  interactive — run `opencode auth login` (also runnable inside the Gaia pane), then verify
+  with `opencode auth list`. Akorith never reads/stores/prints tokens.
+
+### Intentionally unchanged
+Claude/Codex/Ollama runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, PTY kinds, Olympus/Gaia/Atlantis, controller security,
+`loopex.db`/`loopex.config.json`, AkorithLoop. No mission execution, no secrets stored.
+
+### Recommended Phase 39
+Complete the OpenCode Go login UX in-app (a one-click "Sign in" that opens the Gaia pane to
+`opencode auth login`) and a Gaia executor loop via `opencode run`. Alternatives: the
+Akorith CLI over the controller, or the sandboxed plugin runtime.

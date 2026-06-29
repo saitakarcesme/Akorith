@@ -42,6 +42,19 @@ No change to Claude/Codex/Ollama runtime/prompts/returns, token accounting, usag
 `loopex.db`/`loopex.config.json`, AkorithLoop. No secrets stored; OpenCode tokens never
 read/printed.
 
+## OpenCode auth status (Phase 38.10)
+
+- `opencode --version` → **1.17.11** (installed in Phase 37).
+- `opencode auth list` → **0 credentials → not signed in**.
+- **Login is interactive** (`opencode auth login`: provider selection → method →
+  browser/device flow). It cannot be completed unattended, and Akorith never reads,
+  stores, or prints any token. **Exact next action for the user:**
+  1. In a terminal (or inside Akorith's **Gaia** agent pane), run: `opencode auth login`
+  2. Pick your provider/OpenCode Go, complete the browser/device login.
+  3. Verify with `opencode auth list` (should show ≥1 credential).
+- Until then, the Plugins page / Gaia pane keep showing the honest
+  "not signed in — run: opencode auth login" guidance.
+
 ## Validation
 
 `typecheck`, `verify:local-executor`, `verify:workspace-loop`, `verify:controller`,
