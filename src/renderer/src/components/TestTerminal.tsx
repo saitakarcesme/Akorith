@@ -26,6 +26,11 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
       cursorBlink: false,
       disableStdin: true,
       scrollback: 8000,
+      // Phase 36.5: the bounded test child writes plain "\n" line endings. Without
+      // convertEol, xterm advances a row without a carriage return, so each line
+      // starts where the previous ended — the "staircase"/half-sentence misalignment.
+      // Converting \n -> \r\n makes long npm logs wrap cleanly at the terminal width.
+      convertEol: true,
       fontFamily: "'Cascadia Mono', Consolas, 'Courier New', monospace",
       fontSize: 11,
       lineHeight: 1.32,

@@ -5771,8 +5771,21 @@ textarea:focus-visible {
 
 .test-terminal-host {
   flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
-  padding: 10px 12px;
+  /* Phase 36.5: let xterm own the box so the fit addon computes the right column
+     count and long lines wrap to the panel width without spilling. */
+  padding: 8px 10px;
+  overflow: hidden;
+}
+
+.test-terminal-host .xterm,
+.test-terminal-host .xterm-viewport {
+  width: 100% !important;
+}
+
+.test-terminal-host .xterm-viewport {
+  overflow-y: auto;
 }
 
 /* ============================================================
