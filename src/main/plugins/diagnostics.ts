@@ -31,8 +31,31 @@ function runVersion(command: string, args: string[]): Promise<RawDiagnostic> {
   })
 }
 
-export function checkOpenCode(): Promise<RawDiagnostic> {
-  return runVersion('opencode', ['--version'])
+/** OpenCode (Gaia): version + a SAFE auth presence check. We never read or print
+ *  token values — only whether `opencode auth list` reports a configured provider. */
+export async function checkOpenCode(): Promise<RawDiagnostic> {
+  const version = await runVersion('opencode', ['--version'])
+  if (!version.available) return version
+  const signedIn = await new Promise<boolean | null>((resolve) => {
+    execFile('opencode', ['auth', 'list'], { timeout: CHECK_TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) {
+        resolve(null)
+        return
+      }
+      const out = `${stdout ?? ''}${stderr ?? ''}`.toLowerCase()
+      // Heuristic only — presence of a provider word, never the secret itself.
+      const empty = /no\s+(providers|credentials)|not\s+(logged|signed)|empty/.test(out) || out.trim().length === 0
+      const hasProvider = /(anthropic|openai|github|opencode|google|provider)/.test(out) && !empty
+      resolve(hasProvider)
+    })
+  })
+  const authNote =
+    signedIn === true
+      ? 'Terminal (Gaia) ready · a provider is signed in.'
+      : signedIn === false
+        ? 'Terminal (Gaia) ready · not signed in — run: opencode auth login'
+        : 'Terminal (Gaia) ready · sign in with: opencode auth login'
+  return { available: true, message: `${version.message} · ${authNote}`, details: version.details }
 }
 
 export function checkGitHubCli(): Promise<RawDiagnostic> {
