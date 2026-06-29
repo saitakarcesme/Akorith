@@ -54,6 +54,9 @@ interface ChatPanelProps {
   agentStatus: AgentStatusMap
   drawerOpen: boolean
   onToggleDrawer: () => void
+  /** Phase 33.17: bottom workbench (Changes / Runtime / Missions) toggle. */
+  workbenchOpen?: boolean
+  onToggleWorkbench?: () => void
   /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
@@ -221,6 +224,8 @@ export default function ChatPanel({
   agentStatus,
   drawerOpen,
   onToggleDrawer,
+  workbenchOpen,
+  onToggleWorkbench,
   onOpenProject,
   onCreateProject,
   onHistoryChange,
@@ -1190,6 +1195,16 @@ export default function ChatPanel({
           {/* Phase 33.8: provider/model selection moved into the composer's
               ModelPicker (a custom dark listbox). The top bar keeps only the
               scope/agent controls. */}
+          {onToggleWorkbench && (
+            <button
+              type="button"
+              className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
+              onClick={onToggleWorkbench}
+              title="Toggle the bottom workbench (changes, runtime, missions)"
+            >
+              Workbench
+            </button>
+          )}
           {hasProject && (
             <button
               type="button"

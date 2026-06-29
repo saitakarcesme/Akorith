@@ -431,6 +431,10 @@ textarea:focus-visible {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
+  /* Phase 33.17: column so the bottom workbench docks under the chat and
+     pushes content up instead of overlaying it. The agent drawer is absolute
+     and unaffected. */
+  flex-direction: column;
   background: var(--bg);
 }
 
@@ -5423,6 +5427,8 @@ textarea:focus-visible {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
+  /* Phase 33.17: allow the chat to shrink when the bottom workbench is open. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-chat);
@@ -6144,6 +6150,237 @@ textarea:focus-visible {
    dim the workspace (the dock is a persistent surface, not a modal). */
 .agent-drawer-scrim.mode-dock {
   display: none;
+}
+
+/* ---- Phase 33.17: bottom workbench (read-only Changes / Runtime / Missions) ---- */
+.workbench {
+  flex: 0 0 auto;
+  height: min(38vh, 460px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.workbench-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--bg-soft);
+}
+
+.workbench-tab {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.workbench-tab:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.workbench-tab.is-active {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.workbench-spacer {
+  flex: 1 1 auto;
+}
+
+.workbench-action,
+.workbench-close {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.workbench-action:hover,
+.workbench-close:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.workbench-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.workbench-empty {
+  padding: 14px 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.workbench-empty.is-error {
+  color: var(--danger);
+}
+
+.workbench-changes-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.workbench-branch {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workbench-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.workbench-file-list,
+.workbench-mission-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.workbench-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.workbench-file:hover {
+  background: var(--hover);
+}
+
+.workbench-file-status {
+  flex: 0 0 auto;
+  width: 22px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.workbench-file-status.status-new {
+  color: var(--success);
+}
+.workbench-file-status.status-deleted {
+  color: var(--danger);
+}
+.workbench-file-status.status-modified {
+  color: var(--warning);
+}
+
+.workbench-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.workbench-file-word {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--text-faint);
+}
+
+.workbench-diffstat {
+  margin-top: 10px;
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+
+.workbench-note {
+  margin-top: 10px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.workbench-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workbench-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+
+.workbench-stat span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.workbench-stat strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.workbench-mission {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.workbench-mission:hover {
+  background: var(--hover);
+}
+
+.workbench-mission-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.workbench-mission-status {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
 }
 
 .agent-dock-seg {

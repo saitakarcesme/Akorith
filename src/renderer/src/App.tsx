@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
+import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import TestPage from './components/TestPage'
@@ -38,6 +39,8 @@ export default function App(): JSX.Element {
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
   // Phase 13.1: terminals are hidden by default behind an activity drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [agentStatus, setAgentStatus] = useState<AgentStatusMap>({})
   // Lets the center empty-state "Create Project" button open the sidebar modal.
   const [createSignal, setCreateSignal] = useState(0)
@@ -253,10 +256,17 @@ export default function App(): JSX.Element {
           agentStatus={agentStatus}
           drawerOpen={drawerOpen}
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
+          workbenchOpen={workbenchOpen}
+          onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}
           onActiveSession={setActiveSessionId}
+        />
+        <BottomWorkbench
+          activeProject={view === 'general' ? null : activeProject}
+          open={workbenchOpen}
+          onClose={() => setWorkbenchOpen(false)}
         />
         {view === 'workspace' && (
           <AgentDrawer
