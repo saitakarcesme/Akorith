@@ -1,16 +1,4 @@
-export type MacroStatus =
-  | 'idle'
-  | 'preparing_context'
-  | 'proposing'
-  | 'awaiting_approval'
-  | 'sending'
-  | 'awaiting_executor_result'
-  | 'summarizing'
-  | 'awaiting_permission'
-  | 'auto_running'
-  | 'completed'
-  | 'stopped'
-  | 'error'
+export type { MacroStatus } from './loops/types'
 
 export type MacroRiskLevel = 'low' | 'medium' | 'high'
 

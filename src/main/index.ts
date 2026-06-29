@@ -13,6 +13,7 @@ import { registerTestIpc } from './testlab-ipc'
 import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
+import { registerAgentRegistryIpc } from './agents/registry'
 import { closeDb, initDb, registerDbIpc } from './db'
 
 let mainWindowRef: BrowserWindow | null = null
@@ -312,6 +313,7 @@ app.whenReady().then(() => {
   registerDigestIpc()
   registerTestIpc()
   registerEvaluateIpc()
+  registerAgentRegistryIpc()
   registerMacroIpc()
   registerOllamaConnectionIpc()
   registerSettingsIpc()

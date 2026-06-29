@@ -480,6 +480,8 @@ export interface EvaluateApi {
 // ---- macro-loop orchestration (Phase 9) ----
 
 export type MacroStatus =
+  // TODO(phase 28): mirror src/main/loops/types.ts until a renderer-safe shared
+  // type package can be imported by both Electron and web builds.
   | 'draft'
   | 'scheduled'
   | 'idle'
@@ -540,7 +542,186 @@ export type AgentPermissionResponse =
   | { ok: true; detection: PermissionDetection; alive: boolean }
   | { ok: false; error: string }
 
+export type AgentId = 'claude' | 'codex' | 'ollama' | 'opencode' | 'memory'
+export type AgentKind = 'cli' | 'local' | 'memory' | 'future'
+export type AgentStatus = 'unknown' | 'available' | 'missing' | 'unauthenticated' | 'disabled' | 'error'
+export type AgentCapability =
+  | 'chat'
+  | 'terminal'
+  | 'exec'
+  | 'streaming'
+  | 'file_patch'
+  | 'test_generation'
+  | 'review'
+  | 'commit'
+  | 'memory'
+  | 'skills'
+  | 'automation'
+  | 'mission_planning'
+
+export interface AgentAdapterMetadata {
+  id: AgentId
+  displayName: string
+  kind: AgentKind
+  description: string
+  executableName?: string
+  status: AgentStatus
+  capabilities: AgentCapability[]
+  currentIntegrationNotes: string[]
+  futureIntegrationNotes: string[]
+  safetyNotes: string[]
+}
+
+export type AgentIntegrationStage =
+  | 'metadata-only'
+  | 'detection-ready'
+  | 'session-placeholder-ready'
+  | 'runtime-connected-existing-provider'
+  | 'future-runtime'
+
+export interface AgentRuntimeCapability {
+  canCreateSession: boolean
+  canSendMessage: boolean
+  canStream: boolean
+  canExecute: boolean
+  canAttachToPty: boolean
+  canUseExistingProvider: boolean
+  canUseExistingTerminal: boolean
+  isPlaceholder: boolean
+}
+
+export interface AgentAdapterInfo extends AgentAdapterMetadata {
+  runtimeCapabilities: AgentRuntimeCapability
+  integrationStage: AgentIntegrationStage
+}
+
+export interface AgentDetectionResult {
+  id: AgentId
+  status: AgentStatus
+  version?: string
+  executablePath?: string
+  message?: string
+  checkedAt: number
+}
+
+export type AgentSessionId = string
+export type AgentSessionMode = 'chat' | 'terminal' | 'exec' | 'loop' | 'review' | 'memory'
+export type AgentSessionStatus =
+  | 'created'
+  | 'starting'
+  | 'running'
+  | 'idle'
+  | 'busy'
+  | 'waiting_for_permission'
+  | 'completed'
+  | 'stopped'
+  | 'failed'
+  | 'unsupported'
+export type AgentSessionOrigin = 'agent_hub' | 'chat' | 'terminal' | 'loop' | 'test_lab' | 'system'
+
+export interface AgentSession {
+  id: AgentSessionId
+  agentId: AgentId
+  mode: AgentSessionMode
+  origin: AgentSessionOrigin
+  status: AgentSessionStatus
+  projectPath?: string
+  title?: string
+  createdAt: number
+  updatedAt: number
+  lastActivityAt?: number
+  metadata?: Record<string, unknown>
+  error?: string
+}
+
+export interface AgentSessionCreateInput {
+  agentId: AgentId
+  mode: AgentSessionMode
+  origin: AgentSessionOrigin
+  projectPath?: string
+  title?: string
+  metadata?: Record<string, unknown>
+}
+
+export type AgentSessionEventType = 'created' | 'status_changed' | 'stopped' | 'snapshot' | 'error' | 'note'
+
+export interface AgentSessionEvent {
+  id: string
+  sessionId: AgentSessionId
+  agentId: AgentId
+  type: AgentSessionEventType
+  message?: string
+  timestamp: number
+  metadata?: Record<string, unknown>
+}
+
+export type AgentRuntimeAttachmentKind =
+  | 'provider_call'
+  | 'pty_session'
+  | 'ollama_connection'
+  | 'loop_run'
+  | 'test_run'
+  | 'system'
+
+export type AgentRuntimeAttachmentStatus =
+  | 'observed'
+  | 'active'
+  | 'idle'
+  | 'busy'
+  | 'completed'
+  | 'stopped'
+  | 'failed'
+  | 'unknown'
+
+export interface AgentRuntimeAttachment {
+  id: string
+  kind: AgentRuntimeAttachmentKind
+  agentId?: AgentId
+  sessionId?: string
+  externalId?: string
+  status: AgentRuntimeAttachmentStatus
+  sourceFile?: string
+  projectPath?: string
+  title?: string
+  startedAt?: number
+  updatedAt: number
+  lastActivityAt?: number
+  metadata?: Record<string, unknown>
+  error?: string
+}
+
+export interface AgentRuntimeSnapshot {
+  checkedAt: number
+  activeProviderCalls: AgentRuntimeAttachment[]
+  activePtySessions: AgentRuntimeAttachment[]
+  ollamaStatus?: AgentRuntimeAttachment
+  observedSessions: AgentSession[]
+  notes?: string[]
+}
+
 export interface AgentApi {
+  /** Phase 28: read-only Agent OS metadata foundation. */
+  list(): Promise<AgentAdapterInfo[]>
+  /** Phase 28: read-only agent availability detection. */
+  detect(id: AgentId): Promise<AgentDetectionResult>
+  /** Phase 28: read-only detection for every known adapter. */
+  detectAll(): Promise<AgentDetectionResult[]>
+  /** Phase 29/30: in-memory AgentSession list; no runtime processes are started by this API. */
+  listSessions(): Promise<AgentSession[]>
+  /** Phase 29/30: read one in-memory AgentSession. */
+  getSession(id: AgentSessionId): Promise<AgentSession | null>
+  /** Phase 29/30: read in-memory session events. */
+  listSessionEvents(sessionId: AgentSessionId): Promise<AgentSessionEvent[]>
+  /** Phase 30: read observed runtime attachments and synthesized PTY metadata. */
+  listRuntimeAttachments(): Promise<AgentRuntimeAttachment[]>
+  /** Phase 30: read observed runtime attachments for one in-memory AgentSession. */
+  listRuntimeAttachmentsForSession(sessionId: AgentSessionId): Promise<AgentRuntimeAttachment[]>
+  /** Phase 30: read an on-demand runtime observation snapshot. */
+  getRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
+  /** Phase 30: refresh the on-demand runtime observation snapshot; no execution side effects. */
+  refreshRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
+  /** Phase 29: create a placeholder session only; does not call providers, PTYs, or CLIs. */
+  createPlaceholderSession(args: AgentSessionCreateInput): Promise<AgentSession>
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
     terminalId: string

@@ -3,6 +3,7 @@ import { accessSync, chmodSync, constants, existsSync, readdirSync, statSync } f
 import { homedir } from 'os'
 import { delimiter, isAbsolute, join } from 'path'
 import { spawn, type IPty } from 'node-pty'
+import type { AgentId } from './agents/types'
 
 // Terminal ids are renderer-supplied. Logical ids ("t1", "t2") may be suffixed
 // with a sanitized per-project key ("t1::<projectId>") so each project keeps
@@ -141,6 +142,9 @@ interface Session {
   /** Requested cwd/kind, used to avoid reusing a live session after project metadata changes. */
   cwd: string
   requestedKind: PtyCommandKind
+  createdAt: number
+  updatedAt: number
+  lastActivityAt: number
 }
 
 // Hard cap on retained scrollback per terminal — keeps memory bounded.
@@ -167,6 +171,26 @@ export interface PtySnapshot {
   text: string
   chars: number
   truncated: boolean
+}
+
+export interface PtySessionSnapshot {
+  id: string
+  alive: boolean
+  started: PtyCommandKind
+  requestedKind: PtyCommandKind
+  cwd: string
+  logicalId: string
+  projectKey: string | null
+  agentId?: AgentId
+  createdAt: number
+  updatedAt: number
+  lastActivityAt: number
+}
+
+function agentIdForPtyKind(kind: PtyCommandKind): AgentId | undefined {
+  if (kind === 'claude' || kind === 'claude-auto') return 'claude'
+  if (kind === 'codex' || kind === 'codex-auto') return 'codex'
+  return undefined
 }
 
 class PtyManager {
@@ -234,7 +258,17 @@ class PtyManager {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
 
-    const session: Session = { pty, buffer: '', started: spec.started, cwd, requestedKind: kind }
+    const now = Date.now()
+    const session: Session = {
+      pty,
+      buffer: '',
+      started: spec.started,
+      cwd,
+      requestedKind: kind,
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now
+    }
     this.sessions.set(id, session)
     this.touchProject(this.projectKeyOf(id))
 
@@ -246,6 +280,8 @@ class PtyManager {
       if (this.sessions.get(id) !== session) return
       // Retain a bounded tail for read-only snapshots (Phase 11 agentic loop).
       session.buffer = (session.buffer + data).slice(-MAX_BUFFER_CHARS)
+      session.updatedAt = Date.now()
+      session.lastActivityAt = session.updatedAt
       if (!sink.isDestroyed()) sink.send('pty:data', { id, data })
     })
     pty.onExit(({ exitCode }) => {
@@ -278,7 +314,11 @@ class PtyManager {
    * bridgeSend() after user approval.
    */
   write(id: string, data: string): void {
-    this.sessions.get(this.resolve(id))?.pty.write(data)
+    const session = this.sessions.get(this.resolve(id))
+    if (!session) return
+    session.updatedAt = Date.now()
+    session.lastActivityAt = session.updatedAt
+    session.pty.write(data)
   }
 
   /** Whether a live session exists for this terminal id (logical → active project). */
@@ -319,6 +359,27 @@ class PtyManager {
     const full = session.buffer
     const text = full.slice(-cap)
     return { id, alive: true, text, chars: text.length, truncated: full.length > text.length }
+  }
+
+  /** Read-only metadata snapshot for Agent OS runtime observation. No terminal output is exposed. */
+  listSessionSnapshots(): PtySessionSnapshot[] {
+    return [...this.sessions.entries()].map(([id, session]) => {
+      const projectKey = this.projectKeyOf(id)
+      const logicalId = id.split('::')[0]
+      return {
+        id,
+        alive: true,
+        started: session.started,
+        requestedKind: session.requestedKind,
+        cwd: session.cwd,
+        logicalId,
+        projectKey,
+        agentId: agentIdForPtyKind(session.started),
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        lastActivityAt: session.lastActivityAt
+      }
+    })
   }
 
   resize(id: string, cols: number, rows: number): void {

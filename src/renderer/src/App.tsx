@@ -260,7 +260,7 @@ export default function App(): JSX.Element {
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
         <LoopsPage active={view === 'loops'} />
       </div>
-      {view === 'dashboard' && <Dashboard />}
+      {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
     </div>
   )
 }

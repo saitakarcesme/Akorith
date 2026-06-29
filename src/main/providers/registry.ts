@@ -34,6 +34,9 @@ import type {
 import { ClaudeProvider } from './claude'
 import { ChatGPTProvider } from './chatgpt'
 import { LocalProvider } from './local'
+import { agentSessionManager } from '../agents/session-manager'
+import { safeRuntimeError } from '../agents/observation'
+import type { AgentId } from '../agents/types'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -144,6 +147,92 @@ interface ChatSendArgs {
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
 
 const activeRequests = new Map<string, AbortController>()
+
+interface ProviderObservation {
+  sessionId: string
+  attachmentId: string
+}
+
+function agentIdForProvider(providerId: string): AgentId | null {
+  if (providerId === 'claude') return 'claude'
+  if (providerId === 'chatgpt' || providerId === 'codex') return 'codex'
+  if (providerId === 'local' || providerId === 'ollama') return 'ollama'
+  return null
+}
+
+function startProviderObservation(args: ChatSendArgs, provider: Provider, projectPath?: string): ProviderObservation | null {
+  const agentId = agentIdForProvider(args.providerId)
+  if (!agentId) return null
+  try {
+    const observed = agentSessionManager.createObservedSession({
+      agentId,
+      mode: 'chat',
+      origin: 'chat',
+      status: 'busy',
+      projectPath,
+      title: `${provider.label} provider call`,
+      metadata: {
+        providerId: args.providerId,
+        model: args.model ?? null,
+        hasImages: Boolean(args.images?.length),
+        includeDigest: args.includeDigest === true,
+        persistedChatSession: Boolean(args.sessionId),
+        sourceFile: 'src/main/providers/registry.ts'
+      }
+    })
+    const attachment = agentSessionManager.attachRuntime(observed.id, {
+      kind: 'provider_call',
+      agentId,
+      externalId: args.requestId,
+      status: 'active',
+      sourceFile: 'src/main/providers/registry.ts',
+      projectPath,
+      title: `${provider.label} provider call`,
+      startedAt: observed.createdAt,
+      metadata: {
+        providerId: args.providerId,
+        model: args.model ?? null,
+        streamingTokens: provider.id === 'claude' || provider.id === 'local'
+      }
+    })
+    return attachment ? { sessionId: observed.id, attachmentId: attachment.id } : null
+  } catch {
+    return null
+  }
+}
+
+function completeProviderObservation(observation: ProviderObservation | null, result: SendResult): void {
+  if (!observation) return
+  try {
+    agentSessionManager.updateRuntimeAttachment(observation.attachmentId, {
+      status: 'completed',
+      metadata: { model: result.model }
+    })
+    agentSessionManager.markObservedSessionCompleted(observation.sessionId, {
+      metadata: {
+        observed: true,
+        runtime: 'phase-30-runtime-observation',
+        completedProviderModel: result.model
+      }
+    })
+  } catch {
+    // Observation must never affect provider behavior.
+  }
+}
+
+function failProviderObservation(observation: ProviderObservation | null, err: unknown): void {
+  if (!observation) return
+  const message = safeRuntimeError(err)
+  try {
+    agentSessionManager.updateRuntimeAttachment(observation.attachmentId, {
+      status: 'failed',
+      error: message
+    })
+    agentSessionManager.markObservedSessionFailed(observation.sessionId, message)
+  } catch {
+    // Observation must never affect provider behavior.
+  }
+}
 
 /** Convert stored rows to the pure conversation shape. */
 function toConv(messages: { role: 'user' | 'assistant'; content: string }[]): ConvMessage[] {
@@ -295,15 +384,23 @@ export function registerChatIpc(): void {
         workspace: workspaceContext
       })
       const promptForProvider = built.prompt
-      const result = await provider.send(
-        promptForProvider,
-        { model: args.model, signal: controller.signal, images: args.images },
-        (token) => {
-          if (!sender.isDestroyed()) {
-            sender.send('chat:token', { requestId: args.requestId, token })
+      const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
+      let result: SendResult
+      try {
+        result = await provider.send(
+          promptForProvider,
+          { model: args.model, signal: controller.signal, images: args.images },
+          (token) => {
+            if (!sender.isDestroyed()) {
+              sender.send('chat:token', { requestId: args.requestId, token })
+            }
           }
-        }
-      )
+        )
+        completeProviderObservation(observation, result)
+      } catch (err) {
+        failProviderObservation(observation, err)
+        throw err
+      }
       if (sessionId) {
         try {
           addMessage(sessionId, 'assistant', result.text, args.providerId, result.model)
