@@ -6792,6 +6792,30 @@ textarea:focus-visible {
   color: var(--text-faint);
 }
 
+/* Phase 34.9: bottom-dock vertical resize handle (top edge of the dock). */
+.agent-dock-resizer {
+  flex: 0 0 auto;
+  height: 7px;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.agent-dock-resizer::before {
+  content: '';
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color var(--fast);
+}
+
+.agent-dock-resizer:hover::before {
+  background: var(--text-faint);
+}
+
 .agent-dock-seg {
   flex: 0 0 auto;
   display: inline-flex;

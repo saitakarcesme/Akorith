@@ -57,6 +57,13 @@ function sanitizeSplit(value: number): number {
 const WIDTH_MIN = 380
 const WIDTH_MAX = 980
 
+// Phase 34.9: bottom-dock vertical resize bounds.
+const DOCK_MIN = 180
+const DOCK_DEFAULT = 360
+function dockMax(): number {
+  return Math.round((typeof window !== 'undefined' ? window.innerHeight : 900) * 0.75)
+}
+
 /**
  * The agent activity drawer. Terminals (Olympus=Codex, Atlantis=Claude) live here
  * and run in the background: this panel is ALWAYS mounted while a project with a
@@ -72,10 +79,16 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const [olympusCollapsed, setOlympusCollapsed] = useState(() => storageBoolean('akorith.olympusCollapsed', false))
   const [atlantisCollapsed, setAtlantisCollapsed] = useState(() => storageBoolean('akorith.atlantisCollapsed', false))
   const [mode, setMode] = useState<AgentDockMode>(() => storageMode('akorith.agentDockMode', 'drawer'))
+  const [dockHeight, setDockHeight] = useState(() =>
+    clamp(storageNumber('akorith.agentDockHeight', DOCK_DEFAULT), DOCK_MIN, dockMax())
+  )
 
   useEffect(() => {
     localStorage.setItem('akorith.agentDockMode', mode)
   }, [mode])
+  useEffect(() => {
+    localStorage.setItem('akorith.agentDockHeight', String(dockHeight))
+  }, [dockHeight])
 
   useEffect(() => {
     localStorage.setItem('akorith.terminalSplit', String(split))
@@ -123,6 +136,26 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
     window.addEventListener('pointerup', stop)
   }
 
+  // Phase 34.9: drag the top edge of the bottom dock to resize it vertically.
+  // Dragging up increases the height. The terminal panes refit via their own
+  // ResizeObserver — no remount, no PTY restart.
+  const startDockResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = dockHeight
+    const move = (moveEvent: PointerEvent): void => {
+      setDockHeight(clamp(startHeight + (startY - moveEvent.clientY), DOCK_MIN, dockMax()))
+    }
+    const stop = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  const resetDockHeight = (): void => setDockHeight(clamp(DOCK_DEFAULT, DOCK_MIN, dockMax()))
+
   // No project folder → no agents to host; the drawer simply isn't mounted.
   if (!activeProject?.path) return null
 
@@ -148,11 +181,21 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
       <div className={`agent-drawer-scrim ${open ? 'is-open' : ''} mode-${mode}`} onClick={onClose} />
       <aside
         className={`agent-drawer ${open ? 'is-open' : ''} mode-${mode}`}
-        style={mode === 'drawer' ? { width } : undefined}
+        style={mode === 'drawer' ? { width } : mode === 'dock' ? { height: dockHeight } : undefined}
         aria-hidden={!open}
       >
         {mode === 'drawer' && (
           <div className="agent-drawer-resizer" onPointerDown={startWidthResize} title="Drag to resize" />
+        )}
+        {mode === 'dock' && (
+          <div
+            className="agent-dock-resizer"
+            role="separator"
+            aria-orientation="horizontal"
+            title="Drag to resize · double-click to reset"
+            onPointerDown={startDockResize}
+            onDoubleClick={resetDockHeight}
+          />
         )}
         <header className="agent-drawer-header">
           <div className="agent-drawer-title">Agent activity</div>
