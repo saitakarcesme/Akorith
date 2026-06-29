@@ -82,11 +82,13 @@
   --sidebar-width: 320px;
   --sidebar-peek-width: 320px;
 
-  /* Consistent radius system (modern, not cartoonish) */
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 22px;
+  /* Phase 33: sharper, more technical geometry. Smaller radii across the board
+     so panels/cards read as a precise command surface, not pillowy SaaS cards.
+     Tiny status pills keep their own 999px radius where set explicitly. */
+  --radius-sm: 3px;
+  --radius: 5px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 140ms var(--ease);
   --sidebar-slide: 240ms var(--ease);
@@ -361,7 +363,7 @@ textarea:focus-visible {
   height: 100vh;
   background: #111113;
   border-right: 1px solid var(--sidebar-border);
-  border-radius: 0 14px 14px 0;
+  border-radius: 0 8px 8px 0;
   box-shadow: none;
   overflow: hidden;
   pointer-events: none;
@@ -394,7 +396,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
   backdrop-filter: blur(12px);
 }
@@ -434,7 +436,7 @@ textarea:focus-visible {
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
-  border-radius: 11px;
+  border-radius: 6px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
 }
 
@@ -466,7 +468,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -495,7 +497,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 11px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -553,7 +555,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: none;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -568,7 +570,7 @@ textarea:focus-visible {
   font-size: 10px;
   color: var(--text-faint);
   background: var(--hover-strong);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .sidebar-add {
@@ -577,7 +579,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -615,7 +617,7 @@ textarea:focus-visible {
   gap: 2px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -628,7 +630,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   text-align: left;
 }
@@ -660,7 +662,7 @@ textarea:focus-visible {
   padding: 22px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
 }
 
@@ -691,7 +693,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 11px;
+  border-radius: 6px;
 }
 
 .modal-field input:focus {
@@ -717,7 +719,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 11px;
+  border-radius: 6px;
 }
 
 .modal-dir-btn {
@@ -730,7 +732,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 1px solid var(--border-soft);
-  border-radius: 11px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -744,7 +746,7 @@ textarea:focus-visible {
   font-size: 12px;
   color: var(--danger);
   background: rgba(215, 130, 130, 0.12);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .modal-actions {
@@ -758,7 +760,7 @@ textarea:focus-visible {
   padding: 8px 16px;
   font-size: 12px;
   font-weight: 600;
-  border-radius: 11px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -806,7 +808,7 @@ textarea:focus-visible {
   gap: 8px;
   margin-top: 2px;
   padding: 7px 9px;
-  border-radius: 10px;
+  border-radius: 6px;
   color: var(--text-dim);
   user-select: none;
 }
@@ -885,7 +887,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--accent);
-  border-radius: 7px;
+  border-radius: 4px;
 }
 
 .sidebar-item-dot {
@@ -903,7 +905,7 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 7px;
   background: var(--bg-soft);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .project-form input,
@@ -914,7 +916,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .project-form-actions {
@@ -927,7 +929,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--hover);
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -959,7 +961,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 12px;
+  border-radius: 6px;
   text-align: left;
   cursor: pointer;
 }
@@ -970,7 +972,7 @@ textarea:focus-visible {
   min-height: 26px;
   padding: 3px 7px;
   padding-right: 48px;
-  border-radius: 7px;
+  border-radius: 4px;
   background: transparent;
 }
 
@@ -1000,7 +1002,7 @@ textarea:focus-visible {
   min-height: 26px;
   padding: 4px 6px;
   background: transparent !important;
-  border-radius: 7px;
+  border-radius: 4px;
 }
 
 .recent-section .recent-chat:hover,
@@ -1034,7 +1036,7 @@ textarea:focus-visible {
   justify-content: center;
   color: var(--accent-strong);
   background: var(--accent-dim);
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1079,7 +1081,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -1140,7 +1142,7 @@ textarea:focus-visible {
   padding: 5px 8px;
   color: var(--text-faint);
   background: var(--hover);
-  border-radius: 10px;
+  border-radius: 6px;
   line-height: 1.35;
   font-size: 11px;
 }
@@ -1205,7 +1207,7 @@ textarea:focus-visible {
 .provider-section {
   margin: 4px 0;
   padding: 7px 4px 5px;
-  border-radius: 14px;
+  border-radius: 8px;
 }
 
 .provider-section.tone-claude,
@@ -1261,7 +1263,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--hover);
   border: 0;
-  border-radius: 14px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -1293,7 +1295,7 @@ textarea:focus-visible {
   gap: 16px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
 }
 
@@ -1314,7 +1316,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
   cursor: pointer;
   transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
@@ -1364,7 +1366,7 @@ textarea:focus-visible {
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -1439,7 +1441,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -1478,7 +1480,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .settings-summary-item span,
@@ -1520,7 +1522,7 @@ textarea:focus-visible {
   gap: 9px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .provider-status-row > div {
@@ -1565,7 +1567,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   font-size: 10px;
   font-weight: 760;
 }
@@ -1632,7 +1634,7 @@ textarea:focus-visible {
   padding: 11px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .agent-hub-main {
@@ -1673,7 +1675,7 @@ textarea:focus-visible {
   padding: 6px 7px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .agent-hub-stage span {
@@ -1751,7 +1753,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -1771,7 +1773,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .agent-runtime-head {
@@ -1806,7 +1808,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -1833,7 +1835,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .agent-runtime-grid strong {
@@ -1871,7 +1873,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: var(--bg-soft);
   border: 1px dashed var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .agent-empty-state strong {
@@ -1891,7 +1893,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .agent-session-panel > div:first-child {
@@ -1957,7 +1959,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
 }
 
 .agent-session-fields {
@@ -2015,7 +2017,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .agent-attachment-row p {
@@ -2034,7 +2036,7 @@ textarea:focus-visible {
   padding: 9px 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .agent-placeholder-strip strong {
@@ -2061,7 +2063,7 @@ textarea:focus-visible {
   padding: 14px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .mission-hero span,
@@ -2106,7 +2108,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-soft);
   border: 1px dashed var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -2134,7 +2136,7 @@ textarea:focus-visible {
   padding: 12px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .mission-panel-head {
@@ -2167,7 +2169,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -2214,7 +2216,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .mission-template-card.is-active,
@@ -2295,7 +2297,7 @@ textarea:focus-visible {
   padding: 9px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
 }
 
 .mission-step-row > div:last-child,
@@ -2330,7 +2332,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: var(--bg-soft);
   border: 1px dashed var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -2339,7 +2341,7 @@ textarea:focus-visible {
   padding: 9px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
 }
 
 .mission-detail-title,
@@ -2365,7 +2367,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .mission-readonly-grid strong {
@@ -2404,14 +2406,14 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-soft);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .mission-note-list {
   padding: 10px;
   background: var(--bg-soft);
   border: 1px dashed var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .settings-path-row {
@@ -2435,7 +2437,7 @@ textarea:focus-visible {
   gap: 12px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .settings-toggle-row strong,
@@ -2504,7 +2506,7 @@ textarea:focus-visible {
   padding: 3px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .theme-toggle button {
@@ -2513,7 +2515,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -2546,7 +2548,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -2573,7 +2575,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .ollama-share-title {
@@ -2606,7 +2608,7 @@ textarea:focus-visible {
   align-items: stretch;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
   background: var(--bg-raised);
 }
 
@@ -2712,7 +2714,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
   box-shadow: var(--shadow-soft);
   font-size: 12px;
 }
@@ -2798,7 +2800,7 @@ textarea:focus-visible {
   padding: 22px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -2810,7 +2812,7 @@ textarea:focus-visible {
   justify-content: center;
   color: var(--accent-strong);
   background: var(--accent-dim);
-  border-radius: 14px;
+  border-radius: 8px;
 }
 
 .project-onboarding h2 {
@@ -2845,7 +2847,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 11px;
+  border-radius: 6px;
 }
 
 .project-onboarding-actions button,
@@ -2858,7 +2860,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 0;
-  border-radius: 11px;
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -2879,7 +2881,7 @@ textarea:focus-visible {
   color: var(--danger);
   background: rgba(215, 130, 130, 0.12);
   border: 1px solid rgba(215, 130, 130, 0.26);
-  border-radius: 11px;
+  border-radius: 6px;
   font-size: 12px;
 }
 
@@ -3070,7 +3072,7 @@ textarea:focus-visible {
   background-repeat: no-repeat;
   background-position: right 9px center;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -3112,7 +3114,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -3144,7 +3146,7 @@ textarea:focus-visible {
   display: flex;
   padding: 2px;
   background: var(--bg-input);
-  border-radius: 11px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
@@ -3154,7 +3156,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: none;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -3188,7 +3190,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -3211,7 +3213,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--code-copy-bg);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -3290,7 +3292,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--bg-panel);
   border: 1px solid rgba(255, 255, 255, 0.45);
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
@@ -3303,7 +3305,7 @@ textarea:focus-visible {
   z-index: 20;
   padding: 6px 14px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   white-space: nowrap;
@@ -3419,7 +3421,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   text-transform: none;
 }
@@ -3440,7 +3442,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .macro-field textarea,
@@ -3506,7 +3508,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -3538,7 +3540,7 @@ textarea:focus-visible {
   padding: 6px 8px;
   font-size: 11px;
   line-height: 1.4;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .macro-error {
@@ -3559,7 +3561,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -3611,7 +3613,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .macro-permission {
@@ -3646,7 +3648,7 @@ textarea:focus-visible {
   line-height: 1.4;
   color: var(--text-dim);
   background: var(--bg-input);
-  border-radius: 8px;
+  border-radius: 5px;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -3797,7 +3799,7 @@ textarea:focus-visible {
   width: 132px;
   height: 92px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 5px;
   border: 1px solid var(--border-soft);
 }
 
@@ -3835,7 +3837,7 @@ textarea:focus-visible {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 0.92em;
 }
@@ -3934,7 +3936,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
@@ -3991,7 +3993,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -4014,7 +4016,7 @@ textarea:focus-visible {
   padding: 10px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
@@ -4082,7 +4084,7 @@ textarea:focus-visible {
   color: var(--warning);
   background: rgba(198, 169, 107, 0.1);
   border: 1px solid rgba(198, 169, 107, 0.26);
-  border-radius: 6px;
+  border-radius: 4px;
   line-height: 1.4;
 }
 
@@ -4098,7 +4100,7 @@ textarea:focus-visible {
   color: var(--accent-strong);
   background: var(--accent-dim);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -4115,7 +4117,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -4221,7 +4223,7 @@ textarea:focus-visible {
   padding: 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .dash-command-card span,
@@ -4277,7 +4279,7 @@ textarea:focus-visible {
   padding: 16px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 6px;
   min-width: 0;
 }
 
@@ -4331,7 +4333,7 @@ textarea:focus-visible {
   padding: 12px;
   background: var(--bg-input);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .dash-agent-grid strong,
@@ -4457,7 +4459,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: var(--bg-input);
   border: 1px dashed var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 12px;
   line-height: 1.45;
 }
@@ -4544,7 +4546,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
   background: var(--bg-panel);
 }
 
@@ -4643,7 +4645,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   resize: vertical;
 }
 
@@ -4676,7 +4678,7 @@ textarea:focus-visible {
   padding: 6px 9px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .test-toggle {
@@ -4699,7 +4701,7 @@ textarea:focus-visible {
   padding: 8px 10px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .test-compare-model {
@@ -4733,7 +4735,7 @@ textarea:focus-visible {
   min-height: 38px;
   padding: 8px 9px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
   background: var(--bg-input);
   color: var(--text-dim);
   cursor: pointer;
@@ -4775,7 +4777,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -4812,7 +4814,7 @@ textarea:focus-visible {
   padding: 7px 10px;
   background: rgba(215, 130, 130, 0.12);
   border: 1px solid rgba(215, 130, 130, 0.26);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .test-results {
@@ -4828,7 +4830,7 @@ textarea:focus-visible {
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-left: 3px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .test-result.is-pass {
@@ -4915,7 +4917,7 @@ textarea:focus-visible {
   padding: 11px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -4934,7 +4936,7 @@ textarea:focus-visible {
   padding: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .isa-title {
@@ -4956,7 +4958,7 @@ textarea:focus-visible {
   font-size: 10.5px;
   line-height: 1.45;
   overflow-wrap: anywhere;
-  border-radius: 7px;
+  border-radius: 4px;
 }
 
 .pdf-notice.ok {
@@ -4991,7 +4993,7 @@ textarea:focus-visible {
   color: var(--warning);
   background: rgba(198, 169, 107, 0.1);
   border: 1px solid rgba(198, 169, 107, 0.26);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .isa-runs {
@@ -5005,7 +5007,7 @@ textarea:focus-visible {
   padding: 8px;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 4px;
 }
 
 .isa-run-head {
@@ -5029,7 +5031,7 @@ textarea:focus-visible {
   padding: 5px 6px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   font-family: var(--font-mono);
 }
 
@@ -5183,7 +5185,7 @@ textarea:focus-visible {
   gap: 7px;
   padding: 7px 8px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 5px;
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-faint);
 }
@@ -5529,7 +5531,7 @@ textarea:focus-visible {
   position: relative;
   width: 76px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid var(--border-soft);
   background: var(--bg-raised);
@@ -5720,7 +5722,7 @@ textarea:focus-visible {
   color: #a6a2b0;
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
 }
 .agent-drawer-close:hover {
@@ -5899,7 +5901,7 @@ textarea:focus-visible {
   font-size: 18px;
   font-weight: 700;
   border: 1px solid var(--sidebar-border);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 /* ============================================================
@@ -5945,7 +5947,7 @@ textarea:focus-visible {
 /* Phase 20: autonomous workspace-project card. */
 .macro-workspace {
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: 6px;
   padding: 8px 10px;
   background: var(--bg-input);
   display: flex;
@@ -5994,7 +5996,7 @@ textarea:focus-visible {
   color: var(--sidebar-active-text);
   background: var(--sidebar-active-bg);
   border: 1px solid var(--sidebar-border);
-  border-radius: 11px;
+  border-radius: 6px;
   cursor: pointer;
 }
 .sidebar-newchat:hover {
@@ -6087,7 +6089,7 @@ textarea:focus-visible {
   font-size: 0.92em;
   padding: 1px 5px;
   background: rgba(255, 255, 255, 0.07);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 /* ---- terminal permission card surfaced in chat (Item 6) ---- */
@@ -6152,7 +6154,7 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: 5px;
   cursor: pointer;
 }
 .permission-btn:hover {
@@ -6305,7 +6307,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   text-align: left;
   cursor: pointer;
 }
@@ -6350,7 +6352,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   opacity: 0;
 }
