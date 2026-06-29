@@ -1249,6 +1249,20 @@ export interface OllamaApi {
   autoConnect(): Promise<OllamaAutoConnectResult>
 }
 
+export interface GitChangeFile {
+  status: string
+  path: string
+}
+
+export type GitStatusResult =
+  | { ok: true; isRepo: true; branch: string; files: GitChangeFile[]; truncated: boolean; stat: string; clean: boolean }
+  | { ok: true; isRepo: false }
+  | { ok: false; error: string }
+
+export interface GitApi {
+  status(path: string): Promise<GitStatusResult>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1265,6 +1279,7 @@ export interface PreloadApi {
   mission: MissionApi
   settings: SettingsApi
   ollama: OllamaApi
+  git: GitApi
 }
 
 declare global {

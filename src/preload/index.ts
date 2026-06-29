@@ -261,6 +261,11 @@ const ollama = Object.freeze({
   autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect')
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama })
+// Phase 33.17: read-only git surface for the bottom workbench Changes panel.
+const git = Object.freeze({
+  status: (path: string): Promise<unknown> => ipcRenderer.invoke('git:status', { path })
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git })
 
 contextBridge.exposeInMainWorld('api', api)
