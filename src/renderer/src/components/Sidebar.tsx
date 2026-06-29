@@ -198,7 +198,6 @@ export default function Sidebar({
   }, [projectRowMenu])
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
-  const recentSessions = sessions
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
 
   // Phase 33.5: chats grouped by their owning project (newest first, mirroring
@@ -751,15 +750,25 @@ export default function Sidebar({
         </div>
 
         <section className="sidebar-section recent-section">
-          <div className="sidebar-section-title">Recent chats</div>
+          <div className="sidebar-section-header">
+            <div className="sidebar-section-title">Chats</div>
+            <button
+              type="button"
+              className="sidebar-add"
+              title="Start a new chat"
+              onClick={onNewGeneralChat}
+            >
+              <PlusIcon size={14} />
+            </button>
+          </div>
           <div className="recent-list">
-            {recentSessions.length === 0 ? (
-              <div className="sidebar-item is-empty">No recent chats yet</div>
+            {generalSessions.length === 0 ? (
+              <div className="sidebar-item is-empty">No chats yet</div>
             ) : (
-              recentSessions.map((session) => {
+              generalSessions.map((session) => {
                 const provider = labelOf(session.providerId)
-                const project = session.projectId ? projectById.get(session.projectId) : null
-                const meta = `${project ? `Workspace · ${project.name}` : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
+                const orphaned = Boolean(session.projectId)
+                const meta = `${orphaned ? 'Removed project' : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
                 return (
                   <div
                     className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
