@@ -69,13 +69,14 @@
   --danger: #df6f68;
   --info: #6fa3df;
 
-  /* Provider colors survive only as tiny dots/chips. */
-  --provider-claude: #c08a5a;
-  --provider-claude-bg: rgba(192, 138, 90, 0.14);
-  --provider-codex: #6fa3df;
-  --provider-codex-bg: rgba(111, 163, 223, 0.14);
-  --provider-local: #9a8fe0;
-  --provider-local-bg: rgba(154, 143, 224, 0.14);
+  /* Phase 33: provider identity is monochrome — neutral grays only, never
+     orange/blue/purple color blocks. Provider names stay as text labels. */
+  --provider-claude: #b8b8be;
+  --provider-claude-bg: rgba(255, 255, 255, 0.05);
+  --provider-codex: #b8b8be;
+  --provider-codex-bg: rgba(255, 255, 255, 0.05);
+  --provider-local: #b8b8be;
+  --provider-local-bg: rgba(255, 255, 255, 0.05);
 
   --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.45);
   --sidebar-width: 320px;
@@ -175,54 +176,64 @@ textarea:focus-visible {
 
 .app[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #101012;
-  --bg-panel: #18181d;
-  --bg-raised: #222228;
-  --bg-soft: #141418;
-  --bg-input: #202026;
-  --bg-chat: #101012;
-  --bg-chat-raised: #18181d;
-  --bg-composer: #1d1d23;
-  --bubble-user: #26262c;
-  --bubble-user-text: #f0f0f2;
+  /* Phase 33: black-heavy monochrome command surface. Window goes near-black;
+     panels/raised surfaces step up in tiny luminance increments so depth comes
+     from surface contrast rather than borders. Text stays high-contrast. */
+  --bg: #060607;            /* window base — near-black */
+  --bg-panel: #0d0e10;      /* cards, panels, popovers */
+  --bg-raised: #17181b;     /* raised / selected surfaces */
+  --bg-soft: #0a0b0c;
+  --bg-input: #121316;      /* inputs */
+  --bg-chat: #060607;
+  --bg-chat-raised: #0d0e10;
+  --bg-composer: #111215;   /* composer surface */
+  --bubble-user: #1b1c1f;
+  --bubble-user-text: #f4f4f6;
   --bubble-assistant: transparent;
-  --bubble-assistant-text: #ececef;
-  --sidebar-bg: #2b2b2f;
-  --sidebar-bg-2: #222226;
-  --sidebar-panel: #303035;
-  --sidebar-raised: #38383d;
-  --sidebar-soft: #29292e;
-  --sidebar-input: #25252a;
-  --sidebar-text: #f2f2f4;
-  --sidebar-text-dim: #c2c2c8;
-  --sidebar-text-faint: #8e8e98;
-  --sidebar-icon: #c2c2c8;
-  --sidebar-border: rgba(255, 255, 255, 0.10);
-  --sidebar-border-strong: rgba(255, 255, 255, 0.14);
-  --sidebar-hover: rgba(255, 255, 255, 0.07);
-  --sidebar-hover-strong: rgba(255, 255, 255, 0.11);
-  --sidebar-active-bg: rgba(255, 255, 255, 0.13);
+  --bubble-assistant-text: #ededf0;
+  --sidebar-bg: #0a0a0c;
+  --sidebar-bg-2: #070708;
+  --sidebar-panel: #141416;
+  --sidebar-raised: #1d1d20;
+  --sidebar-soft: #0f0f11;
+  --sidebar-input: #141416;
+  --sidebar-text: #f3f3f5;
+  --sidebar-text-dim: #b6b6bd;
+  --sidebar-text-faint: #7e7e87;
+  --sidebar-icon: #b6b6bd;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border-strong: rgba(255, 255, 255, 0.10);
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-hover-strong: rgba(255, 255, 255, 0.09);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.10);
   --sidebar-active-text: #ffffff;
-  --sidebar-accent: #f2f2f4;
-  --sidebar-on-accent: #1c1c20;
-  --sidebar-focus-ring: rgba(255, 255, 255, 0.34);
-  --text: #ececee;
-  --text-dim: #a7a7ae;
-  --text-faint: #73737c;
-  --on-accent: #17171a;
-  --border: #2b2b31;
-  --border-soft: rgba(255, 255, 255, 0.09);
-  --hover: rgba(255, 255, 255, 0.055);
-  --hover-strong: rgba(255, 255, 255, 0.10);
-  --accent: #ededf0;
+  --sidebar-accent: #f3f3f5;
+  --sidebar-on-accent: #0a0a0c;
+  --sidebar-focus-ring: rgba(255, 255, 255, 0.30);
+  --text: #f0f0f2;
+  --text-dim: #b0b0b8;
+  --text-faint: #7c7c85;
+  --on-accent: #0a0a0c;
+  --border: #1d1d20;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --hover: rgba(255, 255, 255, 0.05);
+  --hover-strong: rgba(255, 255, 255, 0.09);
+  --accent: #f0f0f2;
   --accent-strong: #ffffff;
-  --accent-dim: rgba(255, 255, 255, 0.11);
-  --focus-ring: rgba(255, 255, 255, 0.32);
-  --code-bg: #303039;
-  --code-border: rgba(255, 255, 255, 0.16);
-  --code-copy-bg: rgba(255, 255, 255, 0.10);
-  --code-copy-hover-bg: rgba(255, 255, 255, 0.18);
-  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.48);
+  --accent-dim: rgba(255, 255, 255, 0.09);
+  --focus-ring: rgba(255, 255, 255, 0.30);
+  --code-bg: #131316;
+  --code-border: rgba(255, 255, 255, 0.08);
+  --code-copy-bg: rgba(255, 255, 255, 0.08);
+  --code-copy-hover-bg: rgba(255, 255, 255, 0.14);
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.62);
+  /* Provider identity drops to neutral grays — no colored blocks in the UI. */
+  --provider-claude: #c9c9cf;
+  --provider-claude-bg: rgba(255, 255, 255, 0.06);
+  --provider-codex: #c9c9cf;
+  --provider-codex-bg: rgba(255, 255, 255, 0.06);
+  --provider-local: #c9c9cf;
+  --provider-local-bg: rgba(255, 255, 255, 0.06);
 }
 
 .app[data-theme='light'] {
