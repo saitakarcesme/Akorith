@@ -916,7 +916,7 @@ export default function Sidebar({
       </aside>
 
       {settingsOpen && (
-        <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+        <div className="settings-page-host">
           <SettingsCenter
             theme={theme}
             displayName={displayName}

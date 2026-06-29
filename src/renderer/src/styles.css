@@ -1309,6 +1309,73 @@ textarea:focus-visible {
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
 }
 
+/* ---- Phase 33.10: Settings as a real full-page view (not a modal card) ---- */
+.settings-page-host {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  background: var(--bg);
+  animation: settings-page-in 150ms var(--ease);
+}
+
+@keyframes settings-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Override the modal-card sizing so the settings surface fills the window. The
+   inner wrapper keeps content from stretching too wide on large displays. */
+.settings-center.settings-page {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  padding: 0;
+  gap: 0;
+  background: var(--bg);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.settings-page .settings-page-inner {
+  width: 100%;
+  max-width: 1040px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 26px 32px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.settings-page .settings-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+.settings-page .settings-tabs {
+  align-content: start;
+}
+
+.settings-page .settings-content {
+  height: 100%;
+}
+
+.settings-page .settings-title {
+  font-size: 20px;
+}
+
 .settings-header {
   display: flex;
   align-items: center;

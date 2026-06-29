@@ -459,18 +459,18 @@ export default function SettingsCenter({
 
   return (
     <div
-      className="settings-popover settings-center"
-      role="dialog"
-      aria-modal="true"
+      className="settings-popover settings-center settings-page"
+      role="region"
       aria-label="Settings"
       onClick={(event) => event.stopPropagation()}
     >
+      <div className="settings-page-inner">
       <div className="settings-header">
         <div>
           <div className="settings-title">Settings</div>
           <div className="settings-subtitle">Akorith workspace controls</div>
         </div>
-        <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Close">
+        <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Back to workspace">
           <CloseIcon size={16} />
         </button>
       </div>
@@ -1004,6 +1004,7 @@ export default function SettingsCenter({
             </section>
           )}
         </div>
+      </div>
       </div>
     </div>
   )
