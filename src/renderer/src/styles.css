@@ -5790,8 +5790,11 @@ textarea:focus-visible {
   cursor: pointer;
 }
 /* Subtle Codex-like focus: a soft gray border + faint background lift, no glow/ring. */
+/* Phase 34.4: no focus border/outline on the composer. Focus is shown only by
+   a subtle surface lift (no ring, no layout shift). The border stays
+   transparent so nothing draws a box around the textbox when selected. */
 .composer-box:focus-within {
-  border-color: rgba(255, 255, 255, 0.20);
+  border-color: transparent;
   background: var(--bg-raised);
 }
 
