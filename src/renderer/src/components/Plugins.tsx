@@ -1,106 +1,109 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { PluginInfo, PluginKind, PluginPermission, PluginStatus } from '../../../preload/index.d'
 
-// Phase 34.8: Plugins foundation. STATIC metadata only — no execution, no install,
-// no remote code, no marketplace. This is the UI shell future plugin work plugs into.
+// Phase 35: the Plugins page now reads the live plugin registry + diagnostics from
+// the plugin manager (read-only). Enable/disable is config-only; nothing executes.
 
-type PluginCategory = 'Agents' | 'Tools' | 'Workbench Panels' | 'Automations' | 'Model Providers' | 'Integrations'
-type PluginStatus = 'built-in' | 'planned' | 'disabled' | 'missing'
-type PluginPermission = 'filesystem' | 'terminal' | 'network' | 'git' | 'memory'
-
-interface PluginEntry {
-  id: string
-  name: string
-  category: PluginCategory
-  status: PluginStatus
-  description: string
-  permissions: PluginPermission[]
+const KIND_LABEL: Record<PluginKind, string> = {
+  agent: 'Agents',
+  tool: 'Tools',
+  workbench: 'Workbench Panels',
+  automation: 'Automations',
+  model_provider: 'Model Providers',
+  integration: 'Integrations',
+  memory: 'Memory',
+  browser: 'Browser',
+  telemetry: 'Telemetry'
 }
-
-const CATEGORIES: PluginCategory[] = ['Agents', 'Tools', 'Workbench Panels', 'Automations', 'Model Providers', 'Integrations']
-
-// Built-in / planned placeholders. These describe direction only — none of them
-// execute anything in this phase.
-const PLUGINS: PluginEntry[] = [
-  {
-    id: 'opencode-agent',
-    name: 'OpenCode Agent',
-    category: 'Agents',
-    status: 'planned',
-    description: 'A real OpenCode adapter session that plans and executes through the Agent OS runtime.',
-    permissions: ['filesystem', 'terminal', 'git']
-  },
-  {
-    id: 'hermes-memory',
-    name: 'Hermes Memory / Skills',
-    category: 'Agents',
-    status: 'planned',
-    description: 'Durable memory and reusable skills shared across chats, projects, and missions.',
-    permissions: ['memory', 'filesystem']
-  },
-  {
-    id: 'github-workbench',
-    name: 'GitHub Workbench',
-    category: 'Workbench Panels',
-    status: 'planned',
-    description: 'Pull requests, issues, and review threads as a read-first bottom-workbench panel.',
-    permissions: ['network', 'git']
-  },
-  {
-    id: 'remote-ollama-telemetry',
-    name: 'Remote Ollama Telemetry',
-    category: 'Integrations',
-    status: 'planned',
-    description: 'A secured companion endpoint that reports remote GPU/VRAM so the Dashboard can show off-machine runtimes.',
-    permissions: ['network']
-  },
-  {
-    id: 'browser-automation',
-    name: 'Browser Automation',
-    category: 'Automations',
-    status: 'planned',
-    description: 'Drive a sandboxed browser for research and verification flows.',
-    permissions: ['network', 'filesystem']
-  },
-  {
-    id: 'testlab-extensions',
-    name: 'Test Lab Extensions',
-    category: 'Tools',
-    status: 'built-in',
-    description: 'The existing sandboxed generate-and-run Test Lab, exposed as an extensible surface.',
-    permissions: ['filesystem', 'terminal']
-  },
-  {
-    id: 'mission-runners',
-    name: 'Mission Engine Runners',
-    category: 'Automations',
-    status: 'planned',
-    description: 'Planner / executor / reviewer / tester / committer runners for the Mission Engine — preview-only today.',
-    permissions: ['filesystem', 'terminal', 'git', 'network']
-  },
-  {
-    id: 'model-providers',
-    name: 'Custom Model Providers',
-    category: 'Model Providers',
-    status: 'built-in',
-    description: 'Claude, Codex, and local Ollama providers via the existing registry. Additional providers plug in here.',
-    permissions: ['network']
-  }
-]
 
 const STATUS_LABEL: Record<PluginStatus, string> = {
-  'built-in': 'Built-in',
-  planned: 'Planned',
+  built_in: 'Built-in',
+  available: 'Available',
+  unavailable: 'Unavailable',
   disabled: 'Disabled',
-  missing: 'Missing'
+  planned: 'Planned',
+  error: 'Error'
 }
 
-export default function Plugins(): JSX.Element {
-  const [filter, setFilter] = useState<'all' | PluginCategory>('all')
+const PERMISSION_LABEL: Record<PluginPermission, string> = {
+  filesystem_read: 'Read files',
+  filesystem_write: 'Write files',
+  terminal_read: 'Read terminal',
+  terminal_write: 'Send to terminal',
+  network: 'Network',
+  git_read: 'Read git',
+  git_write: 'Modify git',
+  browser: 'Control browser',
+  memory_read: 'Read memory',
+  memory_write: 'Write memory',
+  model_runtime: 'Model runtime',
+  controller_api: 'Controller API',
+  secrets: 'Secrets'
+}
 
+const SENSITIVE = new Set<PluginPermission>([
+  'filesystem_write',
+  'terminal_write',
+  'git_write',
+  'browser',
+  'memory_write',
+  'secrets'
+])
+
+export default function Plugins(): JSX.Element {
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
+  const [filter, setFilter] = useState<'all' | PluginKind>('all')
+  const [checking, setChecking] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      setPlugins(await window.api.plugins.list())
+    } catch {
+      setPlugins([])
+    }
+  }, [])
+
+  const runChecks = useCallback(async (): Promise<void> => {
+    setChecking(true)
+    try {
+      setPlugins(await window.api.plugins.checkAll())
+    } catch {
+      /* keep current */
+    } finally {
+      setChecking(false)
+    }
+  }, [])
+
+  // Load the registry, then run availability diagnostics once on open.
+  useEffect(() => {
+    void load().then(() => runChecks())
+  }, [load, runChecks])
+
+  const toggle = async (plugin: PluginInfo): Promise<void> => {
+    try {
+      const next = plugin.enabled ? await window.api.plugins.disable(plugin.id) : await window.api.plugins.enable(plugin.id)
+      setPlugins(next)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const checkOne = async (plugin: PluginInfo): Promise<void> => {
+    try {
+      await window.api.plugins.check(plugin.id)
+      await load()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const kinds = useMemo(() => [...new Set((plugins ?? []).map((p) => p.kind))], [plugins])
   const visible = useMemo(
-    () => (filter === 'all' ? PLUGINS : PLUGINS.filter((plugin) => plugin.category === filter)),
-    [filter]
+    () => (filter === 'all' ? plugins ?? [] : (plugins ?? []).filter((p) => p.kind === filter)),
+    [plugins, filter]
   )
+  const availableCount = (plugins ?? []).filter((p) => p.effectiveStatus === 'available' || p.effectiveStatus === 'built_in').length
 
   return (
     <main className="plugins-page">
@@ -108,57 +111,105 @@ export default function Plugins(): JSX.Element {
         <header className="plugins-header">
           <div>
             <h1>Plugins</h1>
-            <p>Extend Akorith with agents, tools, workbench panels, and automations.</p>
+            <p>Extend Akorith with agents, tools, workbench panels, and automations. Read-only foundation — nothing executes yet.</p>
           </div>
-          <span className="plugins-tag">Foundation · {PLUGINS.length} registered</span>
+          <div className="plugins-header-actions">
+            <span className="plugins-tag">{plugins ? `${availableCount}/${plugins.length} ready` : 'Loading…'}</span>
+            <button type="button" className="dash-refresh" disabled={checking} onClick={() => void runChecks()}>
+              {checking ? 'Checking…' : 'Re-check all'}
+            </button>
+          </div>
         </header>
 
         <div className="plugins-filters" role="tablist" aria-label="Plugin categories">
-          <button
-            type="button"
-            className={`plugins-filter ${filter === 'all' ? 'is-active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
+          <button type="button" className={`plugins-filter ${filter === 'all' ? 'is-active' : ''}`} onClick={() => setFilter('all')}>
             All
           </button>
-          {CATEGORIES.map((category) => (
+          {kinds.map((kind) => (
             <button
-              key={category}
+              key={kind}
               type="button"
-              className={`plugins-filter ${filter === category ? 'is-active' : ''}`}
-              onClick={() => setFilter(category)}
+              className={`plugins-filter ${filter === kind ? 'is-active' : ''}`}
+              onClick={() => setFilter(kind)}
             >
-              {category}
+              {KIND_LABEL[kind]}
             </button>
           ))}
         </div>
 
         <div className="plugins-grid">
-          {visible.map((plugin) => (
-            <article className="plugin-card" key={plugin.id}>
-              <div className="plugin-card-head">
-                <span className="plugin-card-name">{plugin.name}</span>
-                <span className={`plugin-status status-${plugin.status}`}>{STATUS_LABEL[plugin.status]}</span>
-              </div>
-              <div className="plugin-card-category">{plugin.category}</div>
-              <p className="plugin-card-desc">{plugin.description}</p>
-              <div className="plugin-perms" aria-label="Requested permissions">
-                {plugin.permissions.map((permission) => (
-                  <span className="plugin-perm" key={permission}>
-                    {permission}
-                  </span>
-                ))}
-              </div>
-              <button type="button" className="plugin-install" disabled title="Plugin installation is not available yet">
-                Coming soon
-              </button>
-            </article>
-          ))}
+          {visible.map((plugin) => {
+            const isOpen = expanded === plugin.id
+            return (
+              <article className={`plugin-card status-${plugin.effectiveStatus}`} key={plugin.id}>
+                <div className="plugin-card-head">
+                  <span className="plugin-card-name">{plugin.name}</span>
+                  <span className={`plugin-status status-${plugin.effectiveStatus}`}>{STATUS_LABEL[plugin.effectiveStatus]}</span>
+                </div>
+                <div className="plugin-card-category">
+                  {KIND_LABEL[plugin.kind]} · v{plugin.version}
+                  {plugin.builtIn ? ' · built-in' : ''}
+                </div>
+                <p className="plugin-card-desc">{plugin.description}</p>
+
+                {plugin.diagnostic && (
+                  <div className={`plugin-diagnostic ${plugin.diagnostic.available ? 'is-ok' : 'is-warn'}`}>
+                    {plugin.diagnostic.message}
+                  </div>
+                )}
+
+                <div className="plugin-perms" aria-label="Requested permissions">
+                  {plugin.permissions.map((permission) => (
+                    <span className={`plugin-perm ${SENSITIVE.has(permission) ? 'is-sensitive' : ''}`} key={permission}>
+                      {PERMISSION_LABEL[permission]}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="plugin-actions">
+                  <label className="plugin-toggle" title={plugin.enabled ? 'Disable (config only)' : 'Enable (config only)'}>
+                    <input type="checkbox" checked={plugin.enabled} onChange={() => void toggle(plugin)} />
+                    <span>{plugin.enabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                  <button type="button" className="plugin-check" onClick={() => void checkOne(plugin)}>
+                    Check
+                  </button>
+                  <button type="button" className="plugin-details-btn" onClick={() => setExpanded(isOpen ? null : plugin.id)}>
+                    {isOpen ? 'Hide details' : 'Details'}
+                  </button>
+                  <button type="button" className="plugin-install" disabled title="Plugin execution is not available yet">
+                    Coming soon
+                  </button>
+                </div>
+
+                {isOpen && (
+                  <div className="plugin-details">
+                    <div className="plugin-details-row">
+                      <span>ID</span>
+                      <code>{plugin.id}</code>
+                    </div>
+                    {plugin.docsUrl && (
+                      <div className="plugin-details-row">
+                        <span>Docs</span>
+                        <code>{plugin.docsUrl}</code>
+                      </div>
+                    )}
+                    <div className="plugin-details-notes">
+                      {plugin.safetyNotes.map((note, index) => (
+                        <div key={index}>• {note}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </article>
+            )
+          })}
+          {plugins && plugins.length === 0 && <div className="plugins-note">No plugins registered.</div>}
         </div>
 
         <div className="plugins-note">
-          Static foundation only — plugins do not execute, install, or load remote code in this phase. Permissions
-          shown are the access a plugin would request once the plugin system ships.
+          Foundation only — plugins do not execute, install, or load remote code in this phase. Permissions shown are the
+          access a plugin would request once the plugin runtime ships. Diagnostics are read-only availability checks.
         </div>
       </div>
     </main>
