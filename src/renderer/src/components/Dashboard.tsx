@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AgentAdapterInfo,
   AgentRuntimeSnapshot,
+  ControllerStatus,
   DailyUsageRow,
   EvaluationRow,
   GpuStatusResult,
   MacroSessionRow,
+  PluginInfo,
   Mission,
   MissionTemplate,
   ProjectRow,
@@ -109,7 +111,15 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [draftMissions, setDraftMissions] = useState<Mission[]>([])
   const [gpu, setGpu] = useState<GpuStatusResult | null>(null)
   const [gpuBusy, setGpuBusy] = useState(false)
+  const [controller, setController] = useState<ControllerStatus | null>(null)
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Phase 35: read-only controller status + plugin registry for the Dashboard.
+  useEffect(() => {
+    void window.api.controller.getStatus().then(setController).catch(() => setController(null))
+    void window.api.plugins.list().then(setPlugins).catch(() => setPlugins(null))
+  }, [])
 
   // Phase 34.7: read GPU/local-runtime telemetry on demand (load + manual refresh).
   // No background polling.
@@ -477,6 +487,38 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
             {gpu?.ollama.note && <span className="dash-gpu-note">{gpu.ollama.note}</span>}
           </div>
         )}
+      </section>
+
+      <section className="dash-section dash-control-os">
+        <div className="dash-section-head">
+          <div>
+            <h2>Controller API and plugins</h2>
+            <p>Optional local API (read-only, loopback by default) and the plugin foundation. Manage both in Settings.</p>
+          </div>
+          <span>{controller ? (controller.running ? `running · ${controller.baseUrl}` : 'stopped') : 'not checked'}</span>
+        </div>
+        <div className="dash-agent-grid">
+          <div>
+            <span>Controller</span>
+            <strong>{controller ? (controller.running ? 'Running' : controller.enabled ? 'Enabled' : 'Disabled') : '—'}</strong>
+            <em>{controller ? `${controller.readOnly ? 'Read-only' : 'Read/write'} · ${controller.allowLan ? 'LAN allowed' : 'loopback only'}` : 'Open Settings, then API'}</em>
+          </div>
+          <div>
+            <span>SSE clients</span>
+            <strong>{controller?.connectedClients ?? 0}</strong>
+            <em>{controller?.sseEnabled ? 'Event stream enabled' : 'Event stream off'}</em>
+          </div>
+          <div>
+            <span>Plugins ready</span>
+            <strong>{plugins ? plugins.filter((p) => p.effectiveStatus === 'available' || p.effectiveStatus === 'built_in').length : 0}</strong>
+            <em>{plugins ? `of ${plugins.length} registered` : 'Loading…'}</em>
+          </div>
+          <div>
+            <span>Plugin foundation</span>
+            <strong>Read-only</strong>
+            <em>No plugin executes or loads remote code yet</em>
+          </div>
+        </div>
       </section>
 
       <div className="dash-grid">
