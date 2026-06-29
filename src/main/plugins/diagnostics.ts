@@ -43,10 +43,14 @@ export async function checkOpenCode(): Promise<RawDiagnostic> {
         return
       }
       const out = `${stdout ?? ''}${stderr ?? ''}`.toLowerCase()
-      // Heuristic only — presence of a provider word, never the secret itself.
+      // OpenCode prints "<n> credentials" — trust that count (never the secret).
+      const count = out.match(/(\d+)\s+credentials?/)
+      if (count) {
+        resolve(Number(count[1]) > 0)
+        return
+      }
       const empty = /no\s+(providers|credentials)|not\s+(logged|signed)|empty/.test(out) || out.trim().length === 0
-      const hasProvider = /(anthropic|openai|github|opencode|google|provider)/.test(out) && !empty
-      resolve(hasProvider)
+      resolve(!empty && /(anthropic|openai|google)/.test(out))
     })
   })
   const authNote =
