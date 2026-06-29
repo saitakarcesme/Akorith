@@ -216,8 +216,9 @@ textarea:focus-visible {
   --bg-chat: #060607;
   --bg-chat-raised: #0d0e10;
   --bg-composer: #111215;   /* composer surface */
-  --bubble-user: #1b1c1f;
-  --bubble-user-text: #f4f4f6;
+  /* Phase 37.5: user messages are a white right-aligned bubble in dark theme. */
+  --bubble-user: #ffffff;
+  --bubble-user-text: #17181b;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #ededf0;
   --sidebar-bg: #0a0a0c;
@@ -275,8 +276,10 @@ textarea:focus-visible {
   --bg-chat: #f7f8fa;
   --bg-chat-raised: #ffffff;
   --bg-composer: #ffffff;
-  --bubble-user: #e8eaf0;
-  --bubble-user-text: #191a1d;
+  /* Phase 37.5: light theme inverts to a dark bubble so the user message stays
+     readable on the near-white chat surface. */
+  --bubble-user: #2a2b30;
+  --bubble-user-text: #f3f3f5;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #202124;
   --sidebar-bg: #ffffff;
@@ -4210,11 +4213,22 @@ textarea:focus-visible {
 
 /* Clean, subtle chat bubbles on the light workbench. The assistant message is a
    plain white card with a hairline border; the user message a faint accent tint. */
+/* Phase 37.5: user message — right-aligned, white (dark text), and noticeably
+   more rounded than the technical panels, with a small tail at bottom-right. */
 .chat-msg.user {
   align-self: flex-end;
-  border-bottom-right-radius: var(--radius-sm);
+  max-width: 74%;
   background: var(--bubble-user);
   color: var(--bubble-user-text);
+  border-color: transparent;
+  border-radius: 16px 16px 5px 16px;
+}
+
+/* Keep any inline code legible inside the white bubble. */
+.chat-msg.user code {
+  color: var(--bubble-user-text);
+  background: rgba(0, 0, 0, 0.07);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .chat-msg.assistant {
