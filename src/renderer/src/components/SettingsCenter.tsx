@@ -10,6 +10,9 @@ import type {
   AgentStatus,
   BridgeSettings,
   DigestSettings,
+  ControllerConfigView,
+  ControllerDocs,
+  ControllerStatus,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
@@ -21,7 +24,7 @@ import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
 
-type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -188,6 +191,14 @@ export default function SettingsCenter({
   onClose
 }: SettingsCenterProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
+  // Phase 35: controller API state.
+  const [ctrlConfig, setCtrlConfig] = useState<ControllerConfigView | null>(null)
+  const [ctrlStatus, setCtrlStatus] = useState<ControllerStatus | null>(null)
+  const [ctrlDocs, setCtrlDocs] = useState<ControllerDocs | null>(null)
+  const [ctrlBusy, setCtrlBusy] = useState(false)
+  const [ctrlToken, setCtrlToken] = useState<string | null>(null)
+  const [ctrlPortDraft, setCtrlPortDraft] = useState('')
+  const [ctrlNotice, setCtrlNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
   const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
@@ -401,6 +412,79 @@ export default function SettingsCenter({
     }
   }
 
+  // ---- Phase 35: controller API ----
+  const refreshController = useCallback(async (): Promise<void> => {
+    try {
+      const [config, status] = await Promise.all([window.api.controller.getConfig(), window.api.controller.getStatus()])
+      setCtrlConfig(config)
+      setCtrlStatus(status)
+      setCtrlPortDraft(String(config.port))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'api') return
+    void refreshController()
+    if (!ctrlDocs) void window.api.controller.getDocs().then(setCtrlDocs).catch(() => setCtrlDocs(null))
+  }, [activeTab, refreshController, ctrlDocs])
+
+  const controllerAction = async (action: () => Promise<ControllerStatus>, okText?: string): Promise<void> => {
+    setCtrlBusy(true)
+    setCtrlNotice(null)
+    try {
+      const status = await action()
+      setCtrlStatus(status)
+      await refreshController()
+      if (status.lastError) setCtrlNotice({ kind: 'error', text: status.lastError })
+      else if (okText) setCtrlNotice({ kind: 'ok', text: okText })
+    } catch (err) {
+      setCtrlNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setCtrlBusy(false)
+    }
+  }
+
+  const toggleController = (enabled: boolean): Promise<void> =>
+    controllerAction(
+      () => window.api.controller.updateConfig({ enabled }),
+      enabled ? 'Controller starting…' : 'Controller stopped'
+    )
+
+  const saveControllerPort = (): Promise<void> => {
+    const port = Number(ctrlPortDraft)
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      setCtrlNotice({ kind: 'error', text: 'Enter a port between 1024 and 65535.' })
+      return Promise.resolve()
+    }
+    return controllerAction(() => window.api.controller.updateConfig({ port }), 'Port saved')
+  }
+
+  const toggleControllerLan = (allowLan: boolean): Promise<void> =>
+    controllerAction(() => window.api.controller.updateConfig({ allowLan }), allowLan ? 'LAN access allowed' : 'Loopback only')
+
+  const regenerateControllerToken = (): Promise<void> =>
+    controllerAction(() => window.api.controller.regenerateToken(), 'New token generated')
+
+  const revealControllerToken = async (): Promise<void> => {
+    try {
+      const token = await window.api.controller.revealToken()
+      setCtrlToken(token)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const copyText = async (text: string, label: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCtrlNotice({ kind: 'ok', text: `Copied ${label}` })
+    } catch {
+      setCtrlNotice({ kind: 'info', text: `Copy failed — select manually.` })
+    }
+  }
+
   const toggleAutoEnter = async (): Promise<void> => {
     const next = !(bridgeSettings?.autoEnter ?? false)
     setSaving('bridge')
@@ -519,6 +603,7 @@ export default function SettingsCenter({
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
     { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
+    { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
@@ -1032,6 +1117,153 @@ export default function SettingsCenter({
           {activeTab === 'missions' && (
             <section className="settings-section">
               <MissionCenter />
+            </section>
+          )}
+
+          {activeTab === 'api' && (
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <h2>Controller API</h2>
+                  <p>
+                    Optional local HTTP API for scripts, CLIs, and plugins. Disabled by default, loopback-only,
+                    token-protected, and read-only in this phase.
+                  </p>
+                </div>
+                {ctrlStatus && (
+                  <span className={`ctrl-pill ${ctrlStatus.running ? 'is-running' : 'is-stopped'}`}>
+                    {ctrlStatus.running ? 'Running' : 'Stopped'}
+                  </span>
+                )}
+              </div>
+
+              {ctrlConfig && ctrlStatus ? (
+                <>
+                  <div className="settings-toggle-row">
+                    <label className="ctrl-switch">
+                      <input
+                        type="checkbox"
+                        checked={ctrlConfig.enabled}
+                        disabled={ctrlBusy}
+                        onChange={(event) => void toggleController(event.target.checked)}
+                      />
+                      <span>Enable controller API</span>
+                    </label>
+                    <span className="ctrl-readonly">Read-only · {ctrlStatus.sseEnabled ? 'SSE on' : 'SSE off'}</span>
+                  </div>
+
+                  <div className="ctrl-grid">
+                    <div className="ctrl-field">
+                      <span>Host</span>
+                      <code>{ctrlConfig.host}</code>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Port</span>
+                      <div className="settings-path-row">
+                        <input
+                          value={ctrlPortDraft}
+                          inputMode="numeric"
+                          onChange={(event) => setCtrlPortDraft(event.target.value.replace(/[^0-9]/g, ''))}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') void saveControllerPort()
+                          }}
+                        />
+                        <button type="button" disabled={ctrlBusy} onClick={() => void saveControllerPort()}>
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Base URL</span>
+                      <div className="settings-path-row">
+                        <code>{ctrlStatus.baseUrl}</code>
+                        <button type="button" onClick={() => void copyText(ctrlStatus.baseUrl, 'base URL')}>
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                    <div className="ctrl-field">
+                      <span>Token</span>
+                      <div className="settings-path-row">
+                        <code>{ctrlToken ?? (ctrlConfig.hasToken ? ctrlConfig.tokenMasked : 'none yet')}</code>
+                        <button type="button" onClick={() => void revealControllerToken()}>
+                          {ctrlToken ? 'Shown' : 'Reveal'}
+                        </button>
+                        {ctrlToken && (
+                          <button type="button" onClick={() => void copyText(ctrlToken, 'token')}>
+                            Copy
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-checks">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={ctrlConfig.allowLan}
+                        disabled={ctrlBusy}
+                        onChange={(event) => void toggleControllerLan(event.target.checked)}
+                      />
+                      <span>Allow LAN access (binds a non-loopback host — trusted private networks only)</span>
+                    </label>
+                  </div>
+                  {ctrlConfig.allowLan && (
+                    <div className="ollama-status is-error">
+                      Warning: LAN access is enabled. Only use this on a trusted private network (e.g. Tailscale/VPN).
+                      Never expose the controller to the public internet.
+                    </div>
+                  )}
+
+                  <div className="settings-action-row">
+                    <button type="button" disabled={ctrlBusy} onClick={() => void controllerAction(() => window.api.controller.restart(), 'Controller restarted')}>
+                      Restart
+                    </button>
+                    <button type="button" disabled={ctrlBusy} onClick={() => void regenerateControllerToken()}>
+                      Regenerate token
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyText(`curl -H "Authorization: Bearer <token>" ${ctrlStatus.baseUrl}/health`, 'example curl')}
+                    >
+                      Copy example curl
+                    </button>
+                  </div>
+
+                  {ctrlNotice && <div className={`ollama-status is-${ctrlNotice.kind}`}>{ctrlNotice.text}</div>}
+                  {ctrlStatus.lastStartedAt && (
+                    <div className="settings-hint">Last started {new Date(ctrlStatus.lastStartedAt).toLocaleString()}</div>
+                  )}
+
+                  {ctrlDocs && (
+                    <>
+                      <div className="settings-divider" />
+                      <div className="settings-field is-stacked">
+                        <span>Endpoints ({ctrlDocs.endpoints.length})</span>
+                        <div className="ctrl-endpoints">
+                          {ctrlDocs.endpoints.map((endpoint) => (
+                            <div className="ctrl-endpoint" key={`${endpoint.method}-${endpoint.path}`}>
+                              <span className="ctrl-method">{endpoint.method}</span>
+                              <code>{endpoint.path}</code>
+                              <em>{endpoint.summary}</em>
+                              {!endpoint.auth && <span className="ctrl-open">no auth</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="settings-note">
+                    The token is stored in local config (loopex.config.json), not an OS keychain. It is never logged.
+                    Phase 35 exposes read-only endpoints only — no command, terminal, file, git, prompt-send, or mission
+                    execution.
+                  </div>
+                </>
+              ) : (
+                <div className="settings-hint">Loading controller status…</div>
+              )}
             </section>
           )}
 

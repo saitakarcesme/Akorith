@@ -2804,6 +2804,115 @@ textarea:focus-visible {
   color: var(--text-dim);
 }
 
+/* ---- Phase 35: controller API settings ---- */
+.ctrl-pill {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+.ctrl-pill.is-running {
+  color: var(--success);
+}
+
+.ctrl-readonly {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.ctrl-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ctrl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ctrl-field > span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.ctrl-field code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctrl-endpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ctrl-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+}
+
+.ctrl-endpoint:hover {
+  background: var(--hover);
+}
+
+.ctrl-method {
+  flex: 0 0 38px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.ctrl-endpoint code {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.ctrl-endpoint em {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  color: var(--text-faint);
+}
+
+.ctrl-open {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
 /* ---- Phase 33.13/33.14: remote Ollama endpoints editor ---- */
 .ollama-remote-head {
   display: flex;
