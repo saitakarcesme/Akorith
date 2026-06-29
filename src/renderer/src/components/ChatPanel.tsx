@@ -292,6 +292,18 @@ export default function ChatPanel({
     }
   }, [])
 
+  // Phase 33.15: which Ollama endpoint is currently active (for model-picker
+  // source labels: "Local" vs "Remote: <profile>"). Seeded from the last known
+  // value so the label is correct before auto-connect resolves.
+  const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(() => {
+    try {
+      const raw = localStorage.getItem('akorith.ollamaActive')
+      return raw ? (JSON.parse(raw) as { label: string; baseUrl: string }) : null
+    } catch {
+      return null
+    }
+  })
+
   useEffect(() => {
     void loadProviders()
     void window.api.bridge.getSettings().then((s) => setAutoEnter(s.autoEnter))
@@ -302,6 +314,38 @@ export default function ChatPanel({
       clearTimeout(autoSummaryTimer.current)
     }
   }, [loadProviders])
+
+  // Phase 33.14: once on launch, try local → last → remote Ollama endpoints by
+  // priority and pick the first healthy one. If it switched the active endpoint,
+  // reload providers so the model picker shows the now-reachable models.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.ollama
+      .autoConnect()
+      .then((res) => {
+        if (cancelled || !res.ok) return
+        const active = { label: res.active.label, baseUrl: res.active.baseUrl }
+        setOllamaActive(active)
+        try {
+          localStorage.setItem('akorith.ollamaActive', JSON.stringify(active))
+        } catch {
+          /* ignore */
+        }
+        if (res.switched) void loadProviders()
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [loadProviders])
+
+  const modelSource = useCallback(
+    (pid: string): string | undefined => {
+      if (pid === 'local' || pid.toLowerCase().includes('ollama')) return ollamaActive?.label ?? 'Local'
+      return undefined
+    },
+    [ollamaActive]
+  )
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -1040,6 +1084,7 @@ export default function ChatPanel({
               model={model}
               onSelect={selectModel}
               onRefresh={() => void loadProviders()}
+              modelSource={modelSource}
             />
             <input
               ref={imageInputRef}
