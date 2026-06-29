@@ -271,6 +271,15 @@ const gpu = Object.freeze({
   getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus')
 })
 
+// Phase 36: remote GPU/runtime telemetry via a remote Akorith controller (read-only).
+const telemetry = Object.freeze({
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('telemetry:getStatus'),
+  getProfiles: (): Promise<unknown> => ipcRenderer.invoke('telemetry:getProfiles'),
+  saveProfiles: (profiles: unknown): Promise<unknown> => ipcRenderer.invoke('telemetry:saveProfiles', profiles),
+  testProfile: (profile: unknown): Promise<unknown> => ipcRenderer.invoke('telemetry:testProfile', profile),
+  revealToken: (id: string): Promise<unknown> => ipcRenderer.invoke('telemetry:revealToken', id)
+})
+
 // Phase 35: optional local controller API (read-only, loopback-default, token-gated).
 const controller = Object.freeze({
   getConfig: (): Promise<unknown> => ipcRenderer.invoke('controller:getConfig'),
@@ -296,6 +305,6 @@ const plugins = Object.freeze({
   setChromaEndpoint: (endpoint: string): Promise<unknown> => ipcRenderer.invoke('plugins:setChromaEndpoint', endpoint)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, controller, plugins })
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins })
 
 contextBridge.exposeInMainWorld('api', api)

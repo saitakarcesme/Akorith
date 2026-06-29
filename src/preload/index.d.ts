@@ -1290,6 +1290,51 @@ export interface GpuApi {
   getStatus(): Promise<GpuStatusResult>
 }
 
+export interface RemoteTelemetryProfileView {
+  id: string
+  name: string
+  baseUrl: string
+  enabled: boolean
+  priority: number
+  lastStatus?: 'ok' | 'error'
+  lastError?: string
+  lastCheckedAt?: number
+  hasToken: boolean
+  tokenMasked: string
+}
+
+export interface TelemetryStatus {
+  source: 'remote' | 'local'
+  profile?: { id: string; name: string; baseUrl: string }
+  gpu: GpuStatusResult
+  ollama?: { configuredBaseUrl?: string; endpointKind?: string; note?: string } & Record<string, unknown>
+  checkedAt: number
+  remoteError?: string
+}
+
+export interface TelemetryTestResult {
+  ok: boolean
+  message: string
+  modelCount?: number
+}
+
+export interface TelemetryProfileInput {
+  id?: string
+  name: string
+  baseUrl: string
+  token?: string
+  enabled: boolean
+  priority: number
+}
+
+export interface TelemetryApi {
+  getStatus(): Promise<TelemetryStatus>
+  getProfiles(): Promise<RemoteTelemetryProfileView[]>
+  saveProfiles(profiles: TelemetryProfileInput[]): Promise<RemoteTelemetryProfileView[]>
+  testProfile(profile: TelemetryProfileInput): Promise<TelemetryTestResult>
+  revealToken(id: string): Promise<string>
+}
+
 export interface ControllerStatus {
   enabled: boolean
   running: boolean
@@ -1443,6 +1488,7 @@ export interface PreloadApi {
   ollama: OllamaApi
   git: GitApi
   gpu: GpuApi
+  telemetry: TelemetryApi
   controller: ControllerApi
   plugins: PluginsApi
 }

@@ -141,6 +141,25 @@ export interface PluginSettings {
   chromaEndpoint?: string
 }
 
+/** Phase 36: a remote Akorith Controller used as a GPU/runtime telemetry source —
+ *  e.g. the PC running Ollama, reachable over Tailscale/VPN/LAN. Token required and
+ *  stored in local config (not an OS keychain). Never logged. */
+export interface RemoteTelemetryProfile {
+  id: string
+  name: string
+  baseUrl: string
+  token: string
+  enabled: boolean
+  priority: number
+  lastStatus?: 'ok' | 'error'
+  lastError?: string
+  lastCheckedAt?: number
+}
+
+export interface TelemetrySettings {
+  profiles: RemoteTelemetryProfile[]
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
@@ -150,6 +169,7 @@ export interface LoopexConfig {
   isascore?: Partial<IsaScoreSettings>
   controller?: Partial<ControllerSettings>
   plugins?: Partial<PluginSettings>
+  telemetry?: Partial<TelemetrySettings>
   /** Last theme selected in the renderer; read by the splash at startup. */
   theme?: AppTheme
 }
@@ -211,6 +231,10 @@ export const DEFAULT_PLUGINS: PluginSettings = {
   disabled: []
 }
 
+export const DEFAULT_TELEMETRY: TelemetrySettings = {
+  profiles: []
+}
+
 export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
@@ -223,7 +247,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   test: DEFAULT_TEST,
   isascore: DEFAULT_ISASCORE,
   controller: DEFAULT_CONTROLLER,
-  plugins: DEFAULT_PLUGINS
+  plugins: DEFAULT_PLUGINS,
+  telemetry: DEFAULT_TELEMETRY
 }
 
 export function normalizeBaseUrl(value: unknown, fallback = DEFAULT_LOCAL_PROVIDER.baseUrl): string {
@@ -404,6 +429,45 @@ export function setPluginSettings(patch: Partial<PluginSettings>): PluginSetting
   config.plugins = next
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return next
+}
+
+// ---- Phase 36: remote telemetry profiles (GPU/runtime via remote controller) ----
+
+export function sanitizeTelemetryProfiles(value: unknown): RemoteTelemetryProfile[] {
+  if (!Array.isArray(value)) return []
+  const out: RemoteTelemetryProfile[] = []
+  for (const raw of value.slice(0, 24)) {
+    if (!raw || typeof raw !== 'object') continue
+    const entry = raw as Record<string, unknown>
+    const baseUrl = normalizeBaseUrl(entry.baseUrl, '')
+    if (!baseUrl) continue
+    const status = entry.lastStatus === 'ok' || entry.lastStatus === 'error' ? entry.lastStatus : undefined
+    out.push({
+      id: safeString(entry.id, 64) ?? `rt-${out.length}-${baseUrl.length}`,
+      name: safeString(entry.name, 80) ?? 'Remote runtime',
+      baseUrl,
+      token: typeof entry.token === 'string' ? entry.token : '',
+      enabled: entry.enabled !== false,
+      priority: Number.isFinite(entry.priority) ? Math.max(0, Math.trunc(entry.priority as number)) : out.length,
+      ...(status ? { lastStatus: status } : {}),
+      ...(safeString(entry.lastError, 400) ? { lastError: safeString(entry.lastError, 400) } : {}),
+      ...(Number.isFinite(entry.lastCheckedAt) ? { lastCheckedAt: entry.lastCheckedAt as number } : {})
+    })
+  }
+  return out
+}
+
+export function getTelemetrySettings(): TelemetrySettings {
+  return { profiles: sanitizeTelemetryProfiles(loadConfig().telemetry?.profiles) }
+}
+
+export function setTelemetrySettings(patch: Partial<TelemetrySettings>): TelemetrySettings {
+  const config = loadConfig()
+  const current = getTelemetrySettings()
+  const profiles = patch.profiles === undefined ? current.profiles : sanitizeTelemetryProfiles(patch.profiles)
+  config.telemetry = { profiles }
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return { profiles }
 }
 
 export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
