@@ -26,6 +26,7 @@ import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
+import { registerProjectLoopIpc } from './project-loop'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -392,6 +393,7 @@ app.whenReady().then(() => {
   registerStartupSnapshotIpc()
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
+  registerProjectLoopIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
