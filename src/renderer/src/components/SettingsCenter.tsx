@@ -24,8 +24,9 @@ import type {
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
+import UpdatePanel from './UpdatePanel'
 
-type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -668,6 +669,7 @@ export default function SettingsCenter({
     { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
+    { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
@@ -1183,6 +1185,8 @@ export default function SettingsCenter({
               <MissionCenter />
             </section>
           )}
+
+          {activeTab === 'update' && <UpdatePanel />}
 
           {activeTab === 'api' && (
             <section className="settings-section">
