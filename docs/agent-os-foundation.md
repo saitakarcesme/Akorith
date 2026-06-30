@@ -738,3 +738,48 @@ Claude/Codex/Ollama runtime/prompts/returns, token accounting, usage logging,
 Complete the OpenCode Go login UX in-app (a one-click "Sign in" that opens the Gaia pane to
 `opencode auth login`) and a Gaia executor loop via `opencode run`. Alternatives: the
 Akorith CLI over the controller, or the sandboxed plugin runtime.
+
+## Phase 39 — Self-Update · Release Polish · README · One-Command Setup
+
+Moves Akorith toward a public-ready desktop product. Full plan:
+`docs/phase-39-self-update-release-polish.md`. Setup: `docs/setup.md`. Updater:
+`docs/update-system.md`.
+
+- **In-app source updater** (`src/main/update/`): read-only check of `origin/main`
+  (branch/commit/behind-ahead/dirty, credential-masked remote) and a runner that
+  fast-forwards `main` only after the safety check passes — `fetch → switch main →
+  merge --ff-only` + optional `npm install`/`build`. Never resets, discards, force-pushes,
+  deletes branches, or runs remote-supplied commands. Surfaced at **Settings → Update**
+  with a logs panel + Dashboard badge. Packaged installs get an honest "source-only" message.
+- **Honest usage limits**: Dashboard Claude/Codex cards show Akorith's OWN recorded in-app
+  usage over rolling 5h/7d windows (`getProviderUsageSince`) plus user-configured limit
+  labels (`config.usageLimits`). Never scrapes accounts, reads cookies, stores tokens, or
+  fabricates remaining values; terminal CLI usage is explicitly not counted.
+- **Composer declutter**: secondary actions (Image, Suggest, Repo, Auto-Enter, Summarize,
+  Show agents) moved into a compact "More" popover; only model picker, agent target, More,
+  and Send stay visible. Bigger user-bubble radius (24px).
+- **App identity**: explicit Akorith application menu (About/Hide/Quit Akorith). The dev
+  bold menu-bar name still reads "Electron" (node_modules bundle, unfixable at runtime);
+  the packaged build (productName=Akorith) is correct everywhere.
+- **One-command setup**: `scripts/setup-akorith.sh` / `.ps1` (+ `npm run setup`/`doctor`)
+  check the toolchain, install deps, probe the agent stack, and print exact auth steps —
+  no secrets collected. The shell script also detects + fixes the iCloud `node_modules` trap.
+- **macOS app refresh**: `npm run macos:refresh` backs up old `Akorith.app` copies (moved,
+  never deleted) and installs the newest build; user data/config/db untouched.
+
+### Environment fix
+The repo lives in an iCloud-synced folder that evicted `node_modules` into dataless
+placeholders (hanging tsc/vite/npm across phases). Phase 39 relocates `node_modules` to
+`~/Library/Application Support/akorith-dev` via a symlink so the toolchain stops hanging.
+
+### Intentionally unchanged
+Claude/Codex/Ollama/OpenCode runtime/prompts/returns, token accounting, usage logging,
+`bridgeSend → PtyManager.write`, PTY kinds, Olympus/Gaia/Atlantis, controller security,
+`loopex.db`/`loopex.config.json`, AkorithLoop. No mission execution, no secrets stored,
+no website/release distribution.
+
+### Recommended Phase 40
+A **packaged release auto-updater** (GitHub Releases + signed/notarized artifacts) so
+non-source users get updates, replacing the source updater for end users — plus the
+download/website page. Alternatives: the Gaia (`opencode run`) executor loop, or the
+Akorith CLI over the controller.

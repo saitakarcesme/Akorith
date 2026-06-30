@@ -68,3 +68,16 @@ CLIs resolve.
 - [ ] Link to the GitHub release / repo.
 - [ ] Call out: no API keys, runs your own CLI subscriptions, local data only.
 - [ ] Note current limitations honestly (semi-automatic, no autopilot).
+
+## 8. Phase 39 tooling (source installs)
+
+- [ ] **Keep checkouts current:** Settings → Update fast-forwards a source install to
+      `origin/main` (see `docs/update-system.md`). Replaces manual `git pull` on Mac + PC.
+- [ ] **Refresh the packaged macOS app:** `npm run pack:mac` then `npm run macos:refresh`
+      (old copies are MOVED to `~/Desktop/Akorith-old-apps-<stamp>/`, never deleted; user
+      data/config/db untouched).
+- [ ] **One-command bootstrap on a new machine:** `npm run setup` (macOS/Linux) or
+      `pwsh scripts/setup-akorith.ps1` (Windows); `npm run doctor` for a check-only pass.
+      See `docs/setup.md`.
+- [ ] **iCloud trap:** if the repo is under `~/Desktop`/`~/Documents`, relocate
+      `node_modules` out of the synced tree (the setup script prints the fix).
