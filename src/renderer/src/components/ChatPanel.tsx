@@ -273,6 +273,16 @@ export default function ChatPanel({
   // ---- Phase 6: suggest-only router + opt-in repo context ----
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
   const [suggesting, setSuggesting] = useState(false)
+  // Phase 39.7: secondary composer actions live in a "More" popover.
+  const [moreOpen, setMoreOpen] = useState(false)
+  useEffect(() => {
+    if (!moreOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setMoreOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [moreOpen])
   const [digestEnabled, setDigestEnabled] = useState(false)
   const [summarizingAgent, setSummarizingAgent] = useState(false)
   // Phase 14.1: a detected terminal permission/confirmation prompt, surfaced as
@@ -1124,16 +1134,7 @@ export default function ChatPanel({
               className="composer-file-input"
               onChange={(event) => void addImageFiles(event.target.files)}
             />
-            <button
-              type="button"
-              className="composer-chip"
-              disabled={busyRequestId !== null || attachedImages.length >= 4}
-              onClick={() => imageInputRef.current?.click()}
-              title="Attach image"
-            >
-              <PlusIcon size={13} />
-              Image
-            </button>
+            {/* Primary: target agent selector stays visible in a workspace. */}
             {hasProject && (
               <div className="route-seg" role="group" aria-label="Target agent">
                 {TERMINALS.map((t) => (
@@ -1149,37 +1150,86 @@ export default function ChatPanel({
                 ))}
               </div>
             )}
-            {hasProject && (
-              <label className="composer-chip" title="Prepend a bounded git digest of the repo to what the provider sees.">
-                <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
-                Repo
-              </label>
-            )}
-            {hasProject && (
-              <label className="composer-chip" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
-                <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
-                Auto-Enter
-              </label>
-            )}
-            <button type="button" className="composer-chip" disabled={!draft.trim() || suggesting} onClick={() => void suggestTask()}>
-              {suggesting ? 'Classifying…' : '✦ Suggest'}
-            </button>
-            {hasProject && (
+            {/* Phase 39.7: secondary actions grouped into a compact "More" popover. */}
+            <div className="composer-more">
               <button
                 type="button"
-                className="composer-chip"
-                disabled={summarizingAgent}
-                onClick={() => void runAgentSummary(bridgeTarget, { auto: false })}
-                title={`Read ${TERMINALS.find((t) => t.id === bridgeTarget)?.label}'s recent terminal output and summarize it into chat`}
+                className={`composer-chip ${moreOpen ? 'is-active' : ''}`}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                title="More composer tools"
+                onClick={() => setMoreOpen((v) => !v)}
               >
-                {summarizingAgent ? 'Reading…' : 'Summarize output'}
+                <SparkIcon size={13} />
+                More
               </button>
-            )}
-            {hasProject && (
-              <button type="button" className="composer-chip" onClick={onToggleDrawer}>
-                {drawerOpen ? 'Hide agents' : 'Show agents'}
-              </button>
-            )}
+              {moreOpen && (
+                <>
+                  <div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} />
+                  <div className="composer-more-pop" role="menu">
+                    <button
+                      type="button"
+                      className="composer-more-item"
+                      disabled={busyRequestId !== null || attachedImages.length >= 4}
+                      onClick={() => {
+                        setMoreOpen(false)
+                        imageInputRef.current?.click()
+                      }}
+                    >
+                      <PlusIcon size={13} />
+                      <span>Attach image</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-more-item"
+                      disabled={!draft.trim() || suggesting}
+                      onClick={() => {
+                        setMoreOpen(false)
+                        void suggestTask()
+                      }}
+                    >
+                      <SparkIcon size={13} />
+                      <span>{suggesting ? 'Classifying…' : 'Suggest model'}</span>
+                    </button>
+                    {hasProject && (
+                      <>
+                        <div className="composer-more-sep" />
+                        <label className="composer-more-toggle" title="Prepend a bounded git digest of the repo to what the provider sees.">
+                          <span>Repo context</span>
+                          <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
+                        </label>
+                        <label className="composer-more-toggle" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
+                          <span>Auto-Enter</span>
+                          <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
+                        </label>
+                        <div className="composer-more-sep" />
+                        <button
+                          type="button"
+                          className="composer-more-item"
+                          disabled={summarizingAgent}
+                          onClick={() => {
+                            setMoreOpen(false)
+                            void runAgentSummary(bridgeTarget, { auto: false })
+                          }}
+                        >
+                          <span>{summarizingAgent ? 'Reading…' : `Summarize ${TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? 'agent'} output`}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="composer-more-item"
+                          onClick={() => {
+                            setMoreOpen(false)
+                            onToggleDrawer()
+                          }}
+                        >
+                          <span>{drawerOpen ? 'Hide agents' : 'Show agents'}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           {busyRequestId ? (
             <button type="button" className="send-button" onClick={cancel}>

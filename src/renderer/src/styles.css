@@ -6658,6 +6658,89 @@ textarea:focus-visible {
   accent-color: var(--text-dim);
 }
 
+.composer-chip.is-active {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+/* ---- Phase 39.7: composer "More" popover (declutters secondary actions) ---- */
+.composer-more {
+  position: relative;
+  display: inline-flex;
+}
+
+.composer-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.composer-more-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 61;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+.composer-more-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-more-item:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.composer-more-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.composer-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.composer-more-toggle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.composer-more-toggle input[type='checkbox'] {
+  accent-color: var(--accent-strong);
+}
+
+.composer-more-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-soft);
+}
+
 .composer-info {
   padding: 0 4px;
   font-family: var(--font-mono);
