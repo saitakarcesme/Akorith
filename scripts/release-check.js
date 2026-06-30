@@ -47,10 +47,14 @@ for (const s of ['dist:mac', 'dist:win', 'refresh:mac']) {
   pkg.scripts?.[s] ? ok(`script "${s}" present`) : warn(`script "${s}" missing`)
 }
 
-// 5. CI workflow
-existsSync(join(root, '.github/workflows/release.yml'))
-  ? ok('release workflow present (.github/workflows/release.yml)')
-  : warn('no .github/workflows/release.yml')
+// 5. CI workflow (shipped as a template; activate by copying into .github/workflows/)
+if (existsSync(join(root, '.github/workflows/release.yml'))) {
+  ok('release workflow active (.github/workflows/release.yml)')
+} else if (existsSync(join(root, 'ci/release.yml'))) {
+  ok('release workflow template present (ci/release.yml — copy to .github/workflows/release.yml to activate)')
+} else {
+  warn('no release workflow (ci/release.yml) found')
+}
 
 // 6. Git state (informational)
 try {

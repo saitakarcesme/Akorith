@@ -90,7 +90,9 @@ stores secrets — it only prints the sign-in commands for the tools you use. Se
 [`docs/setup.md`](docs/setup.md).
 
 Maintainers cut releases via the GitHub Actions **release** workflow
-(`workflow_dispatch` or pushing a `v*` tag) — see [`docs/packaging.md`](docs/packaging.md).
+(`workflow_dispatch` or pushing a `v*` tag). It ships as `ci/release.yml` and is activated by
+copying it to `.github/workflows/release.yml` (one-time; needs a `workflow`-scoped token or
+the GitHub web UI) — see [`docs/packaging.md`](docs/packaging.md).
 
 ## Keeping machines current (in-app updates)
 

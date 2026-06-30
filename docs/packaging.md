@@ -51,8 +51,15 @@ npm run dist:win          # nsis + portable → dist/
 
 ## Release via GitHub Actions
 
-`.github/workflows/release.yml` builds **unsigned** artifacts on `macos-latest`
-(dmg+zip) and `windows-latest` (nsis+portable):
+> **Activation note:** the workflow ships as **`ci/release.yml`** (a template), not
+> `.github/workflows/release.yml`, because the repo's current GitHub token lacks the
+> `workflow` scope GitHub requires to push files under `.github/workflows/`. Activate it
+> by copying `ci/release.yml` → `.github/workflows/release.yml` — easiest via the GitHub
+> **web UI** (Add file, whose session has the scope), or locally after
+> `gh auth refresh -s workflow` then commit/push.
+
+Once activated, the workflow builds **unsigned** artifacts on `macos-latest` (dmg+zip)
+and `windows-latest` (nsis+portable):
 
 - **Manual:** Actions → "release" → Run workflow (optionally tick "Create a draft release").
 - **Tag:** `git tag v0.1.0 && git push origin v0.1.0` → builds + a **draft prerelease**

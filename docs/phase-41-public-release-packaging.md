@@ -30,7 +30,10 @@ docs. No website, no runtime/provider/controller/PTY changes; `npm run dev` stay
 - `41.3` Harden macOS packaging (artifactName, darkModeSupport, dmg, unsigned-local).
 - `41.4` Harden Windows installer (artifactName, executableName, NSIS uninstall/shortcut, portable).
 - `41.5` Release build + refresh npm scripts.
-- `41.6` GitHub Actions `release.yml` (workflow_dispatch + `v*` tags; mac+win; unsigned unless secrets).
+- `41.6` GitHub Actions release workflow (workflow_dispatch + `v*` tags; mac+win; unsigned
+  unless secrets). Shipped as `ci/release.yml` (template) — the repo token lacks the
+  `workflow` scope to push under `.github/workflows/`; activate by copying it there via the
+  GitHub web UI or after `gh auth refresh -s workflow`.
 - `41.7` Install/cleanup scripts (`clean-old-akorith-apps.sh`, `release-check.js`).
 - `41.8` README install/release refresh.
 - `41.9` `docs/packaging.md` + `docs/install.md` + release-checklist updates.
