@@ -558,17 +558,15 @@ export default function Sidebar({
           onPointerEnter={revealSidebar}
           onMouseLeave={handleSidebarLeave}
         >
-      <div className="sidebar-brand">
-        <div className="brand-lockup" title="Akorith">
-          <div>
-            <div className="brand-name">Akorith</div>
-            <div className="brand-subtitle">Agent orchestration</div>
-          </div>
-        </div>
+      {/* Phase 43: the Akorith brand block is gone — the sidebar starts at "New
+          chat". A minimal top bar keeps the collapse control accessible (and
+          leaves the macOS traffic-light area clear on the left). */}
+      <div className="sidebar-top">
         <button
           type="button"
           className="sidebar-collapse-btn"
           title={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
+          aria-label={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
           onClick={sidebarCollapsed ? pinSidebar : closeSidebar}
         >
           <ChevronIcon size={16} direction={sidebarCollapsed ? 'right' : 'left'} />

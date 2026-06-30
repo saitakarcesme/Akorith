@@ -479,14 +479,14 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.11);
 }
 
-.sidebar-brand {
+/* Phase 43: minimal top bar (collapse control only); the macOS traffic lights
+   sit at the top-left, so the control is right-aligned and the brand is gone. */
+.sidebar-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
   flex: 0 0 auto;
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 14px 12px 4px;
   user-select: none;
 }
 
@@ -499,34 +499,6 @@ textarea:focus-visible {
      and unaffected. */
   flex-direction: column;
   background: var(--bg);
-}
-
-.brand-lockup {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand-lockup img,
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
-}
-
-.brand-name {
-  font-size: 14px;
-  font-weight: 720;
-  color: var(--text);
-}
-
-.brand-subtitle {
-  margin-top: 1px;
-  font-size: 11px;
-  color: var(--text-faint);
 }
 
 .sidebar-collapse-btn,
