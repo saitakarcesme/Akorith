@@ -9971,3 +9971,242 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ===== Phase 49: Loop — project operations center ===== */
+.loop-ops-page {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+.loop-ops-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+}
+.loop-ops-header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 720;
+  color: var(--text);
+}
+.loop-ops-header p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.loop-ops-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.runtime-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border-radius: 999px;
+}
+.runtime-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.runtime-pill.is-ready .runtime-pill-dot { background: var(--success); }
+.runtime-pill.is-attention .runtime-pill-dot { background: var(--warning); }
+.runtime-pill.is-offline .runtime-pill-dot,
+.runtime-pill.is-setup .runtime-pill-dot { background: var(--danger); }
+
+.loop-ops-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+}
+.loop-ops-list {
+  flex: 0 0 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-soft);
+}
+.loop-ops-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.loop-ops-filters button {
+  font-size: 10.5px;
+  padding: 3px 8px;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.loop-ops-filters button.is-active {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+.loop-ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bg-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.loop-ops-card.is-active {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+.loop-ops-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.loop-ops-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.loop-ops-card-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.loop-status-badge {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+}
+.loop-status-badge.is-active { color: var(--success); }
+.loop-status-badge.is-error { color: var(--danger); }
+.loop-status-badge.is-paused { color: var(--warning); }
+
+.loop-ops-detail {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 24px 40px;
+}
+.loop-ops-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.loop-ops-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.loop-ops-detail-head h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text);
+}
+.loop-ops-detail-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.loop-ops-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.loop-ops-notice {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+.loop-ops-notice.is-error { color: var(--danger); }
+.loop-ops-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.loop-ops-section {
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.loop-ops-section h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.loop-ops-empty {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.loop-run-list,
+.loop-commit-list,
+.loop-event-list,
+.loop-backlog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.loop-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+.loop-run-idx { color: var(--text-faint); }
+.loop-run-status { text-transform: uppercase; font-size: 9.5px; }
+.loop-run.is-success .loop-run-status { color: var(--success); }
+.loop-run.is-failed .loop-run-status,
+.loop-run.is-rejected .loop-run-status { color: var(--danger); }
+.loop-run-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loop-run-meta,
+.loop-commit-meta { color: var(--text-faint); margin-left: 8px; }
+.loop-commit-list li { color: var(--text-dim); overflow-wrap: anywhere; }
+.loop-event { display: flex; gap: 8px; color: var(--text-dim); }
+.loop-event-kind { color: var(--text-faint); font-size: 10px; min-width: 96px; }
+.loop-backlog-add { display: flex; gap: 6px; margin-bottom: 8px; }
+.loop-backlog-add input { flex: 1 1 auto; }
+.loop-backlog-list li { display: flex; justify-content: space-between; color: var(--text-dim); }
+.loop-backlog-list li.is-done span:first-child { text-decoration: line-through; color: var(--text-faint); }
+.loop-backlog-status { color: var(--text-faint); font-size: 10px; }
+
+.loop-create-modal { width: 560px; max-width: 92vw; }
+.loop-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.loop-field > span { font-size: 11px; color: var(--text-faint); }
+.loop-field-row { display: flex; gap: 6px; }
+.loop-field-row input { flex: 1 1 auto; }
+.loop-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.loop-checkbox { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-dim); margin: 6px 0 12px; }
