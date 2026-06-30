@@ -318,6 +318,10 @@ const usageLimits = Object.freeze({
   setConfig: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('usageLimits:setConfig', patch)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits })
+const appApi = Object.freeze({
+  getStartupSnapshot: (request?: unknown): Promise<unknown> => ipcRenderer.invoke('app:getStartupSnapshot', request)
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits })
 
 contextBridge.exposeInMainWorld('api', api)

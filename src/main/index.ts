@@ -22,7 +22,8 @@ import { registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
-import { closeDb, initDb, registerDbIpc } from './db'
+import { closeDb, ensureDbReady, registerDbIpc } from './db'
+import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -373,8 +374,20 @@ function warmLocalProviderAtStartup(): void {
   warmLocalProvider(entry)
 }
 
+async function initializeStartupData(): Promise<void> {
+  if (process.env.AKORITH_SKIP_DB_INIT === '1') return
+  try {
+    await ensureDbReady()
+    resumeActiveAutoLoopsAtStartup()
+  } catch (err) {
+    console.error('[db] SQLite initialization failed:', err)
+  }
+}
+
 app.whenReady().then(() => {
   ensureCliPath()
+  prepareStartupUserData()
+  registerStartupSnapshotIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -400,22 +413,14 @@ app.whenReady().then(() => {
   applyDockIcon()
   createWindow()
 
-  // Native SQLite can occasionally stall during Electron startup on macOS dev
-  // bundles. Open the first window before touching it so a native-module issue
-  // can never leave Akorith as a blank, unresponsive shell.
-  setTimeout(() => {
-    if (process.env.AKORITH_SKIP_DB_INIT !== '1') {
-      try {
-        initDb()
-        resumeActiveAutoLoopsAtStartup()
-      } catch (err) {
-        console.error('[db] SQLite initialization failed:', err)
-      }
-    }
+  // Open the first window before touching the native SQLite module, then start
+  // DB hydration immediately. Startup IPC reads await this readiness gate and
+  // no longer return false-empty project/chat lists while SQLite is opening.
+  void initializeStartupData().finally(() => {
     warmLocalProviderAtStartup()
     // Phase 35: optional controller API — starts only if the user enabled it.
     void startControllerIfEnabled()
-  }, 1_000)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

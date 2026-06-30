@@ -217,6 +217,85 @@ export interface ProjectsApi {
   reveal(projectId: string): Promise<{ ok: true } | { ok: false; error: string }>
 }
 
+// ---- app startup snapshot / hydration ----
+
+export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'plugins'
+
+export interface StartupSnapshotRequest {
+  lastActiveProjectId?: string | null
+  lastActiveSessionId?: string | null
+  lastView?: StartupView | string | null
+  sidebarWidth?: number | string | null
+  displayName?: string | null
+}
+
+export interface StartupRestoreTarget {
+  view: StartupView
+  projectId: string | null
+  sessionId: string | null
+  reason: string
+}
+
+export interface StartupHydrationCounts {
+  projects: number
+  chats: number
+  projectChats: number
+  generalChats: number
+  orphanChats: number
+}
+
+export interface StartupMigrationCandidate {
+  name: string
+  path: string
+  dbExists: boolean
+  dbBytes: number
+  configExists: boolean
+}
+
+export interface StartupMigrationDiagnostics {
+  attempted: boolean
+  copied: string[]
+  skipped: string[]
+  warnings: string[]
+  candidates: StartupMigrationCandidate[]
+}
+
+export interface StartupSnapshot {
+  app: {
+    name: 'Akorith'
+    userDataPath: string
+    dbPath: string
+    configPath: string
+  }
+  settings: {
+    theme: AppTheme
+    bridge: BridgeSettings
+    digest: { enabled: boolean; workingDir: string }
+    router: { classifierModel: string; tierProviders: Record<string, string | null> }
+    providers: string[]
+  }
+  preferences: {
+    displayName: string | null
+    sidebarWidth: number | null
+    lastView: StartupView
+  }
+  projects: ProjectRow[]
+  sessions: SessionRow[]
+  restore: StartupRestoreTarget
+  diagnostics: {
+    dbReady: boolean
+    configReady: boolean
+    loadedAt: number
+    counts: StartupHydrationCounts
+    warnings: string[]
+    migration: StartupMigrationDiagnostics
+  }
+}
+
+export interface AppApi {
+  getStartupSnapshot(request?: StartupSnapshotRequest): Promise<StartupSnapshot>
+}
+
 // ---- usage (dashboard; TODO(phase 6): router reads the same data) ----
 
 export interface ProviderUsageSummary {
@@ -1549,6 +1628,7 @@ export interface UsageLimitsApi {
 }
 
 export interface PreloadApi {
+  app: AppApi
   pty: PtyApi
   chat: ChatApi
   bridge: BridgeApi
