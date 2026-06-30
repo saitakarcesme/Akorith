@@ -7,11 +7,12 @@
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
+    "predev": "node scripts/fix-dev-app-name.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "rebuild": "electron-rebuild -f -o better-sqlite3",
-    "postinstall": "electron-rebuild -f -o better-sqlite3 && node scripts/fix-spawn-helper.js",
+    "postinstall": "electron-rebuild -f -o better-sqlite3 && node scripts/fix-spawn-helper.js && node scripts/fix-dev-app-name.js",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "verify:workspace-loop": "tsx scripts/verify-workspace-loop.ts",
     "verify:local-executor": "node --experimental-strip-types scripts/verify-local-executor.ts",
@@ -19,12 +20,17 @@
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
     "doctor": "bash scripts/setup-akorith.sh --check",
+    "release:check": "node scripts/release-check.js",
     "macos:refresh": "bash scripts/refresh-macos-app.sh",
+    "refresh:mac": "bash scripts/refresh-macos-app.sh",
+    "clean:apps": "bash scripts/clean-old-akorith-apps.sh",
     "pack": "npm run build && electron-builder --dir",
     "pack:mac": "npm run build && electron-builder --mac --dir",
+    "pack:win": "npm run build && electron-builder --win --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:all": "npm run build && electron-builder -mw"
   },
   "build": {
     "appId": "com.akorith.app",
