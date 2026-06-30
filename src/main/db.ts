@@ -229,6 +229,39 @@ export function initDb(): void {
       created_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_loop_reports_loop ON loop_reports(loop_id, created_at);
+
+    -- Phase 48: project-focused Loop (new, additive; old macro/loop tables remain).
+    CREATE TABLE IF NOT EXISTS project_loops (
+      id                   TEXT PRIMARY KEY,
+      title                TEXT NOT NULL,
+      mode                 TEXT NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'active',
+      local_path           TEXT NOT NULL,
+      repo_url             TEXT,
+      github_owner         TEXT,
+      github_name          TEXT,
+      idea                 TEXT,
+      autonomy             TEXT NOT NULL DEFAULT 'assisted',
+      safety               TEXT NOT NULL DEFAULT 'standard',
+      schedule_kind        TEXT NOT NULL DEFAULT 'manual',
+      schedule_minutes     INTEGER NOT NULL DEFAULT 0,
+      daily_commit_target  INTEGER NOT NULL DEFAULT 1,
+      min_commits_per_run  INTEGER NOT NULL DEFAULT 0,
+      max_commits_per_run  INTEGER NOT NULL DEFAULT 1,
+      local_model_provider TEXT NOT NULL DEFAULT 'local',
+      local_model          TEXT,
+      push_enabled         INTEGER NOT NULL DEFAULT 0,
+      created_at           INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL,
+      last_run_at          INTEGER,
+      next_run_at          INTEGER,
+      run_count            INTEGER NOT NULL DEFAULT 0,
+      commit_count         INTEGER NOT NULL DEFAULT 0,
+      error                TEXT,
+      memory_summary       TEXT,
+      roadmap_summary      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_loops_status ON project_loops(status, updated_at);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
