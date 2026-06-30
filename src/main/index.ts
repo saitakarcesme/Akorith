@@ -24,6 +24,7 @@ import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
+import { registerBuildInfoIpc } from './build-info'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -388,6 +389,7 @@ app.whenReady().then(() => {
   ensureCliPath()
   prepareStartupUserData()
   registerStartupSnapshotIpc()
+  registerBuildInfoIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()

@@ -4,3 +4,6 @@ dist/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Phase 42: generated at build time
+build-info.json

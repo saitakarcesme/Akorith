@@ -292,8 +292,32 @@ export interface StartupSnapshot {
   }
 }
 
+export interface BuildInfo {
+  version: string
+  gitCommit: string
+  gitCommitFull: string
+  gitBranch: string
+  buildDate: string
+  buildMode: string
+  platform: string
+  packaged: boolean
+}
+
+export interface AppCurrency {
+  mode: 'git' | 'packaged'
+  buildCommit: string
+  repoHead?: string
+  remoteMainHead?: string
+  behindBy?: number
+  isCurrent?: boolean
+  note: string
+  checkedAt: number
+}
+
 export interface AppApi {
   getStartupSnapshot(request?: StartupSnapshotRequest): Promise<StartupSnapshot>
+  getBuildInfo(): Promise<BuildInfo>
+  getCurrency(fetch?: boolean): Promise<AppCurrency>
 }
 
 // ---- usage (dashboard; TODO(phase 6): router reads the same data) ----

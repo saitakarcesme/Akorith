@@ -319,7 +319,9 @@ const usageLimits = Object.freeze({
 })
 
 const appApi = Object.freeze({
-  getStartupSnapshot: (request?: unknown): Promise<unknown> => ipcRenderer.invoke('app:getStartupSnapshot', request)
+  getStartupSnapshot: (request?: unknown): Promise<unknown> => ipcRenderer.invoke('app:getStartupSnapshot', request),
+  getBuildInfo: (): Promise<unknown> => ipcRenderer.invoke('app:getBuildInfo'),
+  getCurrency: (fetch?: boolean): Promise<unknown> => ipcRenderer.invoke('app:getCurrency', fetch === true)
 })
 
 const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits })

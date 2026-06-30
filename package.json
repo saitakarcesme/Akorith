@@ -7,8 +7,9 @@
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
-    "predev": "node scripts/fix-dev-app-name.js",
+    "predev": "node scripts/fix-dev-app-name.js && node scripts/gen-build-info.js",
     "dev": "electron-vite dev",
+    "prebuild": "node scripts/gen-build-info.js",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "rebuild": "electron-rebuild -f -o better-sqlite3",
@@ -47,6 +48,7 @@
       "out/**/*",
       "assets/**/*",
       "build/icon.ico",
+      "build-info.json",
       "package.json"
     ],
     "asarUnpack": [
