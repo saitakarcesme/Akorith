@@ -1,17 +1,17 @@
 # Akorith
 
-**Akorith orchestrates your logged-in AI coding agents — it does not require API keys.**
+**Akorith — a local-first Agent OS for AI coding workflows. No API keys.**
 
 Akorith is a cross-platform Electron desktop app that drives the coding agents you already
-pay for, through their official command-line tools. You log into those CLIs once in your
-terminal; Akorith runs them locally inside your chosen project. There are no API keys to
-paste and no provider credentials stored by the app.
+pay for, through their official command-line tools. You log into those CLIs once; Akorith
+runs them locally inside your chosen project. There are no API keys to paste and no provider
+credentials stored by the app — your chats, usage, and project metadata stay in local SQLite.
 
 ```
 ┌────────────┬─────────────────────────────────────────────┐
-│  Sidebar   │  Workspace: project planning + agents       │
-│ projects   │  Chat: general model conversations          │
-│ providers  │  Test: generate tests + export PDF reports  │
+│  Sidebar   │  Workspace: project planning + 3 agents     │
+│ projects   │  Dashboard: usage, agents, GPU, controller  │
+│ chats      │  Plugins · Loops · Test Lab · Settings       │
 └────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -19,12 +19,14 @@ paste and no provider credentials stored by the app.
 
 - **Claude** — via the `claude` CLI (your Claude subscription/login).
 - **Codex / ChatGPT** — via the `codex` CLI (your ChatGPT login).
+- **OpenCode** — via the `opencode` CLI (`opencode auth login`).
 - **Local models** — via a local **Ollama** server when one is running (optional).
 
 The center chat talks to whichever of these are installed and logged in. In **Workspace**,
-Akorith also hosts two real project terminals in the Activity drawer: **Olympus** runs Codex
-and **Atlantis** runs Claude inside the project folder you pick. In **Chat**, you can talk to
-Claude, ChatGPT/Codex, or Local models without selecting a project.
+Akorith hosts three real project terminals in the Activity drawer:
+**Olympus** (Codex), **Gaia** (OpenCode), and **Atlantis** (Claude), each running inside the
+project folder you pick. In **Chat**, you can talk to any available provider without selecting
+a project.
 
 ## Workspace vs Chat
 
@@ -37,6 +39,41 @@ Claude, ChatGPT/Codex, or Local models without selecting a project.
   from project workspaces, and does not show or send project context.
 - **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
 - The **provider/model switcher** is a labeled pill in the top bar of every chat.
+
+## Major surfaces
+
+- **Workspace** — sidebar · chat composer · three agent terminals (Olympus/Gaia/Atlantis).
+- **Dashboard** — local usage stats, agent OS snapshot, **Claude/Codex usage-limit cards**,
+  GPU/runtime telemetry, controller + plugin status, and a source-update badge.
+- **Agent Hub** — the Agent OS foundation (adapters, runtime snapshot) in Settings → Agents.
+- **Plugins** — read-only plugin registry + diagnostics (Browser, Chroma memory, …).
+- **Controller API** — optional loopback-only, token-protected, read-only HTTP+SSE surface
+  for companions/CLIs (Settings → API; see `docs/controller-api.md`).
+- **Loops** — the AkorithLoop planner/observer surface.
+- **Test Lab** — generate + run tests in a sandbox and export scored PDF reports.
+- **Bottom workbench** — Changes / Runtime / Missions panel.
+- **Settings → Update** — keep this source checkout current with GitHub `main`.
+
+## Quick start
+
+```bash
+git clone https://github.com/saitakarcesme/Akorith.git
+cd Akorith
+npm run setup        # check toolchain, install deps, print exact auth steps
+npm run dev          # launch the desktop app
+```
+
+One-command setup works on macOS/Linux (`scripts/setup-akorith.sh`) and Windows
+(`scripts/setup-akorith.ps1`); `npm run doctor` runs a check-only pass. It never collects or
+stores secrets — it only prints the sign-in commands for the tools you use. See
+[`docs/setup.md`](docs/setup.md).
+
+## Keeping machines current (in-app updates)
+
+Tired of `git pull` on every Mac and PC? Open **Settings → Update**: it checks GitHub `main`,
+shows how far behind you are, and **fast-forwards safely** (`git fetch` → `git switch main` →
+`git merge --ff-only`, with optional `npm install`/`build`). It never resets, discards local
+changes, or force-pushes. See [`docs/update-system.md`](docs/update-system.md).
 
 ## Managing projects and chats
 
@@ -89,8 +126,11 @@ In more detail:
 1. **Claude** — install the `claude` CLI and run it once to log in (uses your Claude
    subscription).
 2. **Codex** — install the `codex` CLI and log in with your ChatGPT account.
-3. **Ollama (optional)** — install [Ollama](https://ollama.com), start it
+3. **OpenCode (Gaia)** — `npm i -g opencode-ai`, then `opencode auth login` (also runnable
+   inside Akorith's Gaia pane).
+4. **Ollama (optional)** — install [Ollama](https://ollama.com), start it
    (`http://localhost:11434`), and pull at least one model for local/offline use.
+5. **GitHub CLI (optional)** — `gh auth login` for repo operations.
 
 Akorith detects whichever tools are present; any subset works, and a missing tool simply
 shows as unavailable instead of breaking the app.
@@ -202,12 +242,32 @@ and **summarizes the result back into the chat** ("Olympus/Codex created the fil
 how would you like to continue?"), with a manual **Summarize output** action too. The separate
 **Chat** route is for normal, project-free conversations with any available provider.
 
+## Screenshots
+
+Current screenshots live under [`docs/screenshots/`](docs/screenshots/). To (re)capture them,
+follow [`docs/screenshots/README.md`](docs/screenshots/README.md) — a short checklist of the
+surfaces to grab (Workspace/composer, Sidebar, Dashboard, Plugins, Settings → API/Update,
+Agent Activity terminals, Test Lab). Crop to clean screens with no tokens, private paths, or
+personal chat content.
+
+<!-- Add captured images here, e.g.:
+![Workspace](docs/screenshots/workspace.png)
+![Dashboard](docs/screenshots/dashboard.png)
+-->
+
 ![Akorith chat-first workspace](docs/validation/phase13-2-ui.png)
 
-_More screenshots / a short demo clip can be added before public launch._
+## Roadmap
+
+- **Now:** local-first orchestration of Claude/Codex/OpenCode/Ollama; in-app source updater;
+  honest usage-limit visibility; one-command setup; macOS app refresh tooling.
+- **Next:** packaged release auto-updater (signed/notarized GitHub Releases), a Gaia
+  (`opencode run`) executor loop, and a download/website page.
 
 ## More
 
+- [docs/setup.md](docs/setup.md) — one-command setup + tool auth checklist.
+- [docs/update-system.md](docs/update-system.md) — how the in-app source updater works.
 - [AGENTS.md](AGENTS.md) — architecture, provider contract, packaging notes (AI/agent handoff).
 - [codex.md](codex.md) — shorter "how we work + where we are" companion.
 - [docs/release-checklist.md](docs/release-checklist.md) — build / launch / publish checklist.
