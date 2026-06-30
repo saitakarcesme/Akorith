@@ -57,6 +57,25 @@ folder.
   Electron/default Windows identity settings.
 - Document Windows stale icon/cache recovery steps.
 
+## Windows Verification Checklist
+
+After a successful Windows package/install, verify:
+
+- `dist/Akorith-Setup-<version>-x64.exe` exists.
+- `dist/Akorith-<version>-portable-x64.exe` exists.
+- Installed `Akorith.exe` shows `ProductName: Akorith` and not `Electron`.
+- Desktop shortcut target is the installed `Akorith.exe`.
+- Start Menu shortcut target is the installed `Akorith.exe`.
+- The taskbar icon was unpinned/repinned after install if it previously showed
+  Electron.
+- The window title is `Akorith`.
+- Apps & Features lists `Akorith <version>`.
+
+If local `npm run dist:win` fails with `winCodeSign` symbolic-link extraction
+errors, do not use the partial `dist/win-unpacked` app as an install. Enable
+Windows Developer Mode or run the shell as Administrator, rebuild, and install
+the generated NSIS installer.
+
 ## Preserved
 
 This phase does not change provider runtime, Claude/Codex/Ollama/OpenCode

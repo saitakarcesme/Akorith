@@ -75,14 +75,29 @@ Three ways to run Akorith (full details in [`docs/install.md`](docs/install.md))
    npm run refresh:mac   # back up old copies + install + open Akorith.app
    ```
 
-3. **Run in development:**
+3. **Build from source (Windows):**
+
+   ```powershell
+   git clone https://github.com/saitakarcesme/Akorith.git
+   cd Akorith
+   npm install
+   npm run dist:win      # build installer + portable app
+   npm run refresh:win   # clean stale shortcuts, install, launch
+   ```
+
+   Use the generated installer for normal use. If Windows still shows an Electron
+   icon, uninstall old Akorith/Electron entries that belong to Akorith, delete stale
+   shortcuts/taskbar pins, reinstall the latest `Akorith-Setup-<version>-x64.exe`,
+   then restart Explorer or clear the Windows icon cache.
+
+4. **Run in development:**
 
    ```bash
    npm run setup        # check toolchain, install deps, print exact auth steps
    npm run dev          # launch the desktop app
    ```
-   (In dev the macOS menu bar may still read "Electron" — a dev-runtime limitation;
-   the **packaged** app shows Akorith everywhere.)
+   Dev mode is for development and may expose Electron runtime identity in OS shell
+   surfaces. The **packaged** app should show Akorith branding/icons everywhere.
 
 One-command setup works on macOS/Linux (`scripts/setup-akorith.sh`) and Windows
 (`scripts/setup-akorith.ps1`); `npm run doctor` runs a check-only pass. It never collects or

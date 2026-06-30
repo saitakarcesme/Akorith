@@ -10,8 +10,9 @@ All packaging is configured in `package.json` under `build` (electron-builder):
 - **macOS:** `dmg` + `zip`, host architecture, `darkModeSupport`, icon `build/icon.icns`.
   Native modules (`node-pty`, `better-sqlite3`) are `asarUnpack`ed.
 - **Windows:** `nsis` installer + `portable` exe (x64), `executableName: Akorith`, icon
-  `build/icon.ico`. NSIS: non-one-click, choose-install-dir, desktop + Start-menu
-  shortcuts named **Akorith**, `uninstallDisplayName: Akorith <version>`.
+  `build/icon.ico`, and explicit NSIS installer/uninstaller/header icons. NSIS:
+  non-one-click, choose-install-dir, desktop + Start-menu shortcuts named
+  **Akorith**, `uninstallDisplayName: Akorith <version>`.
 - **Linux:** `AppImage` (icon `build/icon.png`).
 - `artifactName`s embed product/version/os/arch.
 
@@ -21,6 +22,11 @@ All packaging is configured in `package.json` under `build` (electron-builder):
   `CFBundleDisplayName` = Akorith), so the **menu bar, Dock, and Finder all say
   Akorith**. The main process also calls `app.setName('Akorith')`, sets the About
   panel, installs an explicit Akorith application menu, and titles the window Akorith.
+- **Windows packaged app:** Electron Builder must finish the executable resource
+  edit step (`win.signAndEditExecutable`). That step applies `build/icon.ico` and
+  the Akorith version metadata to `Akorith.exe`. The main process also calls
+  `app.setAppUserModelId('com.akorith.app')` before windows are created so taskbar
+  grouping matches the packaged app id.
 - **Dev (`npm run dev`):** Electron runs from `node_modules`' own `Electron.app`.
   `scripts/fix-dev-app-name.js` (run by `predev` + `postinstall`) patches that dev-only
   bundle's `CFBundleName`/`CFBundleDisplayName` to **Akorith** as a best effort.
@@ -43,11 +49,36 @@ npm run clean:apps        # just back up old Akorith.app copies (no build/instal
 Windows from a Windows host:
 
 ```bash
-npm run dist:win          # nsis + portable → dist/
+npm run dist:win          # nsis + portable -> dist/
+npm run refresh:win       # clean stale shortcuts, build/install, launch (Windows only)
 ```
 
 > A macOS host cannot reliably cross-build a Windows NSIS installer (needs Wine/extra
 > tooling). Prefer the CI workflow for Windows artifacts.
+
+### Windows icon troubleshooting
+
+If the Windows app still shows the Electron icon after installing a new build:
+
+1. Make sure you are launching packaged Akorith, not `npm run dev` and not a
+   manually copied `dist/win-unpacked` folder from a failed build.
+2. Uninstall old Akorith/Electron entries from **Settings > Apps** if they clearly
+   belong to Akorith.
+3. Delete stale Desktop/Start Menu shortcuts and unpin old taskbar icons.
+4. Install the latest `Akorith-Setup-<version>-x64.exe`.
+5. Restart Explorer, or clear the Windows icon cache if the old icon persists.
+
+On Windows you can use:
+
+```powershell
+npm run refresh:win
+```
+
+The helper is conservative: it backs up stale Akorith shortcuts to the Desktop,
+uses only Akorith-identifying uninstall entries, never touches Akorith user
+data/config/db, and refuses to install by copying `dist\win-unpacked`. If
+`npm run dist:win` fails with a `winCodeSign` symbolic-link privilege error,
+enable Windows Developer Mode or run the shell as Administrator, then retry.
 
 ## Release via GitHub Actions
 

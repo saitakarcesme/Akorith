@@ -37,6 +37,26 @@ npm run refresh:mac       # back up old copies + install the new Akorith.app
 backup (never deletes), installs the freshly built app, and opens it. Your data
 (`~/Library/Application Support/akorith*`) is never touched.
 
+## 2b. Build from source (Windows)
+
+```powershell
+git clone https://github.com/saitakarcesme/Akorith.git
+cd Akorith
+npm install
+npm run dist:win          # builds installer + portable app under dist/
+npm run refresh:win       # backs up stale shortcuts, installs, launches
+```
+
+Use the generated `Akorith-Setup-<version>-x64.exe` installer for normal use.
+Do not install by copying `dist\win-unpacked` after a failed packaging run; if
+Electron Builder stops before its Windows resource-edit step, that executable
+can still carry Electron's default icon/metadata.
+
+`npm run refresh:win` never removes Akorith user data/config/db. It only backs
+up clearly Akorith-owned stale shortcuts, uses Akorith-identifying uninstall
+entries, runs the latest installer when available, and prints manual recovery
+steps when it cannot safely proceed.
+
 ## 3. Run in development
 
 ```bash
@@ -55,6 +75,15 @@ executable, which the patch can't reliably override. The **packaged** app
 Windows installers are best built on Windows or via the GitHub Actions **release**
 workflow (a macOS host can't reliably cross-build a Windows NSIS installer). See
 [`docs/packaging.md`](packaging.md).
+
+If Windows still shows the Electron icon after installing:
+
+1. Uninstall old Akorith/Electron entries from **Settings > Apps** if they
+   clearly belong to Akorith.
+2. Delete stale Desktop/Start Menu shortcuts and unpin the old taskbar icon.
+3. Install the latest `Akorith-Setup-<version>-x64.exe`.
+4. Restart Explorer, or clear the Windows icon cache if the old icon persists.
+5. Launch packaged Akorith, not `npm run dev`.
 
 ## Keeping a source install current
 
