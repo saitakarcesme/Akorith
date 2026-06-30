@@ -11,6 +11,7 @@ import type {
   Mission,
   MissionTemplate,
   ProjectRow,
+  RuntimeStatus,
   SessionRow,
   TestRunRow,
   UpdateStatus,
@@ -118,7 +119,24 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
   const [usageLimits, setUsageLimits] = useState<UsageLimitView | null>(null)
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
+  const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Phase 42 (Remote Ollama): active local-model runtime source + presentation readiness.
+  const loadRuntime = useCallback(async (): Promise<void> => {
+    setRuntimeBusy(true)
+    try {
+      setRuntime(await window.api.ollama.runtimeStatus())
+    } catch {
+      setRuntime(null)
+    } finally {
+      setRuntimeBusy(false)
+    }
+  }, [])
+  useEffect(() => {
+    void loadRuntime()
+  }, [loadRuntime])
 
   // Phase 35: read-only controller status + plugin registry for the Dashboard.
   // Phase 39: usage-limit view + source-update status.
@@ -448,6 +466,73 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
           <div className="dash-empty-state">
             No draft missions yet. Open Settings, then Missions, to create a preview mission without executing anything.
           </div>
+        )}
+      </section>
+
+      <section className="dash-section dash-runtime">
+        <div className="dash-section-head">
+          <div>
+            <h2>Local model runtime</h2>
+            <p>Where your local models come from right now — this Mac, or the PC over LAN / Tailscale / Akorith Controller. Resolved automatically.</p>
+          </div>
+          <button type="button" className="dash-refresh" disabled={runtimeBusy} onClick={() => void loadRuntime()}>
+            {runtimeBusy ? 'Checking…' : 'Refresh'}
+          </button>
+        </div>
+        {runtime ? (
+          <>
+            <div className={`runtime-readiness is-${runtime.readiness}`}>
+              <span className="runtime-dot" />
+              <strong>
+                {runtime.readiness === 'ready'
+                  ? 'Ready'
+                  : runtime.readiness === 'attention'
+                    ? 'Needs attention'
+                    : runtime.readiness === 'offline'
+                      ? 'Offline'
+                      : 'Setup required'}
+              </strong>
+              {runtime.ok && runtime.label && <span className="runtime-source">{runtime.label}</span>}
+            </div>
+            <div className="ctrl-grid">
+              <div className="ctrl-field">
+                <span>Source</span>
+                <code>{runtime.ok ? runtime.label ?? '—' : 'unavailable'}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Models</span>
+                <code>{runtime.modelCount}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Endpoint</span>
+                <code>{runtime.baseUrl ?? runtime.lastSuccessfulBaseUrl ?? '—'}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Tailscale</span>
+                <code>
+                  {runtime.tailscale.installed
+                    ? runtime.tailscale.running
+                      ? `connected · ${runtime.tailscale.peerCount} peer(s)`
+                      : 'installed, off'
+                    : 'not installed'}
+                </code>
+              </div>
+            </div>
+            <div className="dash-gpu-note">{runtime.reason}</div>
+            {!runtime.ok && (
+              <div className="dash-gpu-note">
+                Open <strong>Settings → Providers</strong> to add a Remote Runtime profile (LAN, Tailscale, or Akorith
+                Controller). Last working endpoint: <code>{runtime.lastSuccessfulBaseUrl ?? 'none yet'}</code>.
+              </div>
+            )}
+            {runtime.ok && runtime.source !== 'controller' && (
+              <div className="dash-gpu-note">
+                Direct Ollama does not expose GPU telemetry. Enable the Akorith Controller on the PC for live GPU data.
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="dash-gpu-note">{runtimeBusy ? 'Resolving runtime…' : 'Runtime status unavailable.'}</div>
         )}
       </section>
 

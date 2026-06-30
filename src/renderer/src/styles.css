@@ -4983,6 +4983,39 @@ textarea:focus-visible {
 }
 
 /* ---- Phase 39.10: usage-limit cards ---- */
+/* ---- Phase 42 (Remote Ollama): runtime-source readiness ---- */
+.runtime-readiness {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.runtime-readiness .runtime-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: 0 0 auto;
+}
+.runtime-readiness.is-ready .runtime-dot {
+  background: var(--success);
+}
+.runtime-readiness.is-attention .runtime-dot {
+  background: var(--warning);
+}
+.runtime-readiness.is-offline .runtime-dot,
+.runtime-readiness.is-setup .runtime-dot {
+  background: var(--danger);
+}
+.runtime-readiness strong {
+  color: var(--text);
+}
+.runtime-readiness .runtime-source {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
 .dash-update-badge {
   flex: 0 0 auto;
   font-size: 11px;
