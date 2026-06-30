@@ -17,6 +17,7 @@
     "verify:workspace-loop": "tsx scripts/verify-workspace-loop.ts",
     "verify:local-executor": "node --experimental-strip-types scripts/verify-local-executor.ts",
     "verify:controller": "tsx scripts/verify-controller.ts",
+    "verify:startup-hydration": "tsx scripts/verify-startup-hydration.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
     "doctor": "bash scripts/setup-akorith.sh --check",
