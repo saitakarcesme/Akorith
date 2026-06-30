@@ -298,7 +298,7 @@ export interface RuntimeStatus {
   checkedAt: number
 }
 
-async function getRuntimeStatus(): Promise<RuntimeStatus> {
+export async function getRuntimeStatus(): Promise<RuntimeStatus> {
   const settings = getLocalProviderSettings()
   const hasRemoteProfiles = (settings.remoteProfiles ?? []).some((p) => p.enabled)
   const hasControllerProfiles = getTelemetrySettings().profiles.some((p) => p.enabled)
