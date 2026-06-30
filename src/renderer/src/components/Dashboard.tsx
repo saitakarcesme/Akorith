@@ -13,6 +13,8 @@ import type {
   ProjectRow,
   SessionRow,
   TestRunRow,
+  UpdateStatus,
+  UsageLimitView,
   UsageSummary
 } from '../../../preload/index.d'
 
@@ -114,12 +116,17 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [gpuBusy, setGpuBusy] = useState(false)
   const [controller, setController] = useState<ControllerStatus | null>(null)
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
+  const [usageLimits, setUsageLimits] = useState<UsageLimitView | null>(null)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Phase 35: read-only controller status + plugin registry for the Dashboard.
+  // Phase 39: usage-limit view + source-update status.
   useEffect(() => {
     void window.api.controller.getStatus().then(setController).catch(() => setController(null))
     void window.api.plugins.list().then(setPlugins).catch(() => setPlugins(null))
+    void window.api.usageLimits.get().then(setUsageLimits).catch(() => setUsageLimits(null))
+    void window.api.update.status().then(setUpdate).catch(() => setUpdate(null))
   }, [])
 
   // Phase 36.8: source-aware GPU telemetry — prefers a healthy remote controller
@@ -507,6 +514,57 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
             {telemetry?.gpu.ollama?.note && <span className="dash-gpu-note">{telemetry.gpu.ollama.note}</span>}
           </div>
         )}
+      </section>
+
+      <section className="dash-section dash-limits">
+        <div className="dash-section-head">
+          <div>
+            <h2>Usage limits (Claude / Codex)</h2>
+            <p>Akorith&apos;s recorded in-app usage and the limits you configure. Exact remaining subscription limits are not exposed by the CLIs.</p>
+          </div>
+          {update && update.mode === 'git' && (
+            <span className={update.hasUpdate ? 'dash-update-badge has-update' : 'dash-update-badge'}>
+              {update.hasUpdate ? `Update available (${update.behindBy} behind)` : 'Akorith up to date'}
+            </span>
+          )}
+        </div>
+        {(() => {
+          const win = (rows: { providerId: string; events: number; tokens: number }[] | undefined, pid: string) =>
+            rows?.find((r) => r.providerId === pid)
+          const cards: { provider: string; pid: string; cfg5h?: string; cfgWk?: string }[] = [
+            { provider: 'Claude', pid: 'claude', cfg5h: usageLimits?.config.claude5h, cfgWk: usageLimits?.config.claudeWeekly },
+            { provider: 'Codex / ChatGPT', pid: 'chatgpt', cfg5h: usageLimits?.config.codex5h, cfgWk: usageLimits?.config.codexWeekly }
+          ]
+          return (
+            <div className="dash-limit-grid">
+              {cards.map((c) => {
+                const f = win(usageLimits?.windows.fiveHour, c.pid)
+                const w = win(usageLimits?.windows.weekly, c.pid)
+                return (
+                  <div className="dash-limit-card" key={c.pid}>
+                    <div className="dash-limit-name">{c.provider}</div>
+                    <div className="dash-limit-rows">
+                      <div className="dash-limit-row">
+                        <span>Last 5h (in-app)</span>
+                        <strong>{f ? `${f.events} calls · ${fmtTokens(f.tokens)}` : '0 calls'}</strong>
+                        {c.cfg5h && <em>limit: {c.cfg5h}</em>}
+                      </div>
+                      <div className="dash-limit-row">
+                        <span>Last 7 days (in-app)</span>
+                        <strong>{w ? `${w.events} calls · ${fmtTokens(w.tokens)}` : '0 calls'}</strong>
+                        {c.cfgWk && <em>limit: {c.cfgWk}</em>}
+                      </div>
+                    </div>
+                    {!c.cfg5h && !c.cfgWk && (
+                      <div className="dash-limit-cta">Set your subscription limits in Settings → Profile to compare.</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+        {usageLimits?.note && <div className="dash-limit-note">{usageLimits.note}</div>}
       </section>
 
       <section className="dash-section dash-control-os">

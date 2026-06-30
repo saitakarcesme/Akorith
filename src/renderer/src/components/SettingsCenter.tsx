@@ -14,6 +14,7 @@ import type {
   ControllerDocs,
   ControllerStatus,
   RemoteTelemetryProfileView,
+  UsageLimitConfig,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
@@ -193,6 +194,27 @@ export default function SettingsCenter({
   onClose
 }: SettingsCenterProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
+  // Phase 39: user-configured usage-limit labels (no secrets).
+  const [limits, setLimits] = useState<UsageLimitConfig>({})
+  const [limitsBusy, setLimitsBusy] = useState(false)
+  const [limitsSaved, setLimitsSaved] = useState(false)
+  useEffect(() => {
+    void window.api.usageLimits
+      .get()
+      .then((view) => setLimits(view.config))
+      .catch(() => setLimits({}))
+  }, [])
+  const saveLimits = async (): Promise<void> => {
+    setLimitsBusy(true)
+    try {
+      const saved = await window.api.usageLimits.setConfig(limits)
+      setLimits(saved)
+      setLimitsSaved(true)
+      setTimeout(() => setLimitsSaved(false), 2000)
+    } finally {
+      setLimitsBusy(false)
+    }
+  }
   // Phase 35: controller API state.
   const [ctrlConfig, setCtrlConfig] = useState<ControllerConfigView | null>(null)
   const [ctrlStatus, setCtrlStatus] = useState<ControllerStatus | null>(null)
@@ -757,6 +779,39 @@ export default function SettingsCenter({
                 <div className="settings-summary-item">
                   <span>Repo context</span>
                   <strong>{digestSettings?.enabled ? 'On' : 'Off'}</strong>
+                </div>
+              </div>
+
+              {/* Phase 39: usage-limit labels (shown on the Dashboard). No secrets. */}
+              <div className="settings-divider" />
+              <div className="settings-field is-stacked">
+                <span>Usage limits (Claude / Codex)</span>
+                <p className="settings-hint">
+                  Akorith can&apos;t read your remaining subscription limits (the CLIs don&apos;t expose them), so enter your
+                  own known limits here to compare against Akorith&apos;s recorded in-app usage on the Dashboard. No secrets.
+                </p>
+                <div className="limits-grid">
+                  <label className="limits-field">
+                    <span>Claude 5-hour limit</span>
+                    <input value={limits.claude5h ?? ''} placeholder="e.g. 45 messages" onChange={(e) => setLimits((l) => ({ ...l, claude5h: e.target.value }))} />
+                  </label>
+                  <label className="limits-field">
+                    <span>Claude weekly limit</span>
+                    <input value={limits.claudeWeekly ?? ''} placeholder="e.g. plan tier" onChange={(e) => setLimits((l) => ({ ...l, claudeWeekly: e.target.value }))} />
+                  </label>
+                  <label className="limits-field">
+                    <span>Codex 5-hour limit</span>
+                    <input value={limits.codex5h ?? ''} placeholder="e.g. 150 messages" onChange={(e) => setLimits((l) => ({ ...l, codex5h: e.target.value }))} />
+                  </label>
+                  <label className="limits-field">
+                    <span>Codex weekly limit</span>
+                    <input value={limits.codexWeekly ?? ''} placeholder="e.g. plan tier" onChange={(e) => setLimits((l) => ({ ...l, codexWeekly: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="settings-action-row">
+                  <button type="button" className="is-primary" disabled={limitsBusy} onClick={() => void saveLimits()}>
+                    {limitsBusy ? 'Saving…' : limitsSaved ? 'Saved' : 'Save usage limits'}
+                  </button>
                 </div>
               </div>
             </section>

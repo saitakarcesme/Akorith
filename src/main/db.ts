@@ -517,6 +517,23 @@ export function listSessions(): SessionRow[] {
   )
 }
 
+/** Phase 39: per-provider recorded usage since a timestamp (for usage-limit windows). */
+export function getProviderUsageSince(sinceTs: number): { providerId: string; events: number; tokens: number }[] {
+  if (!ready()) return []
+  const rows = must()
+    .prepare(
+      `SELECT provider_id AS providerId, COUNT(*) AS events,
+              COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0) AS tokens
+       FROM usage_events WHERE ts >= ? GROUP BY provider_id`
+    )
+    .all(sinceTs) as Record<string, unknown>[]
+  return rows.map((r) => ({
+    providerId: String(r.providerId),
+    events: Number(r.events) || 0,
+    tokens: Number(r.tokens) || 0
+  }))
+}
+
 export function createProject(input: {
   name: string
   path?: string | null

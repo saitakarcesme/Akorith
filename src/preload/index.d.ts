@@ -1522,6 +1522,32 @@ export interface UpdateApi {
   run(options: UpdateRunOptions): Promise<UpdateRunResult>
 }
 
+export interface UsageWindowRow {
+  providerId: string
+  events: number
+  tokens: number
+}
+
+export interface UsageLimitConfig {
+  claude5h?: string
+  claudeWeekly?: string
+  codex5h?: string
+  codexWeekly?: string
+  notes?: string
+}
+
+export interface UsageLimitView {
+  windows: { fiveHour: UsageWindowRow[]; weekly: UsageWindowRow[] }
+  config: UsageLimitConfig
+  checkedAt: number
+  note: string
+}
+
+export interface UsageLimitsApi {
+  get(): Promise<UsageLimitView>
+  setConfig(patch: Partial<UsageLimitConfig>): Promise<UsageLimitConfig>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1544,6 +1570,7 @@ export interface PreloadApi {
   controller: ControllerApi
   plugins: PluginsApi
   update: UpdateApi
+  usageLimits: UsageLimitsApi
 }
 
 declare global {

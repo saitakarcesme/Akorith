@@ -160,6 +160,17 @@ export interface TelemetrySettings {
   profiles: RemoteTelemetryProfile[]
 }
 
+/** Phase 39: user-entered subscription limit labels (NOT live remaining values —
+ *  Akorith has no access to those). Plain strings the user fills in to compare
+ *  against Akorith's own recorded in-app usage. No secrets. */
+export interface UsageLimitConfig {
+  claude5h?: string
+  claudeWeekly?: string
+  codex5h?: string
+  codexWeekly?: string
+  notes?: string
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
@@ -170,6 +181,7 @@ export interface LoopexConfig {
   controller?: Partial<ControllerSettings>
   plugins?: Partial<PluginSettings>
   telemetry?: Partial<TelemetrySettings>
+  usageLimits?: Partial<UsageLimitConfig>
   /** Last theme selected in the renderer; read by the splash at startup. */
   theme?: AppTheme
 }
@@ -468,6 +480,43 @@ export function setTelemetrySettings(patch: Partial<TelemetrySettings>): Telemet
   config.telemetry = { profiles }
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return { profiles }
+}
+
+// ---- Phase 39: usage-limit labels (user-entered; no secrets) ----
+
+function safeLimitLabel(value: unknown): string | undefined {
+  return safeString(value, 80)
+}
+
+export function getUsageLimitConfig(): UsageLimitConfig {
+  const u = loadConfig().usageLimits ?? {}
+  return {
+    ...(safeLimitLabel(u.claude5h) ? { claude5h: safeLimitLabel(u.claude5h) } : {}),
+    ...(safeLimitLabel(u.claudeWeekly) ? { claudeWeekly: safeLimitLabel(u.claudeWeekly) } : {}),
+    ...(safeLimitLabel(u.codex5h) ? { codex5h: safeLimitLabel(u.codex5h) } : {}),
+    ...(safeLimitLabel(u.codexWeekly) ? { codexWeekly: safeLimitLabel(u.codexWeekly) } : {}),
+    ...(safeString(u.notes, 400) ? { notes: safeString(u.notes, 400) } : {})
+  }
+}
+
+export function setUsageLimitConfig(patch: Partial<UsageLimitConfig>): UsageLimitConfig {
+  const config = loadConfig()
+  const current = getUsageLimitConfig()
+  const pick = (key: keyof UsageLimitConfig, max = 80): string | undefined => {
+    if (patch[key] === undefined) return current[key]
+    const v = safeString(patch[key], max)
+    return v || undefined
+  }
+  const next: UsageLimitConfig = {
+    ...(pick('claude5h') ? { claude5h: pick('claude5h') } : {}),
+    ...(pick('claudeWeekly') ? { claudeWeekly: pick('claudeWeekly') } : {}),
+    ...(pick('codex5h') ? { codex5h: pick('codex5h') } : {}),
+    ...(pick('codexWeekly') ? { codexWeekly: pick('codexWeekly') } : {}),
+    ...(pick('notes', 400) ? { notes: pick('notes', 400) } : {})
+  }
+  config.usageLimits = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
 }
 
 export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {

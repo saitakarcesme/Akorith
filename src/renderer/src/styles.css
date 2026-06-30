@@ -4982,6 +4982,103 @@ textarea:focus-visible {
   font-size: 11px;
 }
 
+/* ---- Phase 39.10: usage-limit cards ---- */
+.dash-update-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  padding: 3px 10px;
+  background: var(--bg-raised);
+  border-radius: 999px;
+}
+.dash-update-badge.has-update {
+  color: var(--warning);
+}
+
+.dash-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.dash-limit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+}
+
+.dash-limit-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dash-limit-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-limit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-limit-row span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.dash-limit-row strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-limit-row em {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-dim);
+}
+
+.dash-limit-cta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.dash-limit-note {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.limits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.limits-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.limits-field span {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 .dash-section-head {
   display: flex;
   align-items: flex-start;

@@ -312,6 +312,12 @@ const update = Object.freeze({
   run: (options: unknown): Promise<unknown> => ipcRenderer.invoke('update:run', options)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update })
+// Phase 39: honest usage-limit visibility (recorded local usage + configured labels).
+const usageLimits = Object.freeze({
+  get: (): Promise<unknown> => ipcRenderer.invoke('usageLimits:get'),
+  setConfig: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('usageLimits:setConfig', patch)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits })
 
 contextBridge.exposeInMainWorld('api', api)

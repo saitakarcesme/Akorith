@@ -19,6 +19,7 @@ import { registerRemoteTelemetryIpc } from './remote-telemetry'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
 import { registerPluginIpc } from './plugins/manager'
 import { registerUpdateIpc } from './update'
+import { registerUsageLimitsIpc } from './usage-limits'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, initDb, registerDbIpc } from './db'
@@ -388,6 +389,7 @@ app.whenReady().then(() => {
   registerControllerIpc()
   registerPluginIpc()
   registerUpdateIpc()
+  registerUsageLimitsIpc()
   registerSettingsIpc()
   applyAppIdentity()
   applyApplicationMenu()
