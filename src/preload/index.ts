@@ -334,6 +334,29 @@ const localRuntime = Object.freeze({
   status: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:status')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime })
+// Phase 48: project-focused Loop — autonomous local project builder.
+const projectLoop = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:list'),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:get', id),
+  create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('projectLoop:create', input),
+  update: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('projectLoop:update', id, patch),
+  setStatus: (id: string, status: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:setStatus', id, status),
+  archive: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:archive', id),
+  remove: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:delete', id),
+  runOnce: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:runOnce', id),
+  listRuns: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listRuns', id),
+  listEvents: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listEvents', id),
+  listCommits: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listCommits', id),
+  listBacklog: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listBacklog', id),
+  addBacklog: (id: string, title: string, detail?: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:addBacklog', id, title, detail),
+  setBacklogStatus: (itemId: string, status: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:setBacklogStatus', itemId, status),
+  listMemories: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listMemories', id),
+  addMemory: (id: string, content: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:addMemory', id, content),
+  pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder')
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop })
 
 contextBridge.exposeInMainWorld('api', api)
