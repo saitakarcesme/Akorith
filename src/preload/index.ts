@@ -327,6 +327,13 @@ const appApi = Object.freeze({
   getCurrency: (fetch?: boolean): Promise<unknown> => ipcRenderer.invoke('app:getCurrency', fetch === true)
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits })
+// Phase 47: shared local-first runtime used by Loop / Companions / Agents.
+const localRuntime = Object.freeze({
+  listModels: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:listModels'),
+  defaultModel: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:defaultModel'),
+  status: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:status')
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime })
 
 contextBridge.exposeInMainWorld('api', api)

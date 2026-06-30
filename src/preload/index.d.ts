@@ -1357,6 +1357,18 @@ export interface RuntimeStatus {
   checkedAt: number
 }
 
+// Phase 47: shared local-first runtime used by Loop / Companions / Agents.
+export interface LocalModelInfo {
+  id: string
+  label: string
+}
+
+export interface LocalRuntimeApi {
+  listModels(): Promise<LocalModelInfo[]>
+  defaultModel(): Promise<string | undefined>
+  status(): Promise<RuntimeStatus>
+}
+
 export type OllamaAutoConnectResult =
   | { ok: true; active: OllamaActiveEndpoint; models: string[]; modelCount: number; switched: boolean }
   | { ok: false; error: string; lastSuccessfulBaseUrl?: string; triedCount: number }
@@ -1709,6 +1721,7 @@ export interface PreloadApi {
   plugins: PluginsApi
   update: UpdateApi
   usageLimits: UsageLimitsApi
+  localRuntime: LocalRuntimeApi
 }
 
 declare global {
