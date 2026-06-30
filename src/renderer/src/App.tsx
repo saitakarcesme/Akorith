@@ -8,7 +8,7 @@ import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import LoopsPage from './components/LoopsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
-import type { ProjectRow, SessionRow } from '../../preload/index.d'
+import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
 export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
@@ -24,6 +24,24 @@ export interface HistorySelection {
 
 export type AgentStatusMap = Partial<Record<'t1' | 't2' | 't3', AgentStatusInfo>>
 
+function readStartupRequest(): StartupSnapshotRequest {
+  try {
+    return {
+      lastActiveProjectId: localStorage.getItem('akorith.lastActiveProjectId'),
+      lastActiveSessionId: localStorage.getItem('akorith.lastActiveSessionId'),
+      lastView: localStorage.getItem('akorith.lastView'),
+      sidebarWidth: localStorage.getItem('akorith.sidebarWidth'),
+      displayName: localStorage.getItem('akorith.displayName')
+    }
+  } catch {
+    return {}
+  }
+}
+
+function latestSessionFrom(sessions: SessionRow[], projectId: string | null): SessionRow | null {
+  return sessions.find((session) => session.projectId === projectId) ?? null
+}
+
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
   const [theme, setTheme] = useState<AppTheme>(() => {
@@ -35,6 +53,10 @@ export default function App(): JSX.Element {
   })
   const [historyVersion, setHistoryVersion] = useState(0)
   const [projectVersion, setProjectVersion] = useState(0)
+  const [startupSnapshot, setStartupSnapshot] = useState<StartupSnapshot | null>(null)
+  const [startupHydrated, setStartupHydrated] = useState(false)
+  const [startupError, setStartupError] = useState<string | null>(null)
+  const [startupRetry, setStartupRetry] = useState(0)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeProject, setActiveProject] = useState<ProjectRow | null>(null)
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
@@ -66,7 +88,7 @@ export default function App(): JSX.Element {
 
   const latestSession = useCallback(async (projectId: string | null): Promise<SessionRow | null> => {
     const sessions = await window.api.history.list()
-    return sessions.find((session) => session.projectId === projectId) ?? null
+    return latestSessionFrom(sessions, projectId)
   }, [])
 
   const openWorkspaceForProject = useCallback(
@@ -134,34 +156,69 @@ export default function App(): JSX.Element {
     [selectHistory]
   )
 
-  // Phase 13: workspace continuity. On launch, restore the last active project so
-  // the app resumes previous work instead of opening empty. Restoring a project
-  // re-starts its Codex/Claude terminals through the existing safe PTY startup
-  // (a logged-in CLI launch in the project cwd — never a destructive command).
+  const applyStartupSnapshot = useCallback(
+    (snapshot: StartupSnapshot): void => {
+      const projectById = new Map(snapshot.projects.map((project) => [project.id, project]))
+      const sessionById = new Map(snapshot.sessions.map((session) => [session.id, session]))
+      const restoredProject = snapshot.restore.projectId ? projectById.get(snapshot.restore.projectId) ?? null : null
+      const restoredSession = snapshot.restore.sessionId ? sessionById.get(snapshot.restore.sessionId) ?? null : null
+
+      setAgentStatus({})
+      if (snapshot.restore.view === 'general') {
+        setActiveProject(null)
+        setView('general')
+        setActiveSessionId(restoredSession?.id ?? null)
+        selectHistory(restoredSession?.id ?? null, 'general', restoredSession?.providerId)
+        return
+      }
+
+      if (snapshot.restore.view === 'workspace') {
+        const project = restoredProject ?? snapshot.projects[0] ?? null
+        const session = restoredSession ?? (project ? latestSessionFrom(snapshot.sessions, project.id) : null)
+        setActiveProject(project)
+        setView('workspace')
+        setActiveSessionId(session?.id ?? null)
+        selectHistory(session?.id ?? null, 'workspace', session?.providerId)
+        return
+      }
+
+      setActiveProject(restoredProject)
+      setView(snapshot.restore.view)
+      setActiveSessionId(restoredSession?.id ?? null)
+      if (restoredSession) {
+        selectHistory(restoredSession.id, restoredSession.projectId ? 'workspace' : 'general', restoredSession.providerId)
+      }
+    },
+    [selectHistory]
+  )
+
   useEffect(() => {
     let cancelled = false
-    try {
-      const lastId = localStorage.getItem('akorith.lastActiveProjectId')
-      if (!lastId) return
-      void window.api.projects
-        .list()
-        .then((projects) => {
-          if (cancelled) return
-          const match = projects.find((p) => p.id === lastId)
-          if (match) void openWorkspaceForProject(match)
-        })
-        .catch(() => {})
-    } catch {
-      // localStorage unavailable — fall back to the empty workspace.
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [openWorkspaceForProject])
+    setStartupHydrated(false)
+    setStartupError(null)
+    void window.api.app
+      .getStartupSnapshot(readStartupRequest())
+      .then((snapshot) => {
+        if (cancelled) return
+        setStartupSnapshot(snapshot)
+        applyStartupSnapshot(snapshot)
+        if (snapshot.diagnostics.warnings.length > 0) {
+          console.warn('[startup] hydration warnings:', snapshot.diagnostics.warnings)
+        }
+        console.info('[startup] hydration snapshot:', snapshot.diagnostics.counts)
+        setStartupHydrated(true)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setStartupError(err instanceof Error ? err.message : String(err))
+        setStartupHydrated(true)
+      })
+  }, [applyStartupSnapshot, startupRetry])
 
   // Persist the active project id; reset agent status when the project changes
   // (the drawer remounts its terminals for the new cwd).
   useEffect(() => {
+    if (!startupHydrated) return
     try {
       if (activeProject?.id) localStorage.setItem('akorith.lastActiveProjectId', activeProject.id)
       else localStorage.removeItem('akorith.lastActiveProjectId')
@@ -173,15 +230,26 @@ export default function App(): JSX.Element {
     // live sessions, matching the per-project keys used in AgentDrawer.
     const projectKey = activeProject?.id ? activeProject.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40) : ''
     window.api.pty.setActiveProject(projectKey)
-  }, [activeProject?.id])
+  }, [activeProject?.id, startupHydrated])
 
   useEffect(() => {
+    if (!startupHydrated) return
     try {
       if (activeSessionId) localStorage.setItem('akorith.lastActiveSessionId', activeSessionId)
+      else localStorage.removeItem('akorith.lastActiveSessionId')
     } catch {
       /* ignore */
     }
-  }, [activeSessionId])
+  }, [activeSessionId, startupHydrated])
+
+  useEffect(() => {
+    if (!startupHydrated) return
+    try {
+      localStorage.setItem('akorith.lastView', view)
+    } catch {
+      /* ignore */
+    }
+  }, [view, startupHydrated])
 
   useEffect(() => {
     try {
@@ -210,6 +278,7 @@ export default function App(): JSX.Element {
 
   const selectSession = useCallback(
     (sessionId: string, project?: ProjectRow | null, providerId?: string) => {
+      setActiveSessionId(sessionId)
       if (project) {
         setActiveProject(project)
         setView('workspace')
@@ -248,6 +317,10 @@ export default function App(): JSX.Element {
         onNavigate={handleNavigate}
         historyVersion={historyVersion}
         projectVersion={projectVersion}
+        startupSnapshot={startupSnapshot}
+        startupHydrated={startupHydrated}
+        startupError={startupError}
+        onRetryStartupHydration={() => setStartupRetry((n) => n + 1)}
         activeSessionId={activeSessionId}
         activeProject={activeProject}
         createSignal={createSignal}
