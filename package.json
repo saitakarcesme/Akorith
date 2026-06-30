@@ -69,6 +69,7 @@
     "win": {
       "icon": "build/icon.ico",
       "executableName": "Akorith",
+      "signAndEditExecutable": true,
       "artifactName": "${productName}-${version}-win-${arch}.${ext}",
       "target": [
         {
@@ -89,6 +90,10 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "menuCategory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "shortcutName": "Akorith",
       "uninstallDisplayName": "Akorith ${version}",
       "createDesktopShortcut": true,
