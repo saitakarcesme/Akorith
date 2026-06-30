@@ -8768,18 +8768,18 @@ body {
   font-size: 14px;
 }
 
-/* Phase 45: smaller, more refined chat body text (was 16px). This is the
-   effective .chat-msg font-size — assistant/output + general body, in both
+/* Phase 46: smaller chat body text (Phase 45 14.5px -> 13px). Effective
+   .chat-msg font-size — assistant/output + markdown prose (inherits), in both
    general and workspace chats. Line-height kept comfortable. */
 .chat-msg {
-  font-size: 14.5px;
-  line-height: 1.62;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-/* Phase 45: user bubble text matches the body (was 15.5px); still right-aligned
+/* Phase 46: user bubble text matches the body (-> 13px); still right-aligned
    and rounded — only the size changes. */
 .chat-msg.user {
-  font-size: 14.5px;
+  font-size: 13px;
 }
 
 .chat-msg-meta,
@@ -8797,9 +8797,9 @@ body {
   font-size: 13.5px;
 }
 
-/* Phase 45: code blocks slightly smaller but still readable (was 14.5px). */
+/* Phase 46: code blocks a touch smaller but still readable (was 13.5px). */
 .chat-msg .chat-code pre {
-  font-size: 13.5px;
+  font-size: 12.5px;
 }
 
 .ws-hero-title {
