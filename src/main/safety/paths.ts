@@ -49,10 +49,13 @@ export function checkWritePath(root: string, candidate: string): PathCheck {
   if (typeof candidate !== 'string' || !candidate.trim()) {
     return { ok: false, reason: 'empty path' }
   }
-  const cleaned = candidate.trim().replace(/^[./\\]+/, '')
-  if (!cleaned) return { ok: false, reason: 'path resolves to the root itself' }
-  if (isAbsolute(candidate)) return { ok: false, reason: 'absolute paths are not allowed' }
-  if (/[\0\r\n]/.test(candidate)) return { ok: false, reason: 'path contains control characters' }
+  const trimmed = candidate.trim()
+  if (isAbsolute(trimmed)) return { ok: false, reason: 'absolute paths are not allowed' }
+  if (/[\0\r\n]/.test(trimmed)) return { ok: false, reason: 'path contains control characters' }
+  // Strip only a leading "./" (current-dir) — never "../" or a leading dot that
+  // is part of a real dirname like ".git", so traversal/forbidden checks still fire.
+  const cleaned = trimmed.replace(/^(?:\.\/)+/, '')
+  if (!cleaned || cleaned === '.') return { ok: false, reason: 'path resolves to the root itself' }
 
   const rootResolved = resolve(root)
   const abs = resolve(rootResolved, cleaned)
