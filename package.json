@@ -34,7 +34,8 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:all": "npm run build && electron-builder -mw",
-    "verify:local-runtime": "tsx scripts/verify-local-runtime.ts"
+    "verify:local-runtime": "tsx scripts/verify-local-runtime.ts",
+    "verify:project-loop": "tsx scripts/verify-project-loop.ts"
   },
   "build": {
     "appId": "com.akorith.app",
