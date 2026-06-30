@@ -2,12 +2,14 @@ import { ipcMain } from 'electron'
 import { hostname, networkInterfaces } from 'os'
 import {
   getLocalProviderSettings,
+  getTelemetrySettings,
   normalizeBaseUrl,
   sanitizeRemoteProfiles,
   setLocalProviderSettings,
   type LocalProviderSettings,
   type OllamaRemoteProfile
 } from './config'
+import { getTailscaleStatus, tailscaleOllamaCandidates, type TailscaleStatus } from './remote-runtime/tailscale'
 
 export type OllamaConnectionTestResult =
   | { ok: true; baseUrl: string; models: string[]; modelCount: number }
@@ -141,9 +143,19 @@ async function testOllamaEndpoint(baseUrl: string, timeoutMs = 6_000): Promise<O
 
 export interface OllamaActiveEndpoint {
   baseUrl: string
-  source: 'configured' | 'last' | 'profile'
+  source: 'configured' | 'last' | 'profile' | 'tailscale' | 'controller'
   profileId?: string
   label: string
+}
+
+/** Derive an Ollama base URL (host:11434) from a controller/Tailscale host URL. */
+function ollamaUrlFromHostUrl(hostUrl: string): string | null {
+  try {
+    const u = new URL(hostUrl)
+    return `http://${u.hostname}:11434`
+  } catch {
+    return null
+  }
 }
 
 export type OllamaAutoConnectResult =
@@ -205,6 +217,24 @@ async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
     push({ baseUrl: profile.baseUrl, source: 'profile', profileId: profile.id, label: `Remote: ${profile.name}` })
   }
 
+  // Phase 42 (Remote Ollama): a healthy Akorith Controller (the PC) usually runs
+  // Ollama on the same host — derive host:11434 as a candidate. Token telemetry is
+  // separate; here we only probe the public read-only /api/tags. Tokens never logged.
+  for (const c of [...getTelemetrySettings().profiles].filter((p) => p.enabled).sort((a, b) => a.priority - b.priority)) {
+    const derived = ollamaUrlFromHostUrl(c.baseUrl)
+    if (derived) push({ baseUrl: derived, source: 'controller', label: `PC via Controller (${c.name})` })
+  }
+
+  // Phase 42 (Remote Ollama): when away from the home LAN, find the PC's Ollama over
+  // Tailscale automatically (private 100.x peers only; no public/Internet probing).
+  try {
+    for (const t of await tailscaleOllamaCandidates()) {
+      push({ baseUrl: t.baseUrl, source: 'tailscale', label: `PC via Tailscale (${t.hostName})` })
+    }
+  } catch {
+    /* Tailscale is optional — never block auto-connect on it. */
+  }
+
   const now = Date.now()
   const updates = new Map<string, ProfileStatusPatch>()
   let firstError = ''
@@ -249,6 +279,77 @@ async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
   }
 }
 
+// Phase 42 (Remote Ollama): a single summary the Dashboard / presentation-readiness
+// check reads — active runtime source, model count, Tailscale state, and a readiness
+// verdict. GPU is intentionally NOT faked here (direct Ollama exposes none).
+export interface RuntimeStatus {
+  ok: boolean
+  source?: OllamaActiveEndpoint['source']
+  label?: string
+  baseUrl?: string
+  modelCount: number
+  models: string[]
+  readiness: 'ready' | 'attention' | 'offline' | 'setup'
+  reason: string
+  tailscale: { installed: boolean; running: boolean; peerCount: number }
+  hasRemoteProfiles: boolean
+  hasControllerProfiles: boolean
+  lastSuccessfulBaseUrl?: string
+  checkedAt: number
+}
+
+async function getRuntimeStatus(): Promise<RuntimeStatus> {
+  const settings = getLocalProviderSettings()
+  const hasRemoteProfiles = (settings.remoteProfiles ?? []).some((p) => p.enabled)
+  const hasControllerProfiles = getTelemetrySettings().profiles.some((p) => p.enabled)
+  const ts = await getTailscaleStatus().catch(() => ({ installed: false, running: false, peers: [] as { isSelf: boolean }[] }))
+  const tailscale = {
+    installed: ts.installed,
+    running: ts.running,
+    peerCount: ts.peers.filter((p) => !p.isSelf).length
+  }
+
+  const result = await autoConnectOllama()
+  if (result.ok) {
+    const readiness: RuntimeStatus['readiness'] = result.modelCount > 0 ? 'ready' : 'attention'
+    return {
+      ok: true,
+      source: result.active.source,
+      label: result.active.label,
+      baseUrl: result.active.baseUrl,
+      modelCount: result.modelCount,
+      models: result.models,
+      readiness,
+      reason:
+        readiness === 'ready'
+          ? `Connected to ${result.active.label} — ${result.modelCount} model(s) available.`
+          : `Connected to ${result.active.label} but no models are installed. Run "ollama pull <model>" on that machine.`,
+      tailscale,
+      hasRemoteProfiles,
+      hasControllerProfiles,
+      lastSuccessfulBaseUrl: settings.lastSuccessfulBaseUrl,
+      checkedAt: Date.now()
+    }
+  }
+
+  const hasAnyRemote = hasRemoteProfiles || hasControllerProfiles || tailscale.peerCount > 0
+  const readiness: RuntimeStatus['readiness'] = hasAnyRemote ? 'offline' : 'setup'
+  return {
+    ok: false,
+    modelCount: 0,
+    models: [],
+    readiness,
+    reason: hasAnyRemote
+      ? 'No local-model endpoint is reachable right now. Make sure the PC is on and awake, Ollama is running, and your private route (Tailscale/VPN/LAN) is connected.'
+      : 'No local-model endpoint is configured for this network. Add a Remote Runtime profile (LAN, Tailscale, or Akorith Controller) in Settings → Providers.',
+    tailscale,
+    hasRemoteProfiles,
+    hasControllerProfiles,
+    lastSuccessfulBaseUrl: settings.lastSuccessfulBaseUrl,
+    checkedAt: Date.now()
+  }
+}
+
 export function registerOllamaConnectionIpc(): void {
   ipcMain.handle('ollama:getSettings', (): LocalProviderSettings => getLocalProviderSettings())
 
@@ -261,6 +362,11 @@ export function registerOllamaConnectionIpc(): void {
 
   // Phase 33.14: try configured → last → enabled remote profiles, pick first healthy.
   ipcMain.handle('ollama:autoConnect', async (): Promise<OllamaAutoConnectResult> => autoConnectOllama())
+
+  // Phase 42 (Remote Ollama): runtime-source summary + presentation readiness, and a
+  // read-only Tailscale status for setup guidance.
+  ipcMain.handle('runtime:status', async (): Promise<RuntimeStatus> => getRuntimeStatus())
+  ipcMain.handle('runtime:tailscaleStatus', async (): Promise<TailscaleStatus> => getTailscaleStatus())
 
   ipcMain.handle('ollama:setSettings', (_event, args: unknown): OllamaSettingsResponse => {
     if (!args || typeof args !== 'object') {

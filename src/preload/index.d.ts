@@ -1320,9 +1320,41 @@ export interface OllamaConnectionSettings {
 
 export interface OllamaActiveEndpoint {
   baseUrl: string
-  source: 'configured' | 'last' | 'profile'
+  source: 'configured' | 'last' | 'profile' | 'tailscale' | 'controller'
   profileId?: string
   label: string
+}
+
+export interface TailscalePeer {
+  hostName: string
+  dnsName?: string
+  ip: string
+  online: boolean
+  os?: string
+  isSelf: boolean
+}
+
+export interface TailscaleStatus {
+  installed: boolean
+  running: boolean
+  note?: string
+  peers: TailscalePeer[]
+}
+
+export interface RuntimeStatus {
+  ok: boolean
+  source?: 'configured' | 'last' | 'profile' | 'tailscale' | 'controller'
+  label?: string
+  baseUrl?: string
+  modelCount: number
+  models: string[]
+  readiness: 'ready' | 'attention' | 'offline' | 'setup'
+  reason: string
+  tailscale: { installed: boolean; running: boolean; peerCount: number }
+  hasRemoteProfiles: boolean
+  hasControllerProfiles: boolean
+  lastSuccessfulBaseUrl?: string
+  checkedAt: number
 }
 
 export type OllamaAutoConnectResult =
@@ -1357,6 +1389,8 @@ export interface OllamaApi {
   setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
   testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
   autoConnect(): Promise<OllamaAutoConnectResult>
+  runtimeStatus(): Promise<RuntimeStatus>
+  tailscaleStatus(): Promise<TailscaleStatus>
 }
 
 export interface GitChangeFile {

@@ -258,7 +258,10 @@ const ollama = Object.freeze({
   setSettings: (args: unknown): Promise<unknown> => ipcRenderer.invoke('ollama:setSettings', args),
   testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl }),
   // Phase 33.14: resolve the first healthy endpoint (configured → last → profiles).
-  autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect')
+  autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect'),
+  // Phase 42 (Remote Ollama): runtime-source summary + readiness, and Tailscale status.
+  runtimeStatus: (): Promise<unknown> => ipcRenderer.invoke('runtime:status'),
+  tailscaleStatus: (): Promise<unknown> => ipcRenderer.invoke('runtime:tailscaleStatus')
 })
 
 // Phase 33.17: read-only git surface for the bottom workbench Changes panel.
