@@ -318,6 +318,17 @@ export function initDb(): void {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_backlog_loop ON project_loop_backlog_items(loop_id, priority);
+
+    CREATE TABLE IF NOT EXISTS project_loop_memories (
+      id         TEXT PRIMARY KEY,
+      loop_id    TEXT NOT NULL REFERENCES project_loops(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      importance INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_loop_memories_loop ON project_loop_memories(loop_id, importance);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
