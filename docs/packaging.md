@@ -21,12 +21,14 @@ All packaging is configured in `package.json` under `build` (electron-builder):
   `CFBundleDisplayName` = Akorith), so the **menu bar, Dock, and Finder all say
   Akorith**. The main process also calls `app.setName('Akorith')`, sets the About
   panel, installs an explicit Akorith application menu, and titles the window Akorith.
-- **Dev (`npm run dev`):** Electron runs from `node_modules`' own `Electron.app`,
-  whose `CFBundleName` ships as "Electron" — `app.setName` cannot change that at
-  runtime. `scripts/fix-dev-app-name.js` (run by `predev` + `postinstall`) patches
-  that dev-only bundle's `CFBundleName`/`CFBundleDisplayName` to **Akorith**, so the
-  dev menu bar/Dock say Akorith too. The executable name is left as `Electron` so it
-  still launches. This only touches the local dev Electron copy.
+- **Dev (`npm run dev`):** Electron runs from `node_modules`' own `Electron.app`.
+  `scripts/fix-dev-app-name.js` (run by `predev` + `postinstall`) patches that dev-only
+  bundle's `CFBundleName`/`CFBundleDisplayName` to **Akorith** as a best effort.
+  **Honest limitation:** on current macOS the dev menu bar may still read "Electron",
+  because electron-vite launches the Electron binary directly (not via LaunchServices),
+  so macOS names the app from the running executable — which neither `app.setName` nor
+  the Info.plist patch reliably overrides, and which LaunchServices caches. This is a
+  dev-only cosmetic issue; the **packaged** app is Akorith everywhere and is what users run.
 
 ## Build locally
 

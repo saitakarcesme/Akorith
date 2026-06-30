@@ -12,9 +12,13 @@ docs. No website, no runtime/provider/controller/PTY changes; `npm run dev` stay
 - Main process (Phase 39): `app.setName('Akorith')` at module load + About panel + an explicit
   Akorith application menu; window `title: 'Akorith'`. Packaged app verified Akorith.
 - **Gap — dev menu bar reads "Electron":** it comes from `node_modules/electron`'s own
-  `Electron.app/Contents/Info.plist` `CFBundleName` = `Electron`, which `app.setName` cannot
-  change at runtime. **Fixable in dev** by patching that Info.plist's `CFBundleName`/
-  `CFBundleDisplayName` to Akorith (the menu reads `CFBundleName`, not the executable).
+  `Electron.app`. `scripts/fix-dev-app-name.js` patches that bundle's `CFBundleName`/
+  `CFBundleDisplayName` to Akorith as a best effort, BUT (verified on this macOS) the dev
+  menu bar still shows "Electron": electron-vite launches the Electron binary directly, so
+  macOS names the app from the running executable's process identity, which neither
+  `app.setName` nor the Info.plist patch reliably overrides (LaunchServices caches it).
+  **Conclusion:** dev menu = "Electron" is a real dev-runtime limitation; the **packaged**
+  app is Akorith everywhere (verified frontmost app name = "Akorith") and is what users run.
 - **Gaps — packaging/release:** no `.github/workflows/`, no `artifactName`s, NSIS lacks
   uninstall display name / desktop shortcut, no release/refresh npm scripts beyond pack/dist.
 

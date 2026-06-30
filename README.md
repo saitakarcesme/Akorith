@@ -79,8 +79,10 @@ Three ways to run Akorith (full details in [`docs/install.md`](docs/install.md))
 
    ```bash
    npm run setup        # check toolchain, install deps, print exact auth steps
-   npm run dev          # launch the desktop app (menu bar says "Akorith")
+   npm run dev          # launch the desktop app
    ```
+   (In dev the macOS menu bar may still read "Electron" — a dev-runtime limitation;
+   the **packaged** app shows Akorith everywhere.)
 
 One-command setup works on macOS/Linux (`scripts/setup-akorith.sh`) and Windows
 (`scripts/setup-akorith.ps1`); `npm run doctor` runs a check-only pass. It never collects or
@@ -189,12 +191,14 @@ npm run dist:win        # Windows nsis + portable (build on Windows or via CI)
 npm run refresh:mac     # back up old copies + install the new Akorith.app + open it
 ```
 
-The packaged app is named **Akorith** in Finder, the Dock, and the menu bar. **In dev, the
-menu bar/Dock now also say Akorith** — `scripts/fix-dev-app-name.js` (run by `predev`/
-`postinstall`) patches the dev Electron bundle's name (the executable name is preserved so it
-still launches). A macOS host can't reliably cross-build the Windows installer; use the
-GitHub Actions **release** workflow for Windows artifacts. Builds are **unsigned** until
-signing certs are configured (never faked).
+The packaged app is named **Akorith** in Finder, the Dock, and the menu bar (verified:
+`CFBundleName`/`CFBundleDisplayName`/`CFBundleExecutable` = Akorith). In **dev**, the menu
+bar may still read "Electron" — electron-vite launches the Electron binary directly, so macOS
+takes the app name from the running executable, which `app.setName` and the Info.plist patch
+(`scripts/fix-dev-app-name.js`, best-effort) can't reliably override. The packaged app is the
+one users run. A macOS host can't reliably cross-build the Windows installer; use the GitHub
+Actions **release** workflow for Windows artifacts. Builds are **unsigned** until signing
+certs are configured (never faked).
 
 ## Privacy & security
 

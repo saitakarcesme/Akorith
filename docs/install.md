@@ -44,9 +44,11 @@ npm install
 npm run dev               # electron-vite dev server + Electron window
 ```
 
-The `predev` hook patches the local dev Electron bundle so the **macOS menu bar
-and Dock say "Akorith"** in dev too. (If you ever see "Electron", run
-`node scripts/fix-dev-app-name.js` once, or reinstall.)
+The `predev` hook patches the local dev Electron bundle name as a best effort.
+Note: on current macOS the dev menu bar may **still** read "Electron" — electron-vite
+launches the Electron binary directly, so macOS names the app from the running
+executable, which the patch can't reliably override. The **packaged** app
+(`/Applications/Akorith.app`) shows Akorith everywhere and is what users run.
 
 ## Windows builds
 
