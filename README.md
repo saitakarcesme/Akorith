@@ -245,11 +245,12 @@ available from **More**.
 ## Screenshots
 
 Current screenshots live under [`docs/screenshots/`](docs/screenshots/). They are captured from a
-clean demo profile with no tokens, personal chats, or private project paths.
+live local Akorith workspace so the Agent Activity drawer shows the real Codex, OpenCode, and
+Claude panes.
 
 ### Workspace
 
-![Akorith workspace with Local/Ollama selected](docs/screenshots/workspace.png)
+![Akorith live workspace with a project chat](docs/screenshots/workspace.png)
 
 ### Composer tools
 
@@ -257,7 +258,7 @@ clean demo profile with no tokens, personal chats, or private project paths.
 
 ### Agent Activity
 
-![Akorith Agent Activity drawer with Olympus, Gaia, and Atlantis](docs/screenshots/agent-activity.png)
+![Akorith Agent Activity drawer with Olympus Codex, Gaia OpenCode, and Atlantis Claude](docs/screenshots/agent-activity.png)
 
 ### Dashboard
 
