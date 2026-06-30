@@ -4714,18 +4714,21 @@ textarea:focus-visible {
   border-color: var(--text-dim);
 }
 
+/* Phase 43: circular icon-only Send/Stop control. */
 .send-button {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 18px;
-  font-size: 12px;
-  font-weight: 600;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   color: var(--on-accent);
   background: var(--accent);
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   cursor: pointer;
+  transition: background-color var(--fast), border-color var(--fast), transform var(--fast);
 }
 
 .send-button:hover:not(:disabled) {
@@ -4733,11 +4736,27 @@ textarea:focus-visible {
   border-color: var(--accent-strong);
 }
 
+.send-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .send-button:disabled {
   color: var(--text-faint);
   background: var(--bg-raised);
   border-color: var(--border);
   cursor: not-allowed;
+}
+
+/* Stop state: same circular size, distinct (danger) tint. */
+.send-button.is-stop {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.send-button.is-stop:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  filter: brightness(1.08);
 }
 
 /* ---------- dashboard ---------- */
