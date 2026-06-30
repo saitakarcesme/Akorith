@@ -418,6 +418,12 @@ export function isDbReady(): boolean {
   return ready()
 }
 
+/** Phase 48: shared DB accessor so feature modules (project-loop, companions,
+ *  action-agents) can own their own store files without bloating db.ts. */
+export function getDb(): Database.Database {
+  return must()
+}
+
 export async function ensureDbReady(): Promise<void> {
   if (ready()) return
   if (process.env.AKORITH_SKIP_DB_INIT === '1') {
