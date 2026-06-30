@@ -3080,6 +3080,38 @@ textarea:focus-visible {
   color: var(--text-faint);
 }
 
+/* ---- Phase 42 (Remote Ollama): Tailscale helper ---- */
+.ollama-tailscale {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+.ollama-tailscale-peers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ollama-tailscale-peer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.ollama-tailscale-peer .is-online {
+  color: var(--success);
+}
+.ollama-tailscale-peer .is-offline {
+  color: var(--text-faint);
+}
+.ollama-tailscale-peer code {
+  color: var(--text-dim);
+}
+.ollama-tailscale-peer button {
+  margin-left: auto;
+}
+
 .ollama-remote-empty {
   padding: 12px;
   font-size: 11.5px;

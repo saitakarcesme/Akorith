@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { UpdateLogEntry, UpdateRunResult, UpdateStatus } from '../../../preload/index.d'
+import type { BuildInfo, UpdateLogEntry, UpdateRunResult, UpdateStatus } from '../../../preload/index.d'
 
 // Phase 39: Settings → Update. A safe source updater for git/dev installs. It checks
 // origin/main and fast-forwards only — it never discards local changes.
@@ -16,12 +16,19 @@ export default function UpdatePanel(): JSX.Element {
   const [runBuild, setRunBuild] = useState(false)
   const [logs, setLogs] = useState<UpdateLogEntry[]>([])
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 42 (Remote Ollama): which commit this app was built from.
+  const [build, setBuild] = useState<BuildInfo | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     try {
       setStatus(await window.api.update.status())
     } catch {
       setStatus(null)
+    }
+    try {
+      setBuild(await window.api.app.getBuildInfo())
+    } catch {
+      setBuild(null)
     }
   }, [])
 
@@ -83,6 +90,14 @@ export default function UpdatePanel(): JSX.Element {
           {busy === 'check' ? 'Checking…' : 'Check for updates'}
         </button>
       </div>
+
+      {build && (
+        <div className="settings-hint">
+          Akorith build: <code>{build.version}</code> · commit <code>{build.gitCommit}</code> ·{' '}
+          {build.packaged ? 'packaged' : 'dev'}
+          {build.gitBranch && build.gitBranch !== 'unknown' ? ` · ${build.gitBranch}` : ''}
+        </div>
+      )}
 
       {!status ? (
         <div className="settings-hint">Loading update status…</div>

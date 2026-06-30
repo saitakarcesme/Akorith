@@ -14,6 +14,7 @@ import type {
   ControllerDocs,
   ControllerStatus,
   RemoteTelemetryProfileView,
+  TailscaleStatus,
   UsageLimitConfig,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
@@ -239,6 +240,19 @@ export default function SettingsCenter({
   // Phase 33.14: auto-connect (configured → last → remote profiles by priority).
   const [autoConnectBusy, setAutoConnectBusy] = useState(false)
   const [autoConnectInfo, setAutoConnectInfo] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 42 (Remote Ollama): Tailscale status for away-from-home setup guidance.
+  const [tailscale, setTailscale] = useState<TailscaleStatus | null>(null)
+  const [tsBusy, setTsBusy] = useState(false)
+  const refreshTailscale = useCallback(async (): Promise<void> => {
+    setTsBusy(true)
+    try {
+      setTailscale(await window.api.ollama.tailscaleStatus())
+    } catch {
+      setTailscale(null)
+    } finally {
+      setTsBusy(false)
+    }
+  }, [])
   const [digestDirDraft, setDigestDirDraft] = useState('')
   const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
@@ -370,16 +384,18 @@ export default function SettingsCenter({
 
   const setRemoteProfiles = (profiles: OllamaRemoteProfile[]): void => updateOllamaSetting('remoteProfiles', profiles)
 
-  const addRemoteProfile = (): void => {
+  const addRemoteProfile = (name = 'PC Ollama', baseUrl = 'http://100.0.0.0:11434', networkHint = 'Tailscale / VPN'): void => {
+    // Avoid duplicate endpoints (e.g. re-adding the same Tailscale peer).
+    if (remoteProfiles.some((p) => p.baseUrl === baseUrl)) return
     setRemoteProfiles([
       ...remoteProfiles,
       {
         id: `rp-${Date.now()}-${remoteProfiles.length}`,
-        name: 'PC Ollama',
-        baseUrl: 'http://100.0.0.0:11434',
+        name,
+        baseUrl,
         priority: remoteProfiles.length,
         enabled: true,
-        networkHint: 'Tailscale / VPN'
+        networkHint
       }
     ])
   }
@@ -944,7 +960,7 @@ export default function SettingsCenter({
                     <button type="button" disabled={autoConnectBusy} onClick={() => void runAutoConnect()}>
                       {autoConnectBusy ? 'Connecting…' : 'Auto-connect'}
                     </button>
-                    <button type="button" onClick={addRemoteProfile}>
+                    <button type="button" onClick={() => addRemoteProfile()}>
                       Add endpoint
                     </button>
                   </div>
@@ -954,6 +970,56 @@ export default function SettingsCenter({
                   remote endpoints by priority (lowest first), and uses the first that responds.
                 </p>
                 {autoConnectInfo && <div className={`ollama-status is-${autoConnectInfo.kind}`}>{autoConnectInfo.text}</div>}
+
+                {/* Phase 42 (Remote Ollama): Tailscale away-from-home helper + guidance. */}
+                <div className="ollama-tailscale">
+                  <div className="ollama-remote-head">
+                    <span>Find PC over Tailscale</span>
+                    <button type="button" disabled={tsBusy} onClick={() => void refreshTailscale()}>
+                      {tsBusy ? 'Checking…' : tailscale ? 'Re-check' : 'Check Tailscale'}
+                    </button>
+                  </div>
+                  {tailscale && (
+                    <>
+                      {!tailscale.installed && (
+                        <div className="ollama-status is-info">
+                          Tailscale isn&apos;t installed. To use the PC&apos;s models from another network: install Tailscale on
+                          both machines, sign into the same account, keep the PC on with Ollama running
+                          (<code>OLLAMA_HOST=0.0.0.0</code>), then click Auto-connect. Akorith never installs Tailscale or
+                          exposes Ollama publicly.
+                        </div>
+                      )}
+                      {tailscale.installed && !tailscale.running && (
+                        <div className="ollama-status is-info">
+                          Tailscale is installed but not connected. Open Tailscale and sign in on both machines, then re-check.
+                        </div>
+                      )}
+                      {tailscale.running && (
+                        <div className="ollama-tailscale-peers">
+                          {tailscale.peers.filter((p) => !p.isSelf).length === 0 ? (
+                            <div className="ollama-status is-info">Connected, but no peer devices found. Sign the PC into the same tailnet.</div>
+                          ) : (
+                            tailscale.peers
+                              .filter((p) => !p.isSelf)
+                              .map((p) => (
+                                <div className="ollama-tailscale-peer" key={p.ip}>
+                                  <span className={p.online ? 'is-online' : 'is-offline'}>●</span>
+                                  <strong>{p.hostName}</strong>
+                                  <code>http://{p.ip}:11434</code>
+                                  <button
+                                    type="button"
+                                    onClick={() => addRemoteProfile(`${p.hostName} (Tailscale)`, `http://${p.ip}:11434`, 'Tailscale')}
+                                  >
+                                    Add as endpoint
+                                  </button>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 {remoteProfiles.length === 0 ? (
                   <div className="ollama-remote-empty">
