@@ -262,6 +262,26 @@ export function initDb(): void {
       roadmap_summary      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_project_loops_status ON project_loops(status, updated_at);
+
+    CREATE TABLE IF NOT EXISTS project_loop_runs (
+      id                TEXT PRIMARY KEY,
+      loop_id           TEXT NOT NULL REFERENCES project_loops(id) ON DELETE CASCADE,
+      run_index         INTEGER NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      started_at        INTEGER NOT NULL,
+      ended_at          INTEGER,
+      model             TEXT,
+      objective         TEXT,
+      summary           TEXT,
+      files_changed     INTEGER NOT NULL DEFAULT 0,
+      commands_run      INTEGER NOT NULL DEFAULT 0,
+      tests_run         INTEGER NOT NULL DEFAULT 0,
+      commits_created   INTEGER NOT NULL DEFAULT 0,
+      validation_result TEXT,
+      next_step         TEXT,
+      error             TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_loop_runs_loop ON project_loop_runs(loop_id, run_index);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
