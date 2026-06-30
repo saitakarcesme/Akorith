@@ -6330,6 +6330,10 @@ textarea:focus-visible {
   font-size: 14px;
   line-height: 1.62;
   color: var(--text);
+  /* Phase 40.3: allow the row to shrink so wide code/markdown blocks fit and
+     scroll/wrap inside the column instead of stretching the page. */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 /* Phase 38.2: user messages right-align as a white rounded bubble (this rule is
    the effective one — it previously forced align-self: stretch which left the
@@ -6397,7 +6401,9 @@ textarea:focus-visible {
   /* Phase 33.11: borderless — the composer reads via its raised surface tone,
      not a 1px outline. A focus ring still appears on focus-within (below). */
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  /* Phase 40.4: rounder composer surface (var(--radius-lg) was only 8px). The
+     focus treatment stays subtle (background shift, no loud outline). */
+  border-radius: 22px;
   transition: border-color var(--fast), background-color var(--fast);
 }
 
@@ -7659,7 +7665,8 @@ textarea:focus-visible {
   padding: 2px 14px;
 }
 .chat-msg.user {
-  padding: 12px 16px;
+  /* Phase 40.2: tighter vertical padding (the bubble felt too tall). */
+  padding: 9px 18px;
 }
 .composer-dock {
   padding: 12px 32px 18px;
@@ -7908,11 +7915,17 @@ textarea:focus-visible {
 }
 .chat-msg-text {
   max-width: 72ch;
+  /* Phase 40.3: long prose/URLs wrap at word boundaries, never overflow. */
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .chat-msg.user {
   font-size: 14.5px;
-  line-height: 1.6;
-  border-radius: var(--radius);
+  /* Phase 40.2: tighter line spacing + a much rounder bubble (this is the
+     effective radius rule — it previously collapsed back to var(--radius)/5px). */
+  line-height: 1.5;
+  border-radius: 26px 26px 10px 26px;
 }
 .chat-msg .chat-code {
   margin: 12px 0;
@@ -7920,6 +7933,8 @@ textarea:focus-visible {
   border-radius: var(--radius);
   background: #303039;
   overflow: hidden;
+  /* Phase 40.3: never let a code block stretch the chat column. */
+  max-width: 100%;
 }
 .chat-msg .chat-code-header {
   padding: 8px 14px;
@@ -7932,6 +7947,14 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: 14.5px;
   line-height: 1.68;
+  /* Phase 40.3: wrap long lines instead of clipping/overflowing the column.
+     pre-wrap preserves indentation and copy content; overflow-wrap breaks only
+     truly unbreakable tokens (long URLs/hashes). overflow-x:auto is a fallback. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  box-sizing: border-box;
+  max-width: 100%;
   overflow-x: auto;
 }
 /* Inline (non-fenced) code spans inside prose stay legible too. */
