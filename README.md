@@ -25,16 +25,16 @@ credentials stored by the app — your chats, usage, and project metadata stay i
 The center chat talks to whichever of these are installed and logged in. In **Workspace**,
 Akorith hosts three real project terminals in the Activity drawer:
 **Olympus** (Codex), **Gaia** (OpenCode), and **Atlantis** (Claude), each running inside the
-project folder you pick. In **Chat**, you can talk to any available provider without selecting
-a project.
+project folder you pick. A fresh **New chat** can also run as a general, project-free
+conversation with any available provider.
 
 ## Workspace vs Chat
 
 - **New chat** sits at the top of the sidebar (above Workspace). Click it any time to start a
   fresh general chat with your current provider — no project required.
 - **Workspace** is project-scoped. Selecting a project restores that project's latest workspace
-  chat if one exists, starts or reuses Olympus/Codex and Atlantis/Claude for that project, and
-  enables repo context, macro-loop, bridge, and Activity controls.
+  chat if one exists, starts or reuses Olympus/Codex, Gaia/OpenCode, and Atlantis/Claude for
+  that project, and enables repo context, macro-loop, bridge, and Activity controls.
 - **Chat** is general model chat. It works without a project, stores conversations separately
   from project workspaces, and does not show or send project context.
 - **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
@@ -87,11 +87,11 @@ changes, or force-pushes. See [`docs/update-system.md`](docs/update-system.md).
 
 ## Sending prompts to the agents (Auto-Enter)
 
-In a Workspace chat, each assistant message has a **Send to Atlantis** / **Send to Olympus**
-button that drops the text into that agent's terminal through Akorith's single bridge path. The
-**Auto-Enter** toggle (under the composer) controls submission: **ON** pastes the prompt and
-presses Enter for you so the agent runs it immediately; **OFF** pastes the prompt and leaves the
-cursor so you can review and press Enter yourself.
+In a Workspace chat, assistant responses can be sent to **Olympus**, **Gaia**, or
+**Atlantis** through Akorith's single bridge path. The target selector sits beside the
+composer, while secondary tools live under **More**: image attach, model suggestion, repo
+context, Auto-Enter, output summary, and Agent Activity. **Auto-Enter ON** pastes and submits
+the prompt immediately; **OFF** pastes it and leaves the cursor so you can review first.
 
 ## Conversation memory
 
@@ -108,13 +108,14 @@ history, and each project workspace keeps its own conversation.
 
 ## Agent permission prompts & output summaries
 
-When Olympus/Codex or Atlantis/Claude pauses on a confirmation in its terminal (`proceed?`,
-`y/n`, a numbered menu, `allow access?`, `press Enter`), Akorith surfaces it as a **permission
-card** right in the chat with answer buttons — you don't have to open the Activity drawer. Your
-answer is sent through the same single bridge path that all chat→terminal text uses. Permanent
-"always allow" options are shown but never auto-selected. After you send work to an agent (or
-answer a prompt), Akorith watches the terminal until it settles and posts a **summary** of what
-the agent did back into the chat; a **Summarize output** button is always available too.
+When Olympus/Codex, Gaia/OpenCode, or Atlantis/Claude pauses on a confirmation in its terminal
+(`proceed?`, `y/n`, a numbered menu, `allow access?`, `press Enter`), Akorith surfaces it as a
+**permission card** right in the chat with answer buttons — you don't have to open the Activity
+drawer. Your answer is sent through the same single bridge path that all chat→terminal text
+uses. Permanent "always allow" options are shown but never auto-selected. After you send work to
+an agent (or answer a prompt), Akorith watches the terminal until it settles and posts a
+**summary** of what the agent did back into the chat; a **Summarize output** button is always
+available too.
 
 ## Connect your subscriptions
 
@@ -232,30 +233,47 @@ Akorith provider bridge is stdin text.
 
 ## Design
 
-Akorith is **chat-first**, in the spirit of a Codex-style product: a **light/white sidebar** for
-projects, provider folders, recent chats, and navigation; a **dark, calm center workspace** built
-around one large composer; and the Codex/Claude **terminals running in the background**, revealed
-only when you want them via the **Agent activity** drawer. Pick a project from the sidebar and
-Akorith starts or reuses Codex and Claude in it automatically — you mostly just chat, and the
-agents work behind the scenes. After you send work to an agent, Akorith reads its terminal output
-and **summarizes the result back into the chat** ("Olympus/Codex created the files and ran tests —
-how would you like to continue?"), with a manual **Summarize output** action too. The separate
-**Chat** route is for normal, project-free conversations with any available provider.
+Akorith is **chat-first**, in the spirit of a Codex/OpenCode command surface: a black, calm
+workspace with a persistent project/chat sidebar, one large planning composer, and real agent
+terminals running quietly in the background. Pick a project from the sidebar and Akorith starts
+or reuses Codex, OpenCode, and Claude in that folder automatically — you mostly chat, and the
+agents work behind the scenes. The **Agent Activity** drawer can dock as an overlay, bottom panel,
+right-side panel, or focus view. After you send work to an agent, Akorith can read the terminal
+output and **summarize the result back into the chat**, with a manual **Summarize output** action
+available from **More**.
 
 ## Screenshots
 
-Current screenshots live under [`docs/screenshots/`](docs/screenshots/). To (re)capture them,
-follow [`docs/screenshots/README.md`](docs/screenshots/README.md) — a short checklist of the
-surfaces to grab (Workspace/composer, Sidebar, Dashboard, Plugins, Settings → API/Update,
-Agent Activity terminals, Test Lab). Crop to clean screens with no tokens, private paths, or
-personal chat content.
+Current screenshots live under [`docs/screenshots/`](docs/screenshots/). They are captured from a
+clean demo profile with no tokens, personal chats, or private project paths.
 
-<!-- Add captured images here, e.g.:
-![Workspace](docs/screenshots/workspace.png)
-![Dashboard](docs/screenshots/dashboard.png)
--->
+### Workspace
 
-![Akorith chat-first workspace](docs/validation/phase13-2-ui.png)
+![Akorith workspace with Local/Ollama selected](docs/screenshots/workspace.png)
+
+### Composer tools
+
+![Akorith composer More menu](docs/screenshots/composer-more.png)
+
+### Agent Activity
+
+![Akorith Agent Activity drawer with Olympus, Gaia, and Atlantis](docs/screenshots/agent-activity.png)
+
+### Dashboard
+
+![Akorith dashboard command surface](docs/screenshots/dashboard.png)
+
+### Plugins
+
+![Akorith plugins registry](docs/screenshots/plugins.png)
+
+### Test Lab
+
+![Akorith Model Test Lab](docs/screenshots/testlab.png)
+
+### Settings Update
+
+![Akorith Settings Update panel](docs/screenshots/settings-update.png)
 
 ## Roadmap
 
