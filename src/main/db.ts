@@ -282,6 +282,29 @@ export function initDb(): void {
       error             TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_runs_loop ON project_loop_runs(loop_id, run_index);
+
+    CREATE TABLE IF NOT EXISTS project_loop_events (
+      id         TEXT PRIMARY KEY,
+      loop_id    TEXT NOT NULL REFERENCES project_loops(id) ON DELETE CASCADE,
+      run_id     TEXT REFERENCES project_loop_runs(id) ON DELETE SET NULL,
+      kind       TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      detail     TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_loop_events_loop ON project_loop_events(loop_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS project_loop_commits (
+      id                 TEXT PRIMARY KEY,
+      loop_id            TEXT NOT NULL REFERENCES project_loops(id) ON DELETE CASCADE,
+      run_id             TEXT REFERENCES project_loop_runs(id) ON DELETE SET NULL,
+      sha                TEXT NOT NULL,
+      message            TEXT NOT NULL,
+      files_changed      INTEGER NOT NULL DEFAULT 0,
+      created_at         INTEGER NOT NULL,
+      validation_summary TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_loop_commits_loop ON project_loop_commits(loop_id, created_at);
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
