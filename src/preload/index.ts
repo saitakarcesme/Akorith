@@ -305,6 +305,13 @@ const plugins = Object.freeze({
   setChromaEndpoint: (endpoint: string): Promise<unknown> => ipcRenderer.invoke('plugins:setChromaEndpoint', endpoint)
 })
 
-const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins })
+// Phase 39: in-app source updater (read-only check; ff-only update after confirm).
+const update = Object.freeze({
+  status: (): Promise<unknown> => ipcRenderer.invoke('update:status'),
+  check: (): Promise<unknown> => ipcRenderer.invoke('update:check'),
+  run: (options: unknown): Promise<unknown> => ipcRenderer.invoke('update:run', options)
+})
+
+const api = Object.freeze({ pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update })
 
 contextBridge.exposeInMainWorld('api', api)

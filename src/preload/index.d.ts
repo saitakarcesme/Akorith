@@ -1477,6 +1477,51 @@ export interface PluginsApi {
   setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
 }
 
+export interface UpdateStatus {
+  mode: 'git' | 'packaged'
+  repoPath?: string
+  currentBranch?: string
+  currentCommit?: string
+  currentCommitFull?: string
+  remoteMainCommit?: string
+  remoteUrl?: string
+  behindBy: number
+  aheadBy: number
+  hasUpdate: boolean
+  isDirty: boolean
+  dirtyFiles: string[]
+  safeToUpdate: boolean
+  warnings: string[]
+  lastCheckedAt?: number
+  appVersion: string
+}
+
+export interface UpdateLogEntry {
+  command: string
+  ok: boolean
+  output: string
+  at: number
+}
+
+export interface UpdateRunOptions {
+  runInstall?: boolean
+  runBuild?: boolean
+}
+
+export interface UpdateRunResult {
+  ok: boolean
+  status: UpdateStatus
+  logs: UpdateLogEntry[]
+  error?: string
+  restartRecommended: boolean
+}
+
+export interface UpdateApi {
+  status(): Promise<UpdateStatus>
+  check(): Promise<UpdateStatus>
+  run(options: UpdateRunOptions): Promise<UpdateRunResult>
+}
+
 export interface PreloadApi {
   pty: PtyApi
   chat: ChatApi
@@ -1498,6 +1543,7 @@ export interface PreloadApi {
   telemetry: TelemetryApi
   controller: ControllerApi
   plugins: PluginsApi
+  update: UpdateApi
 }
 
 declare global {

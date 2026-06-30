@@ -18,6 +18,7 @@ import { registerGpuStatusIpc } from './gpu-status'
 import { registerRemoteTelemetryIpc } from './remote-telemetry'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
 import { registerPluginIpc } from './plugins/manager'
+import { registerUpdateIpc } from './update'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, initDb, registerDbIpc } from './db'
@@ -328,6 +329,7 @@ app.whenReady().then(() => {
   registerRemoteTelemetryIpc()
   registerControllerIpc()
   registerPluginIpc()
+  registerUpdateIpc()
   registerSettingsIpc()
   applyAppIdentity()
   applyDockIcon()
