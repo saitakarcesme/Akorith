@@ -54,19 +54,41 @@ conversation with any available provider.
 - **Bottom workbench** — Changes / Runtime / Missions panel.
 - **Settings → Update** — keep this source checkout current with GitHub `main`.
 
-## Quick start
+## Install
 
-```bash
-git clone https://github.com/saitakarcesme/Akorith.git
-cd Akorith
-npm run setup        # check toolchain, install deps, print exact auth steps
-npm run dev          # launch the desktop app
-```
+Three ways to run Akorith (full details in [`docs/install.md`](docs/install.md)):
+
+1. **Download a release** — grab the artifact for your OS from the **Releases** page:
+   - macOS: `Akorith-<version>-mac-<arch>.dmg` (or `.zip`) → drag **Akorith.app** to Applications.
+   - Windows: `Akorith-Setup-<version>-x64.exe` (installer) or `Akorith-<version>-portable-x64.exe`.
+
+   Builds are currently **unsigned** — on macOS right-click → **Open** the first time; on
+   Windows choose **More info → Run anyway**. Signing/notarization is planned.
+
+2. **Build from source (macOS):**
+
+   ```bash
+   git clone https://github.com/saitakarcesme/Akorith.git
+   cd Akorith
+   npm install
+   npm run dist:mac      # build dmg + zip
+   npm run refresh:mac   # back up old copies + install + open Akorith.app
+   ```
+
+3. **Run in development:**
+
+   ```bash
+   npm run setup        # check toolchain, install deps, print exact auth steps
+   npm run dev          # launch the desktop app (menu bar says "Akorith")
+   ```
 
 One-command setup works on macOS/Linux (`scripts/setup-akorith.sh`) and Windows
 (`scripts/setup-akorith.ps1`); `npm run doctor` runs a check-only pass. It never collects or
 stores secrets — it only prints the sign-in commands for the tools you use. See
 [`docs/setup.md`](docs/setup.md).
+
+Maintainers cut releases via the GitHub Actions **release** workflow
+(`workflow_dispatch` or pushing a `v*` tag) — see [`docs/packaging.md`](docs/packaging.md).
 
 ## Keeping machines current (in-app updates)
 
@@ -156,18 +178,23 @@ npm run typecheck # tsc over main, preload, and renderer
 
 ## Build / package the desktop app
 
-Akorith packages with **electron-builder**. The product identity (name, icon, bundle id)
-is configured under the `build` field in `package.json`.
+Akorith packages with **electron-builder**; identity (name, icon, bundle id) and targets are
+configured under the `build` field in `package.json`. Full guide: [`docs/packaging.md`](docs/packaging.md).
 
 ```bash
-npm run pack:mac   # fast unpacked .app  → dist/mac-arm64/Akorith.app
-npm run dist:mac   # installers (.dmg + .zip) → dist/
-npm run dist:win   # Windows installer config (build on Windows)
+npm run release:check   # read-only preflight (identity, icons, targets, git, tag)
+npm run pack:mac        # fast unpacked .app  → dist/mac*/Akorith.app
+npm run dist:mac        # installers (.dmg + .zip) → dist/
+npm run dist:win        # Windows nsis + portable (build on Windows or via CI)
+npm run refresh:mac     # back up old copies + install the new Akorith.app + open it
 ```
 
-The packaged macOS app is named **Akorith** in Finder, the Dock, and the menu bar, and uses
-the Akorith icon. (In `npm run dev` the macOS menu/Dock still read "Electron" — that name
-comes from the dev Electron bundle and only the packaged build can override it.)
+The packaged app is named **Akorith** in Finder, the Dock, and the menu bar. **In dev, the
+menu bar/Dock now also say Akorith** — `scripts/fix-dev-app-name.js` (run by `predev`/
+`postinstall`) patches the dev Electron bundle's name (the executable name is preserved so it
+still launches). A macOS host can't reliably cross-build the Windows installer; use the
+GitHub Actions **release** workflow for Windows artifacts. Builds are **unsigned** until
+signing certs are configured (never faked).
 
 ## Privacy & security
 
