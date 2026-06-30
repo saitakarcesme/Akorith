@@ -6,7 +6,7 @@ import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
-import LoopsPage from './components/LoopsPage'
+import ProjectLoopPage from './components/ProjectLoopPage'
 import CompanionsPage from './components/CompanionsPage'
 import AgentsPage from './components/AgentsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
@@ -374,7 +374,7 @@ export default function App(): JSX.Element {
       </div>
       {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-        <LoopsPage active={view === 'loops'} />
+        <ProjectLoopPage active={view === 'loops'} />
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
