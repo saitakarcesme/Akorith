@@ -7030,6 +7030,136 @@ textarea:focus-visible {
   background: var(--bg);
 }
 
+/* ---- Phase 43: placeholder "Soon!" pages (Companions / Agents) ---- */
+.page-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--bg);
+}
+.soon-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 28px 64px;
+}
+.soon-card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 36px 30px 30px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+}
+.soon-glyph {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 4px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border-radius: 16px;
+}
+.soon-glyph .soon-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  border: 1.5px solid var(--text-faint);
+  opacity: 0;
+  animation: soon-pulse 2.4s ease-out infinite;
+}
+@keyframes soon-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.soon-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.soon-kicker .soon-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, var(--text));
+  animation: soon-blink 1.4s ease-in-out infinite;
+}
+@keyframes soon-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.soon-card h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 720;
+  color: var(--text);
+}
+.soon-sub {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+.soon-body {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+.soon-skeleton {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.soon-skeleton span {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--bg-raised) 25%, var(--hover) 50%, var(--bg-raised) 75%);
+  background-size: 200% 100%;
+  animation: soon-shimmer 1.8s linear infinite;
+}
+.soon-skeleton span:nth-child(2) {
+  width: 82%;
+}
+.soon-skeleton span:nth-child(3) {
+  width: 64%;
+}
+@keyframes soon-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .plugins-inner {
   max-width: 1040px;
   margin: 0 auto;
