@@ -1,6 +1,6 @@
 import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ProjectRow, ProviderInfo, SessionRow } from '../../../preload/index.d'
+import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
   ChartIcon,
@@ -24,6 +24,10 @@ interface SidebarProps {
   onNavigate: (view: AppView) => void
   historyVersion: number
   projectVersion: number
+  startupSnapshot: StartupSnapshot | null
+  startupHydrated: boolean
+  startupError: string | null
+  onRetryStartupHydration: () => void
   activeSessionId: string | null
   activeProject: ProjectRow | null
   /** Bumped by the center empty-state "Create Project" button to open the modal. */
@@ -119,6 +123,10 @@ export default function Sidebar({
   onNavigate,
   historyVersion,
   projectVersion,
+  startupSnapshot,
+  startupHydrated,
+  startupError,
+  onRetryStartupHydration,
   activeSessionId,
   activeProject,
   createSignal,
@@ -196,18 +204,41 @@ export default function Sidebar({
   }, [providers, loadProviders])
 
   useEffect(() => {
+    if (!startupSnapshot) return
+    setSessions(startupSnapshot.sessions)
+    setProjects(startupSnapshot.projects)
+    setExpandedProjects((current) => {
+      const projectIds = new Set(startupSnapshot.projects.map((project) => project.id))
+      let changed = false
+      const next = { ...current }
+      for (const session of startupSnapshot.sessions) {
+        if (!session.projectId || !projectIds.has(session.projectId) || next[session.projectId] !== undefined) continue
+        next[session.projectId] = true
+        changed = true
+      }
+      if (startupSnapshot.restore.projectId && next[startupSnapshot.restore.projectId] !== true) {
+        next[startupSnapshot.restore.projectId] = true
+        changed = true
+      }
+      return changed ? next : current
+    })
+  }, [startupSnapshot])
+
+  useEffect(() => {
+    if (!startupHydrated) return
     window.api.history
       .list()
       .then(setSessions)
       .catch(() => setSessions([]))
-  }, [historyVersion])
+  }, [historyVersion, startupHydrated])
 
   useEffect(() => {
+    if (!startupHydrated) return
     window.api.projects
       .list()
       .then(setProjects)
       .catch(() => setProjects([]))
-  }, [projectVersion])
+  }, [projectVersion, startupHydrated])
 
   useEffect(() => {
     localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
@@ -614,7 +645,20 @@ export default function Sidebar({
                 {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
                 {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
                 <div className="project-list">
-                  {projects.length === 0 ? (
+                  {!startupHydrated ? (
+                    <div className="sidebar-empty-state is-loading">
+                      <p>Loading workspace...</p>
+                    </div>
+                  ) : startupError ? (
+                    <div className="sidebar-empty-state">
+                      <p>Workspace data could not load.</p>
+                      <div className="sidebar-empty-actions">
+                        <button type="button" className="sidebar-cta is-primary" onClick={onRetryStartupHydration}>
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  ) : projects.length === 0 ? (
                     <div className="sidebar-empty-state">
                       <p>No projects yet. Pick a folder — Akorith starts Codex, OpenCode, and Claude there.</p>
                       <div className="sidebar-empty-actions">
@@ -859,7 +903,7 @@ export default function Sidebar({
                                   </div>
                                 )
                               )}
-                              {chats.length === 0 && <div className="project-chats-empty">No chats yet</div>}
+                              {startupHydrated && chats.length === 0 && <div className="project-chats-empty">No chats yet</div>}
                             </div>
                           )}
                         </div>
@@ -890,7 +934,13 @@ export default function Sidebar({
             </button>
           </div>
           <div className="recent-list">
-            {generalSessions.length === 0 ? (
+            {!startupHydrated ? (
+              <div className="sidebar-item is-empty">Loading chats...</div>
+            ) : startupError ? (
+              <button type="button" className="sidebar-item is-empty" onClick={onRetryStartupHydration}>
+                Retry loading chats
+              </button>
+            ) : generalSessions.length === 0 ? (
               <div className="sidebar-item is-empty">No chats yet</div>
             ) : (
               generalSessions.map((session) => {
