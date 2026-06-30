@@ -57,6 +57,25 @@ up clearly Akorith-owned stale shortcuts, uses Akorith-identifying uninstall
 entries, runs the latest installer when available, and prints manual recovery
 steps when it cannot safely proceed.
 
+## Existing projects and chats on launch
+
+Akorith should load existing projects and chats immediately on launch. The
+packaged app reads local data from the Akorith userData folder, for example
+`%APPDATA%\Akorith` on Windows, and waits for SQLite readiness before rendering
+the sidebar as empty.
+
+If projects/chats do not appear after installing a new build:
+
+1. Fully quit Akorith and reopen the packaged app.
+2. Confirm you launched packaged Akorith, not `npm run dev`.
+3. Check Settings/About logs or console diagnostics for the userData, DB, and
+   config paths reported by startup hydration.
+4. Do not delete `loopex.db`; it contains local chat/project history.
+
+Phase 42 also performs a conservative legacy userData check. It can copy missing
+DB/config files from known old app folders only when the current Akorith targets
+do not exist; it never overwrites current data.
+
 ## 3. Run in development
 
 ```bash

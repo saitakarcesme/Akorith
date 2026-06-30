@@ -80,6 +80,21 @@ data/config/db, and refuses to install by copying `dist\win-unpacked`. If
 `npm run dist:win` fails with a `winCodeSign` symbolic-link privilege error,
 enable Windows Developer Mode or run the shell as Administrator, then retry.
 
+## Startup data hydration
+
+Packaged Akorith stores local config and SQLite history under the Electron
+`userData` path for the Akorith app name, for example `%APPDATA%\Akorith` on
+Windows. On launch, the renderer uses `window.api.app.getStartupSnapshot()` to
+wait for DB readiness and hydrate projects/chats from one complete snapshot.
+This prevents the packaged app from showing a false first-run sidebar while
+SQLite is still opening.
+
+If a previous build wrote data under an old Electron/Loopex folder, Akorith only
+copies missing `loopex.db` / `loopex.config.json` files into the current Akorith
+folder when the current target is absent. It never overwrites current Akorith
+data and never deletes legacy data. See
+[`docs/phase-42-startup-data-hydration.md`](phase-42-startup-data-hydration.md).
+
 ## Release via GitHub Actions
 
 > **Activation note:** the workflow ships as **`ci/release.yml`** (a template), not

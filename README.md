@@ -99,6 +99,11 @@ Three ways to run Akorith (full details in [`docs/install.md`](docs/install.md))
    Dev mode is for development and may expose Electron runtime identity in OS shell
    surfaces. The **packaged** app should show Akorith branding/icons everywhere.
 
+   Existing projects and chats are loaded from the local Akorith userData folder
+   on launch. If a packaged app ever opens to an empty-looking sidebar, fully quit
+   and reopen packaged Akorith first; do not delete `loopex.db`, which stores local
+   project/chat history. See [`docs/phase-42-startup-data-hydration.md`](docs/phase-42-startup-data-hydration.md).
+
 One-command setup works on macOS/Linux (`scripts/setup-akorith.sh`) and Windows
 (`scripts/setup-akorith.ps1`); `npm run doctor` runs a check-only pass. It never collects or
 stores secrets — it only prints the sign-in commands for the tools you use. See
