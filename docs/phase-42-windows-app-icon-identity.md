@@ -76,6 +76,25 @@ errors, do not use the partial `dist/win-unpacked` app as an install. Enable
 Windows Developer Mode or run the shell as Administrator, rebuild, and install
 the generated NSIS installer.
 
+## Local Validation Result
+
+Validation on the Windows PC passed:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run release:check`
+- `git diff --check`
+- `npm run verify:local-executor`
+- `npm run verify:workspace-loop`
+- `npm run verify:controller`
+
+The local `npm run dist:win` attempt did not complete because this Windows
+session cannot create the symbolic links inside Electron Builder's downloaded
+`winCodeSign` helper archive. The failure happens before Electron Builder can
+apply the Akorith resources to `dist/win-unpacked/Akorith.exe`, so that partial
+file still reports Electron metadata and must not be treated as an installable
+Akorith build.
+
 ## Preserved
 
 This phase does not change provider runtime, Claude/Codex/Ollama/OpenCode
