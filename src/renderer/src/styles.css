@@ -3411,6 +3411,14 @@ textarea:focus-visible {
   flex-direction: column;
 }
 
+/* Phase 43: an expanded pane never shrinks below a usable height; the flexBasis:0
+   + flexGrow still shares spare space when there's room, but once 2–3 panes can't
+   all fit, this floor wins over flex-shrink and the body (above) scrolls. The
+   xterm fit/ResizeObserver keeps working — panes are not remounted. */
+.terminal-slot:not(.is-collapsed) {
+  min-height: 224px;
+}
+
 .terminal-split-resizer {
   flex: 0 0 7px;
   position: relative;
@@ -7676,6 +7684,10 @@ textarea:focus-visible {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Phase 43: when expanded panes can't all fit (2–3 agents), keep each pane a
+     usable height (the slot min-height floor below) and scroll the body
+     internally instead of squishing the panes or overflowing the window. */
+  overflow-y: auto;
   /* dark token scope so the hosted terminal chrome stays dark */
   --bg: #0e0e12;
   --bg-input: #14131b;
