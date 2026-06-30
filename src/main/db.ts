@@ -14,6 +14,7 @@ import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 
 let db: Database.Database | null = null
+let dbInitPromise: Promise<void> | null = null
 const require = createRequire(__filename)
 
 const VALID_ID = /^[\w-]{1,64}$/
@@ -34,11 +35,14 @@ export function dbPath(): string {
 }
 
 export function initDb(): void {
+  if (db) return
   const Database = require('better-sqlite3') as typeof import('better-sqlite3')
-  db = new Database(dbPath())
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  db.exec(`
+  const nextDb = new Database(dbPath())
+  db = nextDb
+  try {
+    nextDb.pragma('journal_mode = WAL')
+    nextDb.pragma('foreign_keys = ON')
+    nextDb.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
@@ -288,11 +292,17 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'last_attempt_status', 'TEXT')
   ensureColumn('macro_sessions', 'last_validation_result', 'TEXT')
   ensureColumn('macro_sessions', 'last_commit_message', 'TEXT')
+  } catch (err) {
+    nextDb.close()
+    db = null
+    throw err
+  }
 }
 
 export function closeDb(): void {
   db?.close()
   db = null
+  dbInitPromise = null
 }
 
 function must(): Database.Database {
@@ -302,6 +312,25 @@ function must(): Database.Database {
 
 function ready(): boolean {
   return db !== null
+}
+
+export function isDbReady(): boolean {
+  return ready()
+}
+
+export async function ensureDbReady(): Promise<void> {
+  if (ready()) return
+  if (process.env.AKORITH_SKIP_DB_INIT === '1') {
+    throw new Error('database initialization skipped by AKORITH_SKIP_DB_INIT')
+  }
+  dbInitPromise ??= Promise.resolve()
+    .then(() => {
+      if (!ready()) initDb()
+    })
+    .finally(() => {
+      dbInitPromise = null
+    })
+  await dbInitPromise
 }
 
 function ensureColumn(table: string, column: string, ddl: string): void {
@@ -1927,15 +1956,13 @@ async function createProjectFolder(
 // ---- IPC ----
 
 export function registerDbIpc(): void {
-  ipcMain.handle('history:list', (): SessionRow[] =>
-    ready()
-      ? (must().prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]).map(
-          toSession
-        )
-      : []
-  )
+  ipcMain.handle('history:list', async (): Promise<SessionRow[]> => {
+    await ensureDbReady()
+    return listSessions()
+  })
 
-  ipcMain.handle('history:messages', (_event, args: { sessionId: string }) => {
+  ipcMain.handle('history:messages', async (_event, args: { sessionId: string }) => {
+    await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return null
     const session = must().prepare('SELECT * FROM sessions WHERE id = ?').get(args.sessionId) as
       | Record<string, unknown>
@@ -1959,7 +1986,8 @@ export function registerDbIpc(): void {
     return { session: toSession(session), messages }
   })
 
-  ipcMain.handle('history:create', (_event, args: { providerId: string; title: string; projectId?: string | null }) => {
+  ipcMain.handle('history:create', async (_event, args: { providerId: string; title: string; projectId?: string | null }) => {
+    await ensureDbReady()
     if (
       typeof args?.providerId !== 'string' ||
       !/^[a-z0-9-]{1,32}$/.test(args.providerId) ||
@@ -1973,7 +2001,8 @@ export function registerDbIpc(): void {
     return createSession(args.providerId, args.title.slice(0, MAX_TITLE) || 'New chat', args.projectId ?? null)
   })
 
-  ipcMain.handle('history:rename', (_event, args: { sessionId: string; title: string }) => {
+  ipcMain.handle('history:rename', async (_event, args: { sessionId: string; title: string }) => {
+    await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId) || typeof args.title !== 'string') {
       return false
     }
@@ -1983,45 +2012,55 @@ export function registerDbIpc(): void {
     return true
   })
 
-  ipcMain.handle('history:delete', (_event, args: { sessionId: string }) => {
+  ipcMain.handle('history:delete', async (_event, args: { sessionId: string }) => {
+    await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     must().prepare('DELETE FROM sessions WHERE id = ?').run(args.sessionId) // messages cascade
     return true
   })
 
   // Phase 14.2: reset context for the active session only (keep the session row).
-  ipcMain.handle('history:clearMessages', (_event, args: { sessionId: string }) => {
+  ipcMain.handle('history:clearMessages', async (_event, args: { sessionId: string }) => {
+    await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     if (!sessionExists(args.sessionId)) return false
     clearSessionMessages(args.sessionId)
     return true
   })
 
-  ipcMain.handle('usage:summary', () =>
-    ready()
-      ? usageSummary()
-      : { totalTokens: 0, totalCostUsd: 0, sessionCount: 0, byProvider: [] } satisfies UsageSummary
-  )
-
-  ipcMain.handle('usage:daily', (_event, args: { days: number }) => {
-    const days = typeof args?.days === 'number' && Number.isFinite(args.days) ? Math.min(Math.max(args.days, 1), 730) : 270
-    return ready() ? usageDaily(days) : []
+  ipcMain.handle('usage:summary', async () => {
+    await ensureDbReady()
+    return usageSummary()
   })
 
-  ipcMain.handle('projects:list', (): ProjectRow[] => (ready() ? listProjects() : []))
+  ipcMain.handle('usage:daily', async (_event, args: { days: number }) => {
+    await ensureDbReady()
+    const days = typeof args?.days === 'number' && Number.isFinite(args.days) ? Math.min(Math.max(args.days, 1), 730) : 270
+    return usageDaily(days)
+  })
 
-  ipcMain.handle('projects:openFolder', (_event, args: { projectId?: string | null }) => {
+  ipcMain.handle('projects:list', async (): Promise<ProjectRow[]> => {
+    await ensureDbReady()
+    return listProjects()
+  })
+
+  ipcMain.handle('projects:openFolder', async (_event, args: { projectId?: string | null }) => {
+    await ensureDbReady()
     if (args?.projectId !== undefined && args.projectId !== null && (typeof args.projectId !== 'string' || !VALID_ID.test(args.projectId))) {
       return { ok: false, error: 'invalid projects:openFolder payload' } satisfies ProjectDialogResponse
     }
     return openProjectFolder(args?.projectId ?? null)
   })
 
-  ipcMain.handle('projects:pickDirectory', () => pickProjectDirectory())
+  ipcMain.handle('projects:pickDirectory', async () => {
+    await ensureDbReady()
+    return pickProjectDirectory()
+  })
 
   ipcMain.handle(
     'projects:createFolder',
-    (_event, args: { name: string; projectId?: string | null; parentPath?: string | null }) => {
+    async (_event, args: { name: string; projectId?: string | null; parentPath?: string | null }) => {
+      await ensureDbReady()
       if (
         typeof args?.name !== 'string' ||
         args.name.length > MAX_PROJECT_NAME ||
@@ -2040,7 +2079,8 @@ export function registerDbIpc(): void {
 
   ipcMain.handle(
     'projects:create',
-    (_event, args: { name: string; path?: string | null; color?: string | null; icon?: string | null }) => {
+    async (_event, args: { name: string; path?: string | null; color?: string | null; icon?: string | null }) => {
+      await ensureDbReady()
       if (
         typeof args?.name !== 'string' ||
         args.name.trim().length === 0 ||
@@ -2063,10 +2103,11 @@ export function registerDbIpc(): void {
 
   ipcMain.handle(
     'projects:update',
-    (
+    async (
       _event,
       args: { projectId: string; patch: Partial<Pick<ProjectRow, 'name' | 'path' | 'color' | 'icon'>> }
     ) => {
+      await ensureDbReady()
       if (
         typeof args?.projectId !== 'string' ||
         !VALID_ID.test(args.projectId) ||
@@ -2096,14 +2137,16 @@ export function registerDbIpc(): void {
 
   // Phase 14.3: remove a project from Akorith. Deletes the project + its
   // workspace chats from the local DB only; the folder on disk is untouched.
-  ipcMain.handle('projects:delete', (_event, args: { projectId: string }) => {
+  ipcMain.handle('projects:delete', async (_event, args: { projectId: string }) => {
+    await ensureDbReady()
     if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) return false
     return deleteProject(args.projectId)
   })
 
   // Phase 14.4: reveal a project's folder in Finder/Explorer. Read-only OS
   // action on the stored path — never writes, never runs a command.
-  ipcMain.handle('projects:reveal', (_event, args: { projectId: string }) => {
+  ipcMain.handle('projects:reveal', async (_event, args: { projectId: string }) => {
+    await ensureDbReady()
     if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) {
       return { ok: false, error: 'invalid projects:reveal payload' }
     }
