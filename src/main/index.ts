@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, type MenuItemConstructorOptions } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
@@ -79,6 +79,64 @@ function applyAppIdentity(): void {
     applicationVersion: app.getVersion(),
     credits: 'Akorith — agent orchestration with no API keys.'
   })
+}
+
+/**
+ * Phase 39: install an explicit Akorith application menu. The role-based items
+ * (About/Hide/Quit) read app.name ("Akorith"), so the app menu and its entries
+ * say Akorith. NOTE: in *dev* the bold menu-bar app-name still reads "Electron"
+ * from node_modules' Electron.app Info.plist (CFBundleName), which no runtime API
+ * can change; the packaged build carries its own Info.plist (productName=Akorith)
+ * and shows Akorith everywhere.
+ */
+function applyApplicationMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: 'Akorith',
+            submenu: [
+              { role: 'about' as const, label: 'About Akorith' },
+              { type: 'separator' as const },
+              { role: 'hide' as const, label: 'Hide Akorith' },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const, label: 'Quit Akorith' }
+            ]
+          } as MenuItemConstructorOptions
+        ]
+      : []),
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, ...(isMac ? [{ role: 'front' as const }] : [{ role: 'close' as const }])] }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 /**
@@ -332,6 +390,7 @@ app.whenReady().then(() => {
   registerUpdateIpc()
   registerSettingsIpc()
   applyAppIdentity()
+  applyApplicationMenu()
   applyDockIcon()
   createWindow()
 
