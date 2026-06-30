@@ -69,6 +69,20 @@ CLIs resolve.
 - [ ] Call out: no API keys, runs your own CLI subscriptions, local data only.
 - [ ] Note current limitations honestly (semi-automatic, no autopilot).
 
+## 9. Phase 41 packaging & release (installable Akorith)
+
+- [ ] `npm run release:check` → 0 errors (identity, icons, mac/win targets, workflow, git/tag).
+- [ ] **macOS:** `npm run dist:mac` → `dist/Akorith-<version>-mac-<arch>.dmg` + `.zip`;
+      `npm run refresh:mac` backs up old copies and installs `/Applications/Akorith.app`.
+- [ ] **Windows:** build on a Windows host (`npm run dist:win`) or via CI — a macOS host
+      cannot cross-build the NSIS installer.
+- [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` or `git push origin v<version>`)
+      builds unsigned mac+win artifacts and creates a draft prerelease.
+- [ ] **Identity:** packaged menu bar / Dock / Finder say Akorith; dev menu bar says Akorith
+      via `scripts/fix-dev-app-name.js`.
+- [ ] **Signing:** artifacts are unsigned until certs are configured — never faked.
+      See `docs/packaging.md` and `docs/install.md`.
+
 ## 8. Phase 39 tooling (source installs)
 
 - [ ] **Keep checkouts current:** Settings → Update fast-forwards a source install to
