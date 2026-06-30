@@ -479,15 +479,19 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.11);
 }
 
-/* Phase 43: minimal top bar (collapse control only); the macOS traffic lights
-   sit at the top-left, so the control is right-aligned and the brand is gone. */
-.sidebar-top {
+/* Phase 44: "New chat" row — the first item at the top of the sidebar, with the
+   collapse control inline at its right (no reserved empty header bar). */
+.sidebar-newchat-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 6px;
+}
+.sidebar-newchat-row .sidebar-newchat {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+.sidebar-newchat-row .sidebar-collapse-btn {
   flex: 0 0 auto;
-  padding: 14px 12px 4px;
-  user-select: none;
 }
 
 .workspace {

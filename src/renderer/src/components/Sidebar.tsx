@@ -562,31 +562,32 @@ export default function Sidebar({
           onPointerEnter={revealSidebar}
           onMouseLeave={handleSidebarLeave}
         >
-      {/* Phase 43: the Akorith brand block is gone — the sidebar starts at "New
-          chat". A minimal top bar keeps the collapse control accessible (and
-          leaves the macOS traffic-light area clear on the left). */}
-      <div className="sidebar-top">
-        <button
-          type="button"
-          className="sidebar-collapse-btn"
-          title={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
-          aria-label={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
-          onClick={sidebarCollapsed ? pinSidebar : closeSidebar}
-        >
-          <ChevronIcon size={16} direction={sidebarCollapsed ? 'right' : 'left'} />
-        </button>
-      </div>
-
+      {/* Phase 44: no brand block and no reserved top bar — the sidebar starts
+          directly with "New chat". The collapse control sits inline at the right
+          of the New-chat row so it stays accessible without empty header space.
+          (The main window uses the native macOS title bar, so traffic lights sit
+          above the renderer and never overlap the sidebar.) */}
       <nav className="sidebar-nav" aria-label="Primary">
-        <button
-          type="button"
-          className={`sidebar-newchat ${view === 'general' ? 'is-active' : ''}`}
-          onClick={onNewGeneralChat}
-          title="Start a fresh general chat"
-        >
-          <PlusIcon size={16} />
-          <span>New chat</span>
-        </button>
+        <div className="sidebar-newchat-row">
+          <button
+            type="button"
+            className={`sidebar-newchat ${view === 'general' ? 'is-active' : ''}`}
+            onClick={onNewGeneralChat}
+            title="Start a fresh general chat"
+          >
+            <PlusIcon size={16} />
+            <span>New chat</span>
+          </button>
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            title={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Pin sidebar' : 'Collapse sidebar'}
+            onClick={sidebarCollapsed ? pinSidebar : closeSidebar}
+          >
+            <ChevronIcon size={16} direction={sidebarCollapsed ? 'right' : 'left'} />
+          </button>
+        </div>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon
           return (
