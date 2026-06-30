@@ -189,6 +189,13 @@ private LAN for a reachable Ollama `/api/tags` endpoint when localhost is unavai
 That lets a MacBook use the models exposed from a running Windows host PC. If Ollama was
 already running localhost-only on the host, restart Ollama/Akorith once so it can bind to LAN.
 
+**Away from home (Tailscale/VPN/Controller):** a LAN IP only works on the same network.
+Akorith auto-resolves the best endpoint — local Mac Ollama → saved profiles → Akorith
+Controller host → online Tailscale peers — and the Dashboard **Local model runtime** card
+shows the active source + a presentation-readiness verdict. Setup:
+[`docs/remote-runtime-sync.md`](docs/remote-runtime-sync.md) and
+[`docs/mac-to-pc-ollama.md`](docs/mac-to-pc-ollama.md).
+
 ## Run in development
 
 ```bash
