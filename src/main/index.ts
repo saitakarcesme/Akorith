@@ -26,6 +26,7 @@ import { closeDb, initDb, registerDbIpc } from './db'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
+const AKORITH_APP_ID = 'com.akorith.app'
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
 // "About Akorith"/"Hide Akorith"/"Quit Akorith" menu roles, and userData.
@@ -35,6 +36,9 @@ let splashWindowRef: BrowserWindow | null = null
 // (CFBundleName/CFBundleDisplayName = Akorith via electron-builder productName),
 // so the packaged app shows Akorith in the menu bar and dock.
 app.setName('Akorith')
+if (process.platform === 'win32') {
+  app.setAppUserModelId(AKORITH_APP_ID)
+}
 app.setAboutPanelOptions({ applicationName: 'Akorith', applicationVersion: app.getVersion() })
 
 /**
