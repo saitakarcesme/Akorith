@@ -7,11 +7,13 @@ import Dashboard from './components/Dashboard'
 import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import LoopsPage from './components/LoopsPage'
+import CompanionsPage from './components/CompanionsPage'
+import AgentsPage from './components/AgentsPage'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins' | 'companions' | 'agents'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -376,6 +378,8 @@ export default function App(): JSX.Element {
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
+      {view === 'companions' && <CompanionsPage />}
+      {view === 'agents' && <AgentsPage />}
     </div>
   )
 }

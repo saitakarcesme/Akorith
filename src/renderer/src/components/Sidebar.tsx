@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom'
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
+  AgentsIcon,
   ChartIcon,
   ChevronIcon,
+  CompanionsIcon,
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -50,7 +52,9 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
   { view: 'loops', label: 'Loop', icon: LoopIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Test', icon: FlaskIcon },
-  { view: 'plugins', label: 'Plugins', icon: PluginIcon }
+  { view: 'plugins', label: 'Plugins', icon: PluginIcon },
+  { view: 'companions', label: 'Companions', icon: CompanionsIcon },
+  { view: 'agents', label: 'Agents', icon: AgentsIcon }
 ]
 
 function storageBoolean(key: string, fallback: boolean): boolean {
