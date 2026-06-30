@@ -120,3 +120,72 @@ export function listLoops(): ProjectLoop[] {
     .all() as Row[]
   return rows.map(rowToLoop)
 }
+
+export function listLoopsByStatus(status: ProjectLoopStatus): ProjectLoop[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM project_loops WHERE status = ? ORDER BY updated_at DESC')
+    .all(status) as Row[]
+  return rows.map(rowToLoop)
+}
+
+const UPDATABLE: Record<string, string> = {
+  title: 'title',
+  status: 'status',
+  autonomy: 'autonomy',
+  safety: 'safety',
+  scheduleKind: 'schedule_kind',
+  scheduleMinutes: 'schedule_minutes',
+  dailyCommitTarget: 'daily_commit_target',
+  minCommitsPerRun: 'min_commits_per_run',
+  maxCommitsPerRun: 'max_commits_per_run',
+  localModel: 'local_model',
+  pushEnabled: 'push_enabled',
+  error: 'error',
+  memorySummary: 'memory_summary',
+  roadmapSummary: 'roadmap_summary',
+  lastRunAt: 'last_run_at',
+  nextRunAt: 'next_run_at'
+}
+
+export function updateLoop(id: string, patch: Partial<ProjectLoop>): ProjectLoop | null {
+  const sets: string[] = []
+  const params: Record<string, unknown> = { id, updated_at: Date.now() }
+  for (const [key, col] of Object.entries(UPDATABLE)) {
+    if (!(key in patch)) continue
+    let value = (patch as Record<string, unknown>)[key]
+    if (key === 'pushEnabled') value = value ? 1 : 0
+    sets.push(`${col} = @${col}`)
+    params[col] = value ?? null
+  }
+  if (sets.length === 0) return getLoop(id)
+  getDb()
+    .prepare(`UPDATE project_loops SET ${sets.join(', ')}, updated_at = @updated_at WHERE id = @id`)
+    .run(params)
+  return getLoop(id)
+}
+
+export function setLoopStatus(id: string, status: ProjectLoopStatus): ProjectLoop | null {
+  return updateLoop(id, { status })
+}
+
+export function archiveLoop(id: string): ProjectLoop | null {
+  return updateLoop(id, { status: 'archived' })
+}
+
+export function deleteLoop(id: string): void {
+  getDb().prepare('DELETE FROM project_loops WHERE id = ?').run(id)
+}
+
+/** Bump counters after a run; called by the runner. */
+export function recordLoopRunResult(id: string, commitsAdded: number): void {
+  getDb()
+    .prepare(
+      `UPDATE project_loops
+       SET run_count = run_count + 1,
+           commit_count = commit_count + @commits,
+           last_run_at = @now,
+           updated_at = @now
+       WHERE id = @id`
+    )
+    .run({ id, commits: commitsAdded, now: Date.now() })
+}
