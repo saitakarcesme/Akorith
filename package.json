@@ -23,6 +23,7 @@
     "release:check": "node scripts/release-check.js",
     "macos:refresh": "bash scripts/refresh-macos-app.sh",
     "refresh:mac": "bash scripts/refresh-macos-app.sh",
+    "refresh:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/refresh-windows-app.ps1",
     "clean:apps": "bash scripts/clean-old-akorith-apps.sh",
     "pack": "npm run build && electron-builder --dir",
     "pack:mac": "npm run build && electron-builder --mac --dir",
