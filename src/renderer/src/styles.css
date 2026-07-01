@@ -10458,6 +10458,36 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.32), 0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
+@media (max-width: 760px) {
+  .command-modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .command-modal,
+  .command-modal.is-wide {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 18px;
+  }
+
+  .command-modal-header,
+  .command-modal-body,
+  .command-modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .form-grid.is-2,
+  .form-grid.is-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .command-modal-footer {
+    flex-wrap: wrap;
+  }
+}
+
 /* ===== Phase 51: Companions ===== */
 .companions-page {
   flex: 1 1 0;
