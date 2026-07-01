@@ -9,6 +9,14 @@ function shortTime(ts?: number): string {
   return new Date(ts).toLocaleString()
 }
 
+function runtimeLabel(status: UpdateStatus): string {
+  if (status.runtimeMode === 'packaged-windows') return 'Packaged Windows app'
+  if (status.runtimeMode === 'packaged-macos') return 'Packaged macOS app'
+  if (status.runtimeMode === 'packaged-other') return 'Packaged app'
+  if (status.runtimeMode === 'dev') return 'Dev/source mode'
+  return 'Source checkout'
+}
+
 export default function UpdatePanel(): JSX.Element {
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [busy, setBusy] = useState<'check' | 'run' | null>(null)
@@ -67,7 +75,12 @@ export default function UpdatePanel(): JSX.Element {
       if (res.ok) {
         setNotice({
           kind: 'ok',
-          text: res.restartRecommended ? 'Updated to latest main. Restart Akorith to load the new build.' : 'Already up to date.'
+          text:
+            res.status.runtimeMode === 'packaged-windows'
+              ? 'Started the packaged Windows refresh. Akorith may close while the installer updates and relaunches it.'
+              : res.restartRecommended
+                ? 'Updated to latest main. Restart Akorith to load the new build.'
+                : 'Already up to date.'
         })
       } else {
         setNotice({ kind: 'error', text: res.error ?? 'Update failed.' })
