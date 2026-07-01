@@ -1496,6 +1496,91 @@ export interface CreateProjectLoopInput {
   pushEnabled?: boolean
 }
 
+// Phase 50: Companions.
+export type CompanionMemoryType =
+  | 'preference' | 'project' | 'decision' | 'idea' | 'goal' | 'personal_context'
+  | 'writing_style' | 'technical_context' | 'warning' | 'relationship' | 'recurring_topic'
+
+export interface Companion {
+  id: string
+  name: string
+  tagline: string
+  tags: string[]
+  builtin: boolean
+  model?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CompanionSession {
+  id: string
+  companionId: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+}
+
+export interface CompanionMessage {
+  id: string
+  sessionId: string
+  companionId: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: number
+}
+
+export interface CompanionMemory {
+  id: string
+  companionId: string
+  type: CompanionMemoryType
+  title: string
+  content: string
+  importance: number
+  confidence: number
+  sourceSessionId?: string
+  pinned: boolean
+  createdAt: number
+  updatedAt: number
+  lastUsedAt?: number
+  archivedAt?: number
+  tags: string[]
+}
+
+export interface CompanionContextInfo {
+  recentMessageCount: number
+  usedMemories: { id: string; title: string; type: CompanionMemoryType }[]
+}
+
+export interface SendCompanionMessageResult {
+  ok: boolean
+  reply?: CompanionMessage
+  contextInfo?: CompanionContextInfo
+  error?: string
+}
+
+export interface CompanionApi {
+  list(): Promise<Companion[]>
+  get(id: string): Promise<Companion | null>
+  setModel(id: string, model: string | null): Promise<Companion | null>
+  memoryCount(id: string): Promise<number>
+  listSessions(companionId: string): Promise<CompanionSession[]>
+  createSession(companionId: string, title?: string): Promise<CompanionSession>
+  getSession(id: string): Promise<CompanionSession | null>
+  deleteSession(id: string): Promise<boolean>
+  listMessages(sessionId: string): Promise<CompanionMessage[]>
+  sendMessage(input: { companionId: string; sessionId: string; prompt: string; model?: string }): Promise<SendCompanionMessageResult>
+  extractMemories(sessionId: string): Promise<{ ok: boolean; created: CompanionMemory[]; error?: string }>
+  contextInfo(companionId: string, sessionId: string, query: string): Promise<CompanionContextInfo>
+  listMemories(companionId: string, includeArchived?: boolean): Promise<CompanionMemory[]>
+  searchMemories(companionId: string, query: string): Promise<CompanionMemory[]>
+  createMemory(input: { companionId: string; type: CompanionMemoryType; title: string; content: string; importance?: number; tags?: string[] }): Promise<CompanionMemory>
+  updateMemory(id: string, patch: Partial<CompanionMemory>): Promise<CompanionMemory | null>
+  pinMemory(id: string, pinned: boolean): Promise<CompanionMemory | null>
+  archiveMemory(id: string): Promise<CompanionMemory | null>
+  forgetMemory(id: string): Promise<boolean>
+}
+
 export interface ProjectLoopApi {
   list(): Promise<ProjectLoop[]>
   get(id: string): Promise<ProjectLoop | null>
@@ -1870,6 +1955,7 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
+  companion: CompanionApi
 }
 
 declare global {
