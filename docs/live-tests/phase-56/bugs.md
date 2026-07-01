@@ -47,3 +47,12 @@
   still rejects raw absolute paths). Absolute-OUTSIDE-root and `..` traversal still rejected.
 - **Status:** FIXED + retested (test 053): DEMO_SCRIPT.md now actually written within root;
   out-of-root absolute + traversal still rejected.
+
+## F-5 (observation, NOT a bug) — agent plan/action reliability varies by local model
+- **Where:** action-agents planner/executor structured output step.
+- **Repro:** small model (qwen3:1.7b) fails the plan/action JSON for demo_script / readme_builder /
+  changelog_maker ("Planning failed" / "Action generation failed"). Coder model succeeds far more.
+- **App behavior:** correct — records a `failed` run with a clear reason and makes NO changes
+  (no crash, no partial write).
+- **Decision:** not an Akorith defect (malformed model JSON). App degrades safely + transparently.
+  Documented so the reliability characteristic is visible.
