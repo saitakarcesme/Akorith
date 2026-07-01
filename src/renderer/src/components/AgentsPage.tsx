@@ -298,6 +298,13 @@ function CreateAgentModal({
         />
         <ModalBody>
         {template?.note && <div className="agents-warn">⚠ {template.note}</div>}
+        {template && (
+          <div className="agent-template-summary">
+            <span>Template</span>
+            <strong>{template.name}</strong>
+            <p>{template.description}</p>
+          </div>
+        )}
         <FieldLabel label="Name">
           <input ref={nameInputRef} value={name} onChange={(e) => setName(e.target.value)} />
         </FieldLabel>
@@ -328,6 +335,11 @@ function CreateAgentModal({
           <input type="checkbox" checked={allowCommands} onChange={(e) => setAllowCommands(e.target.checked)} />
           <span>Allow running allowlisted validation commands (typecheck/build/test/lint)</span>
         </label>
+        <div className="agent-permission-explain">
+          {permission === 'preview'
+            ? 'Preview mode plans and reports without writing files or running commands.'
+            : 'Higher permission modes stay inside the selected folder and log every action. Destructive commands remain blocked by Akorith safety checks.'}
+        </div>
         {err && <div className="agents-error">{err}</div>}
         </ModalBody>
         <ModalFooter>
