@@ -10437,14 +10437,20 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.3);
 }
 
-.action-button:hover:not(:disabled),
-.icon-button:hover:not(:disabled),
-.composer-action-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
+/* Phase 55.059: no floating/translateY hover — Akorith hover is a subtle surface
+   change only (background/border/opacity), never a bouncy movement. */
 .action-button.is-primary:hover:not(:disabled) {
-  box-shadow: 0 14px 32px rgba(126, 101, 216, 0.3);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.action-button.is-secondary:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+.action-button.is-danger:hover:not(:disabled) {
+  background: rgba(255, 99, 99, 0.24);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--hover-strong);
 }
 
 .action-button:disabled,
