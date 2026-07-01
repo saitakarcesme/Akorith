@@ -116,11 +116,75 @@ export default function UpdatePanel(): JSX.Element {
         <div className="settings-hint">Loading update status…</div>
       ) : status.mode === 'packaged' ? (
         <div className="update-packaged">
-          <div className="ollama-status is-info">This Akorith is not running from a git checkout.</div>
-          <p className="settings-hint">
-            The source updater applies to dev/source installs (run via <code>npm run dev</code> or built locally).
-            Packaged release auto-updates are planned for a later phase. App version: <code>{status.appVersion}</code>.
-          </p>
+          <div className="ollama-status is-info">{runtimeLabel(status)}</div>
+          <div className="ctrl-grid">
+            <div className="ctrl-field">
+              <span>Executable</span>
+              <code>{status.executablePath}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Source checkout</span>
+              <code>{status.sourceCheckoutPath ?? 'not found'}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Update target</span>
+              <code>{status.updateTarget}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Relaunch target</span>
+              <code>{status.relaunchTarget ?? status.executablePath}</code>
+            </div>
+          </div>
+          {status.sourceCheckoutPath && (
+            <div className="settings-hint">
+              Source commit <code>{status.currentCommit ?? '-'}</code> / origin main <code>{status.remoteMainCommit ?? '-'}</code>.
+              {status.hasUpdate ? ' Installed app refresh is available.' : ' Installed app appears current for the detected source.'}
+            </div>
+          )}
+          {status.warnings.length > 0 && (
+            <div className="update-warnings">
+              {status.warnings.map((w, i) => (
+                <div key={i} className="ollama-status is-info">{w}</div>
+              ))}
+            </div>
+          )}
+          {status.runtimeMode === 'packaged-windows' ? (
+            <>
+              <div className="settings-checks">
+                <label>
+                  <input type="checkbox" checked={runInstall} onChange={(e) => setRunInstall(e.target.checked)} />
+                  <span>Run npm install in the source checkout before building installer</span>
+                </label>
+              </div>
+              <div className="settings-action-row">
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={busy !== null || !status.canUpdateInstalledApp}
+                  title={status.canUpdateInstalledApp ? 'Update source if needed, build/install Windows package, and relaunch Akorith.exe' : 'A clean source checkout is required'}
+                  onClick={() => void run()}
+                >
+                  {busy === 'run' ? 'Starting refresh...' : 'Update installed Windows app'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="settings-hint">Packaged macOS/other updates require a manual installer refresh from a source checkout for now.</p>
+          )}
+          {notice && <div className={`ollama-status is-${notice.kind}`}>{notice.text}</div>}
+          {logs.length > 0 && (
+            <div className="update-logs">
+              {logs.map((entry, i) => (
+                <div key={i} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
+                  <div className="update-log-cmd">
+                    <span>{entry.ok ? 'ok' : 'error'}</span>
+                    <code>{entry.command}</code>
+                  </div>
+                  {entry.output && <pre className="update-log-out">{entry.output}</pre>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <>
