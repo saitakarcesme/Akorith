@@ -83,6 +83,17 @@ export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
 
   if (!(await isGitRepo(cwd))) {
     const sourceCheckoutPath = await findSourceCheckout()
+    const build = getBuildInfo()
+    let currentBranch: string | undefined
+    let currentCommit: string | undefined
+    let currentCommitFull: string | undefined
+    let remoteMainCommit: string | undefined
+    let remoteMainFull = ''
+    let remoteUrl: string | undefined
+    let behindBy = 0
+    let aheadBy = 0
+    let isDirty = false
+    let dirtyFiles: string[] = []
     const packagedWarnings = [
       app.isPackaged
         ? 'This Akorith is running as a packaged app. Source-only updates are not treated as installed-app updates.'
@@ -90,22 +101,57 @@ export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
     ]
     if (!sourceCheckoutPath) {
       packagedWarnings.push('No Akorith source checkout was found. Set AKORITH_SOURCE_DIR or clone the repo to use the packaged Windows refresh flow.')
+    } else {
+      if (fetch) {
+        const fetched = await runGit(sourceCheckoutPath, ['fetch', 'origin', '--quiet'], 60_000)
+        if (!fetched.ok) packagedWarnings.push(`Could not reach origin from source checkout: ${maskRemoteUrl(fetched.stderr) || 'fetch failed'}`)
+      }
+      currentBranch = (await runGit(sourceCheckoutPath, ['branch', '--show-current'])).stdout || 'HEAD'
+      currentCommitFull = (await runGit(sourceCheckoutPath, ['rev-parse', 'HEAD'])).stdout
+      currentCommit = (await runGit(sourceCheckoutPath, ['rev-parse', '--short', 'HEAD'])).stdout
+      remoteMainFull = (await runGit(sourceCheckoutPath, ['rev-parse', 'origin/main'])).stdout
+      remoteMainCommit = (await runGit(sourceCheckoutPath, ['rev-parse', '--short', 'origin/main'])).stdout
+      remoteUrl = maskRemoteUrl((await runGit(sourceCheckoutPath, ['remote', 'get-url', 'origin'])).stdout)
+      const statusShort = (await runGit(sourceCheckoutPath, ['status', '--porcelain'])).stdout
+      dirtyFiles = statusShort ? statusShort.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 50) : []
+      isDirty = dirtyFiles.length > 0
+      if (remoteMainFull) {
+        const counts = await runGit(sourceCheckoutPath, ['rev-list', '--left-right', '--count', 'HEAD...origin/main'])
+        if (counts.ok) {
+          const [a, b] = counts.stdout.split(/\s+/).map((n) => Number(n))
+          aheadBy = Number.isFinite(a) ? a : 0
+          behindBy = Number.isFinite(b) ? b : 0
+        }
+      }
+      if (isDirty) packagedWarnings.push('The source checkout has local changes. Packaged refresh will not update source until they are committed or stashed.')
     }
+    const installedBuildCurrent = remoteMainFull
+      ? build.gitCommitFull === remoteMainFull
+      : currentCommitFull
+        ? build.gitCommitFull === currentCommitFull
+        : true
+    const hasUpdate = Boolean(sourceCheckoutPath && (behindBy > 0 || !installedBuildCurrent))
     return {
       mode: 'packaged',
       runtimeMode: runtimeMode(false),
       platform: process.platform,
       executablePath,
       appPath,
+      repoPath: sourceCheckoutPath,
       sourceCheckoutPath,
+      currentBranch,
+      currentCommit,
+      currentCommitFull,
+      remoteMainCommit,
+      remoteUrl,
       appVersion,
-      behindBy: 0,
-      aheadBy: 0,
-      hasUpdate: false,
-      isDirty: false,
-      dirtyFiles: [],
+      behindBy,
+      aheadBy,
+      hasUpdate,
+      isDirty,
+      dirtyFiles,
       safeToUpdate: false,
-      canUpdateInstalledApp: Boolean(process.platform === 'win32' && sourceCheckoutPath),
+      canUpdateInstalledApp: Boolean(process.platform === 'win32' && sourceCheckoutPath && !isDirty),
       updateTarget: process.platform === 'win32' ? 'Installed Windows app via refresh-windows-app.ps1' : 'Packaged app (manual installer refresh required)',
       relaunchTarget: expectedWindowsExe(),
       warnings: packagedWarnings,
