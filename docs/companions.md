@@ -34,6 +34,16 @@ Review UI (right panel): pinned + remembered memories, which ones were **recalle
 reply**, search, and pin / archive / forget / manual-add controls. You are in control of what
 is remembered.
 
+## Chat behavior
+
+The Companions chat renders like a normal chat app:
+
+- user messages appear optimistically as soon as Send is pressed,
+- an assistant thinking bubble appears immediately,
+- persisted history replaces the temporary bubbles without duplicating them,
+- send failures keep the user message visible and add an inline error,
+- Stop aborts the in-flight local-model request through the companion IPC cancel path.
+
 ## Local-first & private
 
 Companions default to the **local runtime** (Ollama / resolved endpoint). Conversations and
