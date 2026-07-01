@@ -58,10 +58,12 @@ conversation with any available provider.
 - **Plugins** — read-only plugin registry + diagnostics (Browser, Chroma memory, …).
 - **Controller API** — optional loopback-only, token-protected, read-only HTTP+SSE surface
   for companions/CLIs (Settings → API; see `docs/controller-api.md`).
-- **Loops** — the AkorithLoop planner/observer surface.
+- **Loops** — the AkorithLoop planner/observer surface with a centered Create project loop modal.
+- **Companions** — local memory chat with immediate user-message rendering and cancellable generation.
+- **Agents** — reusable local action shortcuts with a centered create-agent modal and permission policy.
 - **Test Lab** — generate + run tests in a sandbox and export scored PDF reports.
 - **Bottom workbench** — Changes / Runtime / Missions panel.
-- **Settings → Update** — keep this source checkout current with GitHub `main`.
+- **Settings → Update** — keep source checkouts current with GitHub `main`, or refresh the installed Windows app from a clean source checkout.
 
 ## Install
 
