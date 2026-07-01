@@ -293,12 +293,11 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
                 </div>
               ) : (
                 messages.map((m) => (
-                  <div key={m.id} className={`companion-msg is-${m.role}`}>
+                  <div key={m.id} className={`companion-msg is-${m.role} ${m.tone ? `is-${m.tone}` : ''}`}>
                     {m.content}
                   </div>
                 ))
               )}
-              {busy && <div className="companion-msg is-assistant is-thinking">…</div>}
             </div>
             <div className="companions-composer">
               <textarea
