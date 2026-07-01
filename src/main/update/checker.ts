@@ -1,5 +1,9 @@
 import { execFile } from 'child_process'
 import { app } from 'electron'
+import { existsSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
+import { getBuildInfo } from '../build-info'
 import type { UpdateStatus } from './types'
 
 // Phase 39: read-only update detection. Every git call is bounded and uses no shell.
@@ -31,6 +35,39 @@ export function maskRemoteUrl(url: string): string {
 /** The directory we run git in — the app path (the repo root in a dev/source run). */
 export function repoRoot(): string {
   return app.getAppPath()
+}
+
+function runtimeMode(isRepo: boolean): UpdateStatus['runtimeMode'] {
+  if (app.isPackaged && process.platform === 'win32') return 'packaged-windows'
+  if (app.isPackaged && process.platform === 'darwin') return 'packaged-macos'
+  if (app.isPackaged) return 'packaged-other'
+  return process.env['ELECTRON_RENDERER_URL'] || isRepo ? 'dev' : 'source'
+}
+
+function expectedWindowsExe(): string | undefined {
+  if (process.platform !== 'win32') return undefined
+  const local = process.env['LOCALAPPDATA']
+  return local ? join(local, 'Programs', 'Akorith', 'Akorith.exe') : undefined
+}
+
+async function findSourceCheckout(): Promise<string | undefined> {
+  const candidates = [
+    process.env['AKORITH_SOURCE_DIR'],
+    join(homedir(), 'Desktop', 'akorith'),
+    join(homedir(), 'Desktop', 'Akorith'),
+    join(homedir(), 'Documents', 'akorith'),
+    join(homedir(), 'Documents', 'Akorith')
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue
+    if (await isGitRepo(candidate)) {
+      const top = (await runGit(candidate, ['rev-parse', '--show-toplevel'])).stdout || candidate
+      const remote = (await runGit(top, ['remote', 'get-url', 'origin'])).stdout
+      if (/saitakarcesme\/Akorith/i.test(remote)) return top
+    }
+  }
+  return undefined
 }
 
 export async function isGitRepo(cwd: string): Promise<boolean> {
