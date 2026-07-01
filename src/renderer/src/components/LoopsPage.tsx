@@ -1209,9 +1209,9 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     return (
       <CommandModal ariaLabel="Create project loop" onClose={() => !busy && setView('list')} safeToClose={!busy} width="wide">
         <div className="loop-create-modal-content">
-        <button type="button" className="loop-back" disabled={busy} onClick={() => setView('list')}>
+        <SecondaryButton disabled={busy} onClick={() => setView('list')}>
           <ChevronIcon size={16} direction="left" /> Cancel
-        </button>
+        </SecondaryButton>
 
         <section className="loop-create loop-create-wide">
           <div className="loop-create-head">
@@ -1473,9 +1473,9 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
           {createPlanner && !createPlanner.available.ok && <div className="loop-note is-error">{createPlanner.available.reason || 'This provider is unavailable right now.'}</div>}
 
           <div className="loop-actions">
-            <button type="button" className="loop-btn is-primary is-big" disabled={!description.trim() || busy || !createPlanner?.available.ok || !executorReady} onClick={() => void createLoop()}>
+            <PrimaryButton disabled={!description.trim() || busy || !createPlanner?.available.ok || !executorReady} onClick={() => void createLoop()}>
               {busy ? busyNote || 'Setting up...' : 'Create Loop'}
-            </button>
+            </PrimaryButton>
           </div>
         </section>
         </div>
@@ -1495,9 +1495,9 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             Create autonomous workflows that monitor, analyze, build, validate, commit, report, and continue over time.
           </p>
         </div>
-        <button type="button" className="loop-btn is-primary" onClick={() => setView('create')}>
+        <PrimaryButton onClick={() => setView('create')}>
           <PlusIcon size={16} /> Create Loop
-        </button>
+        </PrimaryButton>
       </header>
 
       {error && <div className="loop-note is-error">{error}</div>}
