@@ -287,9 +287,16 @@ function CreateAgentModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal agent-create-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Create agent{template ? ` — ${template.name}` : ''}</h2>
+    <CommandModal ariaLabel="Create agent" onClose={onClose} safeToClose={!busy}>
+      <div className="agent-create-modal">
+        <ModalHeader
+          title="Create agent"
+          subtitle="Build a reusable local action shortcut with a folder boundary, local model, and permission policy."
+          eyebrow={template ? template.name : 'Reusable shortcut'}
+          onClose={onClose}
+          closeDisabled={busy}
+        />
+        <ModalBody>
         {template?.note && <div className="agents-warn">⚠ {template.note}</div>}
         <label className="loop-field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="loop-field">
@@ -323,11 +330,12 @@ function CreateAgentModal({
           <span>Allow running allowlisted validation commands (typecheck/build/test/lint)</span>
         </label>
         {err && <div className="agents-error">{err}</div>}
-        <div className="modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" className="is-primary" disabled={busy} onClick={() => void create()}>{busy ? 'Creating…' : 'Create agent'}</button>
-        </div>
+        </ModalBody>
+        <ModalFooter>
+          <SecondaryButton disabled={busy} onClick={onClose}>Cancel</SecondaryButton>
+          <PrimaryButton disabled={busy} onClick={() => void create()}>{busy ? 'Creating...' : 'Create agent'}</PrimaryButton>
+        </ModalFooter>
       </div>
-    </div>
+    </CommandModal>
   )
 }
