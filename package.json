@@ -37,7 +37,8 @@
     "verify:local-runtime": "tsx scripts/verify-local-runtime.ts",
     "verify:project-loop": "tsx scripts/verify-project-loop.ts",
     "verify:companions": "tsx scripts/verify-companions.ts",
-    "verify:agents": "tsx scripts/verify-agents.ts"
+    "verify:agents": "tsx scripts/verify-agents.ts",
+    "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts"
   },
   "build": {
     "appId": "com.akorith.app",
