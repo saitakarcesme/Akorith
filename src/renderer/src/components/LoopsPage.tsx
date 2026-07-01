@@ -1201,16 +1201,16 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     return (
       <CommandModal ariaLabel="Create project loop" onClose={() => !busy && setView('list')} safeToClose={!busy} width="wide">
         <div className="loop-create-modal-content">
-        <button type="button" className="loop-back" onClick={() => !busy && setView('list')}>
-          <ChevronIcon size={16} direction="left" /> All loops
+        <button type="button" className="loop-back" disabled={busy} onClick={() => setView('list')}>
+          <ChevronIcon size={16} direction="left" /> Cancel
         </button>
 
         <section className="loop-create loop-create-wide">
           <div className="loop-create-head">
             <div>
               <div className="loop-kicker">Create loop</div>
-              <h1>What should this loop do?</h1>
-              <p className="loops-sub">Start simple. Akorith turns the instruction into a scheduled, auditable AI workflow.</p>
+              <h1>Create project loop</h1>
+              <p className="loops-sub">Give Akorith a project idea, local repo, or GitHub URL.</p>
             </div>
           </div>
 
