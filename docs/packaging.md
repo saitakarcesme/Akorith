@@ -51,6 +51,7 @@ Windows from a Windows host:
 ```bash
 npm run dist:win          # nsis + portable -> dist/
 npm run refresh:win       # clean stale shortcuts, build/install, launch (Windows only)
+npm run verify:windows-identity
 ```
 
 > A macOS host cannot reliably cross-build a Windows NSIS installer (needs Wine/extra
@@ -78,7 +79,10 @@ The helper is conservative: it backs up stale Akorith shortcuts to the Desktop,
 uses only Akorith-identifying uninstall entries, never touches Akorith user
 data/config/db, and refuses to install by copying `dist\win-unpacked`. If
 `npm run dist:win` fails with a `winCodeSign` symbolic-link privilege error,
-enable Windows Developer Mode or run the shell as Administrator, then retry.
+the helper retries with an unsigned local installer build that disables
+executable signing/resource editing, then still installs through NSIS. For a
+fully resource-edited executable, enable Windows Developer Mode or run the shell
+as Administrator, then retry the normal build.
 
 ## Startup data hydration
 
