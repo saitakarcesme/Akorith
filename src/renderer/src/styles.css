@@ -9791,6 +9791,32 @@ body {
 .loop-create-summary {
   margin: 16px 0 10px;
 }
+.loop-create-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.loop-create-modal-content > .action-button {
+  align-self: flex-start;
+  margin: 14px 18px 0;
+}
+.command-modal .loop-create-wide {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 22px;
+}
+.command-modal .loop-create-head {
+  margin-bottom: 16px;
+}
+.loop-mode-panel {
+  margin: 14px 0;
+}
+.loop-mode-panel .loop-option-grid {
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+}
 .loop-stats-four {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
