@@ -10575,7 +10575,8 @@ body {
 .companion-msg { font-size: 13px; line-height: 1.6; padding: 10px 14px; border-radius: 14px; max-width: 74%; white-space: pre-wrap; overflow-wrap: anywhere; }
 .companion-msg.is-user { align-self: flex-end; background: var(--bubble-user, #fff); color: var(--bubble-user-text, #1a1a1e); border-radius: 20px 20px 6px 20px; }
 .companion-msg.is-assistant { align-self: flex-start; color: var(--text); background: rgba(255, 255, 255, 0.035); }
-.companion-msg.is-thinking { color: var(--text-faint); background: var(--bg-soft); }
+.companion-msg.is-thinking { color: var(--text-faint); background: var(--bg-soft); animation: companion-thinking-pulse 1.4s ease-in-out infinite; }
+@keyframes companion-thinking-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; } }
 .companion-msg.is-error { color: var(--danger); background: rgba(255, 99, 99, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.16); }
 .companion-msg.is-stopped { color: var(--text-faint); background: transparent; box-shadow: inset 0 0 0 1px var(--border-soft); }
 .companions-empty-chat { margin: auto; max-width: 380px; text-align: center; color: var(--text-faint); font-size: 13px; }
