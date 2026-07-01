@@ -332,7 +332,7 @@ textarea:focus-visible {
   --bubble-user-text: #17181b;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #ededf0;
-  --sidebar-bg: rgba(10, 11, 13, 0.90);
+  --sidebar-bg: rgba(10, 11, 13, 0.50);
   --sidebar-bg-2: rgba(255, 255, 255, 0.055);
   --sidebar-panel: rgba(18, 19, 22, 0.92);
   --sidebar-raised: rgba(255, 255, 255, 0.10);
@@ -393,7 +393,7 @@ textarea:focus-visible {
   --bubble-user-text: #f3f3f5;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #202124;
-  --sidebar-bg: rgba(255, 255, 255, 0.90);
+  --sidebar-bg: rgba(255, 255, 255, 0.50);
   --sidebar-bg-2: rgba(255, 255, 255, 0.78);
   --sidebar-panel: rgba(255, 255, 255, 0.94);
   --sidebar-raised: rgba(17, 24, 39, 0.08);
@@ -504,8 +504,8 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   background: var(--sidebar-bg);
-  backdrop-filter: blur(42px) saturate(1.55);
-  -webkit-backdrop-filter: blur(42px) saturate(1.55);
+  backdrop-filter: blur(50px) saturate(1.55);
+  -webkit-backdrop-filter: blur(50px) saturate(1.55);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
@@ -5500,11 +5500,13 @@ textarea:focus-visible {
 .test-page-wrap {
   flex: 1 1 0;
   min-width: 0;
+  background: var(--bg);
 }
 
 .companions-page-wrap {
   flex: 1 1 0;
   min-width: 0;
+  background: var(--bg);
 }
 
 .test-page {
@@ -5512,6 +5514,7 @@ textarea:focus-visible {
   flex: 1 1 0;
   min-width: 0;
   height: 100%;
+  background: var(--bg);
 }
 
 .test-config {
