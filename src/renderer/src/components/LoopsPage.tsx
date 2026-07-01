@@ -495,6 +495,15 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     }
   }, [active, view, selectedId, refreshLoops])
 
+  useEffect(() => {
+    if (view !== 'create' || busy) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setView('list')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, view])
+
   const createPlanner = useMemo(() => providers.find((p) => p.id === plannerProvider), [providers, plannerProvider])
   const detailPlanner = useMemo(() => providers.find((p) => p.id === detailProvider), [providers, detailProvider])
   const localProvider = useMemo(() => providers.find((p) => p.id === 'local'), [providers])
