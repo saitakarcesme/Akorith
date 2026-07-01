@@ -33,3 +33,17 @@
   4-char prefix count as a partial match (weight 0.5). Keeps exact matches ranked higher; adds no
   cross-word noise for short tokens. (test 030)
 - **Status:** FIXED + retested (test 030): "testing" now returns the tests memory.
+
+## F-4 (bug, low/medium severity, FIXED) — agents lose in-root writes when the model uses an absolute path
+- **Where:** `src/main/action-agents/files.ts` (applyFileWrite / previewWrites / readWithinRoot)
+  via shared `checkWritePath`.
+- **Repro:** demo_script (safe_writes, aiarticle root); coder model emits
+  `"path": "/Users/.../aiarticle/DEMO_SCRIPT.md"` (absolute, inside root); write rejected
+  ("absolute paths are not allowed"); filesChanged 0, nothing written.
+- **Root cause:** `checkWritePath` rejects ALL absolute paths. Correct for the shared primitive,
+  but agents get absolute-in-root paths from weaker local models and lose the write.
+- **Fix:** in the agents' files layer, if a path is absolute AND resolves inside the allowed root,
+  rewrite it to root-relative before `checkWritePath`. Shared safety primitive unchanged (Loop
+  still rejects raw absolute paths). Absolute-OUTSIDE-root and `..` traversal still rejected.
+- **Status:** FIXED + retested (test 053): DEMO_SCRIPT.md now actually written within root;
+  out-of-root absolute + traversal still rejected.
