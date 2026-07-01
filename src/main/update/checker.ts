@@ -78,10 +78,26 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
   const appVersion = app.getVersion()
   const cwd = repoRoot()
+  const executablePath = process.execPath
+  const appPath = cwd
 
   if (!(await isGitRepo(cwd))) {
+    const sourceCheckoutPath = await findSourceCheckout()
+    const packagedWarnings = [
+      app.isPackaged
+        ? 'This Akorith is running as a packaged app. Source-only updates are not treated as installed-app updates.'
+        : 'This Akorith is not running from the Akorith git checkout.'
+    ]
+    if (!sourceCheckoutPath) {
+      packagedWarnings.push('No Akorith source checkout was found. Set AKORITH_SOURCE_DIR or clone the repo to use the packaged Windows refresh flow.')
+    }
     return {
       mode: 'packaged',
+      runtimeMode: runtimeMode(false),
+      platform: process.platform,
+      executablePath,
+      appPath,
+      sourceCheckoutPath,
       appVersion,
       behindBy: 0,
       aheadBy: 0,
@@ -89,9 +105,10 @@ export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
       isDirty: false,
       dirtyFiles: [],
       safeToUpdate: false,
-      warnings: [
-        'This Akorith is not running from a git checkout, so the source updater does not apply. Packaged release updates are planned for a later phase.'
-      ],
+      canUpdateInstalledApp: Boolean(process.platform === 'win32' && sourceCheckoutPath),
+      updateTarget: process.platform === 'win32' ? 'Installed Windows app via refresh-windows-app.ps1' : 'Packaged app (manual installer refresh required)',
+      relaunchTarget: expectedWindowsExe(),
+      warnings: packagedWarnings,
       lastCheckedAt: Date.now()
     }
   }
@@ -136,6 +153,10 @@ export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
 
   return {
     mode: 'git',
+    runtimeMode: runtimeMode(true),
+    platform: process.platform,
+    executablePath,
+    appPath,
     repoPath: toplevel,
     currentBranch: branch,
     currentCommit: headShort,
@@ -148,6 +169,9 @@ export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
     isDirty,
     dirtyFiles,
     safeToUpdate,
+    canUpdateInstalledApp: false,
+    updateTarget: 'Source checkout only',
+    relaunchTarget: executablePath,
     warnings,
     lastCheckedAt: Date.now(),
     appVersion
