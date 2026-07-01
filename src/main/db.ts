@@ -329,6 +329,60 @@ export function initDb(): void {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_memories_loop ON project_loop_memories(loop_id, importance);
+
+    -- Phase 50: Companions — long-memory local personalities (no actions).
+    CREATE TABLE IF NOT EXISTS companions (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      tagline    TEXT NOT NULL DEFAULT '',
+      tags       TEXT NOT NULL DEFAULT '[]',
+      builtin    INTEGER NOT NULL DEFAULT 0,
+      model      TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS companion_sessions (
+      id            TEXT PRIMARY KEY,
+      companion_id  TEXT NOT NULL REFERENCES companions(id) ON DELETE CASCADE,
+      title         TEXT NOT NULL DEFAULT 'New conversation',
+      created_at    INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_companion_sessions_c ON companion_sessions(companion_id, updated_at);
+    CREATE TABLE IF NOT EXISTS companion_messages (
+      id           TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL REFERENCES companion_sessions(id) ON DELETE CASCADE,
+      companion_id TEXT NOT NULL,
+      role         TEXT NOT NULL,
+      content      TEXT NOT NULL,
+      created_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_companion_messages_s ON companion_messages(session_id, created_at);
+    CREATE TABLE IF NOT EXISTS companion_memories (
+      id               TEXT PRIMARY KEY,
+      companion_id     TEXT NOT NULL REFERENCES companions(id) ON DELETE CASCADE,
+      type             TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      content          TEXT NOT NULL,
+      importance       INTEGER NOT NULL DEFAULT 3,
+      confidence       REAL NOT NULL DEFAULT 0.6,
+      source_session_id TEXT,
+      pinned           INTEGER NOT NULL DEFAULT 0,
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      last_used_at     INTEGER,
+      archived_at      INTEGER,
+      tags             TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX IF NOT EXISTS idx_companion_memories_c ON companion_memories(companion_id, importance);
+    CREATE TABLE IF NOT EXISTS companion_memory_events (
+      id           TEXT PRIMARY KEY,
+      companion_id TEXT NOT NULL,
+      memory_id    TEXT,
+      kind         TEXT NOT NULL,
+      detail       TEXT,
+      created_at   INTEGER NOT NULL
+    );
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
