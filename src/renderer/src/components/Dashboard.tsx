@@ -138,6 +138,27 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
     void loadRuntime()
   }, [loadRuntime])
 
+  // Phase 54: Agent OS pillar counts (Loop / Companions / Agents).
+  const [pillarCounts, setPillarCounts] = useState<{ loops: number; companions: number; agents: number } | null>(null)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [loops, companions, agents] = await Promise.all([
+          window.api.projectLoop.list(),
+          window.api.companion.list(),
+          window.api.actionAgent.list()
+        ])
+        setPillarCounts({
+          loops: (loops as unknown[]).length,
+          companions: (companions as unknown[]).length,
+          agents: (agents as unknown[]).length
+        })
+      } catch {
+        setPillarCounts(null)
+      }
+    })()
+  }, [])
+
   // Phase 35: read-only controller status + plugin registry for the Dashboard.
   // Phase 39: usage-limit view + source-update status.
   useEffect(() => {
@@ -467,6 +488,32 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
             No draft missions yet. Open Settings, then Missions, to create a preview mission without executing anything.
           </div>
         )}
+      </section>
+
+      <section className="dash-section dash-pillars">
+        <div className="dash-section-head">
+          <div>
+            <h2>Local Agent OS</h2>
+            <p>Think with Companions · Act with Agents · Build with Loop — all local-first.</p>
+          </div>
+        </div>
+        <div className="dash-pillar-grid">
+          <div className="dash-pillar-card">
+            <div className="dash-pillar-name">Loop</div>
+            <div className="dash-pillar-count">{pillarCounts?.loops ?? '—'}</div>
+            <div className="dash-pillar-sub">project loop(s)</div>
+          </div>
+          <div className="dash-pillar-card">
+            <div className="dash-pillar-name">Companions</div>
+            <div className="dash-pillar-count">{pillarCounts?.companions ?? '—'}</div>
+            <div className="dash-pillar-sub">personalities (Athena · Zeus)</div>
+          </div>
+          <div className="dash-pillar-card">
+            <div className="dash-pillar-name">Agents</div>
+            <div className="dash-pillar-count">{pillarCounts?.agents ?? '—'}</div>
+            <div className="dash-pillar-sub">action shortcut(s)</div>
+          </div>
+        </div>
       </section>
 
       <section className="dash-section dash-runtime">

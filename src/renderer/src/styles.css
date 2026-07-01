@@ -10369,3 +10369,10 @@ body {
 .agents-warn, .agents-error { font-size: 11.5px; padding: 8px 10px; border-radius: var(--radius-sm); margin-bottom: 10px; }
 .agents-warn { color: var(--warning); background: var(--bg-soft); }
 .agents-error { color: var(--danger); background: var(--bg-soft); }
+
+/* Phase 54: Dashboard Agent OS pillar card */
+.dash-pillar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.dash-pillar-card { padding: 16px; background: var(--bg-soft); border-radius: var(--radius-sm); text-align: center; }
+.dash-pillar-name { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.dash-pillar-count { font-size: 28px; font-weight: 720; color: var(--text); margin: 4px 0; font-variant-numeric: tabular-nums; }
+.dash-pillar-sub { font-size: 10.5px; color: var(--text-faint); }
