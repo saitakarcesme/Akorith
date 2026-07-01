@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { CloseIcon } from './icons'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
@@ -31,6 +31,16 @@ export function CommandModal({
   safeToClose = true,
   width = 'standard'
 }: CommandModalProps): JSX.Element {
+  // Phase 55.068: Escape is an intentional close and always works (the dirty
+  // guard only prevents *accidental* backdrop clicks, not deliberate Escape).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div
       className="command-modal-backdrop"
