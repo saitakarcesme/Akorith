@@ -311,9 +311,15 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
                   }
                 }}
               />
-              <button type="button" className="is-primary" disabled={busy || !draft.trim()} onClick={() => void send()}>
-                Send
-              </button>
+              {busy ? (
+                <ComposerActionButton label="Stop generation" title="Stop generation" className="is-stop" onClick={stopGeneration}>
+                  <StopIcon size={16} />
+                </ComposerActionButton>
+              ) : (
+                <ComposerActionButton label="Send message" title="Send message" disabled={!draft.trim()} onClick={() => void send()}>
+                  <SendIcon size={16} />
+                </ComposerActionButton>
+              )}
             </div>
           </>
         ) : (
