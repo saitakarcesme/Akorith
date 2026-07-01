@@ -1,11 +1,20 @@
 # Akorith
 
-**Akorith — a local-first Agent OS for AI coding workflows. No API keys.**
+**Akorith — a local-first Agent OS.**
+**Think with Companions. Act with Agents. Build with Loop.**
 
-Akorith is a cross-platform Electron desktop app that drives the coding agents you already
-pay for, through their official command-line tools. You log into those CLIs once; Akorith
-runs them locally inside your chosen project. There are no API keys to paste and no provider
-credentials stored by the app — your chats, usage, and project metadata stay in local SQLite.
+Akorith is a cross-platform Electron desktop app with three first-class, local-first pillars:
+
+- **Loop** — an autonomous local project builder. Give it an idea, a local repo, or a GitHub
+  URL, and **local models** grow it over time with safe, validated commits.
+- **Companions** — long-memory local personalities (**Athena**, **Zeus**). They talk and
+  remember across every conversation. They **never take actions**.
+- **Agents** — reusable local action shortcuts (organize a folder, repo health report,
+  README/changelog, commit messages, …). Create once, run again, behind a permission policy.
+
+All three default to **local models** (Ollama / resolved runtime). Your existing Claude / Codex
+/ OpenCode CLIs remain for chat and Workspace — Akorith stores no API keys and keeps your
+conversations, memories, and project data in local SQLite.
 
 ```
 ┌────────────┬─────────────────────────────────────────────┐
