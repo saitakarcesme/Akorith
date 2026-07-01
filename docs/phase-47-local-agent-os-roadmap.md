@@ -108,3 +108,47 @@ doc). ≥100 each for Loop / Companions / Agents.
 - **DB growth** — additive tables only; old data readable.
 - **Safety regressions** — deterministic validators + verify-safety scripts; default preview mode.
 - **Not breaking existing surfaces** — new code is additive; existing pages/IPC untouched until UI swap, which keeps the same `AppView` slots.
+
+## Delivered (this build)
+
+**Shared foundation** (`src/main/local-runtime/`, `src/main/safety/`): local-first send +
+structured JSON (with repair retry) + status/models; deterministic path/command/patch/git
+safety guards. Tested by `verify:local-runtime` (which caught + fixed a real path-traversal bug).
+
+**Loop** — full backend (`src/main/project-loop/`): types, 6 additive tables, store + run/event/
+commit/backlog/memory ledgers, bounded read-only inspection, objective planner, safe git helper,
+and a runner that inspects → plans → asks the local model for a structured patch → validates +
+applies (via the local-executor) → commits locally (never pushes) → records everything. Typed
+IPC + preload. New UI (`ProjectLoopPage`): operations center with list/detail/create-wizard/
+run-one-cycle/run-timeline/commit-ledger/event-log/backlog + runtime pill. `verify:project-loop`.
+
+**Companions** — full backend (`src/main/companions/`): types, 5 additive tables, Athena + Zeus
+seeds + system prompts (no-action boundary), session/message stores, durable memory store with
+token-overlap retrieval, memory-aware chat, and a local-model memory-extraction pass with dedupe.
+Typed IPC + preload. New UI (`CompanionsPage`): Athena/Zeus cards, chat, and a memory review
+panel (pinned/recalled/search/pin/archive/forget/add). `verify:companions` asserts boundaries.
+
+**Agents** — full backend (`src/main/action-agents/`): types, 4 additive tables, 10 built-in
+templates, permission policy (default preview), agent planner (`agent_plan`) + executor
+(`agent_action`) with root-contained safe writes (never deletes), allowlisted commands, artifacts,
+and full event logging. Typed IPC + preload. New UI (`AgentsPage`): library + template gallery +
+create wizard + permission preview + run + timeline + artifacts + history. `verify:agents`.
+
+**Nav/Dashboard/docs**: Companions/Agents are first-class pages (Loop route now the new page);
+Dashboard shows a "Local Agent OS" pillar card; docs added (project-loop, companions,
+action-agents, local-runtime, safety-model).
+
+## Honest limitations / next work
+
+- Loop/Companions/Agents runs need a **live local model** (Ollama) to produce real output; with
+  none reachable they surface an honest "local model offline" state (verified by the offline path).
+  The verify scripts use pure/electron-free paths so they pass without Ollama.
+- Loop **scheduler** (auto daily/interval running) is modelled in the schema but the background
+  timer is not wired — runs are manual ("Run one cycle") for now.
+- GitHub clone for `github_loop` uses a chosen local path; automated clone-on-create is not yet wired.
+- Companion memory uses token-overlap scoring (no FTS/vector DB yet).
+- Agents apply writes for non-step-approval modes; the per-step interactive approval UI is
+  modelled (events emit `permission_requested`) but not yet a modal gate.
+- PDF summarizer is intentionally marked unsupported for real PDF parsing.
+- This session delivered a genuine, tested vertical slice of each pillar. Reaching the full
+  ≥100-commits-per-pillar target is continuing work; every commit here is real and reviewable.
