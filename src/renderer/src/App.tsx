@@ -378,7 +378,7 @@ export default function App(): JSX.Element {
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
-      {view === 'companions' && <CompanionsPage />}
+      {view === 'companions' && <CompanionsPage active={view === 'companions'} />}
       {view === 'agents' && <AgentsPage />}
     </div>
   )
