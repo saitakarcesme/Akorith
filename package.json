@@ -36,7 +36,8 @@
     "dist:all": "npm run build && electron-builder -mw",
     "verify:local-runtime": "tsx scripts/verify-local-runtime.ts",
     "verify:project-loop": "tsx scripts/verify-project-loop.ts",
-    "verify:companions": "tsx scripts/verify-companions.ts"
+    "verify:companions": "tsx scripts/verify-companions.ts",
+    "verify:agents": "tsx scripts/verify-agents.ts"
   },
   "build": {
     "appId": "com.akorith.app",
