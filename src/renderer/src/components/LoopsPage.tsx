@@ -858,7 +858,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const gitTone = syncTone(workspaceStatus)
 
     return (
-      <div className="loops-page loop-ops">
+      <CommandModal ariaLabel="Create project loop" onClose={() => !busy && setView('list')} safeToClose={!busy} width="wide">
+        <div className="loop-create-modal-content">
         <button type="button" className="loop-back" onClick={() => setView('list')}>
           <ChevronIcon size={16} direction="left" /> All loops
         </button>
@@ -1185,7 +1186,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
           {selected.workspaceDir && <div className="loop-folder">Workspace <code>{selected.workspaceDir}</code></div>}
         </section>
-      </div>
+        </div>
+      </CommandModal>
     )
   }
 
@@ -1197,7 +1199,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
     const executorReady = executorMode !== 'local' || Boolean(localProvider?.available.ok && (localExecutorModel || localModels.length > 0))
 
     return (
-      <div className="loops-page loop-ops">
+      <CommandModal ariaLabel="Create project loop" onClose={() => !busy && setView('list')} safeToClose={!busy} width="wide">
+        <div className="loop-create-modal-content">
         <button type="button" className="loop-back" onClick={() => !busy && setView('list')}>
           <ChevronIcon size={16} direction="left" /> All loops
         </button>
@@ -1442,7 +1445,8 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             </button>
           </div>
         </section>
-      </div>
+        </div>
+      </CommandModal>
     )
   }
 
