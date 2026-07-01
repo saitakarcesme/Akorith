@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CreateProjectLoopInput,
   LocalModelInfo,
@@ -11,6 +11,16 @@ import type {
   ProjectLoopStatus,
   RuntimeStatus
 } from '../../../preload/index.d'
+import {
+  CommandModal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  FormGrid,
+  FieldLabel,
+  PrimaryButton,
+  SecondaryButton
+} from './CreationPrimitives'
 
 // Phase 49: Loop — project operations center. Autonomously grow local & GitHub
 // projects with local models. Replaces the old generic loop page.
