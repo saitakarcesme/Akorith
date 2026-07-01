@@ -9,6 +9,15 @@
 - **Repo Grower** — an existing local repo; add useful features, commit repeatedly.
 - **GitHub Repo Loop** — a cloned/linked GitHub repo; improve and commit locally (push is opt-in).
 - **Maintenance** — docs, tests, refactor, polish.
+- **Multi-Repo Loop** — coordinate broader repository health checks and reports.
+
+## Create-loop UX
+
+Create project loop opens a centered command modal. It includes the project idea/direction,
+mode selector, target selector, schedule, autonomy, local/PTY executor choice, safety,
+commit/push controls, validation commands, and a compact summary of what will run. The body
+scrolls inside the modal on smaller windows, Escape closes it when safe, and successful
+creation selects the new loop detail view.
 
 ## How one cycle works (`runOneCycle`)
 
