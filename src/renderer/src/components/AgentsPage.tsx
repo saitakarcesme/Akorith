@@ -244,6 +244,16 @@ function CreateAgentModal({
   const [allowCommands, setAllowCommands] = useState(template?.allowCommands ?? false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    nameInputRef.current?.focus()
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
 
   const pick = async (): Promise<void> => {
     const p = (await window.api.actionAgent.pickFolder()) as string | null
