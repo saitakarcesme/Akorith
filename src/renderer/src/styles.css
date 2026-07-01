@@ -10295,6 +10295,81 @@ body {
   background: rgba(0, 0, 0, 0.08);
 }
 
+.form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.form-grid.is-1 {
+  grid-template-columns: 1fr;
+}
+
+.form-grid.is-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid.is-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.field-label > span {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+
+.field-label > em {
+  font-style: normal;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.field-label input,
+.field-label select,
+.field-label textarea {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.field-label textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.field-label input:focus,
+.field-label select:focus,
+.field-label textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(169, 150, 255, 0.13);
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field-row input {
+  flex: 1 1 auto;
+}
+
 /* ===== Phase 51: Companions ===== */
 .companions-page {
   flex: 1 1 0;
