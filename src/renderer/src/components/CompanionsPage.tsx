@@ -192,6 +192,28 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     }
   }
 
+  const stopGeneration = (): void => {
+    const activeRequest = activeRequestRef.current
+    if (!activeRequest) return
+    activeRequest.cancelled = true
+    window.api.companion.cancelMessage(activeRequest.requestId)
+    setMessages((prev) => [
+      ...prev.filter((message) => message.tone !== 'thinking'),
+      {
+        id: newClientId('companion-stopped'),
+        sessionId: activeRequest.sessionId,
+        companionId: activeRequest.companionId,
+        role: 'assistant',
+        content: 'Stopped.',
+        createdAt: Date.now(),
+        pending: true,
+        tone: 'stopped'
+      }
+    ])
+    activeRequestRef.current = null
+    setBusy(false)
+  }
+
   const extractNow = async (): Promise<void> => {
     if (!companion || !sessionId) return
     setBusy(true)
