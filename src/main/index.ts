@@ -27,6 +27,7 @@ import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSna
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
 import { registerProjectLoopIpc } from './project-loop'
+import { registerCompanionIpc } from './companions'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -394,6 +395,7 @@ app.whenReady().then(() => {
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
   registerProjectLoopIpc()
+  registerCompanionIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
