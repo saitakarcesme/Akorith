@@ -19,7 +19,8 @@ import {
   FormGrid,
   FieldLabel,
   PrimaryButton,
-  SecondaryButton
+  SecondaryButton,
+  DangerButton
 } from './CreationPrimitives'
 
 // Phase 49: Loop — project operations center. Autonomously grow local & GitHub
@@ -140,9 +141,7 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
             <span className="runtime-pill-dot" />
             {runtime?.ok ? `Local runtime · ${runtime.modelCount} model(s)` : 'Local runtime offline'}
           </span>
-          <button type="button" className="is-primary" onClick={() => setCreating(true)}>
-            + Create project loop
-          </button>
+          <PrimaryButton onClick={() => setCreating(true)}>+ Create project loop</PrimaryButton>
         </div>
       </header>
 
@@ -187,16 +186,16 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
                 </div>
               </div>
               <div className="loop-ops-actions">
-                <button type="button" className="is-primary" disabled={busy} onClick={() => void runOnce()}>
-                  {busy ? 'Running…' : 'Run one cycle'}
-                </button>
+                <PrimaryButton disabled={busy} onClick={() => void runOnce()}>
+                  {busy ? 'Running...' : 'Run one cycle'}
+                </PrimaryButton>
                 {selected.status === 'paused' ? (
-                  <button type="button" onClick={() => void setStatus('active')}>Resume</button>
+                  <SecondaryButton onClick={() => void setStatus('active')}>Resume</SecondaryButton>
                 ) : (
-                  <button type="button" onClick={() => void setStatus('paused')}>Pause</button>
+                  <SecondaryButton onClick={() => void setStatus('paused')}>Pause</SecondaryButton>
                 )}
-                <button type="button" onClick={() => void setStatus('archived')}>Archive</button>
-                <button type="button" className="is-danger" onClick={() => void removeLoop()}>Delete</button>
+                <SecondaryButton onClick={() => void setStatus('archived')}>Archive</SecondaryButton>
+                <DangerButton onClick={() => void removeLoop()}>Delete</DangerButton>
               </div>
             </div>
 
@@ -264,7 +263,7 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
             <div className="soon-card" style={{ maxWidth: 460 }}>
               <h2>Build with Loop</h2>
               <p className="soon-sub">Give Akorith a project idea, a local repo, or a GitHub URL — local models grow it over time with safe, validated commits.</p>
-              <button type="button" className="is-primary" onClick={() => setCreating(true)}>+ Create your first loop</button>
+              <PrimaryButton onClick={() => setCreating(true)}>+ Create your first loop</PrimaryButton>
             </div>
           </main>
         )}
