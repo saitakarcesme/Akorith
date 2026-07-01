@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ActionAgent,
   ActionAgentArtifact,
@@ -11,6 +11,17 @@ import type {
   LocalModelInfo,
   RuntimeStatus
 } from '../../../preload/index.d'
+import {
+  CommandModal,
+  FieldLabel,
+  FormGrid,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  PrimaryButton,
+  SecondaryButton,
+  DangerButton
+} from './CreationPrimitives'
 
 // Phase 53: Agents — reusable local action shortcuts. Act with Agents. Create a
 // shortcut once, run it again with one click, behind a permission policy.
@@ -72,7 +83,7 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
             <span className="runtime-pill-dot" />
             {runtime?.ok ? 'Local' : 'Offline'}
           </span>
-          <button type="button" className="is-primary" onClick={() => setCreating('blank')}>+ Create agent</button>
+          <PrimaryButton onClick={() => setCreating('blank')}>+ Create agent</PrimaryButton>
         </div>
       </header>
 
@@ -154,7 +165,7 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
               <div className="soon-card" style={{ maxWidth: 460 }}>
                 <h2>Act with Agents</h2>
                 <p className="soon-sub">Turn a repeatable computer/project task into a one-click shortcut, powered by local models and gated by permissions.</p>
-                <button type="button" className="is-primary" onClick={() => setCreating('blank')}>+ Create your first agent</button>
+                <PrimaryButton onClick={() => setCreating('blank')}>+ Create your first agent</PrimaryButton>
               </div>
             </div>
           )}
