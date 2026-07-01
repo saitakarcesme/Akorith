@@ -34,7 +34,9 @@ is the real app data/logic layer, not raw SQL. Data created is visible in Akorit
 
 ## Commit index
 
-(updated as tests run — see individual `NNN-*.md` reports)
+**COMPLETE — PASS.** 70 real commits: 20 Loop (003–024), 21 Companions (025–048),
+20 Agents (049–072), 5 cross-feature (073–077), persistence (078), final validation (079).
+See individual `NNN-*.md` reports and `final-report.md` for the summary.
 
 ## Bugs found / fixes applied
 
