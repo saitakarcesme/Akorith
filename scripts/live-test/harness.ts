@@ -81,7 +81,7 @@ async function dispatch(op: string, a: Record<string, unknown>): Promise<unknown
     case 'listMessages':
       return cMessages.listMessages(a.sessionId as string)
     case 'sendCompanion':
-      return cChat.sendCompanionMessage({ companionId: a.companionId as string, sessionId: a.sessionId as string, prompt: a.prompt as string })
+      return cChat.sendCompanionMessage({ companionId: a.companionId as string, sessionId: a.sessionId as string, prompt: a.prompt as string, model: a.model as string | undefined })
     case 'createMemory':
       return cMem.createMemory(a as never)
     case 'listMemories':
