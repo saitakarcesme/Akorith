@@ -1483,7 +1483,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
 
           <div className="loop-actions">
             <PrimaryButton disabled={!description.trim() || busy || !createPlanner?.available.ok || !executorReady} onClick={() => void createLoop()}>
-              {busy ? busyNote || 'Setting up...' : 'Create Loop'}
+              {busy ? busyNote || 'Setting up...' : 'Create project loop'}
             </PrimaryButton>
           </div>
         </section>
@@ -1505,7 +1505,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
           </p>
         </div>
         <PrimaryButton onClick={() => setView('create')}>
-          <PlusIcon size={16} /> Create Loop
+          <PlusIcon size={16} /> Create project loop
         </PrimaryButton>
       </header>
 
@@ -1542,7 +1542,7 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
       <div className="loops-grid loop-card-grid">
         <button type="button" className="loop-card loop-card-new" onClick={() => setView('create')}>
           <span className="loop-plus"><PlusIcon size={28} /></span>
-          <span className="loop-card-new-label">Create Loop</span>
+          <span className="loop-card-new-label">Create project loop</span>
         </button>
 
         {loops.map((loop) => {
