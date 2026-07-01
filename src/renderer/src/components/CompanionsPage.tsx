@@ -88,8 +88,14 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
   }, [selectedCompanion, loadSessions, loadMemories])
 
   useEffect(() => {
-    if (sessionId) void window.api.companion.listMessages(sessionId).then((m) => setMessages(m as CompanionMessage[]))
-    else setMessages([])
+    if (sessionId) {
+      void window.api.companion.listMessages(sessionId).then((m) => {
+        const persisted = m as CompanionMessage[]
+        setMessages((current) => mergePersistedMessages(persisted, current.filter((message) => message.sessionId === sessionId)))
+      })
+    } else {
+      setMessages([])
+    }
     setUsedMemoryIds([])
   }, [sessionId])
 
