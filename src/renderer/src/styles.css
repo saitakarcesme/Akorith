@@ -10640,8 +10640,8 @@ body {
 .agent-lib-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .agent-lib-meta { font-size: 10px; color: var(--text-faint); }
 .agent-templates { display: flex; flex-direction: column; gap: 6px; }
-.agent-template-card { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; text-align: left; color: inherit; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--border-soft); border-radius: 16px; cursor: pointer; transition: transform 140ms ease, background 140ms ease, border-color 140ms ease; }
-.agent-template-card:hover { background: var(--bg-soft); border-color: var(--border); transform: translateY(-1px); }
+.agent-template-card { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; text-align: left; color: inherit; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--border-soft); border-radius: 16px; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
+.agent-template-card:hover { background: var(--bg-soft); border-color: var(--border); }
 .agent-template-card:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(169, 150, 255, 0.13); }
 .agent-template-name { font-size: 12px; font-weight: 600; color: var(--text); }
 .agent-template-desc { font-size: 10.5px; color: var(--text-faint); line-height: 1.4; }
