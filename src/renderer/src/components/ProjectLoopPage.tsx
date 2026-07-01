@@ -11,6 +11,7 @@ import type {
   ProjectLoopStatus,
   RuntimeStatus
 } from '../../../preload/index.d'
+import { formatLocalModelLabel } from '../modelLabels'
 import {
   CommandModal,
   ModalHeader,
@@ -97,6 +98,15 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
     if (selectedId) void loadDetail(selectedId)
   }, [selectedId, loadDetail])
 
+  useEffect(() => {
+    if (!active) return
+    const timer = window.setInterval(() => {
+      void loadLoops()
+      if (selectedId) void loadDetail(selectedId)
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [active, selectedId, loadLoops, loadDetail])
+
   const filtered = useMemo(
     () => (filter === 'all' ? loops : loops.filter((l) => l.status === filter)),
     [loops, filter]
@@ -169,7 +179,7 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
                   <span className={`loop-status-badge is-${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
                 </div>
                 <div className="loop-ops-card-meta">
-                  {MODE_LABEL[l.mode]} · {l.commitCount} commit(s) · {l.runCount} run(s)
+                  {MODE_LABEL[l.mode]} · {l.autonomy} · {l.commitCount} commit(s) · {l.runCount} run(s)
                 </div>
               </button>
             ))
@@ -182,12 +192,12 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
               <div>
                 <h2>{selected.title}</h2>
                 <div className="loop-ops-detail-sub">
-                  {MODE_LABEL[selected.mode]} · <code>{selected.localPath}</code>
+                  {MODE_LABEL[selected.mode]} · {selected.autonomy} · <code>{selected.localPath}</code>
                 </div>
               </div>
               <div className="loop-ops-actions">
                 <PrimaryButton disabled={busy} onClick={() => void runOnce()}>
-                  {busy ? 'Running...' : 'Run one cycle'}
+                  {busy ? 'Running...' : selected.autonomy === 'auto' ? 'Run now' : 'Run one cycle'}
                 </PrimaryButton>
                 {selected.status === 'paused' ? (
                   <SecondaryButton onClick={() => void setStatus('active')}>Resume</SecondaryButton>
@@ -205,7 +215,9 @@ export default function ProjectLoopPage({ active }: { active: boolean }): JSX.El
               <section className="loop-ops-section">
                 <h3>Run timeline</h3>
                 {runs.length === 0 ? (
-                  <div className="loop-ops-empty">No runs yet. Click “Run one cycle”.</div>
+                  <div className="loop-ops-empty">
+                    {selected.autonomy === 'auto' ? 'No runs yet. Auto will start the first cycle shortly.' : 'No runs yet. Click "Run one cycle".'}
+                  </div>
                 ) : (
                   <ul className="loop-run-list">
                     {runs.map((r) => (
@@ -427,7 +439,7 @@ function CreateLoopModal({
               <select value={model} onChange={(e) => setModel(e.target.value)}>
                 <option value="">Auto (default)</option>
                 {models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
+                  <option key={m.id} value={m.id}>{formatLocalModelLabel(m.id, m.label)}</option>
                 ))}
               </select>
             </FieldLabel>

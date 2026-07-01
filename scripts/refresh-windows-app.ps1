@@ -145,7 +145,6 @@ function Invoke-AkorithUninstaller($Entry) {
 
 function Stop-InstalledAkorith {
   Get-CimInstance Win32_Process -Filter "Name = 'Akorith.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { Test-AkorithOwnedPath $_.ExecutablePath } |
     ForEach-Object {
       Write-Host "Stopping running Akorith process $($_.ProcessId)"
       Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
@@ -189,12 +188,72 @@ function Get-LatestInstaller {
     Select-Object -First 1
 }
 
+function Get-LatestPortable {
+  $dist = Join-Path $RepoRoot 'dist'
+  if (-not (Test-Path -LiteralPath $dist)) { return $null }
+  return Get-ChildItem -LiteralPath $dist -Filter 'Akorith-*-portable-x64.exe' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+}
+
 function Get-InstalledAkorithExe {
   foreach ($root in $ExpectedInstallRoots) {
     $exe = Join-Path $root 'Akorith.exe'
     if (Test-Path -LiteralPath $exe) { return $exe }
   }
   return $null
+}
+
+function Copy-AkorithIcon($InstallRoot) {
+  $source = Join-Path $RepoRoot 'build\icon.ico'
+  if (-not (Test-Path -LiteralPath $source)) { return $null }
+  New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
+  $dest = Join-Path $InstallRoot 'Akorith.ico'
+  Copy-Item -LiteralPath $source -Destination $dest -Force
+  return $dest
+}
+
+function New-AkorithShortcut($ShortcutPath, $ExePath, $IconPath) {
+  $parent = Split-Path -Parent $ShortcutPath
+  if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+  $wsh = New-Object -ComObject WScript.Shell
+  $shortcut = $wsh.CreateShortcut($ShortcutPath)
+  $shortcut.TargetPath = $ExePath
+  $shortcut.WorkingDirectory = Split-Path -Parent $ExePath
+  $shortcut.Description = 'Akorith'
+  if ($IconPath -and (Test-Path -LiteralPath $IconPath)) {
+    $shortcut.IconLocation = $IconPath
+  } else {
+    $shortcut.IconLocation = "$ExePath,0"
+  }
+  $shortcut.Save()
+}
+
+function Install-PortableAkorith {
+  $portable = Get-LatestPortable
+  if (-not $portable) {
+    Write-Warning 'No Akorith portable executable found under dist/.'
+    return $null
+  }
+
+  $root = $ExpectedInstallRoots[0]
+  if (-not (Test-AkorithOwnedPath $root)) {
+    throw "Refusing portable install outside Akorith path: $root"
+  }
+
+  Write-Warning "Installing portable Akorith fallback from $($portable.FullName)"
+  Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Path $root -Force | Out-Null
+
+  $exe = Join-Path $root 'Akorith.exe'
+  Copy-Item -LiteralPath $portable.FullName -Destination $exe -Force
+  $icon = Copy-AkorithIcon $root
+
+  New-AkorithShortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Akorith.lnk') $exe $icon
+  New-AkorithShortcut (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Akorith.lnk') $exe $icon
+  Write-Host "Installed portable fallback: $exe"
+  if ($icon) { Write-Host "Shortcut icon: $icon" }
+  return $exe
 }
 
 Write-Step 'Akorith Windows refresh'
@@ -258,9 +317,25 @@ if (-not $NoInstall) {
   $installer = Get-LatestInstaller
   if (-not $installer) {
     Write-Warning 'No Akorith NSIS installer found under dist/. Run npm run dist:win on Windows or use the GitHub Actions Windows artifact.'
+    Install-PortableAkorith | Out-Null
   } else {
     Write-Host "Running installer: $($installer.FullName)"
+    $installStarted = Get-Date
     Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+    $installed = Get-InstalledAkorithExe
+    $installerWroteFreshExe = $false
+    if ($installed) {
+      $installedItem = Get-Item -LiteralPath $installed -ErrorAction SilentlyContinue
+      $installerWroteFreshExe = $installedItem -and $installedItem.LastWriteTime -ge $installStarted.AddSeconds(-10)
+    }
+    if (-not $installed -or -not $installerWroteFreshExe) {
+      Write-Warning 'NSIS installer did not write a fresh Akorith.exe in an expected install directory; using portable fallback with explicit Akorith icon.'
+      Install-PortableAkorith | Out-Null
+    } else {
+      $icon = Copy-AkorithIcon (Split-Path -Parent $installed)
+      New-AkorithShortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Akorith.lnk') $installed $icon
+      New-AkorithShortcut (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Akorith.lnk') $installed $icon
+    }
   }
 }
 
@@ -279,5 +354,5 @@ Write-Step 'If Windows still shows the old Electron icon'
 Write-Host '1. Uninstall old Akorith/Electron entries from Settings > Apps.'
 Write-Host '2. Delete stale Desktop/Start Menu shortcuts and unpin old taskbar icons.'
 Write-Host '3. Install the latest Akorith-Setup-<version>-x64.exe.'
-Write-Host '4. Restart Explorer, or clear the Windows icon cache if the old icon persists.'
+Write-Host '4. If a pinned taskbar icon still shows Electron, unpin it and pin the new Akorith shortcut; Windows caches pinned icons aggressively.'
 Write-Host '5. Launch packaged Akorith, not npm run dev.'

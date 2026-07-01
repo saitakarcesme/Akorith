@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ProviderInfo } from '../../../preload/index.d'
+import { formatModelLabel } from '../modelLabels'
 import { ChevronIcon } from './icons'
 
 interface ModelPickerProps {
@@ -105,7 +106,7 @@ export default function ModelPicker({
   const triggerLabel = ((): string => {
     if (!providers) return 'Loading…'
     if (!selected) return available.length ? 'Select model' : 'No providers'
-    return model || selected.label
+    return model ? formatModelLabel(model, selected.id) : selected.label
   })()
   const triggerSub = selected ? selected.label : undefined
   const unavailable = Boolean(selected && !selected.available.ok)
@@ -174,7 +175,7 @@ export default function ModelPicker({
                               onMouseEnter={() => idx >= 0 && setActiveIndex(idx)}
                               onClick={() => choose({ providerId: provider.id, model: m })}
                             >
-                              <span className="model-picker-option-name">{m || provider.label}</span>
+                              <span className="model-picker-option-name">{m ? formatModelLabel(m, provider.id) : provider.label}</span>
                               {source && <span className="model-picker-source">{source}</span>}
                               {isSel && <span className="model-picker-check">✓</span>}
                             </button>

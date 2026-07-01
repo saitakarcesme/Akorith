@@ -1,4 +1,4 @@
-import { sendLocal } from '../local-runtime'
+import { listLocalModels, sendLocal } from '../local-runtime'
 import { getCompanion } from './store'
 import { builtinById } from './prompts'
 import { addMessage, recentMessages } from './messages'
@@ -23,6 +23,19 @@ export interface SendCompanionMessageInput {
   prompt: string
   model?: string
   signal?: AbortSignal
+}
+
+async function resolveCompanionModel(companionId: string, explicit?: string, stored?: string): Promise<string | undefined> {
+  if (explicit) return explicit
+  if (stored) return stored
+  const builtin = builtinById(companionId)
+  if (!builtin?.preferredModels.length) return undefined
+  try {
+    const installed = new Set((await listLocalModels()).map((model) => model.id))
+    return builtin.preferredModels.find((model) => installed.has(model))
+  } catch {
+    return undefined
+  }
 }
 
 export interface SendCompanionMessageResult {
@@ -50,16 +63,21 @@ export async function sendCompanionMessage(input: SendCompanionMessageInput): Pr
   const recent = recentMessages(input.sessionId, 12)
   const transcript = recent.map((m) => `${m.role === 'user' ? 'User' : companion.name}: ${m.content}`).join('\n')
 
+  // Persist the user's turn before the local model responds so navigation away
+  // and back never hides the message they just sent.
+  addMessage(input.sessionId, input.companionId, 'user', prompt)
+  touchSession(input.sessionId, recent.length === 0 ? prompt.slice(0, 60) : undefined)
+
   // 3) assemble + send
   const system = `${systemPromptFor(input.companionId)}\n\n${memoryBlock}`
   const full = `${transcript ? transcript + '\n' : ''}User: ${prompt}\n${companion.name}:`
-  const res = await sendLocal(full, { system, model: input.model ?? companion.model, signal: input.signal })
+  const model = await resolveCompanionModel(input.companionId, input.model, companion.model)
+  const res = await sendLocal(full, { system, model, signal: input.signal })
   if (!res.ok) return { ok: false, error: res.error }
 
-  // 4) persist both turns
-  addMessage(input.sessionId, input.companionId, 'user', prompt)
+  // 4) persist the reply
   const reply = addMessage(input.sessionId, input.companionId, 'assistant', res.text.trim())
-  touchSession(input.sessionId, recent.length === 0 ? prompt.slice(0, 60) : undefined)
+  touchSession(input.sessionId)
   markMemoriesUsed(memories.map((m) => m.id))
 
   return {

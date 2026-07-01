@@ -9,6 +9,7 @@ import type {
   TestRunRow,
   TestSettings
 } from '../../../preload/index.d'
+import { formatModelLabel } from '../modelLabels'
 import TestTerminal from './TestTerminal'
 
 interface TestPageProps {
@@ -923,7 +924,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   <span>Judge model</span>
                   <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
                     {judgeSelected.models.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m}>{formatModelLabel(m, judgeSelected.id)}</option>
                     ))}
                   </select>
                 </label>
@@ -1075,7 +1076,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
                     {judgeSelected.models.map((m) => (
                       <option key={m} value={m}>
-                        {m}
+                        {formatModelLabel(m, judgeSelected.id)}
                       </option>
                     ))}
                   </select>

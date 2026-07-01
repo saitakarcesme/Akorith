@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
+import { formatModelLabel } from '../modelLabels'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
@@ -921,7 +922,7 @@ export default function ChatPanel({
   const composerInfo = [
     isWorkspace ? `workspace ${activeProject?.name ?? 'no project'}` : 'general chat',
     selected?.label ?? 'No provider',
-    model || 'default',
+    formatModelLabel(model || 'default', providerId),
     lastUsage ? usageLine(lastUsage) : null,
     hasProject ? `repo context ${digestEnabled ? 'on' : 'off'}` : null,
     hasProject ? `target ${bridgeLabel}` : null
@@ -1391,7 +1392,7 @@ export default function ChatPanel({
                     <div className="chat-msg-meta">
                       {m.status === 'done' && m.meta && (
                         <span>
-                          {m.meta.provider} · {m.meta.model}
+                          {m.meta.provider} · {formatModelLabel(m.meta.model, m.meta.provider)}
                           {m.meta.usage && usageLine(m.meta.usage) ? ` · ${usageLine(m.meta.usage)}` : ''}
                           {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
                         </span>

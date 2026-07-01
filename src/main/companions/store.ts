@@ -36,8 +36,14 @@ export function seedBuiltinCompanions(): void {
     `INSERT OR IGNORE INTO companions (id, name, tagline, tags, builtin, created_at, updated_at)
      VALUES (?, ?, ?, ?, 1, ?, ?)`
   )
+  const update = getDb().prepare(
+    `UPDATE companions
+     SET name = ?, tagline = ?, tags = ?, updated_at = ?
+     WHERE id = ? AND builtin = 1`
+  )
   for (const c of BUILTIN_COMPANIONS) {
     insert.run(c.id, c.name, c.tagline, JSON.stringify(c.tags), now, now)
+    update.run(c.name, c.tagline, JSON.stringify(c.tags), now, c.id)
   }
 }
 

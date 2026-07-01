@@ -18,6 +18,14 @@ type CompanionUiMessage = CompanionMessage & {
   tone?: 'thinking' | 'error' | 'stopped'
 }
 
+type PendingCompanionTurn = {
+  requestId: string
+  user: CompanionUiMessage
+  thinking: CompanionUiMessage
+}
+
+const pendingTurnsBySession = new Map<string, PendingCompanionTurn>()
+
 function newClientId(prefix: string): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? `${prefix}-${crypto.randomUUID()}`
@@ -33,10 +41,21 @@ function persistedMatchesPending(persisted: CompanionMessage, pending: Companion
   )
 }
 
-function mergePersistedMessages(persisted: CompanionMessage[], current: CompanionUiMessage[]): CompanionUiMessage[] {
-  const stillPending = current.filter(
+function mergePersistedMessages(
+  persisted: CompanionMessage[],
+  current: CompanionUiMessage[],
+  activeSessionId: string
+): CompanionUiMessage[] {
+  const requestPending = pendingTurnsBySession.get(activeSessionId)
+  const candidates = requestPending ? [...current, requestPending.user, requestPending.thinking] : current
+  const seen = new Set<string>()
+  const stillPending = candidates.filter(
     (message) => message.pending && !persisted.some((saved) => persistedMatchesPending(saved, message))
-  )
+  ).filter((message) => {
+    if (seen.has(message.id)) return false
+    seen.add(message.id)
+    return true
+  })
   return [...persisted, ...stillPending]
 }
 
@@ -70,16 +89,6 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     void window.api.localRuntime.status().then((s) => setRuntime(s as RuntimeStatus)).catch(() => setRuntime(null))
   }, [active, loadCompanions])
 
-  useEffect(() => {
-    if (active) return
-    const current = activeRequestRef.current
-    if (!current) return
-    current.cancelled = true
-    window.api.companion.cancelMessage(current.requestId)
-    activeRequestRef.current = null
-    setBusy(false)
-  }, [active])
-
   const loadSessions = useCallback(async (companionId: string) => {
     const list = (await window.api.companion.listSessions(companionId)) as CompanionSession[]
     setSessions(list)
@@ -101,7 +110,9 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     if (sessionId) {
       void window.api.companion.listMessages(sessionId).then((m) => {
         const persisted = m as CompanionMessage[]
-        setMessages((current) => mergePersistedMessages(persisted, current.filter((message) => message.sessionId === sessionId)))
+        setMessages((current) =>
+          mergePersistedMessages(persisted, current.filter((message) => message.sessionId === sessionId), sessionId)
+        )
       })
     } else {
       setMessages([])
@@ -134,15 +145,12 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     const requestId = newClientId('companion-send')
     const userId = newClientId('companion-user')
     const thinkingId = newClientId('companion-thinking')
-    setDraft('')
-    setBusy(true)
-    activeRequestRef.current = { requestId, sessionId: sid, companionId: companion.id, cancelled: false }
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, sessionId: sid!, companionId: companion.id, role: 'user', content: prompt, createdAt: Date.now(), pending: true },
-      {
+    const pendingTurn: PendingCompanionTurn = {
+      requestId,
+      user: { id: userId, sessionId: sid, companionId: companion.id, role: 'user', content: prompt, createdAt: Date.now(), pending: true },
+      thinking: {
         id: thinkingId,
-        sessionId: sid!,
+        sessionId: sid,
         companionId: companion.id,
         role: 'assistant',
         content: 'Thinking...',
@@ -150,13 +158,19 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
         pending: true,
         tone: 'thinking'
       }
-    ])
+    }
+    setDraft('')
+    setBusy(true)
+    activeRequestRef.current = { requestId, sessionId: sid, companionId: companion.id, cancelled: false }
+    pendingTurnsBySession.set(sid, pendingTurn)
+    setMessages((prev) => [...prev, pendingTurn.user, pendingTurn.thinking])
     try {
       const res = (await window.api.companion.sendMessage({ companionId: companion.id, sessionId: sid, prompt, requestId })) as SendCompanionMessageResult
       if (activeRequestRef.current?.requestId !== requestId || activeRequestRef.current.cancelled) return
       const msgs = (await window.api.companion.listMessages(sid)) as CompanionMessage[]
       if (res.contextInfo) setUsedMemoryIds(res.contextInfo.usedMemories.map((m) => m.id))
       if (!res.ok) {
+        pendingTurnsBySession.delete(sid)
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== thinkingId),
           {
@@ -172,6 +186,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
         ])
         return
       }
+      pendingTurnsBySession.delete(sid)
       setMessages(msgs)
       // fire-and-forget memory extraction after a few turns
       if (msgs.length >= 4 && msgs.length % 4 === 0) {
@@ -181,6 +196,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
       setMemoryCounts((c) => ({ ...c, [companion.id]: c[companion.id] ?? 0 }))
     } catch (err) {
       if (activeRequestRef.current?.requestId !== requestId || activeRequestRef.current.cancelled) return
+      pendingTurnsBySession.delete(sid)
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== thinkingId),
         {
@@ -198,6 +214,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
       if (activeRequestRef.current?.requestId === requestId) {
         activeRequestRef.current = null
         setBusy(false)
+        pendingTurnsBySession.delete(sid)
       }
     }
   }
@@ -207,6 +224,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     if (!activeRequest) return
     activeRequest.cancelled = true
     window.api.companion.cancelMessage(activeRequest.requestId)
+    pendingTurnsBySession.delete(activeRequest.sessionId)
     setMessages((prev) => [
       ...prev.filter((message) => message.tone !== 'thinking'),
       {

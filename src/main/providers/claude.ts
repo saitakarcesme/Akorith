@@ -11,7 +11,7 @@ import type {
   SendResult
 } from './types'
 
-const DEFAULT_MODELS = ['default', 'sonnet', 'opus', 'haiku']
+const DEFAULT_MODELS = ['default', 'claude-fable-5', 'claude-sonnet-5', 'claude-opus-5']
 
 export class ClaudeProvider implements Provider {
   readonly id = 'claude'

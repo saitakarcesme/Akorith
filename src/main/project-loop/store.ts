@@ -70,6 +70,9 @@ export interface CreateLoopInput {
 export function createLoop(input: CreateLoopInput): ProjectLoop {
   const now = Date.now()
   const id = randomUUID()
+  const autonomy = input.autonomy ?? 'assisted'
+  const scheduleKind = input.scheduleKind ?? (autonomy === 'auto' ? 'interval' : 'manual')
+  const scheduleMinutes = input.scheduleMinutes ?? (autonomy === 'auto' ? 1 : 0)
   getDb()
     .prepare(
       `INSERT INTO project_loops (
@@ -93,10 +96,10 @@ export function createLoop(input: CreateLoopInput): ProjectLoop {
       github_owner: input.githubOwner ?? null,
       github_name: input.githubName ?? null,
       idea: input.idea ?? null,
-      autonomy: input.autonomy ?? 'assisted',
+      autonomy,
       safety: input.safety ?? 'standard',
-      schedule_kind: input.scheduleKind ?? 'manual',
-      schedule_minutes: input.scheduleMinutes ?? 0,
+      schedule_kind: scheduleKind,
+      schedule_minutes: scheduleMinutes,
       daily_commit_target: input.dailyCommitTarget ?? 1,
       min_commits_per_run: input.minCommitsPerRun ?? 0,
       max_commits_per_run: input.maxCommitsPerRun ?? 1,

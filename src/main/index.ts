@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, type MenuItemConstructorOptions } from 'electron'
-import { existsSync, readFileSync } from 'fs'
+import { app, BrowserWindow, ipcMain, Menu, shell, type MenuItemConstructorOptions } from 'electron'
+import { existsSync } from 'fs'
 import { homedir } from 'os'
-import { delimiter, join } from 'path'
+import { delimiter, dirname, join } from 'path'
 import { getTheme, loadConfig, setTheme, type AppTheme } from './config'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
@@ -26,7 +26,7 @@ import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
-import { registerProjectLoopIpc } from './project-loop'
+import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
 import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
 
@@ -150,60 +150,40 @@ function applyApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-/**
- * Prefer the raster Akorith logo (works with nativeImage for the dock /
- * window icon); fall back to the vector mark. Returns the first asset present.
- */
 function resolveAppIcon(): string | undefined {
   const base = app.getAppPath()
+  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
+  const portableFile = process.env.PORTABLE_EXECUTABLE_FILE
+  const winCandidates = [
+    process.resourcesPath ? join(process.resourcesPath, 'icon.ico') : '',
+    portableDir ? join(portableDir, 'icon.ico') : '',
+    portableFile ? join(dirname(portableFile), 'icon.ico') : '',
+    join(dirname(process.execPath), 'icon.ico'),
+    join(base, 'build', 'icon.ico')
+  ]
   const candidates =
     process.platform === 'win32'
-      ? [
-          ['build', 'icon.ico'],
-          ['assets', 'akorith-logo.png'],
-          ['assets', 'akorith-icon.svg']
-        ]
-      : [
-          ['assets', 'akorith-logo.png'],
-          ['assets', 'akorith-icon.svg']
-        ]
-  for (const rel of candidates) {
-    const iconPath = join(base, ...rel)
+      ? winCandidates
+      : process.platform === 'darwin'
+        ? [join(process.resourcesPath, 'icon.icns'), join(base, 'build', 'icon.icns')]
+        : [join(process.resourcesPath, 'icon.png'), join(base, 'build', 'icon.png')]
+  for (const iconPath of candidates) {
+    if (!iconPath) continue
     if (existsSync(iconPath)) return iconPath
   }
   return undefined
 }
 
-/** macOS dock icon — needs a raster image; SVG yields an empty nativeImage. */
-function applyDockIcon(): void {
-  if (process.platform !== 'darwin' || !app.dock) return
-  const pngPath = join(app.getAppPath(), 'assets', 'akorith-logo.png')
-  if (!existsSync(pngPath)) return
-  const image = nativeImage.createFromPath(pngPath)
-  if (!image.isEmpty()) app.dock.setIcon(image)
-}
-
 function createSplashWindow(): BrowserWindow | null {
-  const logoPath = join(app.getAppPath(), 'assets', 'akorith-logo.png')
   // Inline the PNG as base64 so it renders inside the splash. The splash loads a
   // data: URL document with an opaque origin, and Electron blocks loading a
   // file:// resource from there — a file:// <img> just showed a broken placeholder.
-  let logoUrl = ''
-  if (existsSync(logoPath)) {
-    try {
-      logoUrl = `data:image/png;base64,${readFileSync(logoPath).toString('base64')}`
-    } catch {
-      logoUrl = ''
-    }
-  }
-  // Codex-style splash: a calm, solid screen with just the centered Akorith mark.
+  // Codex-style splash: a calm, solid screen without the retired logo asset.
   // The background follows the selected theme (mirrored to config for the splash,
   // since the renderer's localStorage doesn't exist yet at this point).
   const theme: AppTheme = getTheme()
   const bg = theme === 'light' ? '#f2f3f5' : '#101012'
-  const ring = theme === 'light' ? 'rgba(15, 17, 21, 0.08)' : 'rgba(255, 255, 255, 0.08)'
-  const shadow =
-    theme === 'light' ? '0 18px 50px rgba(15, 17, 21, 0.14)' : '0 18px 50px rgba(0, 0, 0, 0.55)'
+  const fg = theme === 'light' ? '#202124' : '#f0f0f2'
 
   const splash = new BrowserWindow({
     width: 420,
@@ -237,22 +217,17 @@ function createSplashWindow(): BrowserWindow | null {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    .mark {
+    .splash-name {
       position: absolute;
       inset: 0;
       display: grid;
       place-items: center;
-    }
-
-    img {
-      width: 96px;
-      height: 96px;
-      object-fit: contain;
-      border-radius: 24px;
-      box-shadow: ${shadow}, 0 0 0 1px ${ring};
-      animation:
-        rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both,
-        breathe 2600ms ease-in-out 600ms infinite;
+      color: ${fg};
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      opacity: 0.86;
+      animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
     @keyframes rise {
@@ -260,14 +235,10 @@ function createSplashWindow(): BrowserWindow | null {
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    @keyframes breathe {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.035); }
-    }
   </style>
 </head>
 <body>
-  <div class="mark">${logoUrl ? `<img src="${logoUrl}" alt="" />` : ''}</div>
+  <div class="splash-name">Akorith</div>
 </body>
 </html>`
 
@@ -295,6 +266,16 @@ function createWindow(): void {
     backgroundColor: mainBg,
     autoHideMenuBar: true,
     title: 'Akorith',
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: mainBg,
+            symbolColor: getTheme() === 'light' ? '#202124' : '#f0f0f2',
+            height: 34
+          }
+        }
+      : {}),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -384,6 +365,7 @@ async function initializeStartupData(): Promise<void> {
   try {
     await ensureDbReady()
     resumeActiveAutoLoopsAtStartup()
+    startProjectLoopAutoScheduler()
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
   }
@@ -420,7 +402,6 @@ app.whenReady().then(() => {
   registerSettingsIpc()
   applyAppIdentity()
   applyApplicationMenu()
-  applyDockIcon()
   createWindow()
 
   // Open the first window before touching the native SQLite module, then start
@@ -439,6 +420,7 @@ app.whenReady().then(() => {
 
 // No zombie shells: every PTY dies with the app.
 app.on('will-quit', () => {
+  stopProjectLoopAutoScheduler()
   ptyManager.killAll()
   closeDb()
   void stopController()

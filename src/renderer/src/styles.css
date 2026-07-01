@@ -79,8 +79,8 @@
   --provider-local-bg: rgba(255, 255, 255, 0.05);
 
   --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.45);
-  --sidebar-width: 320px;
-  --sidebar-peek-width: 320px;
+  --sidebar-width: 292px;
+  --sidebar-peek-width: 292px;
 
   /* Phase 33: sharper, more technical geometry. Smaller radii across the board
      so panels/cards read as a precise command surface, not pillowy SaaS cards.
@@ -200,10 +200,66 @@ textarea:focus-visible {
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100%;
   /* Phase 38.7: paint the app surface with the (theme-scoped) base so any
      page without its own background — e.g. the Loop page — sits on the dark
      surface instead of the lighter :root fallback that bleeds through body. */
+  background: var(--bg);
+}
+
+.app-chrome {
+  flex: 0 0 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 142px 0 8px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-soft);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.app-chrome-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-chrome-icon,
+.app-chrome-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.app-chrome-icon:hover,
+.app-chrome-nav:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.app-chrome-nav:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.app-main {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
   background: var(--bg);
 }
 
@@ -425,11 +481,11 @@ textarea:focus-visible {
 
 .sidebar.is-collapsed .sidebar-surface {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: 34px auto 0 0;
   z-index: 80;
   width: min(var(--sidebar-peek-width), calc(100vw - 24px));
   min-width: 0;
-  height: 100vh;
+  height: calc(100vh - 34px);
   background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
   border-radius: 0 8px 8px 0;
@@ -451,32 +507,9 @@ textarea:focus-visible {
 
 .sidebar-hover-zone {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: 34px auto 0 0;
   z-index: 78;
   width: 22px;
-}
-
-.sidebar-edge-button {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 79;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-}
-
-.sidebar-edge-button:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.11);
 }
 
 /* Phase 44: "New chat" row — the first item at the top of the sidebar, with the
@@ -498,6 +531,7 @@ textarea:focus-visible {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
+  position: relative;
   /* Phase 33.17: column so the bottom workbench docks under the chat and
      pushes content up instead of overlaying it. The agent drawer is absolute
      and unaffected. */
@@ -5412,6 +5446,11 @@ textarea:focus-visible {
   min-width: 0;
 }
 
+.companions-page-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .test-page {
   display: flex;
   flex: 1 1 0;
@@ -6165,6 +6204,7 @@ textarea:focus-visible {
 
 .workspace {
   background: var(--bg);
+  position: relative;
 }
 
 .chat-panel {
@@ -6191,10 +6231,6 @@ textarea:focus-visible {
   transition:
     padding var(--sidebar-slide),
     border-color var(--fast);
-}
-
-.sidebar.is-collapsed + .workspace .ws-topbar {
-  padding-left: 58px;
 }
 
 .ws-topbar-left {
@@ -7803,6 +7839,13 @@ textarea:focus-visible {
   --border-soft: rgba(255, 255, 255, 0.08);
 }
 
+.agent-drawer.mode-drawer .terminal-slot:not(.is-collapsed),
+.agent-drawer.mode-right .terminal-slot:not(.is-collapsed),
+.agent-drawer.mode-full .terminal-slot:not(.is-collapsed) {
+  min-height: 360px;
+  flex: 0 0 auto !important;
+}
+
 /* ---- macro-loop integrated into the composer (not a debug strip) ---- */
 .composer .macro-panel {
   max-height: 340px;
@@ -7949,19 +7992,6 @@ textarea:focus-visible {
 .terminal-collapse-btn:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
-}
-
-/* Sidebar collapsed brand mark (text "A"). */
-.brand-name-compact {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 700;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 6px;
 }
 
 /* ============================================================

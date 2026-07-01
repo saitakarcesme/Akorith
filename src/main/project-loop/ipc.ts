@@ -16,6 +16,7 @@ import { listCommits } from './commits'
 import { addBacklogItem, listBacklog, setBacklogStatus } from './backlog'
 import { addLoopMemory, listLoopMemories } from './memory'
 import { runOneCycle } from './runner'
+import { kickProjectLoopAutoScheduler } from './scheduler'
 import type { BacklogItemStatus, ProjectLoopStatus } from './types'
 
 // Phase 48: typed IPC surface for the project Loop. The renderer never touches
@@ -37,11 +38,21 @@ export function registerProjectLoopIpc(): void {
         /* surfaced later by the runner if truly unwritable */
       }
     }
-    return createLoop(input)
+    const loop = createLoop(input)
+    if (loop.autonomy === 'auto') kickProjectLoopAutoScheduler()
+    return loop
   })
 
-  ipcMain.handle('projectLoop:update', (_e, id: string, patch: Record<string, unknown>) => updateLoop(id, patch))
-  ipcMain.handle('projectLoop:setStatus', (_e, id: string, status: ProjectLoopStatus) => setLoopStatus(id, status))
+  ipcMain.handle('projectLoop:update', (_e, id: string, patch: Record<string, unknown>) => {
+    const loop = updateLoop(id, patch)
+    if (loop?.autonomy === 'auto' && loop.status === 'active') kickProjectLoopAutoScheduler()
+    return loop
+  })
+  ipcMain.handle('projectLoop:setStatus', (_e, id: string, status: ProjectLoopStatus) => {
+    const loop = setLoopStatus(id, status)
+    if (loop?.autonomy === 'auto' && loop.status === 'active') kickProjectLoopAutoScheduler()
+    return loop
+  })
   ipcMain.handle('projectLoop:archive', (_e, id: string) => archiveLoop(id))
   ipcMain.handle('projectLoop:delete', (_e, id: string) => {
     deleteLoop(id)

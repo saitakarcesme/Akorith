@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
@@ -9,6 +9,7 @@ import TestPage from './components/TestPage'
 import ProjectLoopPage from './components/ProjectLoopPage'
 import CompanionsPage from './components/CompanionsPage'
 import AgentsPage from './components/AgentsPage'
+import { ChevronIcon, PanelsIcon } from './components/icons'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
@@ -25,6 +26,39 @@ export interface HistorySelection {
 }
 
 export type AgentStatusMap = Partial<Record<'t1' | 't2' | 't3', AgentStatusInfo>>
+
+function AppChrome({
+  canGoBack,
+  canGoForward,
+  onBack,
+  onForward
+}: {
+  canGoBack: boolean
+  canGoForward: boolean
+  onBack: () => void
+  onForward: () => void
+}): JSX.Element {
+  return (
+    <header className="app-chrome">
+      <div className="app-chrome-left">
+        <button
+          type="button"
+          className="app-chrome-icon"
+          title="Toggle sidebar"
+          onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
+        >
+          <PanelsIcon size={14} />
+        </button>
+        <button type="button" className="app-chrome-nav" title="Back" disabled={!canGoBack} onClick={onBack}>
+          <ChevronIcon size={15} direction="left" />
+        </button>
+        <button type="button" className="app-chrome-nav" title="Forward" disabled={!canGoForward} onClick={onForward}>
+          <ChevronIcon size={15} direction="right" />
+        </button>
+      </div>
+    </header>
+  )
+}
 
 function readStartupRequest(): StartupSnapshotRequest {
   try {
@@ -67,6 +101,10 @@ export default function App(): JSX.Element {
   // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [agentStatus, setAgentStatus] = useState<AgentStatusMap>({})
+  const [navBackStack, setNavBackStack] = useState<AppView[]>([])
+  const [navForwardStack, setNavForwardStack] = useState<AppView[]>([])
+  const lastViewRef = useRef<AppView>('workspace')
+  const navTravelRef = useRef<'back' | 'forward' | null>(null)
   // Lets the center empty-state "Create Project" button open the sidebar modal.
   const [createSignal, setCreateSignal] = useState(0)
   // Phase 38.9: durable "a request is in flight for this session" set, owned by
@@ -81,6 +119,42 @@ export default function App(): JSX.Element {
       return next
     })
   }, [])
+
+  useEffect(() => {
+    if (!startupHydrated) {
+      lastViewRef.current = view
+      return
+    }
+    const previous = lastViewRef.current
+    if (previous !== view && navTravelRef.current === null) {
+      setNavBackStack((stack) => [...stack, previous].slice(-24))
+      setNavForwardStack([])
+    }
+    lastViewRef.current = view
+    navTravelRef.current = null
+  }, [view, startupHydrated])
+
+  const goBack = useCallback((): void => {
+    setNavBackStack((stack) => {
+      const target = stack[stack.length - 1]
+      if (!target) return stack
+      navTravelRef.current = 'back'
+      setNavForwardStack((forward) => [view, ...forward].slice(0, 24))
+      setView(target)
+      return stack.slice(0, -1)
+    })
+  }, [view])
+
+  const goForward = useCallback((): void => {
+    setNavForwardStack((stack) => {
+      const target = stack[0]
+      if (!target) return stack
+      navTravelRef.current = 'forward'
+      setNavBackStack((back) => [...back, view].slice(-24))
+      setView(target)
+      return stack.slice(1)
+    })
+  }, [view])
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
   const bumpProjects = useCallback(() => setProjectVersion((v) => v + 1), [])
@@ -312,6 +386,13 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app" data-theme={theme}>
+      <AppChrome
+        canGoBack={navBackStack.length > 0}
+        canGoForward={navForwardStack.length > 0}
+        onBack={goBack}
+        onForward={goForward}
+      />
+      <div className="app-main">
       <Sidebar
         view={view}
         theme={theme}
@@ -378,8 +459,11 @@ export default function App(): JSX.Element {
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
-      {view === 'companions' && <CompanionsPage active={view === 'companions'} />}
+      <div className="companions-page-wrap" style={{ display: view === 'companions' ? 'flex' : 'none' }}>
+        <CompanionsPage active={view === 'companions'} />
+      </div>
       {view === 'agents' && <AgentsPage active={view === 'agents'} />}
+      </div>
     </div>
   )
 }

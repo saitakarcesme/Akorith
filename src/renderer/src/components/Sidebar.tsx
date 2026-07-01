@@ -84,11 +84,16 @@ function storageNumber(key: string, fallback: number): number {
 
 // Phase 38.3: keep the sidebar between a usable min and a cap that never crowds
 // the workspace (the smaller of 520px / 40vw).
-const SIDEBAR_MIN = 260
-const SIDEBAR_DEFAULT = 320
+const SIDEBAR_MIN = 240
+const SIDEBAR_DEFAULT = 292
 function clampSidebarWidth(value: number): number {
   const max = Math.min(520, Math.round((typeof window !== 'undefined' ? window.innerWidth : 1280) * 0.4))
   return Math.min(Math.max(value, SIDEBAR_MIN), Math.max(max, SIDEBAR_MIN))
+}
+
+function initialSidebarWidth(): number {
+  const stored = storageNumber('akorith.sidebarWidth', SIDEBAR_DEFAULT)
+  return clampSidebarWidth(stored > 312 ? SIDEBAR_DEFAULT : stored)
 }
 
 function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
@@ -159,7 +164,7 @@ export default function Sidebar({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
   const [sidebarPeeking, setSidebarPeeking] = useState(false)
   // Phase 38.3: user-resizable sidebar width (persisted, bounded).
-  const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebarWidth(storageNumber('akorith.sidebarWidth', 320)))
+  const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -508,6 +513,15 @@ export default function Sidebar({
     setSidebarCollapsed(true)
   }
 
+  useEffect(() => {
+    const onToggle = (): void => {
+      setSidebarPeeking(false)
+      setSidebarCollapsed((value) => !value)
+    }
+    window.addEventListener('akorith:toggle-sidebar', onToggle)
+    return () => window.removeEventListener('akorith:toggle-sidebar', onToggle)
+  }, [])
+
   const handleSidebarLeave = (): void => {
     if (sidebarCollapsed && !settingsOpen && !createOpen && !confirmRemoveProject && !projectMenuOpen && !projectRowMenu) {
       setSidebarPeeking(false)
@@ -517,25 +531,13 @@ export default function Sidebar({
   return (
     <>
       {sidebarCollapsed && (
-        <>
-          <div
-            className="sidebar-hover-zone"
-            onMouseEnter={revealSidebar}
-            onMouseMove={revealSidebar}
-            onPointerEnter={revealSidebar}
-            onPointerMove={revealSidebar}
-          />
-          {!sidebarPeeking && (
-            <button
-              type="button"
-              className="sidebar-edge-button"
-              title="Open sidebar"
-              onClick={pinSidebar}
-            >
-              <PanelsIcon size={16} />
-            </button>
-          )}
-        </>
+        <div
+          className="sidebar-hover-zone"
+          onMouseEnter={revealSidebar}
+          onMouseMove={revealSidebar}
+          onPointerEnter={revealSidebar}
+          onPointerMove={revealSidebar}
+        />
       )}
 
       <aside

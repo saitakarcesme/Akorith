@@ -11,6 +11,7 @@ import type {
   LocalModelInfo,
   RuntimeStatus
 } from '../../../preload/index.d'
+import { formatLocalModelLabel } from '../modelLabels'
 import {
   CommandModal,
   FieldLabel,
@@ -323,7 +324,7 @@ function CreateAgentModal({
           <FieldLabel label="Local model">
             <select value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="">Auto (default)</option>
-              {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {models.map((m) => <option key={m.id} value={m.id}>{formatLocalModelLabel(m.id, m.label)}</option>)}
             </select>
           </FieldLabel>
           <FieldLabel label="Permission mode">

@@ -13,15 +13,17 @@ import type {
   SendResult
 } from './types'
 
-const DEFAULT_MODELS = ['default']
+const DEFAULT_MODELS = ['default', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'codex-auto-review']
 
 export class ChatGPTProvider implements Provider {
   readonly id = 'chatgpt'
   readonly label = 'ChatGPT'
   readonly kind: Provider['kind'] = ['chat', 'executor']
   private readonly models: string[]
+  private readonly useCatalog: boolean
 
   constructor(entry: ProviderConfigEntry) {
+    this.useCatalog = !entry.models
     this.models = entry.models ?? DEFAULT_MODELS
   }
 
@@ -36,7 +38,19 @@ export class ChatGPTProvider implements Provider {
   }
 
   async listModels(): Promise<string[]> {
-    return this.models
+    if (!this.useCatalog) return this.models
+    try {
+      const res = await runCli('codex', ['debug', 'models'], { timeoutMs: 20_000 })
+      if (res.code !== 0) return this.models
+      const catalog = JSON.parse(res.stdout) as { models?: { slug?: unknown; visibility?: unknown }[] }
+      const slugs = (catalog.models ?? [])
+        .filter((m) => m.visibility !== 'hidden')
+        .map((m) => m.slug)
+        .filter((slug): slug is string => typeof slug === 'string' && slug.trim().length > 0)
+      return [...new Set(['default', ...slugs])]
+    } catch {
+      return this.models
+    }
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
