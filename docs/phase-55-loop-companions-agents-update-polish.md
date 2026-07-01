@@ -140,3 +140,28 @@ reliability.
   but a fully resource-edited executable still needs Windows Developer Mode or
   Administrator privileges for the normal Electron Builder helper extraction.
 - Packaged macOS update remains a manual installer/app refresh path.
+
+## Follow-up UI correction (Phase 55.057–55.075)
+
+A follow-up pass fixed the gaps that remained after the first Phase 55 polish, because the
+create-modal work had been applied to the orphaned `LoopsPage.tsx` while the live Loop nav
+routes to `ProjectLoopPage.tsx`.
+
+- **Loop create flow corrected to a modal.** `ProjectLoopPage`'s inline bottom form (which used
+  unstyled `.modal-backdrop`/`.modal`) was replaced with the shared `CommandModal` +
+  `ModalHeader`/`ModalBody`/`ModalFooter` + `FormGrid`/`FieldLabel`, identical to the Agents
+  create modal: centered, title/mode/idea/folder/model/autonomy/safety/daily-target/push-warning,
+  internal body scroll, Escape to close, and a dirty-guarded backdrop. The dead orphaned
+  `LoopsPage.tsx` was removed so no duplicate old create UI remains.
+- **Companion composer aligned and matched to ChatPanel.** The composer textarea now
+  vertically centers its placeholder/typed text (explicit `line-height` + balanced padding +
+  `box-sizing: border-box`, so one line = 44px centered), and the send/stop button is centered
+  against it. A shared `ComposerSendButton` (rendering the exact `.send-button` circle) is now
+  used by **both** normal chat and Companions, so the send/stop control is identical
+  (circular, icon-only, same icons, hover/active/disabled/stop states).
+- **Agent/Loop CTAs rethemed to Akorith neutral.** `.action-button.is-primary` dropped the
+  lavender gradient/shadow for the near-white `--accent`/`--on-accent` surface (the same
+  language as the chat send button); secondary/danger use tasteful bordered neutrals; the
+  purple `.composer-action-button` styles + component were removed.
+- **Hover movement removed.** The `transform: translateY(-1px)` float on CTAs was removed —
+  hover is now a subtle background/border change only.
