@@ -123,7 +123,7 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
                   <h2>{selected.name}</h2>
                   <p>{selected.description}</p>
                 </div>
-                <button type="button" className="is-danger" onClick={async () => { await window.api.actionAgent.remove(selected.id); setSelectedId(null); await load() }}>Delete</button>
+                <DangerButton onClick={async () => { await window.api.actionAgent.remove(selected.id); setSelectedId(null); await load() }}>Delete</DangerButton>
               </div>
 
               <div className="agent-perm-card">
@@ -139,9 +139,9 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
 
               <div className="agent-run-form">
                 <input value={input} placeholder="Optional input for this run…" onChange={(e) => setInput(e.target.value)} />
-                <button type="button" className="is-primary" disabled={busy} onClick={() => void runAgent()}>
-                  {busy ? 'Running…' : selected.permissionMode === 'preview' ? 'Preview' : 'Run agent'}
-                </button>
+                <PrimaryButton disabled={busy} onClick={() => void runAgent()}>
+                  {busy ? 'Running...' : selected.permissionMode === 'preview' ? 'Preview' : 'Run agent'}
+                </PrimaryButton>
               </div>
 
               {runResult && <RunResultView result={runResult} />}
