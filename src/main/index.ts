@@ -266,12 +266,7 @@ function createWindow(): void {
     backgroundColor: mainBg,
     autoHideMenuBar: true,
     title: 'Akorith',
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hidden' as const,
-          trafficLightPosition: { x: 24, y: 11 }
-        }
-      : {}),
+    ...(process.platform === 'darwin' ? { frame: false } : {}),
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,
@@ -328,6 +323,13 @@ function createWindow(): void {
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
   })
 
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[main] renderer process gone: ${details.reason} (${details.exitCode})`)
+    if (!mainWindow.isDestroyed() && details.reason !== 'clean-exit') {
+      mainWindow.reload()
+    }
+  })
+
   // Phase 14.4: nudge the whole UI up one comfortable notch. A single zoom
   // factor scales every font/control/spacing uniformly (the layout viewport
   // reflows, so nothing is clipped) — cleaner than per-component font bumps.
@@ -358,6 +360,20 @@ function registerSettingsIpc(): void {
   ipcMain.handle('settings:setTheme', (_event, theme: unknown): AppTheme =>
     setTheme(theme === 'light' ? 'light' : 'dark')
   )
+}
+
+function registerWindowControlsIpc(): void {
+  ipcMain.handle('window:minimize', (event): void => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+  ipcMain.handle('window:close', (event): void => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
+  })
+  ipcMain.handle('window:toggleFullscreen', (event): void => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    win.setFullScreen(!win.isFullScreen())
+  })
 }
 
 function warmLocalProviderAtStartup(): void {
@@ -406,6 +422,7 @@ app.whenReady().then(() => {
   registerUpdateIpc()
   registerUsageLimitsIpc()
   registerSettingsIpc()
+  registerWindowControlsIpc()
   applyAppIdentity()
   applyApplicationMenu()
   createWindow()

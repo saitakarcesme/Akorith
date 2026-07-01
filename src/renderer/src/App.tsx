@@ -38,8 +38,35 @@ function AppChrome({
   onBack: () => void
   onForward: () => void
 }): JSX.Element {
+  const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
+
   return (
     <header className="app-chrome">
+      {hasWindowControls && (
+        <div className="app-window-controls" aria-label="Window controls">
+          <button
+            type="button"
+            className="app-window-control is-close"
+            aria-label="Close window"
+            title="Close"
+            onClick={() => void window.api.windowControls.close()}
+          />
+          <button
+            type="button"
+            className="app-window-control is-minimize"
+            aria-label="Minimize window"
+            title="Minimize"
+            onClick={() => void window.api.windowControls.minimize()}
+          />
+          <button
+            type="button"
+            className="app-window-control is-fullscreen"
+            aria-label="Toggle fullscreen"
+            title="Fullscreen"
+            onClick={() => void window.api.windowControls.toggleFullscreen()}
+          />
+        </div>
+      )}
       <div className="app-chrome-left">
         <button
           type="button"

@@ -1293,6 +1293,12 @@ export interface SettingsApi {
   setTheme(theme: AppTheme): Promise<AppTheme>
 }
 
+export interface WindowControlsApi {
+  close(): Promise<void>
+  minimize(): Promise<void>
+  toggleFullscreen(): Promise<void>
+}
+
 export interface OllamaRemoteProfile {
   id: string
   name: string
@@ -2080,6 +2086,7 @@ export interface PreloadApi {
   agent: AgentApi
   mission: MissionApi
   settings: SettingsApi
+  windowControls: WindowControlsApi
   ollama: OllamaApi
   git: GitApi
   gpu: GpuApi

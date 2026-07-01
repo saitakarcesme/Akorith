@@ -252,6 +252,12 @@ const settings = Object.freeze({
   setTheme: (theme: 'dark' | 'light'): Promise<unknown> => ipcRenderer.invoke('settings:setTheme', theme)
 })
 
+const windowControls = Object.freeze({
+  close: (): Promise<unknown> => ipcRenderer.invoke('window:close'),
+  minimize: (): Promise<unknown> => ipcRenderer.invoke('window:minimize'),
+  toggleFullscreen: (): Promise<unknown> => ipcRenderer.invoke('window:toggleFullscreen')
+})
+
 const ollama = Object.freeze({
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('ollama:getSettings'),
   getShareInfo: (): Promise<unknown> => ipcRenderer.invoke('ollama:getShareInfo'),
@@ -402,6 +408,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)

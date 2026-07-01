@@ -223,6 +223,46 @@ textarea:focus-visible {
   -webkit-app-region: drag;
 }
 
+.app-window-controls {
+  position: absolute;
+  left: 24px;
+  top: 0;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  -webkit-app-region: no-drag;
+}
+
+.app-window-control {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  cursor: default;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.34);
+}
+
+.app-window-control.is-close {
+  background: #ff5f57;
+}
+
+.app-window-control.is-minimize {
+  background: #ffbd2e;
+}
+
+.app-window-control.is-fullscreen {
+  background: #28c840;
+}
+
+.app-window-control:hover {
+  filter: brightness(1.04);
+}
+
 .app-chrome-left {
   display: flex;
   align-items: center;
@@ -295,21 +335,21 @@ textarea:focus-visible {
   --bubble-user-text: #17181b;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #ededf0;
-  --sidebar-bg: #0a0a0c;
-  --sidebar-bg-2: #070708;
-  --sidebar-panel: #141416;
-  --sidebar-raised: #1d1d20;
-  --sidebar-soft: #0f0f11;
-  --sidebar-input: #141416;
+  --sidebar-bg: rgba(16, 17, 20, 0.72);
+  --sidebar-bg-2: rgba(255, 255, 255, 0.035);
+  --sidebar-panel: rgba(18, 19, 22, 0.58);
+  --sidebar-raised: rgba(255, 255, 255, 0.095);
+  --sidebar-soft: rgba(255, 255, 255, 0.04);
+  --sidebar-input: rgba(255, 255, 255, 0.06);
   --sidebar-text: #f3f3f5;
   --sidebar-text-dim: #b6b6bd;
   --sidebar-text-faint: #7e7e87;
   --sidebar-icon: #b6b6bd;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-border-strong: rgba(255, 255, 255, 0.10);
+  --sidebar-border: rgba(255, 255, 255, 0.075);
+  --sidebar-border-strong: rgba(255, 255, 255, 0.12);
   --sidebar-hover: rgba(255, 255, 255, 0.05);
   --sidebar-hover-strong: rgba(255, 255, 255, 0.09);
-  --sidebar-active-bg: rgba(255, 255, 255, 0.10);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.115);
   --sidebar-active-text: #ffffff;
   --sidebar-accent: #f3f3f5;
   --sidebar-on-accent: #0a0a0c;
@@ -356,12 +396,12 @@ textarea:focus-visible {
   --bubble-user-text: #f3f3f5;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #202124;
-  --sidebar-bg: #ffffff;
-  --sidebar-bg-2: #f7f7f8;
-  --sidebar-panel: #ffffff;
-  --sidebar-raised: #f0f1f3;
-  --sidebar-soft: #f6f7f8;
-  --sidebar-input: #ffffff;
+  --sidebar-bg: rgba(255, 255, 255, 0.70);
+  --sidebar-bg-2: rgba(255, 255, 255, 0.48);
+  --sidebar-panel: rgba(255, 255, 255, 0.58);
+  --sidebar-raised: rgba(17, 24, 39, 0.07);
+  --sidebar-soft: rgba(17, 24, 39, 0.045);
+  --sidebar-input: rgba(255, 255, 255, 0.68);
   --sidebar-text: #17181b;
   --sidebar-text-dim: #5e626b;
   --sidebar-text-faint: #9296a1;
@@ -467,6 +507,8 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   background: var(--sidebar-bg);
+  backdrop-filter: blur(26px) saturate(1.18);
+  -webkit-backdrop-filter: blur(26px) saturate(1.18);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
