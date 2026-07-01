@@ -343,6 +343,12 @@ function CreateLoopModal({
   const [pushEnabled, setPushEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  // Phase 55.071: focus the title on open, matching the Agents create modal.
+  useEffect(() => {
+    titleInputRef.current?.focus()
+  }, [])
 
   const pick = async (): Promise<void> => {
     const p = (await window.api.projectLoop.pickFolder()) as string | null
@@ -398,7 +404,7 @@ function CreateLoopModal({
             </select>
           </FieldLabel>
           <FieldLabel label="Title">
-            <input value={title} placeholder="My side project" onChange={(e) => setTitle(e.target.value)} />
+            <input ref={titleInputRef} value={title} placeholder="My side project" onChange={(e) => setTitle(e.target.value)} />
           </FieldLabel>
           {(mode === 'project_builder' || mode === 'maintenance' || mode === 'repo_grower') && (
             <FieldLabel label="Idea / direction">
