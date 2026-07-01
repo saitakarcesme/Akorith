@@ -11,6 +11,22 @@ repo health report, draft a README/changelog, suggest commit messages, analyze a
 
 Create it once, then run it again with one click.
 
+## Create-agent UX
+
+Create Agent opens a centered command modal, not an inline corner form. The modal includes:
+
+- selected template name and summary,
+- agent name,
+- allowed folder/project picker,
+- local model selector,
+- permission mode selector,
+- allowlisted validation-command toggle,
+- permission explanation,
+- Cancel and Create agent actions.
+
+After creation, the modal closes, the new agent is selected, and the Agents page shows a
+short success state.
+
 ## Built-in templates
 
 Desktop Organizer · Repo Health Checker · Test Writer · README Builder · Changelog Maker ·
