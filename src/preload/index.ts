@@ -357,6 +357,32 @@ const projectLoop = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop })
+// Phase 50: Companions — long-memory local personalities (no actions).
+const companion = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('companion:list'),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:get', id),
+  setModel: (id: string, model: string | null): Promise<unknown> => ipcRenderer.invoke('companion:setModel', id, model),
+  memoryCount: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:memoryCount', id),
+  listSessions: (companionId: string): Promise<unknown> => ipcRenderer.invoke('companion:listSessions', companionId),
+  createSession: (companionId: string, title?: string): Promise<unknown> => ipcRenderer.invoke('companion:createSession', companionId, title),
+  getSession: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:getSession', id),
+  deleteSession: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:deleteSession', id),
+  listMessages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:listMessages', sessionId),
+  sendMessage: (input: unknown): Promise<unknown> => ipcRenderer.invoke('companion:sendMessage', input),
+  extractMemories: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:extractMemories', sessionId),
+  contextInfo: (companionId: string, sessionId: string, query: string): Promise<unknown> =>
+    ipcRenderer.invoke('companion:contextInfo', companionId, sessionId, query),
+  listMemories: (companionId: string, includeArchived?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('companion:listMemories', companionId, includeArchived),
+  searchMemories: (companionId: string, query: string): Promise<unknown> =>
+    ipcRenderer.invoke('companion:searchMemories', companionId, query),
+  createMemory: (input: unknown): Promise<unknown> => ipcRenderer.invoke('companion:createMemory', input),
+  updateMemory: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('companion:updateMemory', id, patch),
+  pinMemory: (id: string, pinned: boolean): Promise<unknown> => ipcRenderer.invoke('companion:pinMemory', id, pinned),
+  archiveMemory: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:archiveMemory', id),
+  forgetMemory: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:forgetMemory', id)
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion })
 
 contextBridge.exposeInMainWorld('api', api)
