@@ -28,6 +28,7 @@ import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
 import { registerProjectLoopIpc } from './project-loop'
 import { registerCompanionIpc } from './companions'
+import { registerActionAgentIpc } from './action-agents'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -396,6 +397,7 @@ app.whenReady().then(() => {
   registerLocalRuntimeIpc()
   registerProjectLoopIpc()
   registerCompanionIpc()
+  registerActionAgentIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
