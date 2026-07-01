@@ -44,10 +44,28 @@ Then it recommends a restart to load the new build.
 
 ## Packaged installs
 
-If Akorith is running from a packaged app (no git repo), the updater reports
-"not a source install" and explains that packaged release auto-updates are
-planned for a later phase. Until then, refresh the packaged macOS app with
-`npm run pack:mac && npm run macos:refresh` from a source checkout.
+Settings -> Update now distinguishes:
+
+- dev mode (`npm run dev` / electron-vite)
+- source checkout mode
+- packaged Windows app
+- packaged macOS/other app
+
+In packaged Windows mode, Akorith does **not** pretend that `git pull` updates
+the installed app. It shows the current executable path, detected source
+checkout, update target, and relaunch target. When a clean source checkout is
+available, **Update installed Windows app** fast-forwards the checkout if
+needed, starts `scripts/refresh-windows-app.ps1`, builds a Windows installer,
+runs that installer, and relaunches the installed `Akorith.exe`.
+
+If local Electron Builder cannot extract `winCodeSign` because Windows symlink
+creation is disabled, the refresh script falls back to a local unsigned
+installer build with executable signing/resource editing disabled. It still
+installs the generated NSIS installer and never treats `dist/win-unpacked` as an
+installed app.
+
+Packaged macOS/other app updates still require a manual installer/app refresh
+from a source checkout.
 
 ## Keeping Mac + PC in sync
 
