@@ -116,3 +116,27 @@ reliability.
 - Manual packaged Windows check where possible: Settings -> Update shows the
   executable path, packaged/source mode, relaunch target, and never claims source
   updates changed the installed app unless the refresh/install flow ran.
+
+## Delivered
+
+- Shared command-modal, field, footer, and action-button primitives.
+- Companions optimistic user messages, immediate thinking state, inline errors,
+  real IPC cancellation, and circular Send/Stop controls.
+- Agents creation moved to a centered command modal with template summary,
+  folder picker, local model, permission mode, validation-command toggle,
+  permission explanation, success state, and polished CTAs.
+- Loop creation moved into a centered command modal with Project Builder, Repo
+  Grower, GitHub Repo Loop, Maintenance Loop, and Multi-Repo Loop presets.
+- Update status now distinguishes dev/source/packaged Windows/packaged macOS,
+  reports executable and relaunch targets, and can start the packaged Windows
+  refresh/install flow from a clean source checkout.
+- Windows identity verification added as `npm run verify:windows-identity`.
+
+## Remaining Limitations
+
+- Packaged Windows refresh still depends on a local source checkout and local
+  build tooling. It is not a GitHub Releases auto-updater yet.
+- The winCodeSign symlink fallback produces a usable unsigned local installer,
+  but a fully resource-edited executable still needs Windows Developer Mode or
+  Administrator privileges for the normal Electron Builder helper extraction.
+- Packaged macOS update remains a manual installer/app refresh path.
