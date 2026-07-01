@@ -20,6 +20,8 @@ import type { CompanionMemoryType } from './types'
 // Phase 50: typed IPC for Companions. Companions never act — these are chat +
 // memory operations only.
 
+const pendingCompanionSends = new Map<string, AbortController>()
+
 export function registerCompanionIpc(): void {
   ipcMain.handle('companion:list', () => listCompanions())
   ipcMain.handle('companion:get', (_e, id: string) => getCompanion(id))
@@ -36,11 +38,30 @@ export function registerCompanionIpc(): void {
   ipcMain.handle('companion:listMessages', (_e, sessionId: string) => listMessages(sessionId))
 
   ipcMain.handle('companion:sendMessage', async (_e, input: unknown) => {
-    const i = (input ?? {}) as { companionId?: string; sessionId?: string; prompt?: string; model?: string }
+    const i = (input ?? {}) as { companionId?: string; sessionId?: string; prompt?: string; model?: string; requestId?: string }
     if (!i.companionId || !i.sessionId || typeof i.prompt !== 'string') {
       return { ok: false, error: 'invalid message input' }
     }
-    return sendCompanionMessage({ companionId: i.companionId, sessionId: i.sessionId, prompt: i.prompt, model: i.model })
+    const controller = new AbortController()
+    const requestId = typeof i.requestId === 'string' && i.requestId.trim() ? i.requestId.trim() : null
+    if (requestId) pendingCompanionSends.set(requestId, controller)
+    try {
+      return await sendCompanionMessage({
+        companionId: i.companionId,
+        sessionId: i.sessionId,
+        prompt: i.prompt,
+        model: i.model,
+        signal: controller.signal
+      })
+    } finally {
+      if (requestId) pendingCompanionSends.delete(requestId)
+    }
+  })
+
+  ipcMain.on('companion:cancelMessage', (_e, requestId: unknown) => {
+    if (typeof requestId !== 'string') return
+    pendingCompanionSends.get(requestId)?.abort()
+    pendingCompanionSends.delete(requestId)
   })
 
   ipcMain.handle('companion:extractMemories', async (_e, sessionId: string) => extractMemoriesFromSession(sessionId))
