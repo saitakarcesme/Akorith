@@ -36,7 +36,7 @@ function walk(root: string, dir: string, depth: number, out: string[]): void {
     } catch {
       continue
     }
-    const rel = relative(root, full)
+    const rel = relative(root, full).replace(/\\/g, '/')
     out.push(isDir ? `${rel}/` : rel)
     if (isDir) walk(root, full, depth + 1, out)
   }
