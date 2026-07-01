@@ -97,7 +97,7 @@ export default function UpdatePanel(): JSX.Element {
       <div className="settings-section-head">
         <div>
           <h2>Update</h2>
-          <p>Keep this source/git checkout current with GitHub <code>main</code>. Fast-forward only — it never discards your local changes.</p>
+          <p>Keep source checkouts current with GitHub <code>main</code>, or refresh the installed Windows package from a clean source checkout.</p>
         </div>
         <button type="button" disabled={busy !== null} onClick={() => void check()}>
           {busy === 'check' ? 'Checking…' : 'Check for updates'}
