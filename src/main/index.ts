@@ -268,7 +268,7 @@ function createWindow(): void {
     title: 'Akorith',
     ...(process.platform === 'darwin'
       ? {
-          titleBarStyle: 'hiddenInset' as const,
+          titleBarStyle: 'hidden' as const,
           trafficLightPosition: { x: 24, y: 11 }
         }
       : {}),
