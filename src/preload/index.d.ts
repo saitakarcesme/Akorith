@@ -1987,7 +1987,12 @@ export interface PluginsApi {
 
 export interface UpdateStatus {
   mode: 'git' | 'packaged'
+  runtimeMode: 'dev' | 'source' | 'packaged-windows' | 'packaged-macos' | 'packaged-other'
+  platform: string
+  executablePath: string
+  appPath: string
   repoPath?: string
+  sourceCheckoutPath?: string
   currentBranch?: string
   currentCommit?: string
   currentCommitFull?: string
@@ -1999,6 +2004,9 @@ export interface UpdateStatus {
   isDirty: boolean
   dirtyFiles: string[]
   safeToUpdate: boolean
+  canUpdateInstalledApp: boolean
+  updateTarget: string
+  relaunchTarget?: string
   warnings: string[]
   lastCheckedAt?: number
   appVersion: string

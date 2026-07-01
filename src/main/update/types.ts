@@ -5,7 +5,12 @@
 export interface UpdateStatus {
   /** 'git' = running from a source checkout; 'packaged' = no git repo here. */
   mode: 'git' | 'packaged'
+  runtimeMode: 'dev' | 'source' | 'packaged-windows' | 'packaged-macos' | 'packaged-other'
+  platform: NodeJS.Platform
+  executablePath: string
+  appPath: string
   repoPath?: string
+  sourceCheckoutPath?: string
   currentBranch?: string
   /** Short + full HEAD commit. */
   currentCommit?: string
@@ -21,6 +26,9 @@ export interface UpdateStatus {
   dirtyFiles: string[]
   /** True only when a clean fast-forward of main is possible. */
   safeToUpdate: boolean
+  canUpdateInstalledApp: boolean
+  updateTarget: string
+  relaunchTarget?: string
   warnings: string[]
   lastCheckedAt?: number
   appVersion: string
