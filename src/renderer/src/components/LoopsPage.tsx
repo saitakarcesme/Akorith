@@ -95,6 +95,14 @@ const AUTONOMY: Array<{ id: AutonomyLevel; label: string; detail: string }> = [
   { id: 'full-auto', label: 'Full Auto', detail: 'Run end-to-end inside safety limits.' }
 ]
 
+const CREATE_LOOP_MODES: Array<{ label: string; detail: string; loopType: LoopType; targetType: TargetType }> = [
+  { label: 'Project Builder', detail: 'Start from an idea and let Akorith create a working project loop.', loopType: 'project-creation', targetType: 'new-project' },
+  { label: 'Repo Grower', detail: 'Improve an existing local repository over repeated cycles.', loopType: 'project-improvement', targetType: 'local-project' },
+  { label: 'GitHub Repo Loop', detail: 'Track or improve a remote GitHub repository from its URL.', loopType: 'repo-analysis', targetType: 'github-repo' },
+  { label: 'Maintenance Loop', detail: 'Focus on docs, tests, cleanup, validation, and release prep.', loopType: 'maintenance', targetType: 'local-project' },
+  { label: 'Multi-Repo Loop', detail: 'Coordinate broader repository health checks and reports.', loopType: 'repo-analysis', targetType: 'custom-source' }
+]
+
 const TEMPLATES: LoopTemplate[] = [
   {
     id: 'github-commit',
