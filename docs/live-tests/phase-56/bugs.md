@@ -11,3 +11,15 @@
 - **Mitigation demonstrated:** added a loop-memory `[decision]` "keep planArticle export stable"
   (test 011) so future plan context steers away from removing public API.
 - **Status:** documented; no app-code defect to fix (Akorith validated with the scripts available).
+
+## F-2 (finding, by-design, NOT patched) — Project Builder can't reach a first commit when its scaffold's own validation fails
+- **Where:** project-loop runner + local-executor `scoreAttempt` (`validationPassed` check).
+- **Repro:** project_builder on an empty dir; model scaffolds a package.json with a `typecheck`
+  script; executor runs `npm run typecheck`, it fails in the fresh dir (no deps), so
+  `validationPassed`=false → shouldCommit=false → rollback. 5 cycles, never committed.
+- **Root cause:** commit requires all 7 checks incl. every validation command passing. A scaffold
+  that fails its own validation is (correctly) not committed.
+- **Decision:** NOT a defect — this is the intended safety guarantee ("never commit code that
+  fails validation"). Weakening it would risk committing broken code across all loop modes.
+  Documented for transparency; no code change. Contrast: repo_grower/github_loop on repos whose
+  validation passes DID produce real commits.
