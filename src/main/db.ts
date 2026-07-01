@@ -383,6 +383,59 @@ export function initDb(): void {
       detail       TEXT,
       created_at   INTEGER NOT NULL
     );
+
+    -- Phase 52: Agents — reusable local action shortcuts (permissioned).
+    CREATE TABLE IF NOT EXISTS action_agents (
+      id                   TEXT PRIMARY KEY,
+      name                 TEXT NOT NULL,
+      description          TEXT NOT NULL DEFAULT '',
+      icon                 TEXT NOT NULL DEFAULT 'bolt',
+      category             TEXT NOT NULL DEFAULT 'general',
+      template_id          TEXT NOT NULL DEFAULT 'blank',
+      local_model_provider TEXT NOT NULL DEFAULT 'local',
+      local_model          TEXT,
+      allowed_root         TEXT,
+      permission_mode      TEXT NOT NULL DEFAULT 'preview',
+      allow_commands       INTEGER NOT NULL DEFAULT 0,
+      builtin              INTEGER NOT NULL DEFAULT 0,
+      created_at           INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL,
+      last_run_at          INTEGER,
+      run_count            INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS action_agent_runs (
+      id            TEXT PRIMARY KEY,
+      agent_id      TEXT NOT NULL REFERENCES action_agents(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL DEFAULT 'planning',
+      started_at    INTEGER NOT NULL,
+      ended_at      INTEGER,
+      input         TEXT,
+      summary       TEXT,
+      risk_level    TEXT,
+      files_changed INTEGER NOT NULL DEFAULT 0,
+      commands_run  INTEGER NOT NULL DEFAULT 0,
+      error         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_agent_runs_a ON action_agent_runs(agent_id, started_at);
+    CREATE TABLE IF NOT EXISTS action_agent_events (
+      id         TEXT PRIMARY KEY,
+      run_id     TEXT NOT NULL REFERENCES action_agent_runs(id) ON DELETE CASCADE,
+      agent_id   TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      detail     TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_agent_events_r ON action_agent_events(run_id, created_at);
+    CREATE TABLE IF NOT EXISTS action_agent_artifacts (
+      id         TEXT PRIMARY KEY,
+      run_id     TEXT NOT NULL REFERENCES action_agent_runs(id) ON DELETE CASCADE,
+      agent_id   TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
