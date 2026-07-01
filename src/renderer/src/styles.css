@@ -10229,7 +10229,10 @@ body {
 .loop-backlog-list li.is-done span:first-child { text-decoration: line-through; color: var(--text-faint); }
 .loop-backlog-status { color: var(--text-faint); font-size: 10px; }
 
-.loop-create-modal { width: 560px; max-width: 92vw; }
+/* Phase 55.070: the create-loop content wrapper fills the CommandModal and is a
+   flex column so header/body/footer stack and the body scrolls internally
+   (identical to .agent-create-modal). */
+.loop-create-modal { width: 100%; min-height: 0; display: flex; flex-direction: column; }
 .loop-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .loop-field > span { font-size: 11px; color: var(--text-faint); }
 .loop-field-row { display: flex; gap: 6px; }
