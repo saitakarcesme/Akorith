@@ -257,13 +257,15 @@ function createWindow(): void {
   // Paint the main window in the selected theme's base color so there's no
   // bright flash between the splash and the rendered UI.
   const mainBg = getTheme() === 'light' ? '#f2f3f5' : '#101012'
+  const useTransparentWindow = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
     minHeight: 600,
     show: false,
-    backgroundColor: mainBg,
+    backgroundColor: useTransparentWindow ? '#00000000' : mainBg,
+    transparent: useTransparentWindow,
     autoHideMenuBar: true,
     title: 'Akorith',
     ...(process.platform === 'darwin' ? { frame: false } : {}),

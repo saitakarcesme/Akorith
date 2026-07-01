@@ -1,5 +1,4 @@
 import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
@@ -172,9 +171,9 @@ export default function Sidebar({
   // Phase 14.3/14.4: per-project overflow menu + inline rename + remove confirm.
   // The menu is rendered fixed-position (anchored to the clicked button's rect)
   // so the Projects list's own `overflow-y: auto` cannot clip it.
-  const [projectRowMenu, setProjectRowMenu] = useState<{ id: string; top: number; right: number } | null>(null)
+  const [projectRowMenu, setProjectRowMenu] = useState<string | null>(null)
   // Phase 37.4: per-chat overflow menu (Rename / Delete) — replaces inline text.
-  const [chatRowMenu, setChatRowMenu] = useState<{ id: string; top: number; right: number } | null>(null)
+  const [chatRowMenu, setChatRowMenu] = useState<string | null>(null)
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameProjectValue, setRenameProjectValue] = useState('')
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
@@ -285,8 +284,8 @@ export default function Sidebar({
     localStorage.setItem('akorith.displayName', displayName)
   }, [displayName])
 
-  // Close the project actions menu on Escape (outside-click is handled by its
-  // backdrop). Also re-close if the list scrolls so it never floats detached.
+  // Close row actions on Escape. These menus render inside the sidebar, avoiding
+  // the full-window portal/backdrop path that could blank the app.
   useEffect(() => {
     if (!projectRowMenu) return
     const onKey = (event: KeyboardEvent): void => {
@@ -452,27 +451,16 @@ export default function Sidebar({
     }
   }
 
-  // Open the per-row actions menu, anchored under the clicked button. Fixed
-  // positioning keeps it out of the Projects list's scroll/overflow clip.
   const toggleProjectRowMenu = (projectId: string, event: ReactMouseEvent): void => {
     event.stopPropagation()
     setChatRowMenu(null)
-    setProjectRowMenu((current) => {
-      if (current?.id === projectId) return null
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-      return { id: projectId, top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }
-    })
+    setProjectRowMenu((current) => (current === projectId ? null : projectId))
   }
 
-  // Phase 37.4: per-chat overflow menu (anchored like the project menu).
   const toggleChatRowMenu = (chatId: string, event: ReactMouseEvent): void => {
     event.stopPropagation()
     setProjectRowMenu(null)
-    setChatRowMenu((current) => {
-      if (current?.id === chatId) return null
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-      return { id: chatId, top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }
-    })
+    setChatRowMenu((current) => (current === chatId ? null : chatId))
   }
 
   const commitProjectRename = async (project: ProjectRow): Promise<void> => {
@@ -673,7 +661,7 @@ export default function Sidebar({
                       return (
                         <div className={`project-group ${isExpanded ? 'is-expanded' : ''}`} key={project.id}>
                           <div
-                            className={`project-row ${isActiveProject ? 'is-active' : ''} ${projectRowMenu?.id === project.id ? 'is-menu-open' : ''}`}
+                            className={`project-row ${isActiveProject ? 'is-active' : ''} ${projectRowMenu === project.id ? 'is-menu-open' : ''}`}
                             title={project.path ?? project.name}
                             role="button"
                             tabIndex={0}
@@ -746,65 +734,36 @@ export default function Sidebar({
                                 className="project-overflow"
                                 title="Project actions"
                                 aria-haspopup="menu"
-                                aria-expanded={projectRowMenu?.id === project.id}
+                                aria-expanded={projectRowMenu === project.id}
                                 onClick={(event) => toggleProjectRowMenu(project.id, event)}
                               >
                                 ⋯
                               </button>
                             </span>
-                            {/* Phase 38.4: portal to <body> so the fixed menu escapes
-                                .sidebar-surface (will-change:transform makes it a
-                                containing block, and overflow:hidden would clip it). */}
-                            {projectRowMenu?.id === project.id &&
-                              createPortal(
-                                <>
-                                  <div
-                                    className="popover-backdrop"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      setProjectRowMenu(null)
-                                    }}
-                                  />
-                                  <div
-                                    className="project-menu project-row-menu"
-                                    role="menu"
-                                    style={{ position: 'fixed', top: projectRowMenu.top, right: projectRowMenu.right }}
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
-                                      <span>Rename</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      disabled={!project.path}
-                                      onClick={() => void revealProject(project)}
-                                    >
-                                      <span>Reveal in Finder</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      disabled={!project.path}
-                                      onClick={() => void copyProjectPath(project)}
-                                    >
-                                      <span>Copy path</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      className="is-danger"
-                                      onClick={() => {
-                                        setProjectRowMenu(null)
-                                        setConfirmRemoveProject(project)
-                                      }}
-                                    >
-                                      <span>Remove from Akorith</span>
-                                    </button>
-                                  </div>
-                                </>,
-                                document.body
-                              )}
+                            {projectRowMenu === project.id && (
+                              <div className="project-menu project-row-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                <button type="button" role="menuitem" onClick={() => beginRenameProject(project)}>
+                                  <span>Rename</span>
+                                </button>
+                                <button type="button" role="menuitem" disabled={!project.path} onClick={() => void revealProject(project)}>
+                                  <span>Reveal in Finder</span>
+                                </button>
+                                <button type="button" role="menuitem" disabled={!project.path} onClick={() => void copyProjectPath(project)}>
+                                  <span>Copy path</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="is-danger"
+                                  onClick={() => {
+                                    setProjectRowMenu(null)
+                                    setConfirmRemoveProject(project)
+                                  }}
+                                >
+                                  <span>Remove from Akorith</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                           {isExpanded && (
                             <div className="project-chats">
@@ -825,7 +784,7 @@ export default function Sidebar({
                                   </div>
                                 ) : (
                                   <div
-                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chatRowMenu?.id === chat.id ? 'is-menu-open' : ''}`}
+                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chatRowMenu === chat.id ? 'is-menu-open' : ''}`}
                                     key={chat.id}
                                     role="button"
                                     tabIndex={0}
@@ -846,53 +805,37 @@ export default function Sidebar({
                                       className="project-chat-overflow"
                                       title="Chat actions"
                                       aria-haspopup="menu"
-                                      aria-expanded={chatRowMenu?.id === chat.id}
+                                      aria-expanded={chatRowMenu === chat.id}
                                       onClick={(event) => toggleChatRowMenu(chat.id, event)}
                                     >
                                       ⋯
                                     </button>
-                                    {chatRowMenu?.id === chat.id &&
-                                      createPortal(
-                                        <>
-                                          <div
-                                            className="popover-backdrop"
-                                            onClick={(event) => {
-                                              event.stopPropagation()
-                                              setChatRowMenu(null)
-                                            }}
-                                          />
-                                          <div
-                                            className="project-menu project-row-menu"
-                                            role="menu"
-                                            style={{ position: 'fixed', top: chatRowMenu.top, right: chatRowMenu.right }}
-                                            onClick={(event) => event.stopPropagation()}
-                                          >
-                                            <button
-                                              type="button"
-                                              role="menuitem"
-                                              onClick={() => {
-                                                setChatRowMenu(null)
-                                                setRenamingId(chat.id)
-                                                setRenameValue(chat.title)
-                                              }}
-                                            >
-                                              <span>Rename</span>
-                                            </button>
-                                            <button
-                                              type="button"
-                                              role="menuitem"
-                                              className="is-danger"
-                                              onClick={() => {
-                                                setChatRowMenu(null)
-                                                void deleteSession(chat)
-                                              }}
-                                            >
-                                              <span>Delete chat</span>
-                                            </button>
-                                          </div>
-                                        </>,
-                                        document.body
-                                      )}
+                                    {chatRowMenu === chat.id && (
+                                      <div className="project-menu project-row-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          onClick={() => {
+                                            setChatRowMenu(null)
+                                            setRenamingId(chat.id)
+                                            setRenameValue(chat.title)
+                                          }}
+                                        >
+                                          <span>Rename</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          className="is-danger"
+                                          onClick={() => {
+                                            setChatRowMenu(null)
+                                            void deleteSession(chat)
+                                          }}
+                                        >
+                                          <span>Delete chat</span>
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               )}
