@@ -7,7 +7,7 @@ import type {
   RuntimeStatus,
   SendCompanionMessageResult
 } from '../../../preload/index.d'
-import { ComposerActionButton } from './CreationPrimitives'
+import { ComposerSendButton } from './CreationPrimitives'
 import { SendIcon, StopIcon } from './icons'
 
 // Phase 51: Companions — long-memory local personalities (Athena, Zeus). Think and
@@ -322,13 +322,13 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
                 }}
               />
               {busy ? (
-                <ComposerActionButton label="Stop generation" title="Stop generation" className="is-stop" onClick={stopGeneration}>
+                <ComposerSendButton stop onClick={stopGeneration}>
                   <StopIcon size={16} />
-                </ComposerActionButton>
+                </ComposerSendButton>
               ) : (
-                <ComposerActionButton label="Send message" title="Send message" disabled={!draft.trim()} onClick={() => void send()}>
+                <ComposerSendButton disabled={!draft.trim()} onClick={() => void send()}>
                   <SendIcon size={16} />
-                </ComposerActionButton>
+                </ComposerSendButton>
               )}
             </div>
           </>
