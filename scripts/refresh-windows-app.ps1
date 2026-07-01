@@ -166,6 +166,21 @@ function Invoke-NpmScript($ScriptName) {
   }
 }
 
+function Invoke-UnsignedWindowsInstallerBuild {
+  $npx = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
+  if (-not $npx) { $npx = (Get-Command npx -ErrorAction Stop).Source }
+  Push-Location $RepoRoot
+  try {
+    Write-Warning 'Retrying local installer build with Windows executable resource editing disabled.'
+    & $npx electron-builder --win --config.win.signAndEditExecutable=false
+    if ($LASTEXITCODE -ne 0) {
+      throw "unsigned Windows installer build failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 function Get-LatestInstaller {
   $dist = Join-Path $RepoRoot 'dist'
   if (-not (Test-Path -LiteralPath $dist)) { return $null }
@@ -234,7 +249,7 @@ if (-not $NoBuild) {
     Write-Warning $_.Exception.Message
     Write-Warning 'If the failure mentions winCodeSign symbolic links, enable Windows Developer Mode or run the shell as Administrator, then retry.'
     Write-Warning 'Do not install by copying dist\win-unpacked; that folder can contain Electron default resources if packaging stopped early.'
-    throw
+    Invoke-UnsignedWindowsInstallerBuild
   }
 }
 
