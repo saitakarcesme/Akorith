@@ -37,6 +37,7 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
   const [busy, setBusy] = useState(false)
   const [runResult, setRunResult] = useState<AgentRunResult | null>(null)
   const [runs, setRuns] = useState<ActionAgentRun[]>([])
+  const [createdNotice, setCreatedNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setAgents((await window.api.actionAgent.list()) as ActionAgent[])
@@ -86,6 +87,8 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
           <PrimaryButton onClick={() => setCreating('blank')}>+ Create agent</PrimaryButton>
         </div>
       </header>
+
+      {createdNotice && <div className="agents-success">{createdNotice}</div>}
 
       <div className="agents-body">
         <aside className="agents-library">
@@ -181,6 +184,8 @@ export default function AgentsPage({ active }: { active: boolean }): JSX.Element
             setCreating(null)
             await load()
             setSelectedId(agent.id)
+            setCreatedNotice(`${agent.name} created and selected.`)
+            window.setTimeout(() => setCreatedNotice(null), 3200)
           }}
         />
       )}
