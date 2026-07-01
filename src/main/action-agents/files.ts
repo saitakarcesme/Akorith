@@ -1,11 +1,28 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { dirname } from 'path'
+import { dirname, isAbsolute, relative, resolve } from 'path'
 import { checkWritePath } from '../safety'
 import type { AgentActionFile } from './types'
 
 // Phase 52: deterministic file operations for agents. Every path is validated
 // against the allowed root before any write. Deletes are never performed by
 // agents (only proposed). No absolute paths, no escapes, no secrets.
+
+// Phase 56 (F-4): weaker local models often emit an ABSOLUTE path that actually
+// resolves INSIDE the allowed root (e.g. "/Users/.../aiarticle/DEMO.md"). The
+// shared checkWritePath rejects all absolute paths (correct for Loop patches),
+// so those legitimate in-root writes were silently lost. Here — only in the
+// agent layer — we normalize an absolute path that is contained within the root
+// down to a root-relative path BEFORE the safety check. Absolute paths outside
+// the root, and any ".." traversal, are left untouched so checkWritePath still
+// rejects them.
+function normalizeInRoot(root: string, candidate: string): string {
+  if (typeof candidate !== 'string' || !isAbsolute(candidate.trim())) return candidate
+  const rootResolved = resolve(root)
+  const abs = resolve(candidate.trim())
+  const rel = relative(rootResolved, abs)
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return candidate // outside root → leave for checkWritePath to reject
+  return rel
+}
 
 export interface FileOpResult {
   path: string
@@ -17,7 +34,7 @@ export interface FileOpResult {
 
 /** Read a file within the root for planning context (bounded). */
 export function readWithinRoot(root: string, rel: string, maxBytes = 12_000): string | null {
-  const check = checkWritePath(root, rel)
+  const check = checkWritePath(root, normalizeInRoot(root, rel))
   if (!check.ok || !check.absolute || !existsSync(check.absolute)) return null
   try {
     return readFileSync(check.absolute, 'utf8').slice(0, maxBytes)
@@ -31,7 +48,7 @@ export function applyFileWrite(root: string, file: AgentActionFile): FileOpResul
   if (file.operation === 'delete') {
     return { path: file.path, operation: 'delete', ok: false, reason: 'agents never delete files (propose-only)' }
   }
-  const check = checkWritePath(root, file.path)
+  const check = checkWritePath(root, normalizeInRoot(root, file.path))
   if (!check.ok || !check.absolute) {
     return { path: file.path, operation: file.operation, ok: false, reason: check.reason }
   }
@@ -55,7 +72,7 @@ export function applyFileWrite(root: string, file: AgentActionFile): FileOpResul
 export function previewWrites(root: string, files: AgentActionFile[]): FileOpResult[] {
   return files.map((f) => {
     if (f.operation === 'delete') return { path: f.path, operation: 'delete', ok: false, reason: 'delete proposed (agents never delete)' }
-    const check = checkWritePath(root, f.path)
+    const check = checkWritePath(root, normalizeInRoot(root, f.path))
     return { path: check.relativePath ?? f.path, operation: f.operation, ok: check.ok, reason: check.reason }
   })
 }
