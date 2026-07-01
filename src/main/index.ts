@@ -266,6 +266,12 @@ function createWindow(): void {
     backgroundColor: mainBg,
     autoHideMenuBar: true,
     title: 'Akorith',
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 24, y: 18 }
+        }
+      : {}),
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,

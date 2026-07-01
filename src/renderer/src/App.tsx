@@ -56,6 +56,7 @@ function AppChrome({
           <ChevronIcon size={15} direction="right" />
         </button>
       </div>
+      <div className="app-chrome-title">Akorith</div>
     </header>
   )
 }

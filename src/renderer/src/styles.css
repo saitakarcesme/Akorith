@@ -211,10 +211,11 @@ textarea:focus-visible {
 .app-chrome {
   flex: 0 0 34px;
   min-height: 34px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 142px 0 8px;
+  padding: 0 142px 0 132px;
   color: var(--text-dim);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-soft);
@@ -225,8 +226,21 @@ textarea:focus-visible {
 .app-chrome-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.app-chrome-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .app-chrome-icon,
@@ -512,19 +526,14 @@ textarea:focus-visible {
   width: 22px;
 }
 
-/* Phase 44: "New chat" row — the first item at the top of the sidebar, with the
-   collapse control inline at its right (no reserved empty header bar). */
+/* "New chat" row — the first item at the top of the sidebar. */
 .sidebar-newchat-row {
   display: flex;
   align-items: center;
-  gap: 6px;
 }
 .sidebar-newchat-row .sidebar-newchat {
   flex: 1 1 auto;
   margin-bottom: 0;
-}
-.sidebar-newchat-row .sidebar-collapse-btn {
-  flex: 0 0 auto;
 }
 
 .workspace {
