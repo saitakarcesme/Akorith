@@ -10595,9 +10595,28 @@ body {
 .companion-msg.is-error { color: var(--danger); background: rgba(255, 99, 99, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.16); }
 .companion-msg.is-stopped { color: var(--text-faint); background: transparent; box-shadow: inset 0 0 0 1px var(--border-soft); }
 .companions-empty-chat { margin: auto; max-width: 380px; text-align: center; color: var(--text-faint); font-size: 13px; }
-.companions-composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 10px; padding: 12px 22px 18px; max-width: 780px; margin: 0 auto; width: 100%; }
-.companions-composer textarea { flex: 1 1 auto; resize: none; min-height: 44px; max-height: 160px; padding: 11px 14px; font-family: var(--font-ui); font-size: 13px; color: var(--text); background: var(--bg-composer); border: 1px solid transparent; border-radius: 16px; }
-.companions-composer .composer-action-button { margin-bottom: 1px; }
+/* Phase 55.063: send button centered against the input (both are 44px). */
+.companions-composer { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 22px 18px; max-width: 780px; margin: 0 auto; width: 100%; }
+/* Phase 55.064: vertically-centered placeholder + typed text. Height math:
+   line-height 20 + padding 11+11 + border 1+1 = 44px (one line, centered). */
+.companions-composer textarea {
+  flex: 1 1 auto;
+  resize: none;
+  box-sizing: border-box;
+  min-height: 44px;
+  max-height: 160px;
+  padding: 11px 16px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  background: var(--bg-composer);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  transition: border-color var(--fast), background-color var(--fast);
+}
+.companions-composer textarea::placeholder { color: var(--text-faint); }
+.companions-composer textarea:focus { outline: none; background: var(--bg-raised); border-color: var(--border-soft); }
 
 .companions-memory { flex: 0 0 300px; display: flex; flex-direction: column; padding: 16px 14px; border-left: 1px solid var(--border-soft); overflow-y: auto; }
 .companions-memory-head { display: flex; justify-content: space-between; align-items: center; }
