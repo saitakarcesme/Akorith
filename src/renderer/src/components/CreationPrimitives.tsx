@@ -153,6 +153,37 @@ export function IconButton({
   )
 }
 
+/**
+ * Phase 55.060: the one composer send/stop control, shared by the normal chat
+ * (ChatPanel) and the Companion composer so they are visually identical. It
+ * renders the existing `.send-button` circle (44px, --accent, scale-on-active,
+ * .is-stop danger) — icon-only, no text label.
+ */
+export function ComposerSendButton({
+  stop = false,
+  disabled = false,
+  onClick,
+  children
+}: {
+  stop?: boolean
+  disabled?: boolean
+  onClick?: () => void
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`send-button ${stop ? 'is-stop' : ''}`.trim()}
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={stop ? 'Stop generation' : 'Send message'}
+      title={stop ? 'Stop generation' : 'Send message'}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function ComposerActionButton({
   label,
   children,
