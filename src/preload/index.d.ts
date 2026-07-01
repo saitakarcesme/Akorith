@@ -1695,7 +1695,8 @@ export interface CompanionApi {
   getSession(id: string): Promise<CompanionSession | null>
   deleteSession(id: string): Promise<boolean>
   listMessages(sessionId: string): Promise<CompanionMessage[]>
-  sendMessage(input: { companionId: string; sessionId: string; prompt: string; model?: string }): Promise<SendCompanionMessageResult>
+  sendMessage(input: { companionId: string; sessionId: string; prompt: string; model?: string; requestId?: string }): Promise<SendCompanionMessageResult>
+  cancelMessage(requestId: string): void
   extractMemories(sessionId: string): Promise<{ ok: boolean; created: CompanionMemory[]; error?: string }>
   contextInfo(companionId: string, sessionId: string, query: string): Promise<CompanionContextInfo>
   listMemories(companionId: string, includeArchived?: boolean): Promise<CompanionMemory[]>

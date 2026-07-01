@@ -369,6 +369,9 @@ const companion = Object.freeze({
   deleteSession: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:deleteSession', id),
   listMessages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:listMessages', sessionId),
   sendMessage: (input: unknown): Promise<unknown> => ipcRenderer.invoke('companion:sendMessage', input),
+  cancelMessage: (requestId: string): void => {
+    ipcRenderer.send('companion:cancelMessage', requestId)
+  },
   extractMemories: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:extractMemories', sessionId),
   contextInfo: (companionId: string, sessionId: string, query: string): Promise<unknown> =>
     ipcRenderer.invoke('companion:contextInfo', companionId, sessionId, query),
