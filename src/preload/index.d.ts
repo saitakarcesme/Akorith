@@ -1496,6 +1496,132 @@ export interface CreateProjectLoopInput {
   pushEnabled?: boolean
 }
 
+// Phase 52: Agents — reusable local action shortcuts.
+export type AgentPermissionMode = 'preview' | 'ask_write' | 'safe_writes' | 'safe_commands' | 'manual_each'
+export type AgentRiskLevel = 'low' | 'medium' | 'high'
+
+export interface ActionAgent {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  templateId: string
+  localModelProvider: string
+  localModel?: string
+  allowedRoot?: string
+  permissionMode: AgentPermissionMode
+  allowCommands: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+  lastRunAt?: number
+  runCount: number
+}
+
+export interface AgentTemplateInfo {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  defaultPermission: AgentPermissionMode
+  allowCommands: boolean
+  needsRoot: boolean
+  note?: string
+}
+
+export interface ActionAgentRun {
+  id: string
+  agentId: string
+  status: 'planning' | 'awaiting_approval' | 'running' | 'completed' | 'failed' | 'stopped'
+  startedAt: number
+  endedAt?: number
+  input?: string
+  summary?: string
+  riskLevel?: AgentRiskLevel
+  filesChanged: number
+  commandsRun: number
+  error?: string
+}
+
+export interface ActionAgentEvent {
+  id: string
+  runId: string
+  agentId: string
+  kind: string
+  message: string
+  detail?: string
+  createdAt: number
+}
+
+export interface ActionAgentArtifact {
+  id: string
+  runId: string
+  agentId: string
+  kind: string
+  title: string
+  content: string
+  createdAt: number
+}
+
+export interface AgentPlanStep {
+  kind: 'read' | 'write' | 'command' | 'report' | 'ask'
+  title: string
+  reason: string
+  requiresPermission: boolean
+}
+
+export interface AgentPlan {
+  type: 'agent_plan'
+  summary: string
+  riskLevel: AgentRiskLevel
+  steps: AgentPlanStep[]
+}
+
+export interface AgentPlanResult {
+  ok: boolean
+  plan?: AgentPlan
+  raw?: string
+  error?: string
+}
+
+export interface AgentRunResult {
+  ok: boolean
+  run: ActionAgentRun | null
+  events: ActionAgentEvent[]
+  artifacts: ActionAgentArtifact[]
+  previewOnly: boolean
+  error?: string
+}
+
+export interface CreateActionAgentInput {
+  name: string
+  description?: string
+  templateId?: string
+  allowedRoot?: string
+  permissionMode?: AgentPermissionMode
+  allowCommands?: boolean
+  localModel?: string
+  icon?: string
+  category?: string
+}
+
+export interface ActionAgentApi {
+  templates(): Promise<AgentTemplateInfo[]>
+  permissionModes(): Promise<{ id: AgentPermissionMode; description: string }[]>
+  list(): Promise<ActionAgent[]>
+  get(id: string): Promise<ActionAgent | null>
+  create(input: CreateActionAgentInput): Promise<ActionAgent>
+  update(id: string, patch: Partial<ActionAgent>): Promise<ActionAgent | null>
+  remove(id: string): Promise<boolean>
+  plan(id: string, input?: string): Promise<AgentPlanResult>
+  run(id: string, input?: string): Promise<AgentRunResult>
+  listRuns(id: string): Promise<ActionAgentRun[]>
+  getRun(runId: string): Promise<{ run: ActionAgentRun | null; events: ActionAgentEvent[]; artifacts: ActionAgentArtifact[] }>
+  pickFolder(): Promise<string | null>
+}
+
 // Phase 50: Companions.
 export type CompanionMemoryType =
   | 'preference' | 'project' | 'decision' | 'idea' | 'goal' | 'personal_context'
@@ -1956,6 +2082,7 @@ export interface PreloadApi {
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
   companion: CompanionApi
+  actionAgent: ActionAgentApi
 }
 
 declare global {
