@@ -383,6 +383,22 @@ const companion = Object.freeze({
   forgetMemory: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:forgetMemory', id)
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion })
+// Phase 52: Agents — reusable local action shortcuts (permissioned).
+const actionAgent = Object.freeze({
+  templates: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:templates'),
+  permissionModes: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:permissionModes'),
+  list: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:list'),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:get', id),
+  create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('actionAgent:create', input),
+  update: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('actionAgent:update', id, patch),
+  remove: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:delete', id),
+  plan: (id: string, input?: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:plan', id, input),
+  run: (id: string, input?: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:run', id, input),
+  listRuns: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:listRuns', id),
+  getRun: (runId: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:getRun', runId),
+  pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)
