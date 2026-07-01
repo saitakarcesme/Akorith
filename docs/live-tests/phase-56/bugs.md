@@ -23,3 +23,13 @@
   fails validation"). Weakening it would risk committing broken code across all loop modes.
   Documented for transparency; no code change. Contrast: repo_grower/github_loop on repos whose
   validation passes DID produce real commits.
+
+## F-3 (bug, low severity, FIXED) — companion memory search has no stemming ("testing" ≠ "tests")
+- **Where:** `src/main/companions/memories.ts` `searchMemories` / `tokenize`.
+- **Repro:** seed memory "Strongly dislikes fake or invisible tests"; `searchMemories(athena,
+  "testing")` returns 0 hits (while "test"/"tests"/"fake" all hit).
+- **Root cause:** scoring is exact token overlap; `tokenize` doesn't stem, so `testing` ≠ `tests`.
+- **Fix:** add conservative prefix-overlap scoring — two tokens (both length ≥ 4) that share a
+  4-char prefix count as a partial match (weight 0.5). Keeps exact matches ranked higher; adds no
+  cross-word noise for short tokens. (test 030)
+- **Status:** FIXED + retested (test 030): "testing" now returns the tests memory.
