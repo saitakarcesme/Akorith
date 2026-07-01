@@ -10436,9 +10436,10 @@ body {
 }
 
 .action-button.is-danger {
-  color: #fff7f7;
-  background: rgba(255, 99, 99, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.3);
+  /* Phase 55.072: border (like primary/secondary) instead of an inset shadow. */
+  color: #ffe9e9;
+  background: rgba(223, 111, 104, 0.14);
+  border: 1px solid rgba(223, 111, 104, 0.34);
 }
 
 /* Phase 55.059: no floating/translateY hover — Akorith hover is a subtle surface
