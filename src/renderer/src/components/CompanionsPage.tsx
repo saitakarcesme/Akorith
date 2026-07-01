@@ -7,9 +7,38 @@ import type {
   RuntimeStatus,
   SendCompanionMessageResult
 } from '../../../preload/index.d'
+import { ComposerActionButton } from './CreationPrimitives'
+import { SendIcon, StopIcon } from './icons'
 
 // Phase 51: Companions — long-memory local personalities (Athena, Zeus). Think and
 // remember. Companions never take actions.
+
+type CompanionUiMessage = CompanionMessage & {
+  pending?: boolean
+  tone?: 'thinking' | 'error' | 'stopped'
+}
+
+function newClientId(prefix: string): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function persistedMatchesPending(persisted: CompanionMessage, pending: CompanionUiMessage): boolean {
+  return Boolean(
+    pending.pending &&
+      persisted.sessionId === pending.sessionId &&
+      persisted.role === pending.role &&
+      persisted.content === pending.content
+  )
+}
+
+function mergePersistedMessages(persisted: CompanionMessage[], current: CompanionUiMessage[]): CompanionUiMessage[] {
+  const stillPending = current.filter(
+    (message) => message.pending && !persisted.some((saved) => persistedMatchesPending(saved, message))
+  )
+  return [...persisted, ...stillPending]
+}
 
 export default function CompanionsPage({ active }: { active: boolean }): JSX.Element {
   const [companions, setCompanions] = useState<Companion[]>([])
