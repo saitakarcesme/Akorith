@@ -184,26 +184,6 @@ export function ComposerSendButton({
   )
 }
 
-export function ComposerActionButton({
-  label,
-  children,
-  className,
-  active = false,
-  ...props
-}: Omit<ButtonProps, 'children'> & {
-  label: string
-  children: ReactNode
-  active?: boolean
-}): JSX.Element {
-  return (
-    <button
-      {...props}
-      type={props.type ?? 'button'}
-      className={`composer-action-button ${active ? 'is-active' : ''} ${className ?? ''}`.trim()}
-      aria-label={label}
-      title={props.title ?? label}
-    >
-      {children}
-    </button>
-  )
-}
+// Phase 55.064: the lavender ComposerActionButton was removed — the one composer
+// send/stop control is now ComposerSendButton (the neutral .send-button circle),
+// shared by ChatPanel and Companions.
