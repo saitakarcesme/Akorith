@@ -70,6 +70,16 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     void window.api.localRuntime.status().then((s) => setRuntime(s as RuntimeStatus)).catch(() => setRuntime(null))
   }, [active, loadCompanions])
 
+  useEffect(() => {
+    if (active) return
+    const current = activeRequestRef.current
+    if (!current) return
+    current.cancelled = true
+    window.api.companion.cancelMessage(current.requestId)
+    activeRequestRef.current = null
+    setBusy(false)
+  }, [active])
+
   const loadSessions = useCallback(async (companionId: string) => {
     const list = (await window.api.companion.listSessions(companionId)) as CompanionSession[]
     setSessions(list)
