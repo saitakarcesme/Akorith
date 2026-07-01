@@ -1,4 +1,6 @@
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { getUpdateStatus, maskRemoteUrl, repoRoot, runGit } from './checker'
 import type { UpdateLogEntry, UpdateRunOptions, UpdateRunResult } from './types'
 
@@ -25,6 +27,19 @@ function runNpm(cwd: string, args: string[]): Promise<{ ok: boolean; output: str
   })
 }
 
+function launchWindowsRefresh(cwd: string): { ok: boolean; output: string } {
+  const script = join(cwd, 'scripts', 'refresh-windows-app.ps1')
+  if (!existsSync(script)) return { ok: false, output: `Missing ${script}` }
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], {
+    cwd,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  })
+  child.unref()
+  return { ok: true, output: `Started Windows refresh script: ${script}` }
+}
+
 export async function runUpdate(options: UpdateRunOptions): Promise<UpdateRunResult> {
   const logs: UpdateLogEntry[] = []
   const log = (command: string, ok: boolean, output: string): void => {
@@ -33,6 +48,48 @@ export async function runUpdate(options: UpdateRunOptions): Promise<UpdateRunRes
 
   // Re-check freshly (with a fetch) before touching anything.
   const pre = await getUpdateStatus(true)
+  if (pre.mode === 'packaged' && pre.runtimeMode === 'packaged-windows') {
+    if (!pre.sourceCheckoutPath || !pre.canUpdateInstalledApp) {
+      return { ok: false, status: pre, logs, error: 'Packaged Windows update needs a clean Akorith source checkout.', restartRecommended: false }
+    }
+    const cwd = pre.sourceCheckoutPath
+    if (pre.isDirty) {
+      return { ok: false, status: pre, logs, error: 'Source checkout has local changes. Commit or stash them first.', restartRecommended: false }
+    }
+    if (pre.behindBy > 0) {
+      const fetched = await runGit(cwd, ['fetch', 'origin', '--quiet'], 60_000)
+      log('git fetch origin', fetched.ok, fetched.stdout || fetched.stderr || 'ok')
+      if (!fetched.ok) {
+        return { ok: false, status: await getUpdateStatus(false), logs, error: 'git fetch failed.', restartRecommended: false }
+      }
+      if (pre.currentBranch !== 'main') {
+        const switched = await runGit(cwd, ['switch', 'main'])
+        log('git switch main', switched.ok, switched.stdout || switched.stderr)
+        if (!switched.ok) {
+          return { ok: false, status: await getUpdateStatus(false), logs, error: 'Could not switch source checkout to main.', restartRecommended: false }
+        }
+      }
+      const pulled = await runGit(cwd, ['merge', '--ff-only', 'origin/main'])
+      log('git merge --ff-only origin/main', pulled.ok, pulled.stdout || pulled.stderr)
+      if (!pulled.ok) {
+        return { ok: false, status: await getUpdateStatus(false), logs, error: 'Fast-forward failed in the source checkout.', restartRecommended: false }
+      }
+    }
+    if (options.runInstall) {
+      const installed = await runNpm(cwd, ['install', '--no-audit', '--no-fund'])
+      log('npm install --no-audit --no-fund', installed.ok, installed.output)
+      if (!installed.ok) return { ok: false, status: await getUpdateStatus(false), logs, error: 'npm install failed.', restartRecommended: false }
+    }
+    const launched = launchWindowsRefresh(cwd)
+    log('scripts/refresh-windows-app.ps1', launched.ok, launched.output)
+    return {
+      ok: launched.ok,
+      status: await getUpdateStatus(false),
+      logs,
+      error: launched.ok ? undefined : launched.output,
+      restartRecommended: launched.ok
+    }
+  }
   if (pre.mode !== 'git' || !pre.repoPath) {
     return { ok: false, status: pre, logs, error: 'Not a git/source install — nothing to update.', restartRecommended: false }
   }
