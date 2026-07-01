@@ -10452,7 +10452,8 @@ body {
   background: var(--hover-strong);
 }
 .action-button.is-danger:hover:not(:disabled) {
-  background: rgba(255, 99, 99, 0.24);
+  background: rgba(223, 111, 104, 0.22);
+  border-color: rgba(223, 111, 104, 0.5);
 }
 .icon-button:hover:not(:disabled) {
   background: var(--hover-strong);
