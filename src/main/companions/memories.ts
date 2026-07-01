@@ -101,6 +101,28 @@ function tokenize(text: string): string[] {
   return (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((t, i, a) => a.indexOf(t) === i)
 }
 
+/**
+ * Lightweight stemming-free partial match: two tokens count as a partial hit
+ * when they share a common prefix that is (a) at least 4 chars and (b) covers
+ * all but the last ~2 chars of the shorter token. This lets "testing"↔"tests"
+ * and "commits"↔"commit" match (shared stem) without matching merely-similar
+ * words like "integrity"↔"interfaces" (common prefix "inte" is only 4 of 9).
+ * Short tokens (< 4) still require exact match to avoid cross-word noise.
+ */
+function commonPrefixLen(a: string, b: string): number {
+  const n = Math.min(a.length, b.length)
+  let i = 0
+  while (i < n && a[i] === b[i]) i++
+  return i
+}
+
+function partialMatch(a: string, b: string): boolean {
+  if (a === b) return true
+  if (a.length < 4 || b.length < 4) return false
+  const cp = commonPrefixLen(a, b)
+  return cp >= 4 && cp >= Math.min(a.length, b.length) - 2
+}
+
 /** Score memories by token overlap with the query; boost pinned + importance. */
 export function searchMemories(companionId: string, query: string, limit = 8): CompanionMemory[] {
   const memories = listMemories(companionId)
@@ -111,7 +133,19 @@ export function searchMemories(companionId: string, query: string, limit = 8): C
   const scored = memories.map((m) => {
     const mTokens = tokenize(`${m.title} ${m.content} ${m.tags.join(' ')}`)
     let overlap = 0
-    for (const t of mTokens) if (qTokens.has(t)) overlap++
+    for (const t of mTokens) {
+      if (qTokens.has(t)) {
+        overlap += 1 // exact token match
+      } else {
+        // partial (shared-prefix) match, weighted lower so exact matches rank higher
+        for (const q of qTokens) {
+          if (partialMatch(t, q)) {
+            overlap += 0.5
+            break
+          }
+        }
+      }
+    }
     const score = overlap + (m.pinned ? 3 : 0) + m.importance * 0.4
     return { m, score, overlap }
   })
