@@ -10370,6 +10370,94 @@ body {
   flex: 1 1 auto;
 }
 
+.action-button,
+.icon-button,
+.composer-action-button {
+  border: 0;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.action-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.action-button.is-primary {
+  color: #14131b;
+  background: linear-gradient(180deg, #f2edff, #b9a9ff);
+  box-shadow: 0 10px 26px rgba(126, 101, 216, 0.24);
+}
+
+.action-button.is-secondary {
+  color: var(--text);
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+.action-button.is-danger {
+  color: #fff7f7;
+  background: rgba(255, 99, 99, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.3);
+}
+
+.action-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.composer-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.action-button.is-primary:hover:not(:disabled) {
+  box-shadow: 0 14px 32px rgba(126, 101, 216, 0.3);
+}
+
+.action-button:disabled,
+.icon-button:disabled,
+.composer-action-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+  transform: none;
+}
+
+.icon-button,
+.composer-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  border-radius: 999px;
+}
+
+.composer-action-button {
+  width: 42px;
+  height: 42px;
+  color: #14131b;
+  background: linear-gradient(180deg, #f8f5ff, #c4b8ff);
+  border-radius: 999px;
+  box-shadow: 0 10px 26px rgba(126, 101, 216, 0.25);
+}
+
+.composer-action-button.is-stop {
+  color: #fff7f7;
+  background: rgba(255, 99, 99, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.32), 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
 /* ===== Phase 51: Companions ===== */
 .companions-page {
   flex: 1 1 0;
