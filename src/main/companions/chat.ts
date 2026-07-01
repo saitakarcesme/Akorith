@@ -22,6 +22,7 @@ export interface SendCompanionMessageInput {
   sessionId: string
   prompt: string
   model?: string
+  signal?: AbortSignal
 }
 
 export interface SendCompanionMessageResult {
@@ -52,7 +53,7 @@ export async function sendCompanionMessage(input: SendCompanionMessageInput): Pr
   // 3) assemble + send
   const system = `${systemPromptFor(input.companionId)}\n\n${memoryBlock}`
   const full = `${transcript ? transcript + '\n' : ''}User: ${prompt}\n${companion.name}:`
-  const res = await sendLocal(full, { system, model: input.model ?? companion.model })
+  const res = await sendLocal(full, { system, model: input.model ?? companion.model, signal: input.signal })
   if (!res.ok) return { ok: false, error: res.error }
 
   // 4) persist both turns
