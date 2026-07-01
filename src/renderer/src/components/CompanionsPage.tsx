@@ -46,13 +46,14 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
   const [selectedCompanion, setSelectedCompanion] = useState<string | null>(null)
   const [sessions, setSessions] = useState<CompanionSession[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<CompanionMessage[]>([])
+  const [messages, setMessages] = useState<CompanionUiMessage[]>([])
   const [memories, setMemories] = useState<CompanionMemory[]>([])
   const [usedMemoryIds, setUsedMemoryIds] = useState<string[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const activeRequestRef = useRef<{ requestId: string; sessionId: string; companionId: string; cancelled: boolean } | null>(null)
 
   const loadCompanions = useCallback(async () => {
     const list = (await window.api.companion.list()) as Companion[]
