@@ -1232,6 +1232,31 @@ export default function LoopsPage({ active }: { active: boolean }): JSX.Element 
             onChange={(e) => setDescription(e.target.value)}
           />
 
+          <section className="loop-panel loop-mode-panel">
+            <h2>Mode</h2>
+            <div className="loop-option-grid">
+              {CREATE_LOOP_MODES.map((mode) => {
+                const selectedMode = loopType === mode.loopType && targetType === mode.targetType
+                return (
+                  <button
+                    key={mode.label}
+                    type="button"
+                    className={selectedMode ? 'is-selected' : ''}
+                    disabled={busy}
+                    onClick={() => {
+                      setLoopType(mode.loopType)
+                      setTargetType(mode.targetType)
+                      setTargetRef(mode.targetType === 'local-project' ? projects[0]?.path ?? '' : '')
+                    }}
+                  >
+                    <strong>{mode.label}</strong>
+                    <span>{mode.detail}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
           <div className="loop-create-layout">
             <section className="loop-panel">
               <h2>Loop type</h2>
