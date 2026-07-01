@@ -31,7 +31,7 @@ interface SidebarProps {
   onRetryStartupHydration: () => void
   activeSessionId: string | null
   activeProject: ProjectRow | null
-  /** Bumped by the center empty-state "Create Project" button to open the modal. */
+  /** Bumped by the center empty-state project action. */
   createSignal?: number
   onSelectProject: (project: ProjectRow | null) => void
   onSelectSession: (sessionId: string, project?: ProjectRow | null, providerId?: string) => void
@@ -177,10 +177,7 @@ export default function Sidebar({
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameProjectValue, setRenameProjectValue] = useState('')
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newParent, setNewParent] = useState<string | null>(null)
-  const [projectBusy, setProjectBusy] = useState<'open' | 'create' | null>(null)
+  const [projectBusy, setProjectBusy] = useState<'open' | null>(null)
   const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
@@ -354,59 +351,17 @@ export default function Sidebar({
     }
   }
 
-  const beginCreateProject = (): void => {
-    setProjectMenuOpen(false)
-    setNewName('')
-    setNewParent(null)
-    setProjectError(null)
-    setCreateOpen(true)
-  }
-
-  // The center workspace empty-state "Create Project" routes through here so the
-  // sidebar owns the single create flow. Skip the initial render (signal 0).
+  // The center workspace empty-state project action routes through here. The
+  // create modal has been removed, so this opens an existing folder instead.
   const firstSignal = useRef(true)
   useEffect(() => {
     if (firstSignal.current) {
       firstSignal.current = false
       return
     }
-    beginCreateProject()
+    void openExistingProject()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createSignal])
-
-  const pickParentDir = async (): Promise<void> => {
-    setProjectError(null)
-    const res = await window.api.projects.pickDirectory()
-    if (res.ok) setNewParent(res.path)
-    else if (!res.cancelled) setProjectError(res.error)
-  }
-
-  const submitCreateProject = async (): Promise<void> => {
-    const name = newName.trim()
-    if (!name) {
-      setProjectError('Enter a project name.')
-      return
-    }
-    if (!newParent) {
-      setProjectError('Choose a parent folder.')
-      return
-    }
-    setProjectBusy('create')
-    setProjectError(null)
-    try {
-      const res = await window.api.projects.createFolder({ name, parentPath: newParent })
-      if (res.ok) {
-        setCreateOpen(false)
-        await refreshProjects()
-        onProjectsChange()
-        onSelectProject(res.project)
-      } else if (!res.cancelled) {
-        setProjectError(res.error)
-      }
-    } finally {
-      setProjectBusy(null)
-    }
-  }
 
   const commitRename = async (sessionId: string): Promise<void> => {
     const title = renameValue.trim()
@@ -511,7 +466,7 @@ export default function Sidebar({
   }, [])
 
   const handleSidebarLeave = (): void => {
-    if (sidebarCollapsed && !settingsOpen && !createOpen && !confirmRemoveProject && !projectMenuOpen && !projectRowMenu) {
+    if (sidebarCollapsed && !settingsOpen && !confirmRemoveProject && !projectMenuOpen && !projectRowMenu) {
       setSidebarPeeking(false)
     }
   }
@@ -613,10 +568,6 @@ export default function Sidebar({
                         <FolderIcon size={14} />
                         <span>Open Project</span>
                       </button>
-                      <button type="button" role="menuitem" onClick={beginCreateProject}>
-                        <PlusIcon size={14} />
-                        <span>Create Project</span>
-                      </button>
                     </div>
                   </>
                 )}
@@ -624,7 +575,7 @@ export default function Sidebar({
             </div>
             <>
                 {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
-                {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
+                {projectError && <div className="project-onboarding-error">{projectError}</div>}
                 <div className="project-list">
                   {!startupHydrated ? (
                     <div className="sidebar-empty-state is-loading">
@@ -646,10 +597,6 @@ export default function Sidebar({
                         <button type="button" className="sidebar-cta is-primary" disabled={projectBusy !== null} onClick={() => void openExistingProject()}>
                           <FolderIcon size={14} />
                           Open Project
-                        </button>
-                        <button type="button" className="sidebar-cta" disabled={projectBusy !== null} onClick={beginCreateProject}>
-                          <PlusIcon size={14} />
-                          Create Project
                         </button>
                       </div>
                     </div>
@@ -978,55 +925,6 @@ export default function Sidebar({
         </div>
       )}
 
-      {createOpen && (
-        <div className="modal-overlay" onClick={() => projectBusy === null && setCreateOpen(false)}>
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Create project" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Create project</div>
-            <p className="modal-subtitle">
-              Akorith creates the folder, then starts Olympus as Codex and Atlantis as Claude inside it.
-            </p>
-            <label className="modal-field">
-              <span>Project name</span>
-              <input
-                value={newName}
-                placeholder="my-project"
-                autoFocus
-                onChange={(event) => setNewName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && newName.trim() && newParent) void submitCreateProject()
-                  if (event.key === 'Escape' && projectBusy === null) setCreateOpen(false)
-                }}
-              />
-            </label>
-            <label className="modal-field">
-              <span>Parent folder</span>
-              <div className="modal-dir-row">
-                <span className="modal-dir-path" title={newParent ?? ''}>
-                  {newParent ?? 'No folder selected'}
-                </span>
-                <button type="button" className="modal-dir-btn" onClick={() => void pickParentDir()} disabled={projectBusy !== null}>
-                  <FolderIcon size={14} />
-                  Choose…
-                </button>
-              </div>
-            </label>
-            {projectError && <div className="modal-error">{projectError}</div>}
-            <div className="modal-actions">
-              <button type="button" className="modal-cancel" onClick={() => setCreateOpen(false)} disabled={projectBusy !== null}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="modal-confirm"
-                onClick={() => void submitCreateProject()}
-                disabled={projectBusy !== null || !newName.trim() || !newParent}
-              >
-                {projectBusy === 'create' ? 'Creating…' : 'Create Project'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       </aside>
 
       {settingsOpen && (
