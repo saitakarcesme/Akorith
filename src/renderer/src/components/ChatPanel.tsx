@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
+import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
 
 interface ChatMessage {
@@ -1232,26 +1233,13 @@ export default function ChatPanel({
             </div>
           </div>
           {busyRequestId ? (
-            <button
-              type="button"
-              className="send-button is-stop"
-              onClick={cancel}
-              aria-label="Stop generation"
-              title="Stop"
-            >
+            <ComposerSendButton stop onClick={cancel}>
               <StopIcon size={16} />
-            </button>
+            </ComposerSendButton>
           ) : (
-            <button
-              type="button"
-              className="send-button"
-              disabled={!canSend}
-              onClick={() => void sendPrompt()}
-              aria-label="Send message"
-              title="Send"
-            >
+            <ComposerSendButton disabled={!canSend} onClick={() => void sendPrompt()}>
               <SendIcon size={16} />
-            </button>
+            </ComposerSendButton>
           )}
         </div>
       </div>
