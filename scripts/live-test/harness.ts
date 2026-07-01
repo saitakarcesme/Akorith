@@ -85,7 +85,7 @@ async function dispatch(op: string, a: Record<string, unknown>): Promise<unknown
     case 'createMemory':
       return cMem.createMemory(a as never)
     case 'listMemories':
-      return cMem.listMemories(a.companionId as string, {})
+      return cMem.listMemories(a.companionId as string, (a.filters as never) ?? {})
     case 'searchMemories':
       return cMem.searchMemories(a.companionId as string, a.query as string)
     case 'memoryCount':
