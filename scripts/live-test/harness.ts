@@ -66,6 +66,8 @@ async function dispatch(op: string, a: Record<string, unknown>): Promise<unknown
       return loopBacklog.listBacklog(a.id as string)
     case 'addLoopMemory':
       return loopMemory.addLoopMemory(a.id as string, (a.kind as never) ?? 'note', a.content as string)
+    case 'listLoopMemory':
+      return loopMemory.listLoopMemories(a.id as string)
 
     // ---- Companions ----
     case 'listCompanions':
