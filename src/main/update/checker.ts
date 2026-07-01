@@ -41,7 +41,7 @@ function runtimeMode(isRepo: boolean): UpdateStatus['runtimeMode'] {
   if (app.isPackaged && process.platform === 'win32') return 'packaged-windows'
   if (app.isPackaged && process.platform === 'darwin') return 'packaged-macos'
   if (app.isPackaged) return 'packaged-other'
-  return process.env['ELECTRON_RENDERER_URL'] || isRepo ? 'dev' : 'source'
+  return process.env['ELECTRON_RENDERER_URL'] ? 'dev' : isRepo ? 'source' : 'dev'
 }
 
 function expectedWindowsExe(): string | undefined {
