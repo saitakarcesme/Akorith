@@ -377,85 +377,84 @@ function CreateLoopModal({
     }
   }
 
+  const isDirty = Boolean(title || idea || localPath || repoUrl || model)
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal loop-create-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Create project loop</h2>
-        <label className="loop-field">
-          <span>Mode</span>
-          <select value={mode} onChange={(e) => setMode(e.target.value as ProjectLoopMode)}>
-            <option value="project_builder">Project Builder — start from an idea</option>
-            <option value="repo_grower">Repo Grower — improve an existing local repo</option>
-            <option value="github_loop">GitHub Repo Loop — a cloned repo</option>
-            <option value="maintenance">Maintenance — docs/tests/refactor/polish</option>
-          </select>
-        </label>
-        <label className="loop-field">
-          <span>Title</span>
-          <input value={title} placeholder="My side project" onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        {(mode === 'project_builder' || mode === 'maintenance' || mode === 'repo_grower') && (
-          <label className="loop-field">
-            <span>Idea / direction</span>
-            <textarea value={idea} placeholder="What do you want this project to become?" onChange={(e) => setIdea(e.target.value)} />
-          </label>
-        )}
-        {mode === 'github_loop' && (
-          <label className="loop-field">
-            <span>GitHub URL</span>
-            <input value={repoUrl} placeholder="https://github.com/owner/name" onChange={(e) => setRepoUrl(e.target.value)} />
-          </label>
-        )}
-        <label className="loop-field">
-          <span>Project folder</span>
-          <div className="loop-field-row">
-            <input value={localPath} placeholder="Choose a working folder…" onChange={(e) => setLocalPath(e.target.value)} />
-            <button type="button" onClick={() => void pick()}>Browse</button>
-          </div>
-        </label>
-        <div className="loop-field-grid">
-          <label className="loop-field">
-            <span>Local model</span>
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Auto (default)</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
+    <CommandModal ariaLabel="Create project loop" onClose={onClose} safeToClose={!busy && !isDirty}>
+      <div className="loop-create-modal">
+        <ModalHeader
+          title="Create project loop"
+          subtitle="Autonomously grow a local or GitHub project with local models — safe, validated commits."
+          eyebrow={MODE_LABEL[mode]}
+          onClose={onClose}
+          closeDisabled={busy}
+        />
+        <ModalBody>
+          <FieldLabel label="Mode">
+            <select value={mode} onChange={(e) => setMode(e.target.value as ProjectLoopMode)}>
+              <option value="project_builder">Project Builder — start from an idea</option>
+              <option value="repo_grower">Repo Grower — improve an existing local repo</option>
+              <option value="github_loop">GitHub Repo Loop — a cloned repo</option>
+              <option value="maintenance">Maintenance — docs/tests/refactor/polish</option>
             </select>
+          </FieldLabel>
+          <FieldLabel label="Title">
+            <input value={title} placeholder="My side project" onChange={(e) => setTitle(e.target.value)} />
+          </FieldLabel>
+          {(mode === 'project_builder' || mode === 'maintenance' || mode === 'repo_grower') && (
+            <FieldLabel label="Idea / direction">
+              <textarea value={idea} placeholder="What do you want this project to become?" onChange={(e) => setIdea(e.target.value)} />
+            </FieldLabel>
+          )}
+          {mode === 'github_loop' && (
+            <FieldLabel label="GitHub URL">
+              <input value={repoUrl} placeholder="https://github.com/owner/name" onChange={(e) => setRepoUrl(e.target.value)} />
+            </FieldLabel>
+          )}
+          <FieldLabel label="Project folder" hint="Loop reads and writes only inside this folder; it commits locally and never pushes unless enabled.">
+            <div className="field-row">
+              <input value={localPath} placeholder="Choose a working folder..." onChange={(e) => setLocalPath(e.target.value)} />
+              <SecondaryButton onClick={() => void pick()}>Browse</SecondaryButton>
+            </div>
+          </FieldLabel>
+          <FormGrid>
+            <FieldLabel label="Local model">
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                <option value="">Auto (default)</option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </FieldLabel>
+            <FieldLabel label="Autonomy">
+              <select value={autonomy} onChange={(e) => setAutonomy(e.target.value)}>
+                <option value="manual">Manual</option>
+                <option value="assisted">Assisted</option>
+                <option value="auto">Auto</option>
+              </select>
+            </FieldLabel>
+            <FieldLabel label="Safety">
+              <select value={safety} onChange={(e) => setSafety(e.target.value)}>
+                <option value="strict">Strict</option>
+                <option value="standard">Standard</option>
+                <option value="open">Open</option>
+              </select>
+            </FieldLabel>
+            <FieldLabel label="Daily commit target">
+              <input type="number" min={0} max={50} value={dailyTarget} onChange={(e) => setDailyTarget(Number(e.target.value))} />
+            </FieldLabel>
+          </FormGrid>
+          <label className="loop-checkbox">
+            <input type="checkbox" checked={pushEnabled} onChange={(e) => setPushEnabled(e.target.checked)} />
+            <span>Allow pushing to GitHub — off by default. Local-only is safest; pushes are never forced.</span>
           </label>
-          <label className="loop-field">
-            <span>Autonomy</span>
-            <select value={autonomy} onChange={(e) => setAutonomy(e.target.value)}>
-              <option value="manual">Manual</option>
-              <option value="assisted">Assisted</option>
-              <option value="auto">Auto</option>
-            </select>
-          </label>
-          <label className="loop-field">
-            <span>Safety</span>
-            <select value={safety} onChange={(e) => setSafety(e.target.value)}>
-              <option value="strict">Strict</option>
-              <option value="standard">Standard</option>
-              <option value="open">Open</option>
-            </select>
-          </label>
-          <label className="loop-field">
-            <span>Daily commit target</span>
-            <input type="number" min={0} max={50} value={dailyTarget} onChange={(e) => setDailyTarget(Number(e.target.value))} />
-          </label>
-        </div>
-        <label className="loop-checkbox">
-          <input type="checkbox" checked={pushEnabled} onChange={(e) => setPushEnabled(e.target.checked)} />
-          <span>Allow pushing to GitHub (off by default — local-only is safest)</span>
-        </label>
-        {err && <div className="loop-ops-notice is-error">{err}</div>}
-        <div className="modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" className="is-primary" disabled={busy} onClick={() => void create()}>
-            {busy ? 'Creating…' : 'Create loop'}
-          </button>
-        </div>
+          {err && <div className="agents-error">{err}</div>}
+        </ModalBody>
+        <ModalFooter>
+          <SecondaryButton disabled={busy} onClick={onClose}>Cancel</SecondaryButton>
+          <PrimaryButton disabled={busy} onClick={() => void create()}>{busy ? 'Creating...' : 'Create loop'}</PrimaryButton>
+        </ModalFooter>
       </div>
-    </div>
+    </CommandModal>
   )
 }
