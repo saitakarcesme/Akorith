@@ -121,26 +121,74 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
       setSessionId(sid)
     }
     const prompt = draft.trim()
+    const requestId = newClientId('companion-send')
+    const userId = newClientId('companion-user')
+    const thinkingId = newClientId('companion-thinking')
     setDraft('')
     setBusy(true)
-    // optimistic user bubble
-    setMessages((prev) => [...prev, { id: 'tmp', sessionId: sid!, companionId: companion.id, role: 'user', content: prompt, createdAt: Date.now() }])
+    activeRequestRef.current = { requestId, sessionId: sid, companionId: companion.id, cancelled: false }
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, sessionId: sid!, companionId: companion.id, role: 'user', content: prompt, createdAt: Date.now(), pending: true },
+      {
+        id: thinkingId,
+        sessionId: sid!,
+        companionId: companion.id,
+        role: 'assistant',
+        content: 'Thinking...',
+        createdAt: Date.now() + 1,
+        pending: true,
+        tone: 'thinking'
+      }
+    ])
     try {
-      const res = (await window.api.companion.sendMessage({ companionId: companion.id, sessionId: sid, prompt })) as SendCompanionMessageResult
+      const res = (await window.api.companion.sendMessage({ companionId: companion.id, sessionId: sid, prompt, requestId })) as SendCompanionMessageResult
+      if (activeRequestRef.current?.requestId !== requestId || activeRequestRef.current.cancelled) return
       const msgs = (await window.api.companion.listMessages(sid)) as CompanionMessage[]
-      setMessages(msgs)
       if (res.contextInfo) setUsedMemoryIds(res.contextInfo.usedMemories.map((m) => m.id))
       if (!res.ok) {
-        setMessages((prev) => [...prev, { id: 'err', sessionId: sid!, companionId: companion.id, role: 'assistant', content: `⚠ ${res.error ?? 'error'} — is a local model running?`, createdAt: Date.now() }])
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== thinkingId),
+          {
+            id: newClientId('companion-error'),
+            sessionId: sid!,
+            companionId: companion.id,
+            role: 'assistant',
+            content: `Error: ${res.error ?? 'message failed'} Is a local model running?`,
+            createdAt: Date.now(),
+            pending: true,
+            tone: 'error'
+          }
+        ])
+        return
       }
+      setMessages(msgs)
       // fire-and-forget memory extraction after a few turns
       if (msgs.length >= 4 && msgs.length % 4 === 0) {
         void window.api.companion.extractMemories(sid).then(() => void loadMemories(companion.id))
       }
       await loadSessions(companion.id)
       setMemoryCounts((c) => ({ ...c, [companion.id]: c[companion.id] ?? 0 }))
+    } catch (err) {
+      if (activeRequestRef.current?.requestId !== requestId || activeRequestRef.current.cancelled) return
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== thinkingId),
+        {
+          id: newClientId('companion-error'),
+          sessionId: sid!,
+          companionId: companion.id,
+          role: 'assistant',
+          content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          createdAt: Date.now(),
+          pending: true,
+          tone: 'error'
+        }
+      ])
     } finally {
-      setBusy(false)
+      if (activeRequestRef.current?.requestId === requestId) {
+        activeRequestRef.current = null
+        setBusy(false)
+      }
     }
   }
 
