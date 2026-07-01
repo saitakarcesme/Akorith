@@ -298,24 +298,23 @@ function CreateAgentModal({
         />
         <ModalBody>
         {template?.note && <div className="agents-warn">⚠ {template.note}</div>}
-        <label className="loop-field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label className="loop-field">
-          <span>Folder the agent may read/write</span>
-          <div className="loop-field-row">
-            <input value={root} placeholder="Choose a folder…" onChange={(e) => setRoot(e.target.value)} />
-            <button type="button" onClick={() => void pick()}>Browse</button>
+        <FieldLabel label="Name">
+          <input ref={nameInputRef} value={name} onChange={(e) => setName(e.target.value)} />
+        </FieldLabel>
+        <FieldLabel label="Allowed folder or project" hint="The agent is constrained to this root when it previews or writes files.">
+          <div className="field-row">
+            <input value={root} placeholder="Choose a folder..." onChange={(e) => setRoot(e.target.value)} />
+            <SecondaryButton onClick={() => void pick()}>Browse</SecondaryButton>
           </div>
-        </label>
-        <div className="loop-field-grid">
-          <label className="loop-field">
-            <span>Local model</span>
+        </FieldLabel>
+        <FormGrid>
+          <FieldLabel label="Local model">
             <select value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="">Auto (default)</option>
               {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
-          </label>
-          <label className="loop-field">
-            <span>Permission mode</span>
+          </FieldLabel>
+          <FieldLabel label="Permission mode">
             <select value={permission} onChange={(e) => setPermission(e.target.value as AgentPermissionMode)}>
               <option value="preview">Preview only (safest)</option>
               <option value="ask_write">Ask before write</option>
@@ -323,8 +322,8 @@ function CreateAgentModal({
               <option value="safe_commands">Allow safe commands</option>
               <option value="manual_each">Manual approval each step</option>
             </select>
-          </label>
-        </div>
+          </FieldLabel>
+        </FormGrid>
         <label className="loop-checkbox">
           <input type="checkbox" checked={allowCommands} onChange={(e) => setAllowCommands(e.target.checked)} />
           <span>Allow running allowlisted validation commands (typecheck/build/test/lint)</span>
