@@ -36,10 +36,10 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
       lineHeight: 1.32,
       theme: {
         // Phase 14.1: lighter, more readable sandbox surface (was near-black).
-        background: '#1b1b22',
-        foreground: '#e8e4ee',
-        cursor: '#1b1b22',
-        selectionBackground: 'rgba(169, 150, 255, 0.22)'
+        background: '#181818',
+        foreground: '#ffffff',
+        cursor: '#181818',
+        selectionBackground: 'rgba(255, 255, 255, 0.22)'
       }
     })
     const fitAddon = new FitAddon()

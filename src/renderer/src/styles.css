@@ -79,7 +79,8 @@
   --provider-local-bg: rgba(255, 255, 255, 0.05);
 
   --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.45);
-  --app-chrome-height: 44px;
+  /* Codex desktop toolbar height (`--height-toolbar: 46px`). */
+  --app-chrome-height: 46px;
   --chrome-sidebar-width: var(--sidebar-width);
   --sidebar-width: 292px;
   --sidebar-peek-width: 292px;
@@ -395,52 +396,57 @@ textarea:focus-visible {
 
 .app[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #171717;
-  --bg-panel: #202020;
-  --bg-raised: #292929;
-  --bg-soft: #1b1b1b;
-  --bg-input: #242424;
-  --bg-chat: #171717;
-  --bg-chat-raised: #202020;
-  --bg-composer: #202124;
+  /* Codex desktop `.electron-dark` palette, taken 1:1 from Codex.app:
+     gray-900 #181818 surface, gray-800 #212121 editor/panels, gray-750 #282828
+     raised, white-alpha borders (8% / 16%), white text at 100/70/50%. */
+  --bg: #181818;
+  --bg-panel: #212121;
+  --bg-raised: #282828;
+  --bg-soft: #1d1d1d;
+  --bg-input: #212121;
+  --bg-chat: #181818;
+  --bg-chat-raised: #212121;
+  --bg-composer: #212121;
   /* Phase 37.5: user messages are a white right-aligned bubble in dark theme. */
   --bubble-user: #ffffff;
-  --bubble-user-text: #17181b;
+  --bubble-user-text: #0d0d0d;
   --bubble-assistant: transparent;
-  --bubble-assistant-text: #ededf0;
-  --sidebar-bg: rgba(86, 89, 92, 0.58);
-  --sidebar-bg-2: rgba(255, 255, 255, 0.085);
-  --sidebar-panel: rgba(84, 87, 90, 0.72);
-  --sidebar-raised: rgba(255, 255, 255, 0.14);
-  --sidebar-soft: rgba(255, 255, 255, 0.075);
-  --sidebar-input: rgba(255, 255, 255, 0.10);
-  --sidebar-text: #f3f3f5;
-  --sidebar-text-dim: #b6b6bd;
-  --sidebar-text-faint: #7e7e87;
-  --sidebar-icon: #b6b6bd;
-  --sidebar-border: rgba(255, 255, 255, 0.11);
-  --sidebar-border-strong: rgba(255, 255, 255, 0.17);
-  --sidebar-hover: rgba(255, 255, 255, 0.07);
-  --sidebar-hover-strong: rgba(255, 255, 255, 0.12);
-  --sidebar-active-bg: rgba(255, 255, 255, 0.13);
+  --bubble-assistant-text: rgba(255, 255, 255, 0.92);
+  /* Codex left panel: editor background (gray-800) at 55% over macOS sidebar
+     vibrancy — `color-mix(in srgb, #212121 55%, transparent)`. */
+  --sidebar-bg: rgba(33, 33, 33, 0.55);
+  --sidebar-bg-2: rgba(255, 255, 255, 0.03);
+  --sidebar-panel: rgba(33, 33, 33, 0.96);
+  --sidebar-raised: rgba(255, 255, 255, 0.08);
+  --sidebar-soft: rgba(255, 255, 255, 0.03);
+  --sidebar-input: rgba(255, 255, 255, 0.05);
+  --sidebar-text: #ffffff;
+  --sidebar-text-dim: rgba(255, 255, 255, 0.7);
+  --sidebar-text-faint: rgba(255, 255, 255, 0.5);
+  --sidebar-icon: rgba(255, 255, 255, 0.7);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-border-strong: rgba(255, 255, 255, 0.16);
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-hover-strong: rgba(255, 255, 255, 0.08);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.10);
   --sidebar-active-text: #ffffff;
-  --sidebar-accent: #f3f3f5;
-  --sidebar-on-accent: #0a0a0c;
+  --sidebar-accent: #ffffff;
+  --sidebar-on-accent: #0d0d0d;
   --sidebar-focus-ring: rgba(255, 255, 255, 0.30);
-  --text: #f0f0f2;
-  --text-dim: #b0b0b8;
-  --text-faint: #7c7c85;
-  --on-accent: #0a0a0c;
-  --border: #303030;
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --hover: rgba(255, 255, 255, 0.065);
-  --hover-strong: rgba(255, 255, 255, 0.11);
-  --accent: #f0f0f2;
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.7);
+  --text-faint: rgba(255, 255, 255, 0.5);
+  --on-accent: #0d0d0d;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-soft: rgba(255, 255, 255, 0.04);
+  --hover: rgba(255, 255, 255, 0.07);
+  --hover-strong: rgba(255, 255, 255, 0.10);
+  --accent: #ffffff;
   --accent-strong: #ffffff;
-  --accent-dim: rgba(255, 255, 255, 0.09);
+  --accent-dim: rgba(255, 255, 255, 0.08);
   --focus-ring: rgba(255, 255, 255, 0.30);
-  --code-bg: #202020;
-  --code-border: rgba(255, 255, 255, 0.10);
+  --code-bg: #212121;
+  --code-border: rgba(255, 255, 255, 0.08);
   --code-copy-bg: rgba(255, 255, 255, 0.08);
   --code-copy-hover-bg: rgba(255, 255, 255, 0.14);
   --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.62);
@@ -455,56 +461,60 @@ textarea:focus-visible {
 
 .app[data-theme='light'] {
   color-scheme: light;
-  --bg: #f2f3f5;
+  /* Codex desktop `.electron-light` palette, taken 1:1 from Codex.app:
+     white surface, gray-50 #f9f9f9 under-surface, foreground #1a1c1f with
+     70/50% alpha steps, foreground-alpha borders (8% / 16%). */
+  --bg: #ffffff;
   --bg-panel: #ffffff;
-  --bg-raised: #f7f7f8;
-  --bg-soft: #eceef1;
+  --bg-raised: #f9f9f9;
+  --bg-soft: #f9f9f9;
   --bg-input: #ffffff;
-  --bg-chat: #f7f8fa;
-  --bg-chat-raised: #ffffff;
+  --bg-chat: #ffffff;
+  --bg-chat-raised: #f9f9f9;
   --bg-composer: #ffffff;
   /* Phase 37.5: light theme inverts to a dark bubble so the user message stays
      readable on the near-white chat surface. */
-  --bubble-user: #2a2b30;
-  --bubble-user-text: #f3f3f5;
+  --bubble-user: #1a1c1f;
+  --bubble-user-text: #ffffff;
   --bubble-assistant: transparent;
-  --bubble-assistant-text: #202124;
-  --sidebar-bg: rgba(255, 255, 255, 0.60);
-  --sidebar-bg-2: rgba(255, 255, 255, 0.78);
+  --bubble-assistant-text: #1a1c1f;
+  /* Codex left panel (light): editor background #ededed at 40% over vibrancy. */
+  --sidebar-bg: rgba(237, 237, 237, 0.40);
+  --sidebar-bg-2: rgba(26, 28, 31, 0.02);
   --sidebar-panel: rgba(255, 255, 255, 0.94);
-  --sidebar-raised: rgba(17, 24, 39, 0.08);
-  --sidebar-soft: rgba(17, 24, 39, 0.05);
+  --sidebar-raised: rgba(26, 28, 31, 0.08);
+  --sidebar-soft: rgba(26, 28, 31, 0.03);
   --sidebar-input: rgba(255, 255, 255, 0.92);
-  --sidebar-text: #17181b;
-  --sidebar-text-dim: #5e626b;
-  --sidebar-text-faint: #9296a1;
-  --sidebar-icon: #656a73;
-  --sidebar-border: rgba(17, 24, 39, 0.09);
-  --sidebar-border-strong: rgba(17, 24, 39, 0.13);
-  --sidebar-hover: rgba(17, 24, 39, 0.045);
-  --sidebar-hover-strong: rgba(17, 24, 39, 0.075);
-  --sidebar-active-bg: rgba(17, 24, 39, 0.075);
-  --sidebar-active-text: #101114;
-  --sidebar-accent: #202124;
+  --sidebar-text: #1a1c1f;
+  --sidebar-text-dim: rgba(26, 28, 31, 0.7);
+  --sidebar-text-faint: rgba(26, 28, 31, 0.5);
+  --sidebar-icon: rgba(26, 28, 31, 0.7);
+  --sidebar-border: rgba(26, 28, 31, 0.08);
+  --sidebar-border-strong: rgba(26, 28, 31, 0.16);
+  --sidebar-hover: rgba(26, 28, 31, 0.05);
+  --sidebar-hover-strong: rgba(26, 28, 31, 0.08);
+  --sidebar-active-bg: rgba(26, 28, 31, 0.10);
+  --sidebar-active-text: #1a1c1f;
+  --sidebar-accent: #1a1c1f;
   --sidebar-on-accent: #ffffff;
-  --sidebar-focus-ring: rgba(17, 24, 39, 0.26);
-  --text: #202124;
-  --text-dim: #676b73;
-  --text-faint: #9296a1;
+  --sidebar-focus-ring: rgba(26, 28, 31, 0.26);
+  --text: #1a1c1f;
+  --text-dim: rgba(26, 28, 31, 0.7);
+  --text-faint: rgba(26, 28, 31, 0.5);
   --on-accent: #ffffff;
-  --border: #dfe2e7;
-  --border-soft: rgba(17, 24, 39, 0.10);
-  --hover: rgba(17, 24, 39, 0.045);
-  --hover-strong: rgba(17, 24, 39, 0.075);
-  --accent: #202124;
-  --accent-strong: #111214;
-  --accent-dim: rgba(17, 24, 39, 0.08);
-  --focus-ring: rgba(17, 24, 39, 0.26);
-  --code-bg: #f0f1f5;
-  --code-border: rgba(17, 24, 39, 0.12);
-  --code-copy-bg: rgba(17, 24, 39, 0.06);
-  --code-copy-hover-bg: rgba(17, 24, 39, 0.10);
-  --shadow-soft: 0 18px 48px rgba(17, 24, 39, 0.12);
+  --border: rgba(26, 28, 31, 0.08);
+  --border-soft: rgba(26, 28, 31, 0.04);
+  --hover: rgba(26, 28, 31, 0.05);
+  --hover-strong: rgba(26, 28, 31, 0.08);
+  --accent: #1a1c1f;
+  --accent-strong: #0d0d0d;
+  --accent-dim: rgba(26, 28, 31, 0.08);
+  --focus-ring: rgba(26, 28, 31, 0.26);
+  --code-bg: #f9f9f9;
+  --code-border: rgba(26, 28, 31, 0.08);
+  --code-copy-bg: rgba(26, 28, 31, 0.06);
+  --code-copy-hover-bg: rgba(26, 28, 31, 0.10);
+  --shadow-soft: 0 18px 48px rgba(26, 28, 31, 0.12);
 }
 
 /* ---------- left sidebar ---------- */
@@ -847,7 +857,7 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: #191a1e;
+  background: #212121;
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: var(--shadow-soft);
@@ -6242,10 +6252,10 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   /* Hosts a (dark) xterm — keep the chrome dark, but lighter/readable (Phase 14.1). */
-  --bg-raised: #26262e;
-  --text-dim: #b2aebd;
+  --bg-raised: #282828;
+  --text-dim: rgba(255, 255, 255, 0.7);
   --border-soft: rgba(255, 255, 255, 0.09);
-  background: #181820;
+  background: #181818;
 }
 
 .test-terminal-header {
@@ -7105,9 +7115,12 @@ textarea:focus-visible {
 }
 
 /* ---- agent activity drawer ---- */
+/* Codex-style: overlay panels live below the fixed toolbar instead of sliding
+   under it — otherwise the drag-region chrome (z-index 120) swallows clicks on
+   the drawer header (e.g. the Drawer/Bottom/Right/Focus dock switcher). */
 .agent-drawer-scrim {
   position: absolute;
-  inset: 0;
+  inset: var(--app-chrome-height) 0 0 0;
   z-index: 40;
   background: rgba(0, 0, 0, 0.32);
   opacity: 0;
@@ -7121,14 +7134,14 @@ textarea:focus-visible {
 
 .agent-drawer {
   position: absolute;
-  top: 0;
+  top: var(--app-chrome-height);
   right: 0;
   bottom: 0;
   z-index: 41;
   width: min(620px, 64%);
   display: flex;
   flex-direction: column;
-  background: #0e0e12;
+  background: #181818;
   border-left: 1px solid var(--border);
   box-shadow: -18px 0 50px rgba(0, 0, 0, 0.5);
   transform: translateX(100%);
@@ -7158,7 +7171,7 @@ textarea:focus-visible {
 
 /* Focus view: large inset panel that fades/scales in. */
 .agent-drawer.mode-full {
-  top: 12px;
+  top: calc(var(--app-chrome-height) + 12px);
   right: 12px;
   bottom: 12px;
   left: 12px;
@@ -7186,7 +7199,7 @@ textarea:focus-visible {
 
 /* ---- Phase 36.6: right dock — beside the chat, not overlaying it ---- */
 .agent-drawer.mode-right {
-  top: 0;
+  top: var(--app-chrome-height);
   right: 0;
   bottom: 0;
   left: auto;
@@ -7976,12 +7989,12 @@ textarea:focus-visible {
      usable height (the slot min-height floor below) and scroll the body
      internally instead of squishing the panes or overflowing the window. */
   overflow-y: auto;
-  /* dark token scope so the hosted terminal chrome stays dark */
-  --bg: #0e0e12;
-  --bg-input: #14131b;
-  --text: #e7e4ec;
-  --text-dim: #a6a2b0;
-  --text-faint: #74717e;
+  /* dark token scope so the hosted terminal chrome stays dark (Codex grays) */
+  --bg: #181818;
+  --bg-input: #212121;
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.7);
+  --text-faint: rgba(255, 255, 255, 0.5);
   --border-soft: rgba(255, 255, 255, 0.08);
 }
 
@@ -9960,8 +9973,8 @@ body {
   padding: 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  background: #08080d;
-  color: #d7d7df;
+  background: #0d0d0d;
+  color: rgba(255, 255, 255, 0.85);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -10605,7 +10618,7 @@ body {
 .field-label select:focus,
 .field-label textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(169, 150, 255, 0.13);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.13);
 }
 
 .field-row {
@@ -10861,7 +10874,7 @@ body {
 .agent-templates { display: flex; flex-direction: column; gap: 6px; }
 .agent-template-card { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; text-align: left; color: inherit; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--border-soft); border-radius: 16px; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
 .agent-template-card:hover { background: var(--bg-soft); border-color: var(--border); }
-.agent-template-card:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(169, 150, 255, 0.13); }
+.agent-template-card:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.13); }
 .agent-template-name { font-size: 12px; font-weight: 600; color: var(--text); }
 .agent-template-desc { font-size: 10.5px; color: var(--text-faint); line-height: 1.4; }
 .agent-template-note { font-size: 9.5px; color: var(--warning); }
@@ -10927,7 +10940,7 @@ body {
   margin: 8px 0 12px;
   padding: 10px 12px;
   color: var(--text-dim);
-  background: rgba(169, 150, 255, 0.07);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 14px;
   font-size: 11.5px;
   line-height: 1.45;

@@ -97,10 +97,10 @@ export default function TerminalPane({
       fontSize: 13,
       lineHeight: 1.2,
       theme: {
-        background: '#0b0b10',
-        foreground: '#e6e1ea',
-        cursor: '#a996ff',
-        selectionBackground: 'rgba(169, 150, 255, 0.22)'
+        background: '#0d0d0d',
+        foreground: '#ffffff',
+        cursor: '#ffffff',
+        selectionBackground: 'rgba(255, 255, 255, 0.22)'
       }
     })
     const fitAddon = new FitAddon()

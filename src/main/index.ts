@@ -182,8 +182,8 @@ function createSplashWindow(): BrowserWindow | null {
   // The background follows the selected theme (mirrored to config for the splash,
   // since the renderer's localStorage doesn't exist yet at this point).
   const theme: AppTheme = getTheme()
-  const bg = theme === 'light' ? '#f2f3f5' : '#101012'
-  const fg = theme === 'light' ? '#202124' : '#f0f0f2'
+  const bg = theme === 'light' ? '#ffffff' : '#181818'
+  const fg = theme === 'light' ? '#1a1c1f' : '#ffffff'
 
   const splash = new BrowserWindow({
     width: 420,
@@ -256,7 +256,7 @@ function createWindow(): void {
   splashWindowRef = splashWindow
   // Paint the main window in the selected theme's base color so there's no
   // bright flash between the splash and the rendered UI.
-  const mainBg = getTheme() === 'light' ? '#f2f3f5' : '#101012'
+  const mainBg = getTheme() === 'light' ? '#ffffff' : '#181818'
   const useTransparentWindow = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
     width: 1440,
@@ -283,8 +283,8 @@ function createWindow(): void {
           titleBarStyle: 'hidden' as const,
           titleBarOverlay: {
             color: mainBg,
-            symbolColor: getTheme() === 'light' ? '#202124' : '#f0f0f2',
-            height: 44
+            symbolColor: getTheme() === 'light' ? '#1a1c1f' : '#ffffff',
+            height: 46
           }
         }
       : {}),
