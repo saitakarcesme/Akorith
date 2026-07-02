@@ -88,9 +88,12 @@
   /* Phase 33: sharper, more technical geometry. Smaller radii across the board
      so panels/cards read as a precise command surface, not pillowy SaaS cards.
      Tiny status pills keep their own 999px radius where set explicitly. */
-  --radius-sm: 3px;
-  --radius: 5px;
-  --radius-lg: 8px;
+  /* Phase 57: Codex-grade rounding — Codex scales its radii up 1.25x and uses
+     visibly round surfaces; small radii read as legacy chrome. */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-card: 16px;
   --radius-xl: 10px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 140ms var(--ease);
@@ -253,14 +256,16 @@ textarea:focus-visible {
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.34);
 }
 
+/* Native macOS traffic-light glyphs (close ×, minimize −, zoom ⤢ triangles),
+   drawn as inline SVG so hover shows the real Apple symbols, not text chars. */
 .app-window-control::before {
-  display: inline-block;
-  color: rgba(35, 29, 32, 0.72);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
+  content: '';
+  width: 12px;
+  height: 12px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
   opacity: 0;
-  transform: translateY(-0.5px);
   transition: opacity var(--fast);
 }
 
@@ -269,7 +274,7 @@ textarea:focus-visible {
 }
 
 .app-window-control.is-close::before {
-  content: '×';
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M3.6 3.6l4.8 4.8m0-4.8L3.6 8.4' stroke='%23750b06' stroke-width='1.2' stroke-linecap='round'/></svg>");
 }
 
 .app-window-control.is-close {
@@ -277,8 +282,7 @@ textarea:focus-visible {
 }
 
 .app-window-control.is-minimize::before {
-  content: '−';
-  transform: translateY(-1.5px);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.8 6h6.4' stroke='%23995700' stroke-width='1.3' stroke-linecap='round'/></svg>");
 }
 
 .app-window-control.is-minimize {
@@ -286,8 +290,7 @@ textarea:focus-visible {
 }
 
 .app-window-control.is-fullscreen::before {
-  content: '+';
-  transform: translateY(-0.8px);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M9.2 2.8v3.1L6.1 2.8z' fill='%23006400'/><path d='M2.8 9.2V6.1l3.1 3.1z' fill='%23006400'/></svg>");
 }
 
 .app-window-control.is-fullscreen {
@@ -7998,10 +8001,14 @@ textarea:focus-visible {
   --border-soft: rgba(255, 255, 255, 0.08);
 }
 
+/* Each agent pane (Olympus / Gaia / Atlantis) keeps a tall, readable floor —
+   2x the old 360px — and the drawer body scrolls internally in every mode
+   instead of squishing the terminals. */
 .agent-drawer.mode-drawer .terminal-slot:not(.is-collapsed),
 .agent-drawer.mode-right .terminal-slot:not(.is-collapsed),
-.agent-drawer.mode-full .terminal-slot:not(.is-collapsed) {
-  min-height: 360px;
+.agent-drawer.mode-full .terminal-slot:not(.is-collapsed),
+.agent-drawer.mode-dock .terminal-slot:not(.is-collapsed) {
+  min-height: 720px;
   flex: 0 0 auto !important;
 }
 
@@ -10964,3 +10971,966 @@ body {
 .dash-pillar-name { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
 .dash-pillar-count { font-size: 28px; font-weight: 720; color: var(--text); margin: 4px 0; font-variant-numeric: tabular-nums; }
 .dash-pillar-sub { font-size: 10.5px; color: var(--text-faint); }
+
+/* ============================================================================
+   Phase 57: Codex-grade redesign of the tool pages
+   (Loop · Dashboard · Test · Plugins · Companions · Agents)
+
+   One shared design language, applied as a final layer so it wins the cascade:
+   - Hero headers: 26px tight-tracked title + 13px dim subtitle, roomy padding.
+   - Cards: var(--bg-panel) #212121, 1px 8% border, 16px radius, hover = 16%
+     border. No gradients, no colored blocks — Codex monochrome.
+   - Chips/filters: pill rows; the active chip is the white "primary" surface.
+   - Lists: separator rows (4% hairlines) instead of floating text soup.
+   ========================================================================== */
+
+/* ---- shared hero header ---- */
+.loop-ops-header,
+.agents-header,
+.plugins-header,
+.dash-hero,
+.test-head {
+  padding: 30px 34px 18px;
+}
+
+.loop-ops-header h1,
+.agents-header h1,
+.plugins-header h1,
+.dash-hero h1,
+.test-title {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.loop-ops-header p,
+.agents-header p,
+.plugins-header p,
+.dash-hero p,
+.test-sub {
+  max-width: 560px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* ---- shared card + section surfaces ---- */
+.loop-ops-section,
+.dash-section,
+.dash-command-card,
+.dash-pillar-card,
+.dash-limit-card,
+.dash-gpu-card,
+.plugin-card,
+.agent-perm-card,
+.agent-run-result,
+.companion-card,
+.isa-card,
+.test-step,
+.soon-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+.loop-ops-section,
+.dash-section {
+  padding: 20px 22px;
+}
+
+.loop-ops-section h3,
+.dash-section-head h2 {
+  color: var(--text);
+}
+
+.loop-ops-section h3 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+/* ---- shared pill filter rows ---- */
+.loop-ops-filters button,
+.plugins-filter,
+.test-source-tabs button {
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color var(--fast), color var(--fast);
+}
+
+.loop-ops-filters button:hover,
+.plugins-filter:hover,
+.test-source-tabs button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.loop-ops-filters button.is-active,
+.plugins-filter.is-active,
+.test-source-tabs button.is-active {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.loop-ops-filters,
+.plugins-filters {
+  gap: 6px;
+}
+
+/* ---- runtime pill: bordered, calmer ---- */
+.runtime-pill {
+  padding: 6px 13px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+/* ============================== Loop page ============================== */
+
+.loop-ops-list {
+  flex: 0 0 300px;
+  gap: 8px;
+  padding: 10px 16px 20px;
+}
+
+.loop-ops-card {
+  flex: 0 0 auto;
+  gap: 6px;
+  /* the legacy macro-loop page set a 210px floor on this class name */
+  min-height: 0;
+  padding: 13px 15px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--fast), background-color var(--fast);
+}
+
+.loop-ops-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.loop-ops-card.is-active {
+  background: var(--bg-raised);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.loop-ops-card-title {
+  font-size: 13.5px;
+}
+
+.loop-ops-detail {
+  padding: 20px 34px 48px;
+}
+
+.loop-ops-detail > * {
+  max-width: 1040px;
+}
+
+.loop-ops-detail-head h2 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.loop-ops-detail-sub {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.loop-ops-detail-sub code {
+  padding: 2px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+.loop-ops-notice {
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.loop-ops-grid {
+  gap: 14px;
+}
+
+/* Timeline / ledger / events as separated rows, not floating text. */
+.loop-run-list,
+.loop-commit-list,
+.loop-event-list,
+.loop-backlog-list {
+  gap: 0;
+  font-size: 12px;
+}
+
+.loop-run,
+.loop-commit-list li,
+.loop-event,
+.loop-backlog-list li {
+  padding: 8px 2px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.loop-run:first-child,
+.loop-commit-list li:first-child,
+.loop-event:first-child,
+.loop-backlog-list li:first-child {
+  border-top: 0;
+}
+
+.loop-run-idx {
+  min-width: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.loop-run-status {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+.loop-status-badge {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.loop-backlog-add {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.loop-backlog-add input {
+  border-radius: 999px;
+  padding-left: 14px;
+}
+
+.loop-backlog-add button {
+  padding: 7px 15px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.loop-backlog-add button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================== Dashboard ============================== */
+
+.dashboard {
+  padding: 0 34px 56px;
+}
+
+.dash-hero {
+  align-items: center;
+  margin: 0 -34px;
+}
+
+.dash-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+}
+
+.dash-observation-pill {
+  padding: 6px 13px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.dash-overview-grid {
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dash-command-card {
+  gap: 6px;
+  padding: 16px 18px;
+  transition: border-color var(--fast);
+}
+
+.dash-command-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.dash-command-card > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.dash-command-card > strong {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-command-card > em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.dash-section {
+  margin-bottom: 14px;
+}
+
+.dash-section-head h2 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.dash-section-head p {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.dash-agent-grid > div,
+.dash-mission-grid > div,
+.dash-ops-grid > div {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.dash-pillar-card {
+  padding: 20px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color var(--fast);
+}
+
+.dash-pillar-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.dash-pillar-count {
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.dash-limit-card,
+.dash-gpu-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+}
+
+.dash-refresh {
+  padding: 7px 15px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color var(--fast);
+}
+
+.dash-refresh:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dash-refresh:disabled {
+  opacity: 0.5;
+}
+
+/* Heatmap: rounder cells, white-alpha intensity ladder. */
+.hm-cell {
+  border-radius: 3px;
+}
+
+.hm-l0 { background: rgba(255, 255, 255, 0.05); }
+.hm-l1 { background: rgba(255, 255, 255, 0.22); }
+.hm-l2 { background: rgba(255, 255, 255, 0.45); }
+.hm-l3 { background: rgba(255, 255, 255, 0.82); }
+
+.usage-stat {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.usage-stat strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-empty-state {
+  padding: 22px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.dash-chip {
+  padding: 4px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.dash-footnote {
+  max-width: 1040px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* ============================== Test Lab ============================== */
+
+.test-page {
+  padding: 0 34px 48px;
+}
+
+.test-head {
+  margin: 0 -34px;
+  padding-bottom: 14px;
+}
+
+.test-head-badge {
+  padding: 6px 13px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.test-step {
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+.test-step-head strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.test-step-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.test-step-head > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.test-btn {
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color var(--fast), border-color var(--fast);
+}
+
+.test-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.test-btn.is-primary {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.test-btn.is-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.test-btn.is-stop {
+  color: #ffe9e9;
+  background: rgba(223, 111, 104, 0.14);
+  border-color: rgba(223, 111, 104, 0.34);
+}
+
+.test-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.test-recent-table .test-row,
+.isa-run {
+  border-top: 1px solid var(--border-soft);
+}
+
+.isa-card {
+  padding: 16px 18px;
+}
+
+/* ============================== Plugins ============================== */
+
+.plugins-grid {
+  gap: 14px;
+}
+
+.plugin-card {
+  padding: 18px 20px;
+  transition: border-color var(--fast);
+}
+
+.plugin-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.plugin-card-name {
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.plugin-status {
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.plugin-card-category {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.plugin-card-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.plugin-perm {
+  padding: 3px 9px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.plugin-perm.is-sensitive {
+  color: var(--warning);
+  border-color: rgba(201, 168, 95, 0.35);
+  background: rgba(201, 168, 95, 0.08);
+}
+
+.plugin-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.plugin-check,
+.plugin-details-btn,
+.plugin-install {
+  padding: 6px 13px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.plugin-check:hover,
+.plugin-details-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.plugin-install:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.plugin-diagnostic {
+  padding: 8px 12px;
+  font-size: 11.5px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+}
+
+.plugins-note {
+  max-width: 1040px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.plugins-tag {
+  padding: 6px 13px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+/* ============================== Companions ============================== */
+
+.companions-left {
+  padding: 24px 18px 20px;
+}
+
+.companions-head h1 {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.companions-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.companion-card {
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  transition: border-color var(--fast), background-color var(--fast);
+}
+
+.companion-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.companion-card.is-active {
+  background: var(--bg-raised);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.companion-card-avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.companion-card-name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.companion-card-tagline {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.companion-card-tags span {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.companion-sessions button {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+}
+
+.companion-sessions button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.companion-sessions button.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.companions-chat-head {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.companion-msg {
+  border-radius: var(--radius-lg);
+}
+
+.companions-composer textarea {
+  border-radius: var(--radius-lg);
+}
+
+.companions-memory {
+  padding: 24px 18px 20px;
+}
+
+.companions-memory-head h3 {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.companions-memory-head button {
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.memory-search {
+  border-radius: 999px;
+  padding-left: 14px;
+}
+
+.memory-item {
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.memory-item.is-used {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.memory-type {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.memory-actions button {
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.memory-actions button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.memory-actions button.is-danger {
+  color: var(--danger);
+}
+
+.memory-add-toggle {
+  padding: 8px 12px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.memory-add-toggle:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* ============================== Agents ============================== */
+
+.agents-library {
+  padding: 10px 16px 20px;
+}
+
+.agents-lib-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.agent-lib-card {
+  flex: 0 0 auto;
+  padding: 13px 15px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--fast), background-color var(--fast);
+}
+
+.agent-lib-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.agent-lib-card.is-active {
+  background: var(--bg-raised);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.agent-lib-name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.agent-lib-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.agent-template-card {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--fast);
+}
+
+.agent-template-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.agent-template-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.agent-template-desc {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.agents-detail {
+  padding: 20px 34px 48px;
+}
+
+.agents-detail > * {
+  max-width: 1040px;
+}
+
+.agents-detail-head h2 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.agent-perm-card {
+  padding: 16px 18px;
+}
+
+.agent-perm-row {
+  padding: 7px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.agent-perm-row:first-child {
+  border-top: 0;
+}
+
+.agent-perm-row code {
+  padding: 2px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+.agent-run-form input {
+  border-radius: 999px;
+  padding-left: 16px;
+}
+
+.agent-run-result {
+  padding: 16px 18px;
+}
+
+.agent-history h3 {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.agent-run-list li {
+  padding: 8px 2px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.agent-run-list li:first-child {
+  border-top: 0;
+}
+
+.agent-run-status {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ---- shared empty-state card ---- */
+.soon-card {
+  padding: 34px 36px;
+  text-align: center;
+}
+
+.soon-card h2 {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.soon-card .soon-sub {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
