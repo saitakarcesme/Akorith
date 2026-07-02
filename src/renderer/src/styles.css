@@ -332,7 +332,7 @@ textarea:focus-visible {
   --bubble-user-text: #17181b;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #ededf0;
-  --sidebar-bg: rgba(10, 11, 13, 0.50);
+  --sidebar-bg: rgba(10, 11, 13, 0.60);
   --sidebar-bg-2: rgba(255, 255, 255, 0.055);
   --sidebar-panel: rgba(18, 19, 22, 0.92);
   --sidebar-raised: rgba(255, 255, 255, 0.10);
@@ -393,7 +393,7 @@ textarea:focus-visible {
   --bubble-user-text: #f3f3f5;
   --bubble-assistant: transparent;
   --bubble-assistant-text: #202124;
-  --sidebar-bg: rgba(255, 255, 255, 0.50);
+  --sidebar-bg: rgba(255, 255, 255, 0.60);
   --sidebar-bg-2: rgba(255, 255, 255, 0.78);
   --sidebar-panel: rgba(255, 255, 255, 0.94);
   --sidebar-raised: rgba(17, 24, 39, 0.08);
