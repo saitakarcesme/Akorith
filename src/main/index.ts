@@ -284,7 +284,7 @@ function createWindow(): void {
           titleBarOverlay: {
             color: mainBg,
             symbolColor: getTheme() === 'light' ? '#202124' : '#f0f0f2',
-            height: 34
+            height: 44
           }
         }
       : {}),

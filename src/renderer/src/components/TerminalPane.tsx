@@ -25,6 +25,7 @@ interface TerminalPaneProps {
   onStatus?: (info: AgentStatusInfo) => void
   /** When true the host is hidden (PTY stays alive); the header collapse toggle
    *  is rendered when onToggleCollapse is provided. */
+  active?: boolean
   collapsed?: boolean
   onToggleCollapse?: () => void
 }
@@ -43,10 +44,13 @@ export default function TerminalPane({
   cwd,
   commandKind,
   onStatus,
+  active = true,
   collapsed = false,
   onToggleCollapse
 }: TerminalPaneProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
+  const terminalRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
   const [status, setStatus] = useState<PaneStatus>('connecting')
   const [exitCode, setExitCode] = useState<number | null>(null)
   const [role, setRole] = useState<TerminalRole>(commandKind)
@@ -55,6 +59,29 @@ export default function TerminalPane({
   useEffect(() => {
     onStatus?.({ status, role })
   }, [status, role, onStatus])
+
+  useEffect(() => {
+    if (!active || collapsed) return
+    let firstFrame = 0
+    let secondFrame = 0
+    let settleTimer = 0
+    const fitVisibleTerminal = (): void => {
+      const host = hostRef.current
+      const fitAddon = fitAddonRef.current
+      if (!host || !fitAddon || host.clientWidth <= 0 || host.clientHeight <= 0) return
+      fitAddon.fit()
+    }
+    firstFrame = window.requestAnimationFrame(() => {
+      fitVisibleTerminal()
+      secondFrame = window.requestAnimationFrame(fitVisibleTerminal)
+    })
+    settleTimer = window.setTimeout(fitVisibleTerminal, 220)
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+      window.clearTimeout(settleTimer)
+    }
+  }, [active, collapsed])
 
   useEffect(() => {
     const host = hostRef.current
@@ -79,7 +106,14 @@ export default function TerminalPane({
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     terminal.open(host)
-    fitAddon.fit()
+    terminalRef.current = terminal
+    fitAddonRef.current = fitAddon
+    const fitVisibleTerminal = (): void => {
+      if (host.clientWidth > 0 && host.clientHeight > 0) {
+        fitAddon.fit()
+      }
+    }
+    fitVisibleTerminal()
 
     // Subscribe before create so no early shell output is dropped.
     const offData = window.api.pty.onData(id, (data) => terminal.write(data))
@@ -137,7 +171,7 @@ export default function TerminalPane({
     const resizeObserver = new ResizeObserver(() => {
       // Skip fits while the pane is collapsed (e.g. during layout churn).
       if (host.clientWidth > 0 && host.clientHeight > 0) {
-        fitAddon.fit() // triggers terminal.onResize → pty:resize
+        fitVisibleTerminal() // triggers terminal.onResize → pty:resize
       }
     })
     resizeObserver.observe(host)
@@ -153,6 +187,8 @@ export default function TerminalPane({
       resizeSub.dispose()
       offData()
       offExit()
+      if (terminalRef.current === terminal) terminalRef.current = null
+      if (fitAddonRef.current === fitAddon) fitAddonRef.current = null
       terminal.dispose()
     }
   }, [id, cwd, commandKind])
@@ -193,7 +229,11 @@ export default function TerminalPane({
         )}
       </header>
       {/* Host stays mounted even when collapsed (CSS hides it) so the PTY lives. */}
-      <div className="terminal-host" ref={hostRef} />
+      <div
+        className="terminal-host"
+        ref={hostRef}
+        onPointerDown={() => terminalRef.current?.focus()}
+      />
     </section>
   )
 }

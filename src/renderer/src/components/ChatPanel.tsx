@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
-import type { AgentStatusMap, ChatMode, HistorySelection } from '../App'
+import type { ChatMode, HistorySelection } from '../App'
 import { formatModelLabel } from '../modelLabels'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
@@ -53,13 +53,8 @@ interface ChatPanelProps {
   /** Sidebar instruction: load a session or start a fresh thread. */
   historySel: HistorySelection | null
   activeProject: ProjectRow | null
-  /** Background agent status (Codex/Claude) so the header can show readiness. */
-  agentStatus: AgentStatusMap
   drawerOpen: boolean
   onToggleDrawer: () => void
-  /** Phase 33.17: bottom workbench (Changes / Runtime / Missions) toggle. */
-  workbenchOpen?: boolean
-  onToggleWorkbench?: () => void
   /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
@@ -72,22 +67,6 @@ interface ChatPanelProps {
 }
 
 const AGENT_LABELS: Record<'t1' | 't2' | 't3', string> = { t1: 'Claude', t2: 'Codex', t3: 'OpenCode' }
-
-/** Compact readiness summary for the header chip from the three agents' statuses. */
-function agentSummary(status: AgentStatusMap): { label: string; tone: 'ready' | 'starting' | 'idle' | 'warn' } {
-  const vals = [status.t2, status.t3, status.t1]
-  if (vals.every((v) => !v)) return { label: 'Agents starting…', tone: 'starting' }
-  const live = vals.filter((v) => v?.status === 'live').length
-  const anyShellFallback = vals.some((v) => v && v.status === 'live' && v.role === 'shell')
-  if (live >= 2) {
-    return {
-      label: anyShellFallback ? `Agents running (shell fallback)` : `${live} agents running`,
-      tone: anyShellFallback ? 'warn' : 'ready'
-    }
-  }
-  if (vals.some((v) => v?.status === 'exited')) return { label: 'An agent exited', tone: 'warn' }
-  return { label: 'Agents starting…', tone: 'starting' }
-}
 
 function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -232,11 +211,8 @@ export default function ChatPanel({
   mode,
   historySel,
   activeProject,
-  agentStatus,
   drawerOpen,
   onToggleDrawer,
-  workbenchOpen,
-  onToggleWorkbench,
   onOpenProject,
   onCreateProject,
   onHistoryChange,
@@ -960,7 +936,6 @@ export default function ChatPanel({
   )
 
   const hasConversation = messages.length > 0
-  const summary = agentSummary(agentStatus)
 
   // Phase 14.2 memory indicator + reset control, shown near the composer so it is
   // obvious the model receives this session's prior turns (a trust surface).
@@ -1115,7 +1090,7 @@ export default function ChatPanel({
               void sendPrompt()
             }
           }}
-          rows={3}
+          rows={2}
           spellCheck={false}
         />
         <div className="composer-controls">
@@ -1251,50 +1226,6 @@ export default function ChatPanel({
 
   return (
     <main className="chat-panel">
-      <header className="ws-topbar">
-        <div className="ws-topbar-left">
-          <span className="ws-title">{isWorkspace ? activeProject?.name ?? 'Workspace' : 'General chat'}</span>
-          <span className="ws-scope-pill">{isWorkspace ? 'Project workspace' : 'Model chat'}</span>
-          {hasProject && (
-            <button
-              type="button"
-              className={`agent-status agent-${summary.tone}`}
-              onClick={onToggleDrawer}
-              title="Open the agent activity drawer"
-            >
-              <span className="agent-status-dot" />
-              {summary.label}
-            </button>
-          )}
-        </div>
-        <div className="ws-topbar-right">
-          {/* Phase 33.8: provider/model selection moved into the composer's
-              ModelPicker (a custom dark listbox). The top bar keeps only the
-              scope/agent controls. */}
-          {onToggleWorkbench && (
-            <button
-              type="button"
-              className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
-              onClick={onToggleWorkbench}
-              title="Toggle the bottom workbench (changes, runtime, missions)"
-            >
-              Workbench
-            </button>
-          )}
-          {hasProject && (
-            <button
-              type="button"
-              className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
-              onClick={onToggleDrawer}
-              title="Show agent terminals"
-            >
-              <SparkIcon size={14} />
-              Activity
-            </button>
-          )}
-        </div>
-      </header>
-
       {isWorkspace && !hasProject ? (
         <div className="ws-hero">
           <div className="ws-hero-inner">

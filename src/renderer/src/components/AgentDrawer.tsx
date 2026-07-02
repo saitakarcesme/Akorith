@@ -56,7 +56,13 @@ function sanitizeSplit(value: number): number {
 }
 
 const WIDTH_MIN = 380
-const WIDTH_MAX = 980
+const WIDTH_DEFAULT = 1180
+const WIDTH_MAX = 1600
+
+function drawerMax(): number {
+  if (typeof window === 'undefined') return WIDTH_DEFAULT
+  return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, window.innerWidth - 80))
+}
 
 // Phase 34.9: bottom-dock vertical resize bounds.
 const DOCK_MIN = 180
@@ -84,11 +90,12 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   const bodyRef = useRef<HTMLDivElement>(null)
   const asideRef = useRef<HTMLElement>(null)
   const [split, setSplit] = useState(() => sanitizeSplit(storageNumber('akorith.terminalSplit', 50)))
-  const [width, setWidth] = useState(() => clamp(storageNumber('akorith.drawerWidth', 620), WIDTH_MIN, WIDTH_MAX))
+  const previousOpenRef = useRef(open)
+  const [width, setWidth] = useState(() => clamp(storageNumber('akorith.drawerWidth', WIDTH_DEFAULT), WIDTH_MIN, drawerMax()))
   const [olympusCollapsed, setOlympusCollapsed] = useState(() => storageBoolean('akorith.olympusCollapsed', false))
   const [gaiaCollapsed, setGaiaCollapsed] = useState(() => storageBoolean('akorith.gaiaCollapsed', false))
   const [atlantisCollapsed, setAtlantisCollapsed] = useState(() => storageBoolean('akorith.atlantisCollapsed', false))
-  const [mode, setMode] = useState<AgentDockMode>(() => storageMode('akorith.agentDockMode', 'drawer'))
+  const [mode, setMode] = useState<AgentDockMode>(() => storageMode('akorith.agentDockMode', 'full'))
   const [dockHeight, setDockHeight] = useState(() =>
     clamp(storageNumber('akorith.agentDockHeight', DOCK_DEFAULT), DOCK_MIN, dockMax())
   )
@@ -99,6 +106,14 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   useEffect(() => {
     localStorage.setItem('akorith.agentDockMode', mode)
   }, [mode])
+
+  useEffect(() => {
+    if (open && !previousOpenRef.current) {
+      if (mode === 'drawer' || mode === 'right') setMode('full')
+      setWidth(drawerMax())
+    }
+    previousOpenRef.current = open
+  }, [open, mode])
   useEffect(() => {
     localStorage.setItem('akorith.agentDockHeight', String(dockHeight))
   }, [dockHeight])
@@ -164,7 +179,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
     const startWidth = width
     const move = (moveEvent: PointerEvent): void => {
       // Dragging the left edge leftwards widens the right-anchored drawer.
-      setWidth(clamp(startWidth + (startX - moveEvent.clientX), WIDTH_MIN, WIDTH_MAX))
+      setWidth(clamp(startWidth + (startX - moveEvent.clientX), WIDTH_MIN, drawerMax()))
     }
     const stop = (): void => {
       window.removeEventListener('pointermove', move)
@@ -235,7 +250,13 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
   ]
 
   const asideStyle =
-    mode === 'drawer' ? { width } : mode === 'dock' ? { height: dockHeight } : mode === 'right' ? { width: rightWidth } : undefined
+    mode === 'drawer'
+      ? { width: `min(100%, ${width}px)` }
+      : mode === 'dock'
+        ? { height: dockHeight }
+        : mode === 'right'
+          ? { width: rightWidth }
+          : undefined
 
   return (
     <>
@@ -295,6 +316,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
               identity="olympus"
               cwd={activeProject.path}
               commandKind="codex"
+              active={open}
               collapsed={olympusCollapsed}
               onToggleCollapse={() => setOlympusCollapsed((v) => !v)}
               onStatus={(info) => onAgentStatus('t2', info)}
@@ -311,6 +333,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
               identity="gaia"
               cwd={activeProject.path}
               commandKind="opencode"
+              active={open}
               collapsed={gaiaCollapsed}
               onToggleCollapse={() => setGaiaCollapsed((v) => !v)}
               onStatus={(info) => onAgentStatus('t3', info)}
@@ -327,6 +350,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
               identity="atlantis"
               cwd={activeProject.path}
               commandKind="claude"
+              active={open}
               collapsed={atlantisCollapsed}
               onToggleCollapse={() => setAtlantisCollapsed((v) => !v)}
               onStatus={(info) => onAgentStatus('t1', info)}

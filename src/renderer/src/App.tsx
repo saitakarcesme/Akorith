@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
@@ -9,7 +9,7 @@ import TestPage from './components/TestPage'
 import ProjectLoopPage from './components/ProjectLoopPage'
 import CompanionsPage from './components/CompanionsPage'
 import AgentsPage from './components/AgentsPage'
-import { ChevronIcon, PanelsIcon } from './components/icons'
+import { ChevronIcon, PanelsIcon, SparkIcon } from './components/icons'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
@@ -27,16 +27,42 @@ export interface HistorySelection {
 
 export type AgentStatusMap = Partial<Record<'t1' | 't2' | 't3', AgentStatusInfo>>
 
+function initialChromeSidebarWidth(): number {
+  try {
+    if (localStorage.getItem('akorith.sidebarCollapsed') === 'true') return 0
+    const raw = Number(localStorage.getItem('akorith.sidebarWidth'))
+    return Number.isFinite(raw) && raw > 0 && raw <= 520 ? raw : 292
+  } catch {
+    return 292
+  }
+}
+
 function AppChrome({
+  title,
+  scope,
   canGoBack,
   canGoForward,
   onBack,
-  onForward
+  onForward,
+  showWorkbench,
+  workbenchOpen,
+  onToggleWorkbench,
+  showActivity,
+  drawerOpen,
+  onToggleDrawer
 }: {
+  title: string
+  scope?: string
   canGoBack: boolean
   canGoForward: boolean
   onBack: () => void
   onForward: () => void
+  showWorkbench: boolean
+  workbenchOpen: boolean
+  onToggleWorkbench: () => void
+  showActivity: boolean
+  drawerOpen: boolean
+  onToggleDrawer: () => void
 }): JSX.Element {
   const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
 
@@ -83,7 +109,33 @@ function AppChrome({
           <ChevronIcon size={15} direction="right" />
         </button>
       </div>
-      <div className="app-chrome-title">Akorith</div>
+      <div className="app-chrome-title">
+        <span>{title}</span>
+        {scope && <span className="app-chrome-scope">{scope}</span>}
+      </div>
+      <div className="app-chrome-right">
+        {showWorkbench && (
+          <button
+            type="button"
+            className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
+            onClick={onToggleWorkbench}
+            title="Toggle the bottom workbench (changes, runtime, missions)"
+          >
+            Workbench
+          </button>
+        )}
+        {showActivity && (
+          <button
+            type="button"
+            className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
+            onClick={onToggleDrawer}
+            title="Show agent terminals"
+          >
+            <SparkIcon size={14} />
+            Activity
+          </button>
+        )}
+      </div>
     </header>
   )
 }
@@ -128,7 +180,8 @@ export default function App(): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
-  const [agentStatus, setAgentStatus] = useState<AgentStatusMap>({})
+  const [, setAgentStatus] = useState<AgentStatusMap>({})
+  const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)
   const [navBackStack, setNavBackStack] = useState<AppView[]>([])
   const [navForwardStack, setNavForwardStack] = useState<AppView[]>([])
   const lastViewRef = useRef<AppView>('workspace')
@@ -411,14 +464,52 @@ export default function App(): JSX.Element {
   }, [activeProject?.id, bumpProjects, openWorkspaceForProject])
 
   const requestCreateProject = useCallback(() => setCreateSignal((n) => n + 1), [])
+  const chromeTitle =
+    view === 'general'
+      ? 'General chat'
+      : view === 'workspace'
+        ? activeProject?.name ?? 'Workspace'
+        : view === 'dashboard'
+          ? 'Dashboard'
+          : view === 'test'
+            ? 'Test'
+            : view === 'loops'
+              ? 'Loop'
+              : view === 'plugins'
+                ? 'Plugins'
+                : view === 'companions'
+                  ? 'Companions'
+                  : 'Agents'
+  const chromeScope =
+    view === 'general'
+      ? 'Model chat'
+      : view === 'workspace'
+        ? activeProject?.path
+          ? 'Project workspace'
+          : 'Workspace'
+        : undefined
+  const showChromeWorkbench = view === 'general' || view === 'workspace'
+  const showChromeActivity = view === 'workspace' && Boolean(activeProject?.path)
 
   return (
-    <div className="app" data-theme={theme}>
+    <div
+      className="app"
+      data-theme={theme}
+      style={{ ['--chrome-sidebar-width' as string]: `${chromeSidebarWidth}px` } as CSSProperties}
+    >
       <AppChrome
+        title={chromeTitle}
+        scope={chromeScope}
         canGoBack={navBackStack.length > 0}
         canGoForward={navForwardStack.length > 0}
         onBack={goBack}
         onForward={goForward}
+        showWorkbench={showChromeWorkbench}
+        workbenchOpen={workbenchOpen}
+        onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
+        showActivity={showChromeActivity}
+        drawerOpen={drawerOpen}
+        onToggleDrawer={() => setDrawerOpen((v) => !v)}
       />
       <div className="app-main">
       <Sidebar
@@ -442,6 +533,7 @@ export default function App(): JSX.Element {
         onNewProjectChat={startNewProjectChat}
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
+        onChromeWidthChange={setChromeSidebarWidth}
       />
       {/* Chat-first workspace. Terminals are not part of this column anymore —
           they live in the AgentDrawer overlay (kept mounted to stay alive). */}
@@ -450,11 +542,8 @@ export default function App(): JSX.Element {
           mode={view === 'general' ? 'general' : 'workspace'}
           historySel={historySel}
           activeProject={view === 'general' ? null : activeProject}
-          agentStatus={agentStatus}
           drawerOpen={drawerOpen}
           onToggleDrawer={() => setDrawerOpen((v) => !v)}
-          workbenchOpen={workbenchOpen}
-          onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}

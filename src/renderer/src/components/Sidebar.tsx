@@ -42,6 +42,7 @@ interface SidebarProps {
   onNewProjectChat: (project: ProjectRow) => void
   onHistoryChange: () => void
   onProjectsChange: () => void
+  onChromeWidthChange?: (width: number) => void
 }
 
 // Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
@@ -144,7 +145,8 @@ export default function Sidebar({
   onNewGeneralChat,
   onNewProjectChat,
   onHistoryChange,
-  onProjectsChange
+  onProjectsChange,
+  onChromeWidthChange
 }: SidebarProps): JSX.Element {
   // Folders come from the registry + DB — never a hardcoded provider list.
   const [providers, setProviders] = useState<ProviderInfo[]>([])
@@ -255,6 +257,10 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.sidebarWidth', String(sidebarWidth))
   }, [sidebarWidth])
+
+  useEffect(() => {
+    onChromeWidthChange?.(sidebarCollapsed && !sidebarPeeking ? 0 : sidebarWidth)
+  }, [onChromeWidthChange, sidebarCollapsed, sidebarPeeking, sidebarWidth])
 
   // Phase 38.3: drag the right edge to resize the open sidebar.
   const startSidebarResize = (event: ReactMouseEvent): void => {
