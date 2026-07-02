@@ -268,7 +268,16 @@ function createWindow(): void {
     transparent: useTransparentWindow,
     autoHideMenuBar: true,
     title: 'Akorith',
-    ...(process.platform === 'darwin' ? { frame: false } : {}),
+    ...(process.platform === 'darwin'
+      ? {
+          frame: false,
+          // CSS backdrop-filter cannot blur the native desktop seen through a
+          // transparent Electron window. macOS vibrancy supplies the real
+          // wallpaper blur; opaque renderer surfaces cover it outside sidebar.
+          vibrancy: 'sidebar' as const,
+          visualEffectState: 'active' as const
+        }
+      : {}),
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,
