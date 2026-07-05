@@ -76,45 +76,121 @@ function isLocalAutoStarting(provider?: ProviderInfo): boolean {
   )
 }
 
-// Focus presets only. The runner/path still come from repo detection so the
-// normal flow stays: repo -> test kind -> Local LLM -> optional ISAScore judge.
-interface TestPreset {
+// Benchmark test types. Every model in a run gets the same type; they're then
+// ranked on objective metrics (no model judges another). Most types work by
+// "generate tests → run in sandbox" and are scored on tests passed + speed.
+// The 'latency' type is different: it runs no test files, it times raw model
+// response on a fixed task and ranks by throughput.
+type TestMetric = 'tests' | 'latency'
+interface TestType {
   id: string
   label: string
+  blurb: string
+  metric: TestMetric
   focus?: string
 }
-const PRESETS: TestPreset[] = [
+const TEST_TYPES: TestType[] = [
   {
-    id: 'general',
-    label: 'General coverage',
-    focus: 'Choose the most valuable stable behavior in this repository and write broad, useful tests for it.'
+    id: 'bug',
+    label: 'Bug hunt & correctness',
+    blurb: 'Reproduce bugs and cover core logic — ranked by tests passed.',
+    metric: 'tests',
+    focus:
+      'Find likely regressions and fragile logic; write focused tests that reproduce bugs or edge-case failures, and cover the most valuable stable behavior with correct assertions.'
   },
   {
-    id: 'debug',
-    label: 'Debug regression',
-    focus: 'Find likely regressions and fragile logic; write focused tests that reproduce bugs or edge-case failures.'
-  },
-  {
-    id: 'security',
-    label: 'Security holes',
-    focus: 'Probe security-sensitive behavior: validation, injection, path traversal, unsafe parsing, permissions, and trust boundaries.'
+    id: 'ui',
+    label: 'UI / behavior',
+    blurb: 'For React/UI repos: visible behavior, state, interactions.',
+    metric: 'tests',
+    focus:
+      'For React/UI repos, test visible behavior, state changes, and user interactions without brittle snapshots.'
   },
   {
     id: 'unit',
-    label: 'Core unit logic',
+    label: 'Unit logic',
+    blurb: 'Small deterministic tests over pure utility & domain logic.',
+    metric: 'tests',
     focus: 'Cover pure utility and domain logic with small deterministic unit tests.'
   },
   {
     id: 'edge',
     label: 'Edge cases',
+    blurb: 'Boundary values, empty & malformed inputs, odd state.',
+    metric: 'tests',
     focus: 'Stress boundary values, empty inputs, malformed data, and unusual state transitions.'
   },
   {
-    id: 'ui',
-    label: 'UI behavior',
-    focus: 'For React/UI repos, test visible behavior, state changes, and user interactions without brittle snapshots.'
+    id: 'security',
+    label: 'Security probing',
+    blurb: 'Validation, injection, path traversal, trust boundaries.',
+    metric: 'tests',
+    focus:
+      'Probe security-sensitive behavior: validation, injection, path traversal, unsafe parsing, permissions, and trust boundaries.'
+  },
+  {
+    id: 'latency',
+    label: 'Latency & throughput',
+    blurb: 'No test files — pure speed on a fixed task (tokens/sec, total time).',
+    metric: 'latency'
   }
 ]
+
+// Fixed, repo-independent prompt used by the latency benchmark so every model
+// does comparable work. Kept deterministic (temperature aside) and self-contained.
+const LATENCY_PROMPT =
+  'Write a single self-contained function `debounce(fn, waitMs)` in TypeScript that delays calling ' +
+  '`fn` until `waitMs` has elapsed since the last call, cancels pending calls on each new call, and ' +
+  'preserves `this` and arguments. Include a 3-sentence explanation of how it works. Respond concisely.'
+
+// A benchmark result carries an objective 0–100 score and rank, computed
+// client-side from sandbox metrics — never from a model's opinion.
+interface Ranked {
+  score: number
+  rank: number
+}
+
+// Score a finished test-generation run: mostly pass rate, with a completion
+// gate so a model that produced no runnable tests can't out-rank one that did.
+function scoreTestsRun(run: TestRunRow): number {
+  const p = run.passed ?? 0
+  const f = run.failed ?? 0
+  const e = run.errored ?? 0
+  const total = p + f + e
+  if (run.status === 'install-failed' || run.status === 'error' || run.status === 'aborted') return 0
+  if (total === 0) return 0
+  const passRate = p / total
+  // 90% of the score is honest pass rate; 10% rewards writing more real tests
+  // (log-scaled so a huge count doesn't dominate), capped at 100.
+  const volume = Math.min(1, Math.log10(1 + total) / Math.log10(11)) // 10 tests ≈ full
+  return Math.round(Math.min(100, passRate * 90 + volume * 10))
+}
+
+// Rank a cohort. Higher score wins; ties broken by speed (lower durationMs).
+function rankResults(items: ResultItem[], metric: TestMetric): Map<string, Ranked> {
+  const scored = items
+    .filter((it) => it.run)
+    .map((it) => {
+      const run = it.run as TestRunRow
+      const raw = metric === 'latency' ? 0 : scoreTestsRun(run)
+      return { id: run.id, run, raw }
+    })
+  if (metric === 'latency') {
+    // Rank by tokens/sec (throughput); fastest gets 100, others scaled to it.
+    const tput = scored.map((s) => {
+      const secs = (s.run.durationMs ?? 0) / 1000
+      return { ...s, tps: secs > 0 ? (s.run.tokens ?? 0) / secs : 0 }
+    })
+    const best = Math.max(1, ...tput.map((t) => t.tps))
+    for (const t of tput) t.raw = Math.round((t.tps / best) * 100)
+    scored.length = 0
+    scored.push(...tput)
+  }
+  scored.sort((a, b) => b.raw - a.raw || (a.run.durationMs ?? 0) - (b.run.durationMs ?? 0))
+  const out = new Map<string, Ranked>()
+  scored.forEach((s, i) => out.set(s.id, { score: s.raw, rank: i + 1 }))
+  return out
+}
 
 function scoreLabel(score: number | null): string {
   return score === null ? 'omitted' : score.toFixed(1)
@@ -149,14 +225,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [installDeps, setInstallDeps] = useState(true)
   const [testPath, setTestPath] = useState('')
 
-  const [preset, setPreset] = useState('debug')
-  const [presetFocus, setPresetFocus] = useState(PRESETS[0]?.focus ?? '')
+  const [testTypeId, setTestTypeId] = useState('bug')
+  const testType = TEST_TYPES.find((t) => t.id === testTypeId) ?? TEST_TYPES[0]
+  const presetFocus = testType.focus ?? ''
 
   const [running, setRunning] = useState(false)
   const [repairingIdx, setRepairingIdx] = useState<number | null>(null)
   const [phase, setPhase] = useState('')
   const [clearKey, setClearKey] = useState(0)
   const [results, setResults] = useState<ResultItem[]>([])
+  const [ranMetric, setRanMetric] = useState<TestMetric>('tests')
+  const [sandboxOpen, setSandboxOpen] = useState(true)
   const [recent, setRecent] = useState<TestRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [sourceNotice, setSourceNotice] = useState<string | null>(null)
@@ -343,11 +422,11 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   }
 
   // Apply the requested test focus. Repo detection owns framework/command/path.
-  const applyPreset = async (id: string): Promise<void> => {
-    setPreset(id)
-    const p = PRESETS.find((x) => x.id === id)
-    setPresetFocus(p?.focus ?? '')
-    if (sourceRepo.trim()) await detect()
+  const applyTestType = async (id: string): Promise<void> => {
+    setTestTypeId(id)
+    const t = TEST_TYPES.find((x) => x.id === id)
+    // Latency runs no test files, so it never needs repo runner detection.
+    if (t?.metric === 'tests' && sourceRepo.trim()) await detect()
     setError(null)
   }
 
@@ -413,6 +492,47 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     `Make sure imports resolve from that location.\n\n` +
     `Respond with ONLY the complete test file content inside a single fenced code block — no prose, no explanation.`
 
+  /** Latency benchmark: no test files — time the model on a fixed task and
+   *  synthesize a run row so it slots into the same leaderboard. */
+  const latencyOne = async (useModel: string): Promise<ResultItem> => {
+    const reqId = newId()
+    currentReqId.current = reqId
+    setPhase(`timing ${useModel || providerId}…`)
+    const started = Date.now()
+    try {
+      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: LATENCY_PROMPT })
+      const durationMs = Date.now() - started
+      if (!res.ok) return { model: useModel, pending: false, error: res.error }
+      const u = res.result.usage
+      const tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
+      const run: TestRunRow = {
+        id: newId(),
+        ts: Date.now(),
+        sourceRepo: 'latency-benchmark',
+        targetDesc: 'latency & throughput',
+        providerId,
+        model: res.result.model,
+        framework: 'latency',
+        passed: null,
+        failed: null,
+        errored: null,
+        durationMs,
+        exitCode: 0,
+        tokens,
+        attempts: 1,
+        sandboxPath: null,
+        generatedFiles: null,
+        rawOutput: res.result.text,
+        status: 'passed'
+      }
+      return { model: res.result.model, pending: false, run }
+    } catch (err) {
+      return { model: useModel, pending: false, error: err instanceof Error ? err.message : String(err) }
+    } finally {
+      currentReqId.current = null
+    }
+  }
+
   /** Generate (local model) → write into a fresh sandbox → run → metrics. */
   const runOne = async (
     useModel: string,
@@ -470,20 +590,40 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     }
   }
 
+  const needsRepo = testType.metric === 'tests'
   const canRun =
     !running &&
-    Boolean(sourceRepo.trim()) &&
+    (!needsRepo || Boolean(sourceRepo.trim())) &&
     Boolean(selected?.available.ok) &&
-    selectedModels.length > 0 &&
-    Boolean(judgeProviderId)
+    selectedModels.length > 0
 
   const handleRun = async (): Promise<void> => {
     setError(null)
     if (!canRun) {
-      if (!sourceRepo.trim()) setError('Pick a source repo.')
-      else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to generate tests.')
+      if (needsRepo && !sourceRepo.trim()) setError('Pick a source repo.')
+      else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to run models.')
       else if (selectedModels.length === 0) setError('Pick at least one local model to benchmark.')
-      else if (!judgeProviderId) setError('Pick a result judge: Local, Claude, or ChatGPT.')
+      return
+    }
+
+    const metric = testType.metric
+    const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
+
+    // Latency: no repo, no sandbox — just time each model on the fixed task.
+    if (metric === 'latency') {
+      setRunning(true)
+      setClearKey((k) => k + 1)
+      setRanMetric('latency')
+      setResults(models.map((m) => ({ model: m, pending: true })))
+      const done: ResultItem[] = []
+      for (let i = 0; i < models.length; i++) {
+        const item = await latencyOne(models[i])
+        done.push(item)
+        setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
+      }
+      refreshRecent()
+      setRunning(false)
+      setPhase('')
       return
     }
 
@@ -515,9 +655,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       return
     }
 
-    const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
     setRunning(true)
     setClearKey((k) => k + 1)
+    setRanMetric('tests')
     setResults(models.map((m) => ({ model: m, pending: true })))
     const completed: ResultItem[] = []
 
@@ -528,17 +668,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     }
 
     refreshRecent()
-    const runIds = completed.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
-    if (runIds.length > 0) {
-      setSelectedRunIds(runIds)
-      setLatestEvaluation(null)
-      setPhase('scoring test result...')
-      const evaluation = await runEvaluation(runIds, { includeQuality: true })
-      if (evaluation) {
-        setPhase('exporting PDF report...')
-        await exportPdf(evaluation)
-      }
-    }
+    // Objective leaderboard is derived from results at render — keep run ids
+    // handy so the optional AI review panel can still be pointed at them.
+    setSelectedRunIds(completed.map((item) => item.run?.id).filter((id): id is string => Boolean(id)))
     setRunning(false)
     setPhase('')
   }
@@ -742,14 +874,27 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   const resultRunIds = results.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
 
+  // Objective leaderboard for the current results (computed here, not by a model).
+  const ranking = rankResults(results, ranMetric)
+  const leaderboard = results
+    .filter((r) => r.run)
+    .slice()
+    .sort((a, b) => (ranking.get(a.run!.id)?.rank ?? 99) - (ranking.get(b.run!.id)?.rank ?? 99))
+  const anyPending = results.some((r) => r.pending)
+  // tokens/sec for latency rows
+  const tps = (run: TestRunRow): number => {
+    const secs = (run.durationMs ?? 0) / 1000
+    return secs > 0 ? Math.round((run.tokens ?? 0) / secs) : 0
+  }
+
   return (
     <div className="test-page">
       <div className="test-config">
         <div className="test-head">
           <div>
-            <h2 className="test-title">Model Test Lab</h2>
+            <h2 className="test-title">Model Benchmark</h2>
             <p className="test-sub">
-              Compare local Ollama models on the same generated-test task, sandbox run, score, and PDF report.
+              Pit local models against each other on the same task — ranked on objective results, no model judging another.
             </p>
           </div>
           <div className="test-head-badge">{selectedModels.length || 0} model{selectedModels.length === 1 ? '' : 's'}</div>
@@ -888,47 +1033,22 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>3</span>
               <div>
-                <strong>Choose test intent</strong>
-                <p>All selected models receive the same intent and repo context.</p>
+                <strong>Choose test type</strong>
+                <p>Every selected model runs the same type; results are ranked objectively.</p>
               </div>
             </div>
-            <div className="test-choice-grid">
-              {PRESETS.map((p) => (
-                <button key={p.id} type="button" className={preset === p.id ? 'is-selected' : ''} onClick={() => void applyPreset(p.id)}>
-                  {p.label}
+            <div className="test-type-grid">
+              {TEST_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`test-type-card ${testTypeId === t.id ? 'is-selected' : ''}`}
+                  onClick={() => void applyTestType(t.id)}
+                >
+                  <strong>{t.label}</strong>
+                  <span>{t.blurb}</span>
                 </button>
               ))}
-            </div>
-          </section>
-
-          <section className="test-step">
-            <div className="test-step-head">
-              <span>4</span>
-              <div>
-                <strong>Choose scoring judge</strong>
-                <p>The judge grades finished runs after objective sandbox metrics are collected.</p>
-              </div>
-            </div>
-            <div className="test-grid">
-              <label className="test-field">
-                <span>Judge provider</span>
-                <select value={judgeProviderId} onChange={(e) => setJudgeProviderId(e.target.value)}>
-                  {judgeProviders.length === 0 && <option value="">No available judge</option>}
-                  {judgeProviders.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-              </label>
-              {judgeSelected && judgeSelected.models.length > 0 && (
-                <label className="test-field">
-                  <span>Judge model</span>
-                  <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)}>
-                    {judgeSelected.models.map((m) => (
-                      <option key={m} value={m}>{formatModelLabel(m, judgeSelected.id)}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
             </div>
           </section>
         </div>
@@ -969,7 +1089,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              Run benchmark and export PDF
+              {selectedModels.length > 1 ? `Benchmark ${selectedModels.length} models` : 'Run benchmark'}
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -977,67 +1097,87 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         {error && <div className="test-error">{error}</div>}
 
         {results.length > 0 && (
-          <div className="test-results">
-            {results.map((r, i) => (
-              <div key={i} className={`test-result ${r.run ? statusColor(r.run.status) : r.error ? 'is-error' : ''}`}>
-                <div className="test-result-head">
-                  <span className="test-result-model">{r.model || providerId}</span>
-                  {r.pending ? (
-                    <span className="test-result-status">running…</span>
-                  ) : r.error ? (
-                    <span className="test-result-status">error</span>
-                  ) : (
-                    <span className="test-result-status">{r.run?.status}</span>
-                  )}
-                </div>
-                {r.run && (
-                  <div className="test-result-body">
-                    <div>{metric(r.run)}</div>
-                    <div className="test-result-meta">
-                      {r.run.durationMs != null ? `${(r.run.durationMs / 1000).toFixed(1)}s` : '—'} · exit{' '}
-                      {r.run.exitCode ?? '—'} · {r.run.tokens ?? 0} tok
-                    </div>
+          <div className="bench-board">
+            <div className="bench-board-head">
+              <span className="test-recent-title">Leaderboard</span>
+              <span className="test-hint">
+                {ranMetric === 'latency' ? 'ranked by throughput (tokens/sec)' : 'ranked by tests passed, then speed'}
+              </span>
+            </div>
+
+            {/* Finished rows first, ranked; pending/errored models below. */}
+            {leaderboard.map((r) => {
+              const run = r.run as TestRunRow
+              const rank = ranking.get(run.id)?.rank ?? 0
+              const score = ranking.get(run.id)?.score ?? 0
+              const i = results.indexOf(r)
+              return (
+                <div key={run.id} className={`bench-row ${rank === 1 ? 'is-top' : ''}`}>
+                  <div className="bench-rank">{rank === 1 ? '★' : rank}</div>
+                  <div className="bench-model">
+                    <strong>{r.model || providerId}</strong>
+                    <span className={`bench-status ${statusColor(run.status)}`}>
+                      {ranMetric === 'latency' ? 'timed' : run.status}
+                    </span>
+                  </div>
+                  <div className="bench-metrics">
+                    {ranMetric === 'latency' ? (
+                      <>
+                        <span><strong>{tps(run)}</strong> tok/s</span>
+                        <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                        <span>{run.tokens ?? 0} tok</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{metric(run)}</span>
+                        <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                        <span>{run.tokens ?? 0} tok</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="bench-score">
+                    <div className="bench-score-bar"><div style={{ width: `${score}%` }} /></div>
+                    <strong>{score}</strong>
+                    {rank === 1 && leaderboard.length > 1 && <span className="bench-winner">WINNER</span>}
+                  </div>
+                  {ranMetric === 'tests' && isRepairable(r) && (
                     <button
                       type="button"
                       className="test-mini-btn"
-                      onClick={() => {
-                        setSelectedRunIds([r.run!.id])
-                        setLatestEvaluation(null)
-                      }}
+                      disabled={running || repairingIdx !== null}
+                      title="Send the failing test + sandbox output back to the model, then rerun once"
+                      onClick={() => void repairOne(i)}
                     >
-                      Evaluate
+                      {repairingIdx === i ? 'Repairing…' : 'Repair & rerun'}
                     </button>
-                    {isRepairable(r) && (
-                      <button
-                        type="button"
-                        className="test-mini-btn"
-                        disabled={running || repairingIdx !== null}
-                        title="Send the failing test + sandbox output back to the model, then rerun once"
-                        onClick={() => void repairOne(i)}
-                      >
-                        {repairingIdx === i ? 'Repairing…' : 'Repair & rerun'}
-                      </button>
-                    )}
+                  )}
+                </div>
+              )
+            })}
+
+            {results
+              .filter((r) => !r.run)
+              .map((r, i) => (
+                <div key={`p-${i}`} className="bench-row is-muted">
+                  <div className="bench-rank">·</div>
+                  <div className="bench-model">
+                    <strong>{r.model || providerId}</strong>
+                    <span className="bench-status">{r.pending ? 'running…' : r.error ? 'error' : '—'}</span>
                   </div>
-                )}
-                {r.error && <div className="test-result-body test-result-err">{r.error}</div>}
+                  <div className="bench-metrics">{r.error && <span className="test-result-err">{r.error}</span>}</div>
+                </div>
+              ))}
+
+            {!anyPending && leaderboard.length > 1 && (
+              <div className="test-hint bench-foot">
+                {leaderboard[0].model} {ranMetric === 'latency' ? 'is fastest' : 'leads'} this benchmark.
               </div>
-            ))}
-            {resultRunIds.length > 1 && (
-              <button
-                type="button"
-                className="test-btn"
-                onClick={() => {
-                  setSelectedRunIds(resultRunIds)
-                  setLatestEvaluation(null)
-                }}
-              >
-                Use these runs
-              </button>
             )}
           </div>
         )}
 
+        <details className="test-optional-review">
+          <summary>Optional: AI quality review &amp; PDF (off by default — the leaderboard above is objective)</summary>
         <div className="test-evaluate">
           <div className="test-evaluate-head">
             <div>
@@ -1152,6 +1292,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </div>
           )}
         </div>
+        </details>
 
         <div className="test-recent">
           <div className="test-recent-title">Recent runs</div>
@@ -1242,32 +1383,45 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         </div>
       </div>
 
-      <div className="test-terminal-col">
+      <div className={`test-terminal-col ${sandboxOpen ? '' : 'is-collapsed'}`}>
         <div className="test-terminal-header">
           <div>
             <span>Sandbox output</span>
             <strong>{phase || 'Idle'}</strong>
           </div>
+          <button
+            type="button"
+            className="test-sandbox-toggle"
+            aria-expanded={sandboxOpen}
+            title={sandboxOpen ? 'Collapse sandbox' : 'Expand sandbox'}
+            onClick={() => setSandboxOpen((v) => !v)}
+          >
+            {sandboxOpen ? '⟩' : '⟨'}
+          </button>
         </div>
-        <div className="test-sandbox-rail">
-          <div className={detection ? 'is-done' : ''}>
-            <span>1</span>
-            <strong>Detect</strong>
-          </div>
-          <div className={running || results.length > 0 ? 'is-done' : ''}>
-            <span>2</span>
-            <strong>Generate</strong>
-          </div>
-          <div className={results.some((r) => r.run) ? 'is-done' : ''}>
-            <span>3</span>
-            <strong>Run</strong>
-          </div>
-          <div className={latestEvaluation ? 'is-done' : ''}>
-            <span>4</span>
-            <strong>Score</strong>
-          </div>
-        </div>
-        <TestTerminal clearKey={clearKey} active={active} />
+        {sandboxOpen && (
+          <>
+            <div className="test-sandbox-rail">
+              <div className={detection ? 'is-done' : ''}>
+                <span>01</span>
+                <strong>Detect</strong>
+              </div>
+              <div className={running || results.length > 0 ? 'is-done' : ''}>
+                <span>02</span>
+                <strong>Generate</strong>
+              </div>
+              <div className={results.some((r) => r.run) ? 'is-done' : ''}>
+                <span>03</span>
+                <strong>Run</strong>
+              </div>
+              <div className={results.some((r) => r.run) ? 'is-done' : ''}>
+                <span>04</span>
+                <strong>Score</strong>
+              </div>
+            </div>
+            <TestTerminal clearKey={clearKey} active={active} />
+          </>
+        )}
       </div>
     </div>
   )

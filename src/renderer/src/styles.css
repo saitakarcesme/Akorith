@@ -69,6 +69,14 @@
   --danger: #df6f68;
   --info: #6fa3df;
 
+  /* Akorith brand accents (from akorith.space) — used for small touches only:
+     step markers, active indicators, benchmark winner bars. Not full color. */
+  --ak-purple: #8f6ae0;
+  --ak-purple-soft: rgba(143, 106, 224, 0.14);
+  --ak-green: #4ea67e;
+  --ak-green-bright: #5fd39b;
+  --ak-green-soft: rgba(94, 211, 155, 0.16);
+
   /* Phase 33: provider identity is monochrome — neutral grays only, never
      orange/blue/purple color blocks. Provider names stay as text labels. */
   --provider-claude: #b8b8be;
@@ -5685,8 +5693,9 @@ textarea:focus-visible {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--accent-dim);
-  color: var(--accent-strong);
+  background: var(--ak-purple-soft);
+  color: var(--ak-purple);
+  border: 1px solid rgba(143, 106, 224, 0.34);
   font-weight: 700;
   font-size: 12px;
 }
@@ -5968,6 +5977,183 @@ textarea:focus-visible {
 
 .test-result.is-warn {
   border-left-color: var(--warning);
+}
+
+/* --- Model Benchmark: test-type cards + leaderboard --- */
+.test-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.test-type-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.test-type-card:hover {
+  background: var(--bg-raised);
+}
+.test-type-card.is-selected {
+  border-color: var(--ak-purple);
+  background: var(--ak-purple-soft);
+}
+.test-type-card strong {
+  font-size: 13px;
+  color: var(--text);
+}
+.test-type-card span {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
+.bench-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.bench-board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.bench-row {
+  display: grid;
+  grid-template-columns: 30px minmax(120px, 1.1fr) minmax(120px, 1.4fr) minmax(110px, 1.2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+.bench-row.is-top {
+  border-color: var(--ak-green);
+  background: var(--ak-green-soft);
+}
+.bench-row.is-muted {
+  opacity: 0.6;
+}
+.bench-rank {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ak-purple);
+}
+.bench-row.is-top .bench-rank {
+  color: var(--ak-green-bright);
+}
+.bench-model {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bench-model strong {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bench-status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.bench-status.is-pass {
+  color: var(--success);
+}
+.bench-status.is-fail,
+.bench-status.is-warn {
+  color: var(--warning);
+}
+.bench-status.is-error {
+  color: var(--danger);
+}
+.bench-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.bench-metrics strong {
+  color: var(--text);
+}
+.bench-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bench-score-bar {
+  flex: 1;
+  height: 6px;
+  min-width: 48px;
+  background: var(--bg-soft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+/* Non-winner bars stay faint (like the website mock); only the winner is green. */
+.bench-score-bar > div {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
+.bench-row.is-top .bench-score-bar > div {
+  background: var(--ak-green-bright);
+}
+.bench-score strong {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 24px;
+  text-align: right;
+}
+.bench-row.is-top .bench-score strong {
+  color: var(--ak-green-bright);
+}
+.bench-winner {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ak-green-bright);
+  border: 1px solid var(--ak-green);
+  background: var(--ak-green-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.bench-foot {
+  margin-top: 2px;
+}
+.bench-foot,
+.bench-board-head .test-hint {
+  color: var(--text-faint);
+}
+.test-optional-review {
+  margin-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+}
+.test-optional-review > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 4px 0;
 }
 
 .test-result-head {
@@ -6259,6 +6445,41 @@ textarea:focus-visible {
   --text-dim: rgba(255, 255, 255, 0.7);
   --border-soft: rgba(255, 255, 255, 0.09);
   background: #181818;
+  transition: flex-basis 0.18s ease, flex-grow 0.18s ease;
+}
+
+/* Collapsed: shrink to a thin header strip; the rail + xterm are unmounted. */
+.test-terminal-col.is-collapsed {
+  flex: 0 0 44px;
+}
+.test-terminal-col.is-collapsed .test-terminal-header {
+  height: 100%;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  padding: 12px 0;
+}
+.test-terminal-col.is-collapsed .test-terminal-header > div {
+  flex-direction: column;
+  height: 100%;
+}
+.test-sandbox-toggle {
+  writing-mode: horizontal-tb;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.test-sandbox-toggle:hover {
+  border-color: var(--ak-purple);
+  color: var(--ak-purple);
 }
 
 .test-terminal-header {
@@ -6294,7 +6515,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-bottom: 1px solid var(--border-soft);
   background: #202029;
 }
@@ -6302,30 +6523,51 @@ textarea:focus-visible {
 .test-sandbox-rail div {
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.03);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 2px 2px;
   color: var(--text-faint);
 }
 
-.test-sandbox-rail div.is-done {
-  border-color: rgba(134, 185, 154, 0.34);
-  color: var(--success);
+/* Connecting line between steps, like the website stepper. */
+.test-sandbox-rail div:not(:last-child) span::after {
+  content: '';
+  position: absolute;
+  left: 26px;
+  top: 50%;
+  width: calc(100% - 22px);
+  height: 1px;
+  background: var(--border-soft);
 }
 
 .test-sandbox-rail span {
+  position: relative;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  width: 26px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 10px;
   font-weight: 700;
+  color: var(--ak-purple);
+}
+
+.test-sandbox-rail div.is-done span {
+  border-color: var(--ak-purple);
+  background: var(--ak-purple-soft);
+}
+.test-sandbox-rail div.is-done {
+  color: var(--text-dim);
+}
+.test-sandbox-rail div:last-child.is-done span {
+  border-color: var(--ak-green);
+  background: var(--ak-green-soft);
+  color: var(--ak-green-bright);
 }
 
 .test-sandbox-rail strong {
