@@ -472,7 +472,7 @@ export default function App(): JSX.Element {
         : view === 'dashboard'
           ? 'Dashboard'
           : view === 'test'
-            ? 'Test'
+            ? 'Benchmark'
             : view === 'loops'
               ? 'Loop'
               : view === 'plugins'

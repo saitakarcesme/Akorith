@@ -5679,7 +5679,12 @@ textarea:focus-visible {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--bg-panel);
+  /* A whisper of the brand: purple glow from the top-left, green from the
+     bottom-right — barely-there tint so the panels read as Akorith's. */
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(143, 106, 224, 0.06), transparent 45%),
+    radial-gradient(120% 90% at 100% 100%, rgba(94, 211, 155, 0.05), transparent 45%),
+    var(--bg-panel);
 }
 
 .test-step-head {
@@ -6022,6 +6027,13 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 6px;
   margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    radial-gradient(100% 80% at 100% 0%, rgba(94, 211, 155, 0.06), transparent 50%),
+    radial-gradient(90% 80% at 0% 100%, rgba(143, 106, 224, 0.05), transparent 50%),
+    var(--bg-panel);
 }
 .bench-board-head {
   display: flex;
@@ -6458,36 +6470,60 @@ textarea:focus-visible {
   border-right: none;
 }
 
-/* Collapsed sandbox: a clean slim vertical rail that reopens on click. */
-.test-sandbox-rail-collapsed {
-  flex: 0 0 34px;
-  align-self: stretch;
+/* Top-left "Sandbox output" toggle — same shape as the workspace Activity
+   button. Hidden by default; opening it reveals the sandbox panel. */
+.test-topbar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 12px 0;
-  background: #181818;
-  border-left: 1px solid var(--border);
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.sandbox-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.test-sandbox-rail-collapsed:hover {
-  color: var(--ak-purple);
+.sandbox-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--ak-purple);
 }
-.test-sandbox-rail-collapsed .rail-chevron {
-  font-size: 15px;
-  line-height: 1;
+.sandbox-toggle-btn.is-active {
+  color: var(--text);
+  background: var(--ak-purple-soft);
+  border-color: var(--ak-purple);
 }
-.test-sandbox-rail-collapsed .rail-label {
-  writing-mode: vertical-rl;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+.sandbox-toggle-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ak-green-bright);
+  box-shadow: 0 0 6px var(--ak-green-soft);
+}
+.sandbox-toggle-btn:not(.is-active) .sandbox-toggle-dot {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+
+/* Neutral, non-alarming notice (replaces red errors during benchmarking). */
+.test-notice {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 11px;
+  border-radius: 6px;
+  background: linear-gradient(120deg, var(--ak-purple-soft), transparent 70%);
+  border: 1px solid var(--border-soft);
+}
+.bench-note {
+  font-size: 12px;
   color: var(--text-faint);
-}
-.test-sandbox-rail-collapsed:hover .rail-label {
-  color: var(--ak-purple);
 }
 .test-sandbox-toggle {
   flex: 0 0 auto;
@@ -6510,12 +6546,18 @@ textarea:focus-visible {
 
 .test-terminal-header {
   flex: 0 0 auto;
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0;
   color: var(--text-dim);
-  background: var(--bg-raised);
+  background:
+    linear-gradient(90deg, var(--ak-purple-soft), transparent 60%),
+    var(--bg-raised);
   border-bottom: 1px solid var(--border-soft);
 }
 

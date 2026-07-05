@@ -81,7 +81,7 @@ function isLocalAutoStarting(provider?: ProviderInfo): boolean {
 // "generate tests → run in sandbox" and are scored on tests passed + speed.
 // The 'latency' type is different: it runs no test files, it times raw model
 // response on a fixed task and ranks by throughput.
-type TestMetric = 'tests' | 'latency'
+type TestMetric = 'tests' | 'latency' | 'efficiency'
 interface TestType {
   id: string
   label: string
@@ -129,10 +129,32 @@ const TEST_TYPES: TestType[] = [
       'Probe security-sensitive behavior: validation, injection, path traversal, unsafe parsing, permissions, and trust boundaries.'
   },
   {
+    id: 'reasoning',
+    label: 'Reasoning & algorithms',
+    blurb: 'Multi-step logic, computed results, algorithmic correctness.',
+    metric: 'tests',
+    focus:
+      'Exercise multi-step logic and algorithms: assert exact computed results across representative and tricky inputs, including ordering, recursion, and state transitions.'
+  },
+  {
+    id: 'integration',
+    label: 'Integration',
+    blurb: 'How modules combine — cross-function and end-to-end paths.',
+    metric: 'tests',
+    focus:
+      'Test how multiple modules work together: compose several real functions/classes in one flow and assert the combined end-to-end behavior, not just isolated units.'
+  },
+  {
     id: 'latency',
     label: 'Latency & throughput',
     blurb: 'No test files — pure speed on a fixed task (tokens/sec, total time).',
     metric: 'latency'
+  },
+  {
+    id: 'efficiency',
+    label: 'Token efficiency',
+    blurb: 'No test files — who solves the fixed task in the fewest tokens.',
+    metric: 'efficiency'
   }
 ]
 
@@ -172,9 +194,17 @@ function rankResults(items: ResultItem[], metric: TestMetric): Map<string, Ranke
     .filter((it) => it.run)
     .map((it) => {
       const run = it.run as TestRunRow
-      const raw = metric === 'latency' ? 0 : scoreTestsRun(run)
+      const raw = metric === 'tests' ? scoreTestsRun(run) : 0
       return { id: run.id, run, raw }
     })
+  if (metric === 'efficiency') {
+    // Fewest tokens for the fixed task wins; scaled so the leanest gets 100.
+    const withTok = scored.map((s) => ({ ...s, tok: s.run.tokens ?? 0 }))
+    const min = Math.min(...withTok.map((t) => t.tok).filter((n) => n > 0), Infinity)
+    for (const t of withTok) t.raw = t.tok > 0 && min !== Infinity ? Math.round((min / t.tok) * 100) : 0
+    scored.length = 0
+    scored.push(...withTok)
+  }
   if (metric === 'latency') {
     // Rank by tokens/sec (throughput); fastest gets 100, others scaled to it.
     const tput = scored.map((s) => {
@@ -235,7 +265,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [clearKey, setClearKey] = useState(0)
   const [results, setResults] = useState<ResultItem[]>([])
   const [ranMetric, setRanMetric] = useState<TestMetric>('tests')
-  const [sandboxOpen, setSandboxOpen] = useState(true)
+  const [sandboxOpen, setSandboxOpen] = useState(false)
   const [recent, setRecent] = useState<TestRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [sourceNotice, setSourceNotice] = useState<string | null>(null)
@@ -605,11 +635,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     const metric = testType.metric
     const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
 
-    // Latency: no repo, no sandbox — just time each model on the fixed task.
-    if (metric === 'latency') {
+    // Latency & efficiency: no repo, no sandbox — run each model on the fixed
+    // task once; rank by throughput or by token count.
+    if (metric === 'latency' || metric === 'efficiency') {
       setRunning(true)
       setClearKey((k) => k + 1)
-      setRanMetric('latency')
+      setRanMetric(metric)
       setResults(models.map((m) => ({ model: m, pending: true })))
       const done: ResultItem[] = []
       for (let i = 0; i < models.length; i++) {
@@ -893,6 +924,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   return (
     <div className={`test-page ${sandboxOpen ? '' : 'sandbox-collapsed'}`}>
       <div className="test-config">
+        <div className="test-topbar">
+          <button
+            type="button"
+            className={`sandbox-toggle-btn ${sandboxOpen ? 'is-active' : ''}`}
+            onClick={() => setSandboxOpen((v) => !v)}
+            title="Show the disposable sandbox output stream"
+          >
+            <span className="sandbox-toggle-dot" />
+            Sandbox output
+          </button>
+        </div>
         <div className="test-head">
           <div>
             <h2 className="test-title">Model Benchmark</h2>
@@ -1028,7 +1070,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 </div>
               </>
             ) : (
-              <div className="test-error">Local (Ollama) is unavailable. Akorith will auto-start it when possible.</div>
+              <div className="test-notice">Waiting for local models — Akorith will start Ollama automatically when you run.</div>
             )}
           </section>
 
@@ -1097,14 +1139,18 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           )}
           {phase && <span className="test-phase">{phase}</span>}
         </div>
-        {error && <div className="test-error">{error}</div>}
+        {error && <div className="test-notice">{error}</div>}
 
         {results.length > 0 && (
           <div className="bench-board">
             <div className="bench-board-head">
               <span className="test-recent-title">Leaderboard</span>
               <span className="test-hint">
-                {ranMetric === 'latency' ? 'ranked by throughput (tokens/sec)' : 'ranked by tests passed, then speed'}
+                {ranMetric === 'latency'
+                  ? 'ranked by throughput (tokens/sec)'
+                  : ranMetric === 'efficiency'
+                    ? 'ranked by token efficiency (fewest tokens)'
+                    : 'ranked by tests passed, then speed'}
               </span>
             </div>
 
@@ -1120,11 +1166,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   <div className="bench-model">
                     <strong>{r.model || providerId}</strong>
                     <span className={`bench-status ${statusColor(run.status)}`}>
-                      {ranMetric === 'latency' ? 'timed' : run.status}
+                      {ranMetric === 'tests' ? run.status : 'timed'}
                     </span>
                   </div>
                   <div className="bench-metrics">
-                    {ranMetric === 'latency' ? (
+                    {ranMetric === 'efficiency' ? (
+                      <>
+                        <span><strong>{run.tokens ?? 0}</strong> tok</span>
+                        <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                        <span>{tps(run)} tok/s</span>
+                      </>
+                    ) : ranMetric === 'latency' ? (
                       <>
                         <span><strong>{tps(run)}</strong> tok/s</span>
                         <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
@@ -1167,13 +1219,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                     <strong>{r.model || providerId}</strong>
                     <span className="bench-status">{r.pending ? 'running…' : r.error ? 'error' : '—'}</span>
                   </div>
-                  <div className="bench-metrics">{r.error && <span className="test-result-err">{r.error}</span>}</div>
+                  <div className="bench-metrics">
+                    <span className="bench-note">{r.pending ? 'running…' : 'no result — skipped in ranking'}</span>
+                  </div>
                 </div>
               ))}
 
             {!anyPending && leaderboard.length > 1 && (
               <div className="test-hint bench-foot">
-                {leaderboard[0].model} {ranMetric === 'latency' ? 'is fastest' : 'leads'} this benchmark.
+                {leaderboard[0].model}{' '}
+                {ranMetric === 'latency' ? 'is fastest' : ranMetric === 'efficiency' ? 'is leanest' : 'leads'} this
+                benchmark.
               </div>
             )}
           </div>
@@ -1386,18 +1442,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         </div>
       </div>
 
-      {!sandboxOpen ? (
-        <button
-          type="button"
-          className="test-sandbox-rail-collapsed"
-          aria-expanded={false}
-          title="Show sandbox output"
-          onClick={() => setSandboxOpen(true)}
-        >
-          <span className="rail-chevron">‹</span>
-          <span className="rail-label">Sandbox</span>
-        </button>
-      ) : (
+      {sandboxOpen && (
         <div className="test-terminal-col">
           <div className="test-terminal-header">
             <div>
@@ -1408,10 +1453,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               type="button"
               className="test-sandbox-toggle"
               aria-expanded={sandboxOpen}
-              title="Collapse sandbox"
+              title="Hide sandbox"
               onClick={() => setSandboxOpen(false)}
             >
-              ›
+              ✕
             </button>
           </div>
           <div className="test-sandbox-rail">

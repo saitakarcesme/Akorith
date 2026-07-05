@@ -51,7 +51,7 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
   { view: 'loops', label: 'Loop', icon: LoopIcon },
   { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
-  { view: 'test', label: 'Test', icon: FlaskIcon },
+  { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon },
   { view: 'companions', label: 'Companions', icon: CompanionsIcon },
   { view: 'agents', label: 'Agents', icon: AgentsIcon }
