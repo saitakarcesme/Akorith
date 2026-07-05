@@ -5622,12 +5622,15 @@ textarea:focus-visible {
   flex: 1 1 0;
   min-width: 0;
   height: 100%;
+  overflow-x: hidden;
   background: var(--bg);
 }
 
 .test-config {
   flex: 0 0 52%;
   max-width: 720px;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 18px 20px 28px;
   border-right: 1px solid var(--border);
@@ -6445,25 +6448,48 @@ textarea:focus-visible {
   --text-dim: rgba(255, 255, 255, 0.7);
   --border-soft: rgba(255, 255, 255, 0.09);
   background: #181818;
-  transition: flex-basis 0.18s ease, flex-grow 0.18s ease;
 }
 
-/* Collapsed: shrink to a thin header strip; the rail + xterm are unmounted. */
-.test-terminal-col.is-collapsed {
-  flex: 0 0 44px;
+/* When the sandbox is collapsed, the benchmark content takes the whole width
+   (no fixed 720px cap → no empty right gutter, no layout jump). */
+.test-page.sandbox-collapsed .test-config {
+  flex: 1 1 auto;
+  max-width: none;
+  border-right: none;
 }
-.test-terminal-col.is-collapsed .test-terminal-header {
-  height: 100%;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  padding: 12px 0;
-}
-.test-terminal-col.is-collapsed .test-terminal-header > div {
+
+/* Collapsed sandbox: a clean slim vertical rail that reopens on click. */
+.test-sandbox-rail-collapsed {
+  flex: 0 0 34px;
+  align-self: stretch;
+  display: flex;
   flex-direction: column;
-  height: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  background: #181818;
+  border-left: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.test-sandbox-rail-collapsed:hover {
+  color: var(--ak-purple);
+}
+.test-sandbox-rail-collapsed .rail-chevron {
+  font-size: 15px;
+  line-height: 1;
+}
+.test-sandbox-rail-collapsed .rail-label {
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+.test-sandbox-rail-collapsed:hover .rail-label {
+  color: var(--ak-purple);
 }
 .test-sandbox-toggle {
-  writing-mode: horizontal-tb;
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
@@ -6474,7 +6500,7 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
 }
 .test-sandbox-toggle:hover {

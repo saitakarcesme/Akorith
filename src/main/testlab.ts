@@ -257,13 +257,17 @@ export async function detectFramework(sourceRepo: string): Promise<Detection> {
     }
   }
 
+  // No JS/TS toolchain and no Python evidence: rather than block the benchmark,
+  // fall back to Akorith's own disposable Vitest sandbox so Detect → Generate →
+  // Run → Score always continues. The model is asked to write a self-contained
+  // test; the runner brings its own config and needs nothing from the repo.
   return {
-    framework: 'unknown',
-    testCommand: '',
-    installCommand: '',
+    framework: 'vitest',
+    testCommand: `npx --yes vitest run --config ${AKORITH_VITEST_CONFIG} akorith.generated.test.ts`,
+    installCommand: 'npm install',
     lockfile: '',
-    suggestedTestPath: 'loopex_generated_test',
-    note: 'Could not auto-detect a test framework — enter the test command to run.'
+    suggestedTestPath: 'akorith.generated.test.ts',
+    note: 'No standard test runner found — using Akorith’s own sandbox evaluation.'
   }
 }
 

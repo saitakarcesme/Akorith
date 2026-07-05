@@ -408,15 +408,11 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       const ctx = await window.api.test.context(repoPath)
       const nextContext = ctx && !('error' in ctx) ? ctx : null
       setRepoContext(nextContext)
-      if (!d.testCommand.trim()) {
-        setError('Auto-detect could not choose a runner. Check the runner details.')
-      }
+      // Detection always yields a runnable command now (Akorith's sandbox
+      // fallback covers repos with no test runner), so we never block here.
       return { detection: d, context: nextContext, sourceRepo: repoPath }
     } catch {
       setRepoContext(null)
-    }
-    if (!d.testCommand.trim()) {
-      setError('Auto-detect could not choose a runner. Check the runner details.')
     }
     return { detection: d, context: null, sourceRepo: repoPath }
   }
@@ -649,10 +645,17 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       }
       context = detected.context
     }
+    // Never block the benchmark on a missing runner: fall back to Akorith's own
+    // disposable Vitest sandbox so Detect → Generate → Run → Score always runs.
     if (!runConfig.testCommand.trim() || !runConfig.testPath.trim()) {
-      setPhase('')
-      setError('Akorith could not detect a runnable test command for this repo. Open Runner details and set the command/path.')
-      return
+      const isTs = runConfig.testPath.endsWith('.ts') || runConfig.testPath.endsWith('.tsx') || framework === 'vitest'
+      const fallbackPath = runConfig.testPath.trim() || `akorith.generated.test.${isTs ? 'ts' : 'js'}`
+      runConfig = {
+        framework: 'vitest',
+        testCommand: `npx --yes vitest run --config akorith.vitest.config.mjs ${fallbackPath}`,
+        installCommand: runConfig.installCommand || 'npm install',
+        testPath: fallbackPath
+      }
     }
 
     setRunning(true)
@@ -888,7 +891,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   }
 
   return (
-    <div className="test-page">
+    <div className={`test-page ${sandboxOpen ? '' : 'sandbox-collapsed'}`}>
       <div className="test-config">
         <div className="test-head">
           <div>
@@ -1383,25 +1386,35 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         </div>
       </div>
 
-      <div className={`test-terminal-col ${sandboxOpen ? '' : 'is-collapsed'}`}>
-        <div className="test-terminal-header">
-          <div>
-            <span>Sandbox output</span>
-            <strong>{phase || 'Idle'}</strong>
+      {!sandboxOpen ? (
+        <button
+          type="button"
+          className="test-sandbox-rail-collapsed"
+          aria-expanded={false}
+          title="Show sandbox output"
+          onClick={() => setSandboxOpen(true)}
+        >
+          <span className="rail-chevron">‹</span>
+          <span className="rail-label">Sandbox</span>
+        </button>
+      ) : (
+        <div className="test-terminal-col">
+          <div className="test-terminal-header">
+            <div>
+              <span>Sandbox output</span>
+              <strong>{phase || 'Idle'}</strong>
+            </div>
+            <button
+              type="button"
+              className="test-sandbox-toggle"
+              aria-expanded={sandboxOpen}
+              title="Collapse sandbox"
+              onClick={() => setSandboxOpen(false)}
+            >
+              ›
+            </button>
           </div>
-          <button
-            type="button"
-            className="test-sandbox-toggle"
-            aria-expanded={sandboxOpen}
-            title={sandboxOpen ? 'Collapse sandbox' : 'Expand sandbox'}
-            onClick={() => setSandboxOpen((v) => !v)}
-          >
-            {sandboxOpen ? '⟩' : '⟨'}
-          </button>
-        </div>
-        {sandboxOpen && (
-          <>
-            <div className="test-sandbox-rail">
+          <div className="test-sandbox-rail">
               <div className={detection ? 'is-done' : ''}>
                 <span>01</span>
                 <strong>Detect</strong>
@@ -1420,9 +1433,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               </div>
             </div>
             <TestTerminal clearKey={clearKey} active={active} />
-          </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
