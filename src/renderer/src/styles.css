@@ -6042,6 +6042,72 @@ textarea:focus-visible {
   gap: 10px;
   margin-bottom: 2px;
 }
+
+/* Purple/green score graph — vertical columns, one per model. */
+.bench-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+  height: 150px;
+  padding: 12px 8px 6px;
+  margin: 4px 0 10px;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(143, 106, 224, 0.05), rgba(94, 211, 155, 0.04)),
+    rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--border-soft);
+}
+.bench-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+  min-width: 42px;
+  max-width: 90px;
+  flex: 1 1 0;
+}
+.bench-col-score {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ak-purple);
+}
+.bench-col:first-child .bench-col-score {
+  color: var(--ak-green-bright);
+}
+.bench-col-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.bench-col-fill {
+  width: 60%;
+  min-height: 3px;
+  border-radius: 5px 5px 0 0;
+  /* purple by default */
+  background: linear-gradient(180deg, #a78bfa, #7c5fd6);
+  box-shadow: 0 0 14px rgba(143, 106, 224, 0.35);
+  transition: height 0.4s ease;
+}
+.bench-col-fill.is-top {
+  /* winner column in Akorith green */
+  background: linear-gradient(180deg, var(--ak-green-bright), #3f9e73);
+  box-shadow: 0 0 16px rgba(94, 211, 155, 0.45);
+}
+.bench-col-name {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .bench-row {
   display: grid;
   grid-template-columns: 30px minmax(120px, 1.1fr) minmax(120px, 1.4fr) minmax(110px, 1.2fr) auto;

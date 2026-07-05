@@ -545,24 +545,21 @@ export async function runTests(input: RunInput): Promise<RunMetrics> {
     }
   }
 
-  // 2. Install dependencies (failure is its own status, not a test failure).
+  // 2. Install dependencies — best-effort. A failed install must NOT block the
+  // benchmark: the Akorith Vitest fallback runs via `npx --yes vitest`, which
+  // fetches what it needs on its own, and many generated tests import only the
+  // repo's own source. So on install failure we log a note and continue to the
+  // test run instead of returning an 'install-failed' dead end. Only genuine
+  // aborts/timeouts (user stop / hang) stop here.
   if (input.installDeps && input.installCommand && input.installCommand.trim()) {
     input.onOutput(`\r\n\x1b[36m$ ${input.installCommand}\x1b[0m\r\n`)
     const inst = await runBounded(input.installCommand, input.sandbox, input.timeoutMs, input.signal, input.onOutput)
     if (inst.aborted) return failMetrics(input.framework, started, 'aborted', '', input.onOutput, inst.output)
     if (inst.timedOut) return failMetrics(input.framework, started, 'timeout', '', input.onOutput, inst.output)
     if (inst.code !== 0) {
-      return {
-        framework: input.framework,
-        passed: null,
-        failed: null,
-        errored: null,
-        total: null,
-        durationMs: Date.now() - started,
-        exitCode: inst.code,
-        status: 'install-failed',
-        rawOutput: inst.output
-      }
+      input.onOutput(
+        `\x1b[33m[akorith] install exited ${inst.code} — continuing anyway; the runner fetches deps on demand.\x1b[0m\r\n`
+      )
     }
   }
 

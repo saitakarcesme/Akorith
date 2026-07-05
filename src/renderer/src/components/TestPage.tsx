@@ -1154,6 +1154,32 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               </span>
             </div>
 
+            {/* Purple → green score graph: one column per finished model,
+                height ∝ score. The winner column is green, the rest purple. */}
+            {leaderboard.length > 0 && (
+              <div className="bench-chart">
+                {leaderboard.map((r) => {
+                  const run = r.run as TestRunRow
+                  const rank = ranking.get(run.id)?.rank ?? 0
+                  const score = ranking.get(run.id)?.score ?? 0
+                  return (
+                    <div key={run.id} className="bench-col">
+                      <span className="bench-col-score">{score}</span>
+                      <div className="bench-col-track">
+                        <div
+                          className={`bench-col-fill ${rank === 1 ? 'is-top' : ''}`}
+                          style={{ height: `${Math.max(score, 3)}%` }}
+                        />
+                      </div>
+                      <span className="bench-col-name" title={r.model || providerId}>
+                        {(r.model || providerId).replace(/:.*$/, '')}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Finished rows first, ranked; pending/errored models below. */}
             {leaderboard.map((r) => {
               const run = r.run as TestRunRow
