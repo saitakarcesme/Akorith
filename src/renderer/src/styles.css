@@ -5988,20 +5988,161 @@ textarea:focus-visible {
 }
 
 /* --- Model Benchmark: test-type cards + leaderboard --- */
+.bench-local-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 27px;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ak-green-bright);
+  background: var(--ak-green-soft);
+  border: 1px solid rgba(94, 211, 155, 0.32);
+  border-radius: 5px;
+}
+
+.bench-hero {
+  align-items: stretch;
+  padding: 20px;
+  margin: 4px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(143, 106, 224, 0.16), rgba(94, 211, 155, 0.08) 48%, rgba(16, 17, 22, 0.45)),
+    var(--bg-panel);
+}
+
+.bench-eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ak-green-bright);
+}
+
+.bench-hero .test-title {
+  font-size: 27px;
+  line-height: 1.08;
+}
+
+.bench-hero .test-sub {
+  max-width: 760px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.bench-hero-stats {
+  min-width: 250px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bench-hero-stats > div {
+  min-width: 0;
+  padding: 12px 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.bench-hero-stats strong,
+.bench-hero-stats span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bench-hero-stats strong {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.bench-hero-stats span {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.bench-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.bench-flow > div {
+  min-width: 0;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.bench-flow > div.is-active {
+  border-color: rgba(143, 106, 224, 0.62);
+  background: linear-gradient(135deg, var(--ak-purple-soft), rgba(94, 211, 155, 0.05));
+}
+
+.bench-flow span {
+  display: inline-grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  margin-bottom: 9px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ak-purple);
+  border: 1px solid rgba(143, 106, 224, 0.56);
+  border-radius: 7px;
+}
+
+.bench-flow .is-active span {
+  color: var(--ak-green-bright);
+  border-color: rgba(94, 211, 155, 0.5);
+  background: rgba(94, 211, 155, 0.08);
+}
+
+.bench-flow strong,
+.bench-flow em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bench-flow strong {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.bench-flow em {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-style: normal;
+}
+
 .test-type-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
 }
 .test-type-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   text-align: left;
-  padding: 10px 12px;
+  min-height: 112px;
+  padding: 13px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
@@ -6009,8 +6150,10 @@ textarea:focus-visible {
   background: var(--bg-raised);
 }
 .test-type-card.is-selected {
-  border-color: var(--ak-purple);
-  background: var(--ak-purple-soft);
+  border-color: rgba(94, 211, 155, 0.55);
+  background:
+    linear-gradient(135deg, rgba(143, 106, 224, 0.18), rgba(94, 211, 155, 0.1)),
+    var(--bg-panel);
 }
 .test-type-card strong {
   font-size: 13px;
@@ -6020,6 +6163,13 @@ textarea:focus-visible {
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-dim);
+}
+.test-type-card em {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ak-green-bright);
+  font-style: normal;
 }
 
 .bench-board {

@@ -76,94 +76,109 @@ function isLocalAutoStarting(provider?: ProviderInfo): boolean {
   )
 }
 
-// Benchmark test types. Every model in a run gets the same type; they're then
-// ranked on objective metrics (no model judges another). Most types work by
-// "generate tests → run in sandbox" and are scored on tests passed + speed.
-// The 'latency' type is different: it runs no test files, it times raw model
-// response on a fixed task and ranks by throughput.
-type TestMetric = 'tests' | 'latency' | 'efficiency'
+// Benchmark challenge types. Every selected local model receives the exact same
+// prompt and is ranked by local, objective metrics. Most challenges do not need
+// a user repo; the optional "repo sandbox" challenge still uses Test Lab's
+// disposable copy runner for users who want real codebase tests.
+type TestMetric = 'tests' | 'latency' | 'efficiency' | 'artifact'
 interface TestType {
   id: string
   label: string
   blurb: string
   metric: TestMetric
   focus?: string
+  prompt?: string
+  deliverables?: string[]
+  scoreHint?: string
 }
 const TEST_TYPES: TestType[] = [
   {
-    id: 'bug',
-    label: 'Bug hunt & correctness',
-    blurb: 'Reproduce bugs and cover core logic — ranked by tests passed.',
+    id: 'speed',
+    label: 'Speed test',
+    blurb: 'Fixed implementation task ranked by tokens/sec and total time.',
+    metric: 'latency',
+    scoreHint: 'Fastest sustained token throughput wins.',
+    prompt:
+      'Write a single self-contained TypeScript function `debounce(fn, waitMs)` that delays calling `fn` until `waitMs` has elapsed since the last call, cancels pending calls on each new call, preserves `this` and arguments, and includes a 3-sentence explanation. Respond concisely.',
+    deliverables: ['TypeScript function', 'Cancellation behavior', '3-sentence explanation']
+  },
+  {
+    id: 'token',
+    label: 'Token efficiency',
+    blurb: 'Same coding task, but the leanest complete answer wins.',
+    metric: 'efficiency',
+    scoreHint: 'Fewest total prompt + completion tokens wins.',
+    prompt:
+      'Implement `parseEnvFlag(value)` in TypeScript. It should accept booleans, numbers, and strings; treat true/1/yes/on/enabled as true; false/0/no/off/disabled/empty as false; return null for unknown values; include 5 compact examples.',
+    deliverables: ['TypeScript implementation', 'Boolean/null behavior', '5 examples']
+  },
+  {
+    id: 'project-builder',
+    label: 'Project build',
+    blurb: 'Generate a compact app scaffold plan with files and validation.',
+    metric: 'artifact',
+    scoreHint: 'Scores completeness, structure, validation plan, speed, and token discipline.',
+    prompt:
+      'Design a small offline-first task tracker project. Return: architecture, file tree, key TypeScript interfaces, 2 core React components, persistence approach, and validation commands. Keep it implementable in one sitting.',
+    deliverables: ['Architecture', 'File tree', 'Interfaces', 'Components', 'Validation commands']
+  },
+  {
+    id: 'game-builder',
+    label: 'Game build',
+    blurb: 'Ask each model for a playable browser game blueprint.',
+    metric: 'artifact',
+    scoreHint: 'Scores gameplay loop, state model, controls, assets, validation, and clarity.',
+    prompt:
+      'Create a Phaser-style 2D browser game spec for a 90-second arcade survival game. Include gameplay loop, player controls, enemy waves, scoring, state objects, asset list, and 3 implementation risks with mitigations.',
+    deliverables: ['Gameplay loop', 'Controls', 'Enemy waves', 'Scoring', 'Risks']
+  },
+  {
+    id: 'backend',
+    label: 'Backend coding',
+    blurb: 'Design a local API endpoint with tests and failure handling.',
+    metric: 'artifact',
+    scoreHint: 'Scores API shape, data validation, error paths, tests, and operational clarity.',
+    prompt:
+      'Design a Node/TypeScript API endpoint `POST /runs` for storing local benchmark runs. Include request/response schemas, validation rules, persistence model, handler pseudocode, and 6 focused tests.',
+    deliverables: ['Schemas', 'Validation', 'Persistence model', 'Handler', '6 tests']
+  },
+  {
+    id: 'python-tests',
+    label: 'Python test writing',
+    blurb: 'Generate pytest coverage for a described utility module.',
+    metric: 'artifact',
+    scoreHint: 'Scores edge coverage, concrete assertions, maintainability, and brevity.',
+    prompt:
+      'Write pytest tests for a Python module `slugify.py` with function `slugify(text, max_length=80)`. Cover whitespace, accents, punctuation, duplicate separators, empty input, max length, and idempotence. Return only the test file and a short rationale.',
+    deliverables: ['Pytest file', 'Edge cases', 'Concrete assertions', 'Short rationale']
+  },
+  {
+    id: 'repo-bug',
+    label: 'Custom repo sandbox',
+    blurb: 'Optional: use a folder or GitHub repo, generate tests, run in temp sandbox.',
     metric: 'tests',
+    scoreHint: 'Scores pass rate, generated test count, and execution speed.',
     focus:
       'Find likely regressions and fragile logic; write focused tests that reproduce bugs or edge-case failures, and cover the most valuable stable behavior with correct assertions.'
   },
   {
-    id: 'ui',
-    label: 'UI / behavior',
+    id: 'repo-ui',
+    label: 'Repo UI behavior',
     blurb: 'For React/UI repos: visible behavior, state, interactions.',
     metric: 'tests',
+    scoreHint: 'Scores runnable behavior tests in a disposable repo copy.',
     focus:
       'For React/UI repos, test visible behavior, state changes, and user interactions without brittle snapshots.'
   },
   {
-    id: 'unit',
-    label: 'Unit logic',
+    id: 'repo-unit',
+    label: 'Repo unit logic',
     blurb: 'Small deterministic tests over pure utility & domain logic.',
     metric: 'tests',
+    scoreHint: 'Scores executable unit tests against real source files.',
     focus: 'Cover pure utility and domain logic with small deterministic unit tests.'
-  },
-  {
-    id: 'edge',
-    label: 'Edge cases',
-    blurb: 'Boundary values, empty & malformed inputs, odd state.',
-    metric: 'tests',
-    focus: 'Stress boundary values, empty inputs, malformed data, and unusual state transitions.'
-  },
-  {
-    id: 'security',
-    label: 'Security probing',
-    blurb: 'Validation, injection, path traversal, trust boundaries.',
-    metric: 'tests',
-    focus:
-      'Probe security-sensitive behavior: validation, injection, path traversal, unsafe parsing, permissions, and trust boundaries.'
-  },
-  {
-    id: 'reasoning',
-    label: 'Reasoning & algorithms',
-    blurb: 'Multi-step logic, computed results, algorithmic correctness.',
-    metric: 'tests',
-    focus:
-      'Exercise multi-step logic and algorithms: assert exact computed results across representative and tricky inputs, including ordering, recursion, and state transitions.'
-  },
-  {
-    id: 'integration',
-    label: 'Integration',
-    blurb: 'How modules combine — cross-function and end-to-end paths.',
-    metric: 'tests',
-    focus:
-      'Test how multiple modules work together: compose several real functions/classes in one flow and assert the combined end-to-end behavior, not just isolated units.'
-  },
-  {
-    id: 'latency',
-    label: 'Latency & throughput',
-    blurb: 'No test files — pure speed on a fixed task (tokens/sec, total time).',
-    metric: 'latency'
-  },
-  {
-    id: 'efficiency',
-    label: 'Token efficiency',
-    blurb: 'No test files — who solves the fixed task in the fewest tokens.',
-    metric: 'efficiency'
   }
 ]
-
-// Fixed, repo-independent prompt used by the latency benchmark so every model
-// does comparable work. Kept deterministic (temperature aside) and self-contained.
-const LATENCY_PROMPT =
-  'Write a single self-contained function `debounce(fn, waitMs)` in TypeScript that delays calling ' +
-  '`fn` until `waitMs` has elapsed since the last call, cancels pending calls on each new call, and ' +
-  'preserves `this` and arguments. Include a 3-sentence explanation of how it works. Respond concisely.'
 
 // A benchmark result carries an objective 0–100 score and rank, computed
 // client-side from sandbox metrics — never from a model's opinion.
@@ -188,13 +203,27 @@ function scoreTestsRun(run: TestRunRow): number {
   return Math.round(Math.min(100, passRate * 90 + volume * 10))
 }
 
+function scoreArtifactRun(run: TestRunRow, challenge: TestType): number {
+  const text = (run.rawOutput ?? '').toLowerCase()
+  if (!text.trim()) return 0
+  const deliverables = challenge.deliverables ?? []
+  const covered = deliverables.length
+    ? deliverables.filter((item) => text.includes(item.toLowerCase().split(/\s+/)[0])).length / deliverables.length
+    : 0.7
+  const structureSignals = ['```', 'test', 'validate', 'command', 'interface', 'schema', 'state', 'risk']
+  const structure = structureSignals.filter((signal) => text.includes(signal)).length / structureSignals.length
+  const durationScore = run.durationMs ? Math.max(0, 1 - run.durationMs / 120000) : 0.5
+  const tokenScore = run.tokens ? Math.max(0.2, Math.min(1, 1800 / run.tokens)) : 0.5
+  return Math.round(Math.min(100, covered * 45 + structure * 25 + durationScore * 15 + tokenScore * 15))
+}
+
 // Rank a cohort. Higher score wins; ties broken by speed (lower durationMs).
-function rankResults(items: ResultItem[], metric: TestMetric): Map<string, Ranked> {
+function rankResults(items: ResultItem[], metric: TestMetric, challenge: TestType): Map<string, Ranked> {
   const scored = items
     .filter((it) => it.run)
     .map((it) => {
       const run = it.run as TestRunRow
-      const raw = metric === 'tests' ? scoreTestsRun(run) : 0
+      const raw = metric === 'tests' ? scoreTestsRun(run) : metric === 'artifact' ? scoreArtifactRun(run, challenge) : 0
       return { id: run.id, run, raw }
     })
   if (metric === 'efficiency') {
@@ -255,7 +284,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [installDeps, setInstallDeps] = useState(true)
   const [testPath, setTestPath] = useState('')
 
-  const [testTypeId, setTestTypeId] = useState('bug')
+  const [testTypeId, setTestTypeId] = useState('speed')
   const testType = TEST_TYPES.find((t) => t.id === testTypeId) ?? TEST_TYPES[0]
   const presetFocus = testType.focus ?? ''
 
@@ -451,7 +480,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const applyTestType = async (id: string): Promise<void> => {
     setTestTypeId(id)
     const t = TEST_TYPES.find((x) => x.id === id)
-    // Latency runs no test files, so it never needs repo runner detection.
+    // Only custom repo sandbox runs need repo detection.
     if (t?.metric === 'tests' && sourceRepo.trim()) await detect()
     setError(null)
   }
@@ -518,15 +547,24 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     `Make sure imports resolve from that location.\n\n` +
     `Respond with ONLY the complete test file content inside a single fenced code block — no prose, no explanation.`
 
-  /** Latency benchmark: no test files — time the model on a fixed task and
-   *  synthesize a run row so it slots into the same leaderboard. */
-  const latencyOne = async (useModel: string): Promise<ResultItem> => {
+  const buildChallengePrompt = (challenge: TestType): string => {
+    const deliverables = challenge.deliverables?.length ? `\nRequired deliverables:\n- ${challenge.deliverables.join('\n- ')}` : ''
+    return (
+      `${challenge.prompt ?? 'Complete the benchmark task clearly and concisely.'}` +
+      deliverables +
+      `\n\nBenchmark rules:\n- Run fully locally; do not assume cloud APIs or paid services.\n- Be specific enough that a developer could implement or verify the answer.\n- Prefer compact code blocks, concrete commands, and explicit acceptance checks.\n- Do not mention that you are being benchmarked.`
+    )
+  }
+
+  /** Repo-free benchmark: time the model on a fixed challenge and synthesize a
+   *  run row so it slots into the same leaderboard and graph. */
+  const challengeOne = async (useModel: string, challenge: TestType): Promise<ResultItem> => {
     const reqId = newId()
     currentReqId.current = reqId
-    setPhase(`timing ${useModel || providerId}…`)
+    setPhase(`running ${challenge.label.toLowerCase()} on ${useModel || 'local model'}…`)
     const started = Date.now()
     try {
-      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: LATENCY_PROMPT })
+      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildChallengePrompt(challenge) })
       const durationMs = Date.now() - started
       if (!res.ok) return { model: useModel, pending: false, error: res.error }
       const u = res.result.usage
@@ -534,11 +572,11 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       const run: TestRunRow = {
         id: newId(),
         ts: Date.now(),
-        sourceRepo: 'latency-benchmark',
-        targetDesc: 'latency & throughput',
+        sourceRepo: 'local-benchmark-preset',
+        targetDesc: challenge.label,
         providerId,
         model: res.result.model,
-        framework: 'latency',
+        framework: challenge.metric,
         passed: null,
         failed: null,
         errored: null,
@@ -635,16 +673,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     const metric = testType.metric
     const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
 
-    // Latency & efficiency: no repo, no sandbox — run each model on the fixed
-    // task once; rank by throughput or by token count.
-    if (metric === 'latency' || metric === 'efficiency') {
+    // Repo-free challenges: run each model on the fixed local task once; rank
+    // by throughput, token count, or artifact completeness.
+    if (metric === 'latency' || metric === 'efficiency' || metric === 'artifact') {
       setRunning(true)
       setClearKey((k) => k + 1)
       setRanMetric(metric)
       setResults(models.map((m) => ({ model: m, pending: true })))
       const done: ResultItem[] = []
       for (let i = 0; i < models.length; i++) {
-        const item = await latencyOne(models[i])
+        const item = await challengeOne(models[i], testType)
         done.push(item)
         setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
       }
@@ -909,7 +947,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const resultRunIds = results.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
 
   // Objective leaderboard for the current results (computed here, not by a model).
-  const ranking = rankResults(results, ranMetric)
+  const ranking = rankResults(results, ranMetric, testType)
   const leaderboard = results
     .filter((r) => r.run)
     .slice()
@@ -934,24 +972,55 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <span className="sandbox-toggle-dot" />
             Sandbox output
           </button>
+          <span className="bench-local-pill">Local models only</span>
         </div>
-        <div className="test-head">
+        <div className="test-head bench-hero">
           <div>
-            <h2 className="test-title">Model Benchmark</h2>
+            <span className="bench-eyebrow">Akorith benchmark arena</span>
+            <h2 className="test-title">Local Model Battle Lab</h2>
             <p className="test-sub">
-              Pit local models against each other on the same task — ranked on objective results, no model judging another.
+              Select one or more local Ollama models, run them on the same challenge, then compare speed, token use,
+              project quality signals, and sandbox test scores in one scoreboard.
             </p>
           </div>
-          <div className="test-head-badge">{selectedModels.length || 0} model{selectedModels.length === 1 ? '' : 's'}</div>
+          <div className="bench-hero-stats">
+            <div>
+              <strong>{selectedModels.length || 0}</strong>
+              <span>models</span>
+            </div>
+            <div>
+              <strong>{TEST_TYPES.length}</strong>
+              <span>challenges</span>
+            </div>
+            <div>
+              <strong>{testType.metric === 'tests' ? 'sandbox' : 'local'}</strong>
+              <span>runner</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bench-flow" aria-label="Benchmark flow">
+          {[
+            ['01', 'Select', 'local models'],
+            ['02', 'Challenge', testType.label],
+            ['03', 'Battle', selectedModels.length > 1 ? 'multi model' : 'single model'],
+            ['04', 'Score', testType.scoreHint ?? 'objective metrics']
+          ].map(([num, label, detail], idx) => (
+            <div key={num} className={idx <= (results.length > 0 ? 3 : running ? 2 : selectedModels.length > 0 ? 1 : 0) ? 'is-active' : ''}>
+              <span>{num}</span>
+              <strong>{label}</strong>
+              <em>{detail}</em>
+            </div>
+          ))}
         </div>
 
         <div className="test-wizard">
-          <section className="test-step">
+          {needsRepo && <section className="test-step">
             <div className="test-step-head">
               <span>1</span>
               <div>
-                <strong>Choose benchmark codebase</strong>
-                <p>The codebase is copied into a fresh temp sandbox for each run.</p>
+                <strong>Choose optional repo source</strong>
+                <p>Repo sandbox challenges copy this source into a fresh temp sandbox for each model.</p>
               </div>
             </div>
             <div className="test-source-tabs">
@@ -1023,14 +1092,14 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 {detection.note ? ` · ${detection.note}` : ''}
               </div>
             )}
-          </section>
+          </section>}
 
           <section className="test-step">
             <div className="test-step-head">
-              <span>2</span>
+              <span>{needsRepo ? '2' : '1'}</span>
               <div>
                 <strong>Choose local models</strong>
-                <p>Each selected model gets the same prompt, file path, runner, and sandbox rules.</p>
+                <p>Each selected model gets the same prompt, limits, runner, and scoring formula.</p>
               </div>
             </div>
             {selected && modelOptions.length > 0 ? (
@@ -1070,16 +1139,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 </div>
               </>
             ) : (
-              <div className="test-notice">Waiting for local models — Akorith will start Ollama automatically when you run.</div>
+              <div className="test-notice">Waiting for local models. Start Ollama or add a remote Ollama endpoint in Settings.</div>
             )}
           </section>
 
           <section className="test-step">
             <div className="test-step-head">
-              <span>3</span>
+              <span>{needsRepo ? '3' : '2'}</span>
               <div>
-                <strong>Choose test type</strong>
-                <p>Every selected model runs the same type; results are ranked objectively.</p>
+                <strong>Choose benchmark challenge</strong>
+                <p>Project build, game build, backend coding, Python tests, speed, token use, or repo sandbox.</p>
               </div>
             </div>
             <div className="test-type-grid">
@@ -1092,6 +1161,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 >
                   <strong>{t.label}</strong>
                   <span>{t.blurb}</span>
+                  <em>{t.metric === 'tests' ? 'repo sandbox' : t.metric === 'artifact' ? 'artifact score' : t.metric}</em>
                 </button>
               ))}
             </div>
@@ -1099,7 +1169,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         </div>
 
         {/* Advanced: auto-filled sandbox runner details, only needed when detection misses. */}
-        <details className="test-advanced">
+        {needsRepo && <details className="test-advanced">
           <summary>Sandbox runner details</summary>
           <div className="test-grid">
             <label className="test-field">
@@ -1125,7 +1195,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               Install deps in sandbox
             </label>
           </div>
-        </details>
+        </details>}
 
         <div className="test-actions">
           {running ? (
@@ -1134,7 +1204,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              {selectedModels.length > 1 ? `Benchmark ${selectedModels.length} models` : 'Run benchmark'}
+              {selectedModels.length > 1 ? `Battle ${selectedModels.length} models` : 'Run local benchmark'}
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -1150,7 +1220,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   ? 'ranked by throughput (tokens/sec)'
                   : ranMetric === 'efficiency'
                     ? 'ranked by token efficiency (fewest tokens)'
-                    : 'ranked by tests passed, then speed'}
+                    : ranMetric === 'artifact'
+                      ? 'ranked by deliverables, structure, speed, and token discipline'
+                      : 'ranked by tests passed, then speed'}
               </span>
             </div>
 
@@ -1196,7 +1268,13 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                     </span>
                   </div>
                   <div className="bench-metrics">
-                    {ranMetric === 'efficiency' ? (
+                    {ranMetric === 'artifact' ? (
+                      <>
+                        <span><strong>{run.tokens ?? 0}</strong> tok</span>
+                        <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                        <span>{tps(run)} tok/s</span>
+                      </>
+                    ) : ranMetric === 'efficiency' ? (
                       <>
                         <span><strong>{run.tokens ?? 0}</strong> tok</span>
                         <span>{run.durationMs != null ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}</span>
@@ -1254,7 +1332,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             {!anyPending && leaderboard.length > 1 && (
               <div className="test-hint bench-foot">
                 {leaderboard[0].model}{' '}
-                {ranMetric === 'latency' ? 'is fastest' : ranMetric === 'efficiency' ? 'is leanest' : 'leads'} this
+                {ranMetric === 'latency' ? 'is fastest' : ranMetric === 'efficiency' ? 'is leanest' : ranMetric === 'artifact' ? 'has the strongest artifact score' : 'leads'} this
                 benchmark.
               </div>
             )}
