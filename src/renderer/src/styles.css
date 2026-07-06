@@ -5679,12 +5679,7 @@ textarea:focus-visible {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  /* A whisper of the brand: purple glow from the top-left, green from the
-     bottom-right — barely-there tint so the panels read as Akorith's. */
-  background:
-    radial-gradient(120% 90% at 0% 0%, rgba(143, 106, 224, 0.06), transparent 45%),
-    radial-gradient(120% 90% at 100% 100%, rgba(94, 211, 155, 0.05), transparent 45%),
-    var(--bg-panel);
+  background: var(--bg-panel);
 }
 
 .test-step-head {
@@ -5701,9 +5696,9 @@ textarea:focus-visible {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--ak-purple-soft);
-  color: var(--ak-purple);
-  border: 1px solid rgba(143, 106, 224, 0.34);
+  background: var(--hover);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
   font-weight: 700;
   font-size: 12px;
 }
@@ -5995,9 +5990,9 @@ textarea:focus-visible {
   padding: 0 10px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ak-green-bright);
-  background: var(--ak-green-soft);
-  border: 1px solid rgba(94, 211, 155, 0.32);
+  color: var(--text-dim);
+  background: var(--hover);
+  border: 1px solid var(--border);
   border-radius: 5px;
 }
 
@@ -6007,9 +6002,7 @@ textarea:focus-visible {
   margin: 4px 0 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(143, 106, 224, 0.16), rgba(94, 211, 155, 0.08) 48%, rgba(16, 17, 22, 0.45)),
-    var(--bg-panel);
+  background: var(--bg-panel);
 }
 
 .bench-eyebrow {
@@ -6018,7 +6011,7 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--ak-green-bright);
+  color: var(--text-faint);
 }
 
 .bench-hero .test-title {
@@ -6084,8 +6077,8 @@ textarea:focus-visible {
 }
 
 .bench-flow > div.is-active {
-  border-color: rgba(143, 106, 224, 0.62);
-  background: linear-gradient(135deg, var(--ak-purple-soft), rgba(94, 211, 155, 0.05));
+  border-color: var(--text-faint);
+  background: var(--accent-dim);
 }
 
 .bench-flow span {
@@ -6096,15 +6089,15 @@ textarea:focus-visible {
   margin-bottom: 9px;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ak-purple);
-  border: 1px solid rgba(143, 106, 224, 0.56);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
   border-radius: 7px;
 }
 
 .bench-flow .is-active span {
-  color: var(--ak-green-bright);
-  border-color: rgba(94, 211, 155, 0.5);
-  background: rgba(94, 211, 155, 0.08);
+  color: var(--accent-strong);
+  border-color: var(--text-faint);
+  background: var(--hover-strong);
 }
 
 .bench-flow strong,
@@ -6150,10 +6143,8 @@ textarea:focus-visible {
   background: var(--bg-raised);
 }
 .test-type-card.is-selected {
-  border-color: rgba(94, 211, 155, 0.55);
-  background:
-    linear-gradient(135deg, rgba(143, 106, 224, 0.18), rgba(94, 211, 155, 0.1)),
-    var(--bg-panel);
+  border-color: var(--text-faint);
+  background: var(--bg-raised);
 }
 .test-type-card strong {
   font-size: 13px;
@@ -6168,7 +6159,7 @@ textarea:focus-visible {
   margin-top: auto;
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ak-green-bright);
+  color: var(--text-faint);
   font-style: normal;
 }
 
@@ -6180,10 +6171,7 @@ textarea:focus-visible {
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background:
-    radial-gradient(100% 80% at 100% 0%, rgba(94, 211, 155, 0.06), transparent 50%),
-    radial-gradient(90% 80% at 0% 100%, rgba(143, 106, 224, 0.05), transparent 50%),
-    var(--bg-panel);
+  background: var(--bg-panel);
 }
 .bench-board-head {
   display: flex;
@@ -6193,7 +6181,7 @@ textarea:focus-visible {
   margin-bottom: 2px;
 }
 
-/* Purple/green score graph — vertical columns, one per model. */
+/* Monochrome score graph — vertical columns, one per model. */
 .bench-chart {
   display: flex;
   align-items: flex-end;
@@ -6203,9 +6191,7 @@ textarea:focus-visible {
   padding: 12px 8px 6px;
   margin: 4px 0 10px;
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(143, 106, 224, 0.05), rgba(94, 211, 155, 0.04)),
-    rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.14);
   border: 1px solid var(--border-soft);
 }
 .bench-col {
@@ -6223,10 +6209,10 @@ textarea:focus-visible {
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
-  color: var(--ak-purple);
+  color: var(--text-dim);
 }
 .bench-col:first-child .bench-col-score {
-  color: var(--ak-green-bright);
+  color: var(--text);
 }
 .bench-col-track {
   flex: 1;
@@ -6239,15 +6225,12 @@ textarea:focus-visible {
   width: 60%;
   min-height: 3px;
   border-radius: 5px 5px 0 0;
-  /* purple by default */
-  background: linear-gradient(180deg, #a78bfa, #7c5fd6);
-  box-shadow: 0 0 14px rgba(143, 106, 224, 0.35);
+  background: var(--text-faint);
   transition: height 0.4s ease;
 }
 .bench-col-fill.is-top {
-  /* winner column in Akorith green */
-  background: linear-gradient(180deg, var(--ak-green-bright), #3f9e73);
-  box-shadow: 0 0 16px rgba(94, 211, 155, 0.45);
+  /* winner column reads brightest, no color */
+  background: var(--accent);
 }
 .bench-col-name {
   font-family: 'Cascadia Mono', Consolas, monospace;
@@ -6269,8 +6252,8 @@ textarea:focus-visible {
   border-radius: 7px;
 }
 .bench-row.is-top {
-  border-color: var(--ak-green);
-  background: var(--ak-green-soft);
+  border-color: var(--text-faint);
+  background: var(--accent-dim);
 }
 .bench-row.is-muted {
   opacity: 0.6;
@@ -6280,10 +6263,10 @@ textarea:focus-visible {
   font-size: 15px;
   font-weight: 700;
   text-align: center;
-  color: var(--ak-purple);
+  color: var(--text-dim);
 }
 .bench-row.is-top .bench-rank {
-  color: var(--ak-green-bright);
+  color: var(--text);
 }
 .bench-model {
   display: flex;
@@ -6338,14 +6321,14 @@ textarea:focus-visible {
   border-radius: 3px;
   overflow: hidden;
 }
-/* Non-winner bars stay faint (like the website mock); only the winner is green. */
+/* Non-winner bars stay faint; the winner bar is the bright one. */
 .bench-score-bar > div {
   height: 100%;
   background: rgba(255, 255, 255, 0.18);
   border-radius: 3px;
 }
 .bench-row.is-top .bench-score-bar > div {
-  background: var(--ak-green-bright);
+  background: var(--accent);
 }
 .bench-score strong {
   font-family: 'Cascadia Mono', Consolas, monospace;
@@ -6355,16 +6338,16 @@ textarea:focus-visible {
   text-align: right;
 }
 .bench-row.is-top .bench-score strong {
-  color: var(--ak-green-bright);
+  color: var(--text);
 }
 .bench-winner {
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--ak-green-bright);
-  border: 1px solid var(--ak-green);
-  background: var(--ak-green-soft);
+  color: var(--text);
+  border: 1px solid var(--text-faint);
+  background: var(--accent-dim);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -6709,19 +6692,18 @@ textarea:focus-visible {
 }
 .sandbox-toggle-btn:hover {
   color: var(--text);
-  border-color: var(--ak-purple);
+  border-color: var(--text-faint);
 }
 .sandbox-toggle-btn.is-active {
   color: var(--text);
-  background: var(--ak-purple-soft);
-  border-color: var(--ak-purple);
+  background: var(--accent-dim);
+  border-color: var(--text-faint);
 }
 .sandbox-toggle-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ak-green-bright);
-  box-shadow: 0 0 6px var(--ak-green-soft);
+  background: var(--text);
 }
 .sandbox-toggle-btn:not(.is-active) .sandbox-toggle-dot {
   background: var(--text-faint);
@@ -6734,7 +6716,7 @@ textarea:focus-visible {
   color: var(--text-dim);
   padding: 8px 11px;
   border-radius: 6px;
-  background: linear-gradient(120deg, var(--ak-purple-soft), transparent 70%);
+  background: var(--bg-raised);
   border: 1px solid var(--border-soft);
 }
 .bench-note {
@@ -6756,8 +6738,8 @@ textarea:focus-visible {
   line-height: 1;
 }
 .test-sandbox-toggle:hover {
-  border-color: var(--ak-purple);
-  color: var(--ak-purple);
+  border-color: var(--text-faint);
+  color: var(--text);
 }
 
 .test-terminal-header {
@@ -6771,9 +6753,7 @@ textarea:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0;
   color: var(--text-dim);
-  background:
-    linear-gradient(90deg, var(--ak-purple-soft), transparent 60%),
-    var(--bg-raised);
+  background: var(--bg-raised);
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -6801,7 +6781,7 @@ textarea:focus-visible {
   gap: 8px;
   padding: 12px 12px;
   border-bottom: 1px solid var(--border-soft);
-  background: #202029;
+  background: var(--bg-raised);
 }
 
 .test-sandbox-rail div {
@@ -6838,20 +6818,20 @@ textarea:focus-visible {
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 10px;
   font-weight: 700;
-  color: var(--ak-purple);
+  color: var(--text-dim);
 }
 
 .test-sandbox-rail div.is-done span {
-  border-color: var(--ak-purple);
-  background: var(--ak-purple-soft);
+  border-color: var(--text-faint);
+  background: var(--accent-dim);
 }
 .test-sandbox-rail div.is-done {
   color: var(--text-dim);
 }
 .test-sandbox-rail div:last-child.is-done span {
-  border-color: var(--ak-green);
-  background: var(--ak-green-soft);
-  color: var(--ak-green-bright);
+  border-color: var(--text-faint);
+  background: var(--accent-dim);
+  color: var(--text);
 }
 
 .test-sandbox-rail strong {
