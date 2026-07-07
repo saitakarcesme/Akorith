@@ -251,7 +251,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
     chatgpt: { enabled: true },
-    local: DEFAULT_LOCAL_PROVIDER
+    local: DEFAULT_LOCAL_PROVIDER,
+    opencode: { enabled: true }
   },
   bridge: { autoEnter: false },
   router: DEFAULT_ROUTER,
@@ -261,6 +262,21 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   controller: DEFAULT_CONTROLLER,
   plugins: DEFAULT_PLUGINS,
   telemetry: DEFAULT_TELEMETRY
+}
+
+function withConfigDefaults(config: LoopexConfig): LoopexConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    providers: {
+      ...DEFAULT_CONFIG.providers,
+      ...config.providers,
+      local: {
+        ...DEFAULT_LOCAL_PROVIDER,
+        ...(config.providers.local ?? {})
+      }
+    }
+  }
 }
 
 export function normalizeBaseUrl(value: unknown, fallback = DEFAULT_LOCAL_PROVIDER.baseUrl): string {
@@ -335,7 +351,7 @@ export function loadConfig(): LoopexConfig {
     if (!parsed || typeof parsed.providers !== 'object' || parsed.providers === null) {
       throw new Error('missing "providers" object')
     }
-    return parsed
+    return withConfigDefaults(parsed)
   } catch (err) {
     console.error(`[config] invalid ${file} — falling back to defaults:`, err)
     return DEFAULT_CONFIG

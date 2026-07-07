@@ -34,6 +34,7 @@ import type {
 import { ClaudeProvider } from './claude'
 import { ChatGPTProvider } from './chatgpt'
 import { LocalProvider } from './local'
+import { OpenCodeProvider } from './opencode'
 import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
@@ -44,7 +45,8 @@ import type { AgentId } from '../agents/types'
 const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
   claude: (entry) => new ClaudeProvider(entry),
   chatgpt: (entry) => new ChatGPTProvider(entry),
-  local: (entry) => new LocalProvider(entry)
+  local: (entry) => new LocalProvider(entry),
+  opencode: (entry) => new OpenCodeProvider(entry)
 }
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/
@@ -156,6 +158,7 @@ interface ProviderObservation {
 function agentIdForProvider(providerId: string): AgentId | null {
   if (providerId === 'claude') return 'claude'
   if (providerId === 'chatgpt' || providerId === 'codex') return 'codex'
+  if (providerId === 'opencode') return 'opencode'
   if (providerId === 'local' || providerId === 'ollama') return 'ollama'
   return null
 }
