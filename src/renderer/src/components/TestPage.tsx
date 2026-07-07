@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  BenchmarkCategory,
+  BenchmarkEntry,
+  BenchmarkMediaType,
   EvaluationRow,
   IsaDimensionName,
   ProviderInfo,
@@ -85,7 +88,9 @@ interface TestType {
   id: string
   label: string
   blurb: string
+  category: BenchmarkCategory
   metric: TestMetric
+  mediaType?: BenchmarkMediaType
   focus?: string
   prompt?: string
   deliverables?: string[]
@@ -96,6 +101,7 @@ const TEST_TYPES: TestType[] = [
     id: 'speed',
     label: 'Speed test',
     blurb: 'Fixed implementation task ranked by tokens/sec and total time.',
+    category: 'general',
     metric: 'latency',
     scoreHint: 'Fastest sustained token throughput wins.',
     prompt:
@@ -106,6 +112,7 @@ const TEST_TYPES: TestType[] = [
     id: 'token',
     label: 'Token efficiency',
     blurb: 'Same coding task, but the leanest complete answer wins.',
+    category: 'general',
     metric: 'efficiency',
     scoreHint: 'Fewest total prompt + completion tokens wins.',
     prompt:
@@ -116,7 +123,9 @@ const TEST_TYPES: TestType[] = [
     id: 'project-builder',
     label: 'Project build',
     blurb: 'Generate a compact app scaffold plan with files and validation.',
+    category: 'general',
     metric: 'artifact',
+    mediaType: 'artifact',
     scoreHint: 'Scores completeness, structure, validation plan, speed, and token discipline.',
     prompt:
       'Design a small offline-first task tracker project. Return: architecture, file tree, key TypeScript interfaces, 2 core React components, persistence approach, and validation commands. Keep it implementable in one sitting.',
@@ -126,16 +135,55 @@ const TEST_TYPES: TestType[] = [
     id: 'game-builder',
     label: 'Game build',
     blurb: 'Ask each model for a playable browser game blueprint.',
+    category: 'game',
     metric: 'artifact',
+    mediaType: 'interactive',
     scoreHint: 'Scores gameplay loop, state model, controls, assets, validation, and clarity.',
     prompt:
       'Create a Phaser-style 2D browser game spec for a 90-second arcade survival game. Include gameplay loop, player controls, enemy waves, scoring, state objects, asset list, and 3 implementation risks with mitigations.',
     deliverables: ['Gameplay loop', 'Controls', 'Enemy waves', 'Scoring', 'Risks']
   },
   {
+    id: 'game-visual',
+    label: 'Game visual pass',
+    blurb: 'Compare models on a playable scene, HUD, and recording plan.',
+    category: 'game',
+    metric: 'artifact',
+    mediaType: 'video',
+    scoreHint: 'Scores visual specificity, game loop, capture plan, and implementation clarity.',
+    prompt:
+      'Design a playable browser mini-game scene for a model benchmark. Include the game loop, a 16:9 first-screen layout, HUD states, player/enemy visuals, keyboard controls, scoring, and a Playwright screen-recording plan that would capture a 20-second clip.',
+    deliverables: ['Game loop', '16:9 layout', 'HUD states', 'Visuals', 'Recording plan']
+  },
+  {
+    id: 'ui-visual',
+    label: 'UI visual build',
+    blurb: 'Generate an inspectable product UI with visual QA criteria.',
+    category: 'ui',
+    metric: 'artifact',
+    mediaType: 'image',
+    scoreHint: 'Scores visual hierarchy, responsive states, accessibility, and screenshot readiness.',
+    prompt:
+      'Design a desktop + mobile UI benchmark for an AI productivity dashboard. Include screen structure, component states, accessibility checks, responsive rules, and a Playwright screenshot checklist. The output should be specific enough to visually compare two model-built UIs.',
+    deliverables: ['Desktop layout', 'Mobile layout', 'Component states', 'Accessibility checks', 'Screenshot checklist']
+  },
+  {
+    id: 'ui-flow',
+    label: 'UI behavior flow',
+    blurb: 'Ask models for interaction states and visual regression coverage.',
+    category: 'ui',
+    metric: 'artifact',
+    mediaType: 'video',
+    scoreHint: 'Scores interaction clarity, state coverage, visual test plan, and edge cases.',
+    prompt:
+      'Specify a visual UI benchmark for a settings workflow: navigation, form edits, validation errors, save success, keyboard focus, and reduced-motion behavior. Include exact screenshots/video moments to capture and what should be asserted.',
+    deliverables: ['Navigation', 'Form states', 'Validation errors', 'Save success', 'Visual captures']
+  },
+  {
     id: 'backend',
     label: 'Backend coding',
     blurb: 'Design a local API endpoint with tests and failure handling.',
+    category: 'general',
     metric: 'artifact',
     scoreHint: 'Scores API shape, data validation, error paths, tests, and operational clarity.',
     prompt:
@@ -146,6 +194,7 @@ const TEST_TYPES: TestType[] = [
     id: 'python-tests',
     label: 'Python test writing',
     blurb: 'Generate pytest coverage for a described utility module.',
+    category: 'general',
     metric: 'artifact',
     scoreHint: 'Scores edge coverage, concrete assertions, maintainability, and brevity.',
     prompt:
@@ -156,6 +205,7 @@ const TEST_TYPES: TestType[] = [
     id: 'repo-bug',
     label: 'Custom repo sandbox',
     blurb: 'Optional: use a folder or GitHub repo, generate tests, run in temp sandbox.',
+    category: 'repo',
     metric: 'tests',
     scoreHint: 'Scores pass rate, generated test count, and execution speed.',
     focus:
@@ -165,7 +215,9 @@ const TEST_TYPES: TestType[] = [
     id: 'repo-ui',
     label: 'Repo UI behavior',
     blurb: 'For React/UI repos: visible behavior, state, interactions.',
+    category: 'ui',
     metric: 'tests',
+    mediaType: 'image',
     scoreHint: 'Scores runnable behavior tests in a disposable repo copy.',
     focus:
       'For React/UI repos, test visible behavior, state changes, and user interactions without brittle snapshots.'
@@ -174,6 +226,7 @@ const TEST_TYPES: TestType[] = [
     id: 'repo-unit',
     label: 'Repo unit logic',
     blurb: 'Small deterministic tests over pure utility & domain logic.',
+    category: 'repo',
     metric: 'tests',
     scoreHint: 'Scores executable unit tests against real source files.',
     focus: 'Cover pure utility and domain logic with small deterministic unit tests.'
@@ -255,6 +308,40 @@ function scoreLabel(score: number | null): string {
   return score === null ? 'omitted' : score.toFixed(1)
 }
 
+function categoryLabel(category: BenchmarkCategory): string {
+  switch (category) {
+    case 'ui':
+      return 'Visual UI tests'
+    case 'game':
+      return 'Game tests'
+    case 'repo':
+      return 'Repo sandbox'
+    default:
+      return 'General tests'
+  }
+}
+
+function mediaLabel(mediaType: BenchmarkMediaType): string {
+  switch (mediaType) {
+    case 'image':
+      return 'screenshot'
+    case 'video':
+      return 'video'
+    case 'interactive':
+      return 'playable'
+    case 'artifact':
+      return 'artifact'
+    default:
+      return 'metrics'
+  }
+}
+
+function benchmarkMediaUrl(challenge: TestType): string | null {
+  if (challenge.category === 'ui') return '/screenshots/test-lab.png'
+  if (challenge.category === 'game') return '/screenshots/test-lab.png'
+  return null
+}
+
 function evaluationWarning(evaluation: EvaluationRow): string | null {
   const scores = evaluation.dimensionScores
   if (scores.qualityRequested && !scores.qualityIncluded) {
@@ -296,6 +383,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const [ranMetric, setRanMetric] = useState<TestMetric>('tests')
   const [sandboxOpen, setSandboxOpen] = useState(false)
   const [recent, setRecent] = useState<TestRunRow[]>([])
+  const [benchmarks, setBenchmarks] = useState<BenchmarkEntry[]>([])
+  const [benchmarkExportNotice, setBenchmarkExportNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sourceNotice, setSourceNotice] = useState<string | null>(null)
 
@@ -323,6 +412,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   const refreshRecent = useCallback(() => {
     void window.api.test.listRuns(12).then(setRecent).catch(() => setRecent([]))
+  }, [])
+
+  const refreshBenchmarks = useCallback(() => {
+    void window.api.benchmark.list(120).then(setBenchmarks).catch(() => setBenchmarks([]))
   }, [])
 
   const refreshEvaluations = useCallback(() => {
@@ -353,8 +446,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     })
     void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
     refreshRecent()
+    refreshBenchmarks()
     refreshEvaluations()
-  }, [refreshRecent, refreshEvaluations, refreshProviders])
+  }, [refreshRecent, refreshBenchmarks, refreshEvaluations, refreshProviders])
 
   useEffect(() => {
     if (!isLocalAutoStarting(localProvider)) return
@@ -569,7 +663,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       if (!res.ok) return { model: useModel, pending: false, error: res.error }
       const u = res.result.usage
       const tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
-      const run: TestRunRow = {
+      let run: TestRunRow = {
         id: newId(),
         ts: Date.now(),
         sourceRepo: 'local-benchmark-preset',
@@ -588,6 +682,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         generatedFiles: null,
         rawOutput: res.result.text,
         status: 'passed'
+      }
+      const persisted = await window.api.test.persistRun(run)
+      if (persisted.ok) {
+        run = persisted.run
       }
       return { model: res.result.model, pending: false, run }
     } catch (err) {
@@ -654,6 +752,43 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     }
   }
 
+  const recordBenchmarkResults = async (items: ResultItem[], challenge: TestType, metricName: TestMetric): Promise<void> => {
+    const finished = items.filter((item) => item.run)
+    if (finished.length === 0) return
+    const ranked = rankResults(finished, metricName, challenge)
+    const sourceLabel = challenge.metric === 'tests' ? sourceRepo.trim() || 'repo sandbox' : 'local preset'
+    await Promise.all(
+      finished.map((item) => {
+        const run = item.run as TestRunRow
+        const score = ranked.get(run.id)?.score ?? null
+        const rank = ranked.get(run.id)?.rank ?? null
+        const modelName = run.model || item.model || 'unknown'
+        return window.api.benchmark.upsert({
+          challengeId: challenge.id,
+          challengeLabel: challenge.label,
+          category: challenge.category,
+          metric: metricName,
+          model: modelName,
+          providerId: run.providerId,
+          score,
+          rank,
+          status: run.status,
+          durationMs: run.durationMs,
+          tokens: run.tokens,
+          runId: run.id,
+          source: sourceLabel,
+          summary: `${challenge.label} · ${modelName}${score === null ? '' : ` · ${score}/100`}`,
+          prompt: buildChallengePrompt(challenge),
+          artifactPreview: run.rawOutput,
+          mediaType: challenge.mediaType ?? 'none',
+          mediaUrl: benchmarkMediaUrl(challenge),
+          signature: `${challenge.id}::${modelName.toLowerCase()}`
+        })
+      })
+    )
+    refreshBenchmarks()
+  }
+
   const needsRepo = testType.metric === 'tests'
   const canRun =
     !running &&
@@ -685,6 +820,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         const item = await challengeOne(models[i], testType)
         done.push(item)
         setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
+      }
+      try {
+        await recordBenchmarkResults(done, testType, metric)
+        setBenchmarkExportNotice(null)
+      } catch (err) {
+        setBenchmarkExportNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       }
       refreshRecent()
       setRunning(false)
@@ -739,6 +880,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setResults((prev) => prev.map((r, idx) => (idx === i ? item : r)))
     }
 
+    try {
+      await recordBenchmarkResults(completed, testType, 'tests')
+      setBenchmarkExportNotice(null)
+    } catch (err) {
+      setBenchmarkExportNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
     refreshRecent()
     // Objective leaderboard is derived from results at render — keep run ids
     // handy so the optional AI review panel can still be pointed at them.
@@ -944,7 +1091,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setPdfNotice({ kind: 'ok', text: `Opened PDF: ${evaluation.pdfPath}` })
   }
 
-  const resultRunIds = results.map((item) => item.run?.id).filter((id): id is string => Boolean(id))
+  const exportBenchmarkLibrary = async (): Promise<void> => {
+    setBenchmarkExportNotice(null)
+    const res = await window.api.benchmark.exportForWeb()
+    if (!res.ok) {
+      setBenchmarkExportNotice({ kind: 'error', text: res.error })
+      return
+    }
+    setBenchmarkExportNotice({ kind: 'ok', text: `Exported ${res.count} benchmark${res.count === 1 ? '' : 's'} to ${res.path}` })
+    refreshBenchmarks()
+  }
 
   // Objective leaderboard for the current results (computed here, not by a model).
   const ranking = rankResults(results, ranMetric, testType)
@@ -957,6 +1113,18 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const tps = (run: TestRunRow): number => {
     const secs = (run.durationMs ?? 0) / 1000
     return secs > 0 ? Math.round((run.tokens ?? 0) / secs) : 0
+  }
+  const challengeSections = (['general', 'ui', 'game', 'repo'] as BenchmarkCategory[])
+    .map((category) => ({
+      category,
+      label: categoryLabel(category),
+      items: TEST_TYPES.filter((t) => t.category === category)
+    }))
+    .filter((section) => section.items.length > 0)
+  const benchmarkSummary = {
+    total: benchmarks.length,
+    visual: benchmarks.filter((entry) => entry.category === 'ui' || entry.category === 'game').length,
+    exported: benchmarks.filter((entry) => entry.mediaType !== 'none').length
   }
 
   return (
@@ -1148,21 +1316,31 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               <span>{needsRepo ? '3' : '2'}</span>
               <div>
                 <strong>Choose benchmark challenge</strong>
-                <p>Project build, game build, backend coding, Python tests, speed, token use, or repo sandbox.</p>
+                <p>General metrics, visual UI tasks, game captures, and repo sandbox tests stay separated.</p>
               </div>
             </div>
-            <div className="test-type-grid">
-              {TEST_TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`test-type-card ${testTypeId === t.id ? 'is-selected' : ''}`}
-                  onClick={() => void applyTestType(t.id)}
-                >
-                  <strong>{t.label}</strong>
-                  <span>{t.blurb}</span>
-                  <em>{t.metric === 'tests' ? 'repo sandbox' : t.metric === 'artifact' ? 'artifact score' : t.metric}</em>
-                </button>
+            <div className="test-type-sections">
+              {challengeSections.map((section) => (
+                <div key={section.category} className={`test-type-section is-${section.category}`}>
+                  <div className="test-type-section-head">
+                    <strong>{section.label}</strong>
+                    <span>{section.items.length} challenge{section.items.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="test-type-grid">
+                    {section.items.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`test-type-card ${testTypeId === t.id ? 'is-selected' : ''}`}
+                        onClick={() => void applyTestType(t.id)}
+                      >
+                        <strong>{t.label}</strong>
+                        <span>{t.blurb}</span>
+                        <em>{t.mediaType ? mediaLabel(t.mediaType) : t.metric === 'tests' ? 'repo sandbox' : t.metric === 'artifact' ? 'artifact score' : t.metric}</em>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </section>
@@ -1339,6 +1517,53 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           </div>
         )}
 
+        <section className="benchmark-library">
+          <div className="benchmark-library-head">
+            <div>
+              <span className="test-recent-title">Benchmark library</span>
+              <p className="test-hint">
+                Unique model + challenge results are kept here and exported to akorith.space.
+              </p>
+            </div>
+            <div className="benchmark-library-actions">
+              <span>{benchmarkSummary.total} saved</span>
+              <span>{benchmarkSummary.visual} visual</span>
+              <span>{benchmarkSummary.exported} media-ready</span>
+              <button type="button" className="test-table-btn" onClick={() => void exportBenchmarkLibrary()}>
+                Export web JSON
+              </button>
+            </div>
+          </div>
+          {benchmarkExportNotice && <div className={`pdf-notice ${benchmarkExportNotice.kind}`}>{benchmarkExportNotice.text}</div>}
+          {benchmarks.length === 0 ? (
+            <div className="benchmark-empty">
+              Run a local benchmark to publish its latest model/challenge result into the library.
+            </div>
+          ) : (
+            <div className="benchmark-library-list">
+              {benchmarks.map((entry) => (
+                <article key={entry.id} className={`benchmark-entry is-${entry.category}`}>
+                  <div className="benchmark-entry-top">
+                    <span>{categoryLabel(entry.category)}</span>
+                    <em>{mediaLabel(entry.mediaType)}</em>
+                  </div>
+                  <div className="benchmark-entry-main">
+                    <strong>{entry.challengeLabel}</strong>
+                    <span title={entry.model}>{entry.model}</span>
+                  </div>
+                  <div className="benchmark-entry-meta">
+                    <span>score {entry.score ?? '—'}</span>
+                    <span>{entry.durationMs != null ? `${(entry.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                    <span>{entry.tokens ?? 0} tok</span>
+                    <span>{new Date(entry.updatedAt).toLocaleTimeString()}</span>
+                  </div>
+                  {entry.summary && <p>{entry.summary}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
         <details className="test-optional-review">
           <summary>Optional: AI quality review &amp; PDF (off by default — the leaderboard above is objective)</summary>
         <div className="test-evaluate">
@@ -1457,6 +1682,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         </div>
         </details>
 
+        <details className="test-optional-review legacy-runs">
+          <summary>Raw run history &amp; past evaluations</summary>
         <div className="test-recent">
           <div className="test-recent-title">Recent runs</div>
           {recent.length === 0 ? (
@@ -1544,6 +1771,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </table>
           )}
         </div>
+        </details>
       </div>
 
       {sandboxOpen && (
