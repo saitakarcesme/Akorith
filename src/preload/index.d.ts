@@ -520,11 +520,12 @@ export interface BenchmarkEntry {
   summary: string | null
   prompt: string | null
   artifactPreview: string | null
+  artifactPath: string | null
   mediaType: BenchmarkMediaType
   mediaUrl: string | null
 }
 
-export type BenchmarkUpsertInput = Omit<BenchmarkEntry, 'id' | 'createdAt' | 'updatedAt' | 'signature'> & {
+export type BenchmarkUpsertInput = Omit<BenchmarkEntry, 'id' | 'createdAt' | 'updatedAt' | 'signature' | 'artifactPath'> & {
   id?: string
   signature?: string
 }

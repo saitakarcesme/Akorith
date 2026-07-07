@@ -337,8 +337,7 @@ function mediaLabel(mediaType: BenchmarkMediaType): string {
 }
 
 function benchmarkMediaUrl(challenge: TestType): string | null {
-  if (challenge.category === 'ui') return '/screenshots/test-lab.png'
-  if (challenge.category === 'game') return '/screenshots/test-lab.png'
+  void challenge
   return null
 }
 
@@ -1543,21 +1542,26 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="benchmark-library-list">
               {benchmarks.map((entry) => (
                 <article key={entry.id} className={`benchmark-entry is-${entry.category}`}>
-                  <div className="benchmark-entry-top">
-                    <span>{categoryLabel(entry.category)}</span>
-                    <em>{mediaLabel(entry.mediaType)}</em>
+                  <div className="benchmark-entry-score">
+                    <strong>{entry.score ?? '—'}</strong>
+                    <span>{entry.score == null ? 'score' : '/100'}</span>
                   </div>
                   <div className="benchmark-entry-main">
-                    <strong>{entry.challengeLabel}</strong>
+                    <div className="benchmark-entry-titleline">
+                      <strong>{entry.challengeLabel}</strong>
+                      <span>{categoryLabel(entry.category)}</span>
+                      <span>{mediaLabel(entry.mediaType)}</span>
+                    </div>
                     <span title={entry.model}>{entry.model}</span>
+                    {entry.summary && <p>{entry.summary}</p>}
                   </div>
                   <div className="benchmark-entry-meta">
-                    <span>score {entry.score ?? '—'}</span>
+                    <span>{entry.rank ? `#${entry.rank}` : 'rank —'}</span>
                     <span>{entry.durationMs != null ? `${(entry.durationMs / 1000).toFixed(1)}s` : '—'}</span>
                     <span>{entry.tokens ?? 0} tok</span>
                     <span>{new Date(entry.updatedAt).toLocaleTimeString()}</span>
+                    {entry.artifactPath && <span title={entry.artifactPath}>artifact saved</span>}
                   </div>
-                  {entry.summary && <p>{entry.summary}</p>}
                 </article>
               ))}
             </div>

@@ -139,6 +139,7 @@ export function initDb(): void {
       summary          TEXT,
       prompt           TEXT,
       artifact_preview TEXT,
+      artifact_path    TEXT,
       media_type       TEXT,
       media_url        TEXT
     );
@@ -464,6 +465,7 @@ export function initDb(): void {
     );
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
+  ensureColumn('benchmark_entries', 'artifact_path', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
   // Phase 14.2 conversation memory: a cached summary of older (non-verbatim)
