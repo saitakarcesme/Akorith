@@ -161,6 +161,7 @@ const test = Object.freeze({
   detect: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:detect', { sourceRepo }),
   context: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:context', { sourceRepo }),
   run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:run', args),
+  persistRun: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:persistRun', args),
   stop: (runId: string): void => {
     ipcRenderer.send('test:stop', { runId })
   },
@@ -182,6 +183,13 @@ const evaluate = Object.freeze({
     ipcRenderer.invoke('evaluate:revealPdf', { evaluationId }),
   openPdf: (evaluationId: string): Promise<unknown> =>
     ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
+})
+
+const benchmark = Object.freeze({
+  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:list', { limit }),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('benchmark:get', id),
+  upsert: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:upsert', input),
+  exportForWeb: (): Promise<unknown> => ipcRenderer.invoke('benchmark:export')
 })
 
 const macro = Object.freeze({
@@ -408,6 +416,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)

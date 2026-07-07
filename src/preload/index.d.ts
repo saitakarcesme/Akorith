@@ -485,11 +485,55 @@ export interface TestApi {
   context(sourceRepo: string): Promise<TestRepoContext | { error: string }>
   /** Snapshot → (install) → run in a fresh ephemeral sandbox; persists the run. */
   run(args: TestRunRequest): Promise<TestRunResponse>
+  /** Persist a synthetic benchmark run that did not need a sandbox. */
+  persistRun(args: Omit<TestRunRow, 'id' | 'ts'> & { id?: string; ts?: number }): Promise<TestRunResponse>
   /** Abort an in-flight run (kills the whole process tree). */
   stop(runId: string): void
   listRuns(limit?: number): Promise<TestRunRow[]>
   /** Subscribe to live sandbox output. Returns an unsubscribe fn. */
   onOutput(listener: (payload: { runId: string; chunk: string }) => void): () => void
+}
+
+// ---- benchmark library (public showcase/export layer) ----
+
+export type BenchmarkCategory = 'general' | 'ui' | 'game' | 'repo'
+export type BenchmarkMediaType = 'none' | 'image' | 'video' | 'interactive' | 'artifact'
+
+export interface BenchmarkEntry {
+  id: string
+  signature: string
+  createdAt: number
+  updatedAt: number
+  challengeId: string
+  challengeLabel: string
+  category: BenchmarkCategory
+  metric: string
+  model: string
+  providerId: string | null
+  score: number | null
+  rank: number | null
+  status: string | null
+  durationMs: number | null
+  tokens: number | null
+  runId: string | null
+  source: string | null
+  summary: string | null
+  prompt: string | null
+  artifactPreview: string | null
+  mediaType: BenchmarkMediaType
+  mediaUrl: string | null
+}
+
+export type BenchmarkUpsertInput = Omit<BenchmarkEntry, 'id' | 'createdAt' | 'updatedAt' | 'signature'> & {
+  id?: string
+  signature?: string
+}
+
+export interface BenchmarkApi {
+  list(limit?: number): Promise<BenchmarkEntry[]>
+  get(id: string): Promise<BenchmarkEntry | null>
+  upsert(input: BenchmarkUpsertInput): Promise<BenchmarkEntry>
+  exportForWeb(): Promise<{ ok: true; path: string; count: number } | { ok: false; error: string }>
 }
 
 // ---- evaluate + PDF reports (Phase 8) ----
@@ -2081,6 +2125,7 @@ export interface PreloadApi {
   router: RouterApi
   digest: DigestApi
   test: TestApi
+  benchmark: BenchmarkApi
   evaluate: EvaluateApi
   macro: MacroApi
   agent: AgentApi

@@ -270,6 +270,17 @@ export function registerTestIpc(): void {
 
   ipcMain.handle('test:run', (event, args: RunArgs) => handleRun(args, event.sender))
 
+  ipcMain.handle('test:persistRun', (_event, row: Omit<TestRunRow, 'id' | 'ts'> & { id?: string; ts?: number }) => {
+    if (!row || typeof row !== 'object' || typeof row.sourceRepo !== 'string') {
+      return { ok: false, error: 'invalid test:persistRun payload' }
+    }
+    try {
+      return { ok: true, run: createTestRun(row) }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   ipcMain.on('test:stop', (_event, args: { runId: string }) => {
     if (typeof args?.runId !== 'string') return
     activeRuns.get(args.runId)?.abort()

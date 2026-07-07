@@ -118,6 +118,32 @@ export function initDb(): void {
       pdf_path         TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_evaluations_ts ON evaluations(ts);
+    CREATE TABLE IF NOT EXISTS benchmark_entries (
+      id               TEXT PRIMARY KEY,
+      signature        TEXT NOT NULL UNIQUE,
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      challenge_id     TEXT NOT NULL,
+      challenge_label  TEXT NOT NULL,
+      category         TEXT NOT NULL,
+      metric           TEXT NOT NULL,
+      model            TEXT NOT NULL,
+      provider_id      TEXT,
+      score            INTEGER,
+      rank             INTEGER,
+      status           TEXT,
+      duration_ms      INTEGER,
+      tokens           INTEGER,
+      run_id           TEXT,
+      source           TEXT,
+      summary          TEXT,
+      prompt           TEXT,
+      artifact_preview TEXT,
+      media_type       TEXT,
+      media_url        TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_benchmark_entries_updated ON benchmark_entries(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_entries_category ON benchmark_entries(category, updated_at);
     CREATE TABLE IF NOT EXISTS macro_sessions (
       id                    TEXT PRIMARY KEY,
       created_at            INTEGER NOT NULL,
