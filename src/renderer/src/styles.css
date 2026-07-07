@@ -11261,10 +11261,10 @@ body {
   overflow: hidden;
 }
 .companions-left {
-  flex: 0 0 300px;
+  flex: 0 0 244px;
   display: flex;
   flex-direction: column;
-  padding: 18px 16px;
+  padding: 14px 12px;
   border-right: 1px solid var(--border-soft);
   overflow-y: auto;
 }
@@ -11273,13 +11273,14 @@ body {
   align-items: center;
   justify-content: space-between;
 }
-.companions-head h1 { margin: 0; font-size: 20px; color: var(--text); }
-.companions-sub { margin: 4px 0 14px; font-size: 11.5px; color: var(--text-dim); }
+.companions-head h1 { margin: 0; font-size: 16px; color: var(--text); }
+.companions-sub { margin: 3px 0 10px; font-size: 10.5px; line-height: 1.35; color: var(--text-dim); }
 .companion-cards { display: flex; flex-direction: column; gap: 8px; }
 .companion-card {
   display: flex;
-  gap: 11px;
-  padding: 12px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
   text-align: left;
   background: var(--bg-soft);
   border: 1px solid transparent;
@@ -11289,8 +11290,8 @@ body {
 .companion-card.is-active { border-color: var(--border); background: var(--bg-raised); }
 .companion-card-avatar {
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11301,11 +11302,12 @@ body {
   border-radius: 10px;
 }
 .companion-card-name { font-size: 14px; font-weight: 650; color: var(--text); }
-.companion-card-tagline { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.companion-card-body { min-width: 0; }
+.companion-card-tagline { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--text-dim); margin-top: 1px; }
 .companion-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .companion-card-tags span { font-size: 9.5px; padding: 1px 6px; border-radius: 999px; background: var(--bg-raised); color: var(--text-faint); }
-.companion-card-meta { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
-.companion-sessions-head { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 6px; font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.companion-card-meta { font-size: 9.5px; color: var(--text-faint); margin-top: 3px; }
+.companion-sessions-head { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 5px; font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
 .companion-sessions-head button { font-size: 11px; background: transparent; border: 0; color: var(--text-dim); cursor: pointer; }
 .companion-sessions { display: flex; flex-direction: column; gap: 2px; }
 .companion-sessions button { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; text-align: left; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-dim); cursor: pointer; font-size: 12px; }
@@ -11349,10 +11351,21 @@ body {
 .companions-composer textarea::placeholder { color: var(--text-faint); }
 .companions-composer textarea:focus { outline: none; background: var(--bg-raised); border-color: var(--border-soft); }
 
-.companions-memory { flex: 0 0 300px; display: flex; flex-direction: column; padding: 16px 14px; border-left: 1px solid var(--border-soft); overflow-y: auto; }
-.companions-memory-head { display: flex; justify-content: space-between; align-items: center; }
+.companions-memory { flex: 0 0 300px; display: flex; flex-direction: column; padding: 16px 14px; border-left: 1px solid var(--border-soft); overflow-y: auto; transition: flex-basis var(--fast), padding var(--fast); }
+.companions-memory.is-collapsed { flex-basis: 46px; align-items: center; padding: 12px 7px; overflow: hidden; }
+.companions-memory-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .companions-memory-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
 .companions-memory-head button { font-size: 11px; background: var(--bg-raised); border: 0; border-radius: 999px; padding: 3px 10px; color: var(--text-dim); cursor: pointer; }
+.companions-memory-title { min-width: 0; flex: 1 1 auto; display: flex; align-items: baseline; gap: 7px; }
+.companions-memory-title span { font-size: 10px; color: var(--text-faint); }
+.memory-collapse-btn { width: 24px; height: 24px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.companions-memory.is-collapsed .companions-memory-head { flex-direction: column; justify-content: flex-start; }
+.companions-memory.is-collapsed .companions-memory-title,
+.companions-memory.is-collapsed .memory-extract-btn { display: none; }
+.memory-collapsed-open { margin-top: 12px; width: 30px; min-height: 112px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-faint); background: transparent; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); cursor: pointer; }
+.memory-collapsed-open:hover { color: var(--text); background: var(--hover); }
+.memory-collapsed-open span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
+.memory-collapsed-open strong { font-size: 11px; color: var(--text); }
 .memory-search { margin: 10px 0; width: 100%; }
 .memory-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 10px 0 4px; }
 .memory-list { display: flex; flex-direction: column; gap: 8px; }
@@ -12121,25 +12134,28 @@ body {
 /* ============================== Companions ============================== */
 
 .companions-left {
-  padding: 24px 18px 20px;
+  flex-basis: 244px;
+  padding: 14px 12px 16px;
 }
 
 .companions-head h1 {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .companions-sub {
-  font-size: 12px;
+  margin-bottom: 10px;
+  font-size: 10.5px;
   color: var(--text-dim);
 }
 
 .companion-card {
   flex: 0 0 auto;
-  gap: 12px;
-  padding: 14px;
-  border-radius: var(--radius-lg);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
   transition: border-color var(--fast), background-color var(--fast);
 }
 
@@ -12153,9 +12169,9 @@ body {
 }
 
 .companion-card-avatar {
-  width: 38px;
-  height: 38px;
-  font-size: 15px;
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
   font-weight: 650;
   color: var(--on-accent);
   background: var(--accent);
@@ -12166,14 +12182,21 @@ body {
 }
 
 .companion-card-name {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 650;
   color: var(--text);
 }
 
 .companion-card-tagline {
-  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
   color: var(--text-dim);
+}
+
+.companion-card-tags {
+  display: none;
 }
 
 .companion-card-tags span {
@@ -12186,8 +12209,9 @@ body {
 }
 
 .companion-sessions button {
-  padding: 8px 12px;
-  border-radius: var(--radius);
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
 }
 
 .companion-sessions button:hover {
@@ -12212,11 +12236,11 @@ body {
 }
 
 .companions-memory {
-  padding: 24px 18px 20px;
+  padding: 16px 14px 20px;
 }
 
 .companions-memory-head h3 {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
   color: var(--text);
 }
@@ -12230,6 +12254,17 @@ body {
   border: 1px solid var(--border);
   border-radius: 999px;
   cursor: pointer;
+}
+
+.memory-collapse-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0 !important;
+}
+
+.companions-memory.is-collapsed {
+  flex-basis: 46px;
+  padding: 12px 7px;
 }
 
 .memory-search {

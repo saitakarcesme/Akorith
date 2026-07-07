@@ -8,7 +8,7 @@ import type {
   SendCompanionMessageResult
 } from '../../../preload/index.d'
 import { ComposerSendButton } from './CreationPrimitives'
-import { SendIcon, StopIcon } from './icons'
+import { ChevronIcon, SendIcon, StopIcon } from './icons'
 
 // Phase 51: Companions — long-memory local personalities (Athena, Zeus). Think and
 // remember. Companions never take actions.
@@ -70,6 +70,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
   const [usedMemoryIds, setUsedMemoryIds] = useState<string[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [memoryCollapsed, setMemoryCollapsed] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeRequestRef = useRef<{ requestId: string; sessionId: string; companionId: string; cancelled: boolean } | null>(null)
@@ -355,14 +356,43 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
         )}
       </main>
 
-      <aside className="companions-memory">
+      <aside className={`companions-memory ${memoryCollapsed ? 'is-collapsed' : ''}`}>
         <div className="companions-memory-head">
-          <h3>Memory</h3>
-          <button type="button" disabled={busy || !sessionId} onClick={() => void extractNow()} title="Extract memories from this conversation now">
+          <button
+            type="button"
+            className="memory-collapse-btn"
+            onClick={() => setMemoryCollapsed((value) => !value)}
+            title={memoryCollapsed ? 'Show memory' : 'Hide memory'}
+            aria-label={memoryCollapsed ? 'Show memory' : 'Hide memory'}
+            aria-expanded={!memoryCollapsed}
+          >
+            <ChevronIcon size={14} direction={memoryCollapsed ? 'left' : 'right'} />
+          </button>
+          <div className="companions-memory-title">
+            <h3>Memory</h3>
+            <span>{memories.length}</span>
+          </div>
+          <button
+            type="button"
+            className="memory-extract-btn"
+            disabled={busy || !sessionId}
+            onClick={() => void extractNow()}
+            title="Extract memories from this conversation now"
+          >
             Extract
           </button>
         </div>
-        {companion && (
+        {memoryCollapsed ? (
+          <button
+            type="button"
+            className="memory-collapsed-open"
+            onClick={() => setMemoryCollapsed(false)}
+            title={`Show memory (${memories.length})`}
+          >
+            <span>Memory</span>
+            <strong>{memories.length}</strong>
+          </button>
+        ) : companion && (
           <MemoryPanel
             companionId={companion.id}
             memories={memories}
