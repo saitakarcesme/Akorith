@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BenchmarkCategory,
   BenchmarkEntry,
@@ -22,9 +22,26 @@ interface TestPageProps {
 
 interface ResultItem {
   model: string
+  providerId?: string
+  providerLabel?: string
   pending: boolean
   run?: TestRunRow
   error?: string
+}
+
+interface BenchmarkModelOption {
+  key: string
+  providerId: string
+  providerLabel: string
+  model: string
+  available: boolean
+  reason?: string
+}
+
+interface BenchmarkProviderGroup {
+  provider: ProviderInfo
+  available: boolean
+  options: BenchmarkModelOption[]
 }
 
 interface RunConfig {
@@ -79,8 +96,34 @@ function isLocalAutoStarting(provider?: ProviderInfo): boolean {
   )
 }
 
-// Benchmark challenge types. Every selected local model receives the exact same
-// prompt and is ranked by local, objective metrics. Most challenges do not need
+const BENCHMARK_PROVIDER_ORDER = ['local', 'chatgpt', 'claude', 'opencode']
+const BENCHMARK_PROVIDER_IDS = new Set(BENCHMARK_PROVIDER_ORDER)
+
+function benchmarkModelKey(providerId: string, model: string): string {
+  return `${providerId}::${model || 'default'}`
+}
+
+function providerDisplayName(providerId: string, providers: ProviderInfo[] = []): string {
+  const info = providers.find((p) => p.id === providerId)
+  if (info?.label) return info.label
+  if (providerId === 'chatgpt') return 'Codex/GPT'
+  if (providerId === 'opencode') return 'OpenCode'
+  if (providerId === 'claude') return 'Claude'
+  if (providerId === 'local') return 'Ollama'
+  return providerId || 'Provider'
+}
+
+function benchmarkOptionLabel(option: Pick<BenchmarkModelOption, 'providerLabel' | 'model'>): string {
+  return `${option.providerLabel} · ${option.model || 'default'}`
+}
+
+function resultLabel(item: ResultItem, providers: ProviderInfo[] = []): string {
+  const providerLabel = item.providerLabel ?? providerDisplayName(item.providerId ?? item.run?.providerId ?? '', providers)
+  return `${providerLabel} · ${item.model || item.run?.model || 'default'}`
+}
+
+// Benchmark challenge types. Every selected provider/model receives the exact
+// same prompt and is ranked by objective metrics. Most challenges do not need
 // a user repo; the optional "repo sandbox" challenge still uses Test Lab's
 // disposable copy runner for users who want real codebase tests.
 type TestMetric = 'tests' | 'latency' | 'efficiency' | 'artifact'
@@ -402,8 +445,38 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const currentReqId = useRef<string | null>(null)
 
   const localProvider = providers.find((p) => p.id === 'local')
-  const selected = localProvider
-  const modelOptions = selected?.models ?? []
+  const selected = providers.find((p) => p.id === providerId)
+  const benchmarkProviderGroups = useMemo<BenchmarkProviderGroup[]>(() => {
+    return providers
+      .filter((provider) => BENCHMARK_PROVIDER_IDS.has(provider.id))
+      .sort((a, b) => BENCHMARK_PROVIDER_ORDER.indexOf(a.id) - BENCHMARK_PROVIDER_ORDER.indexOf(b.id))
+      .map((provider) => {
+        const available = provider.available.ok || isLocalAutoStarting(provider)
+        const models = provider.models.length > 0 ? provider.models : ['default']
+        const providerLabel = provider.id === 'chatgpt' ? 'Codex/GPT' : provider.label
+        return {
+          provider,
+          available,
+          options: models.map((modelName) => ({
+            key: benchmarkModelKey(provider.id, modelName),
+            providerId: provider.id,
+            providerLabel,
+            model: modelName,
+            available,
+            reason: provider.available.reason
+          }))
+        }
+      })
+  }, [providers])
+  const benchmarkOptions = useMemo(
+    () => benchmarkProviderGroups.flatMap((group) => group.options),
+    [benchmarkProviderGroups]
+  )
+  const availableBenchmarkOptions = benchmarkOptions.filter((option) => option.available)
+  const selectedBenchmarkOptions = selectedModels
+    .map((key) => benchmarkOptions.find((option) => option.key === key))
+    .filter((option): option is BenchmarkModelOption => Boolean(option))
+  const unavailableSelected = selectedBenchmarkOptions.find((option) => !option.available)
   const judgeProviders = providers.filter((p) => p.available.ok && (p.id === 'local' || p.id === 'claude' || p.id === 'chatgpt'))
   const judgeSelected = judgeProviders.find((p) => p.id === judgeProviderId)
   const projectOptions = projects.filter((project) => Boolean(project.path))
@@ -426,8 +499,13 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       const list = await window.api.chat.listProviders()
       setProviders(list)
       setProviderId((cur) => {
-        if (cur === 'local' && list.some((p) => p.id === 'local' && (p.available.ok || isLocalAutoStarting(p)))) return cur
-        return list.find((p) => p.id === 'local' && p.available.ok)?.id ?? 'local'
+        if (list.some((p) => p.id === cur && (p.available.ok || isLocalAutoStarting(p)))) return cur
+        return (
+          list.find((p) => p.id === 'local' && (p.available.ok || isLocalAutoStarting(p)))?.id ??
+          list.find((p) => p.available.ok)?.id ??
+          list[0]?.id ??
+          ''
+        )
       })
     } catch {
       setProviders([])
@@ -441,7 +519,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setSettings(s)
       setInstallDeps(s.installDeps)
       setSourceRepo((cur) => cur || s.sourceRepo)
-      setProviderId((cur) => cur || 'local')
+      setProviderId((cur) => cur || s.defaultProviderId || 'local')
     })
     void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
     refreshRecent()
@@ -474,17 +552,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   useEffect(() => {
     setSelectedModels((current) => {
-      const valid = current.filter((m) => modelOptions.includes(m))
+      const optionKeys = new Set(benchmarkOptions.filter((option) => option.available).map((option) => option.key))
+      const valid = current.filter((key) => optionKeys.has(key))
       if (valid.length > 0) return valid
-      return modelOptions[0] ? [modelOptions[0]] : []
+      return availableBenchmarkOptions.slice(0, 2).map((option) => option.key)
     })
-  }, [modelOptions.join('|')])
+  }, [benchmarkOptions.map((option) => `${option.key}:${option.available ? '1' : '0'}`).join('|')])
 
   useEffect(() => {
-    if (selectedModels.length > 0 && !selectedModels.includes(model)) {
-      setModel(selectedModels[0])
+    const first = selectedBenchmarkOptions[0]
+    if (first && (first.providerId !== providerId || first.model !== model)) {
+      setProviderId(first.providerId)
+      setModel(first.model)
     }
-  }, [selectedModels, model])
+  }, [selectedModels.join('|'), benchmarkOptions.map((option) => option.key).join('|')])
 
   // Pick a sensible but overridable judge default. Phase 25 allows Local,
   // Claude, or ChatGPT; Local is preferred when available.
@@ -578,12 +659,15 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setError(null)
   }
 
-  const toggleModel = (modelName: string): void => {
-    const adding = !selectedModels.includes(modelName)
+  const toggleModel = (option: BenchmarkModelOption): void => {
+    const adding = !selectedModels.includes(option.key)
     setSelectedModels((current) => {
-      return current.includes(modelName) ? current.filter((m) => m !== modelName) : [...current, modelName]
+      return current.includes(option.key) ? current.filter((key) => key !== option.key) : [...current, option.key]
     })
-    if (adding) setModel(modelName)
+    if (adding) {
+      setProviderId(option.providerId)
+      setModel(option.model)
+    }
   }
 
   const effectiveTarget = (): string => presetFocus || 'the most important logic in this repository'
@@ -651,15 +735,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   /** Repo-free benchmark: time the model on a fixed challenge and synthesize a
    *  run row so it slots into the same leaderboard and graph. */
-  const challengeOne = async (useModel: string, challenge: TestType): Promise<ResultItem> => {
+  const challengeOne = async (selection: BenchmarkModelOption, challenge: TestType): Promise<ResultItem> => {
     const reqId = newId()
     currentReqId.current = reqId
-    setPhase(`running ${challenge.label.toLowerCase()} on ${useModel || 'local model'}…`)
+    setPhase(`running ${challenge.label.toLowerCase()} on ${benchmarkOptionLabel(selection)}...`)
     const started = Date.now()
     try {
-      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildChallengePrompt(challenge) })
+      const res = await window.api.chat.send({
+        requestId: reqId,
+        providerId: selection.providerId,
+        model: selection.model || undefined,
+        prompt: buildChallengePrompt(challenge)
+      })
       const durationMs = Date.now() - started
-      if (!res.ok) return { model: useModel, pending: false, error: res.error }
+      if (!res.ok) return { model: selection.model, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, error: res.error }
       const u = res.result.usage
       const tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
       let run: TestRunRow = {
@@ -667,7 +756,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         ts: Date.now(),
         sourceRepo: 'local-benchmark-preset',
         targetDesc: challenge.label,
-        providerId,
+        providerId: selection.providerId,
         model: res.result.model,
         framework: challenge.metric,
         passed: null,
@@ -686,42 +775,59 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       if (persisted.ok) {
         run = persisted.run
       }
-      return { model: res.result.model, pending: false, run }
+      return { model: res.result.model, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, run }
     } catch (err) {
-      return { model: useModel, pending: false, error: err instanceof Error ? err.message : String(err) }
+      return {
+        model: selection.model,
+        providerId: selection.providerId,
+        providerLabel: selection.providerLabel,
+        pending: false,
+        error: err instanceof Error ? err.message : String(err)
+      }
     } finally {
       currentReqId.current = null
     }
   }
 
-  /** Generate (local model) → write into a fresh sandbox → run → metrics. */
+  /** Generate with the selected provider → write into a fresh sandbox → run → metrics. */
   const runOne = async (
-    useModel: string,
+    selection: BenchmarkModelOption,
     config: RunConfig,
     context: TestRepoContext | null,
     sourcePath: string
   ): Promise<ResultItem> => {
     const reqId = newId()
     currentReqId.current = reqId
-    setPhase(`generating tests with ${useModel || providerId}…`)
+    setPhase(`generating tests with ${benchmarkOptionLabel(selection)}...`)
     let genText: string
     let tokens: number | undefined
-    let runModel = useModel
+    let runModel = selection.model
     try {
-      const res = await window.api.chat.send({ requestId: reqId, providerId, model: useModel || undefined, prompt: buildGenPrompt(config, context) })
-      if (!res.ok) return { model: useModel, pending: false, error: res.error }
+      const res = await window.api.chat.send({
+        requestId: reqId,
+        providerId: selection.providerId,
+        model: selection.model || undefined,
+        prompt: buildGenPrompt(config, context)
+      })
+      if (!res.ok) return { model: selection.model, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, error: res.error }
       genText = res.result.text
       runModel = res.result.model
       const u = res.result.usage
       tokens = (u.promptTokens ?? 0) + (u.completionTokens ?? 0)
     } catch (err) {
-      return { model: useModel, pending: false, error: err instanceof Error ? err.message : String(err) }
+      return {
+        model: selection.model,
+        providerId: selection.providerId,
+        providerLabel: selection.providerLabel,
+        pending: false,
+        error: err instanceof Error ? err.message : String(err)
+      }
     } finally {
       currentReqId.current = null
     }
 
     const code = extractCode(genText)
-    if (!code) return { model: useModel, pending: false, error: 'model did not return a fenced code block' }
+    if (!code) return { model: selection.model, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, error: 'model did not return a fenced code block' }
 
     const runId = newId()
     currentRunId.current = runId
@@ -731,7 +837,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         runId,
         sourceRepo: sourcePath,
         targetDesc: effectiveTarget(),
-        providerId,
+        providerId: selection.providerId,
         model: runModel,
         framework: config.framework,
         testCommand: config.testCommand,
@@ -742,10 +848,16 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         attempts: 1,
         timeoutMs: settings?.timeoutMs
       })
-      if (!res.ok) return { model: useModel, pending: false, error: res.error }
-      return { model: runModel, pending: false, run: res.run }
+      if (!res.ok) return { model: selection.model, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, error: res.error }
+      return { model: runModel, providerId: selection.providerId, providerLabel: selection.providerLabel, pending: false, run: res.run }
     } catch (err) {
-      return { model: useModel, pending: false, error: err instanceof Error ? err.message : String(err) }
+      return {
+        model: selection.model,
+        providerId: selection.providerId,
+        providerLabel: selection.providerLabel,
+        pending: false,
+        error: err instanceof Error ? err.message : String(err)
+      }
     } finally {
       currentRunId.current = null
     }
@@ -762,13 +874,15 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         const score = ranked.get(run.id)?.score ?? null
         const rank = ranked.get(run.id)?.rank ?? null
         const modelName = run.model || item.model || 'unknown'
+        const runProviderId = run.providerId ?? item.providerId ?? 'unknown'
+        const providerName = item.providerLabel ?? providerDisplayName(runProviderId, providers)
         return window.api.benchmark.upsert({
           challengeId: challenge.id,
           challengeLabel: challenge.label,
           category: challenge.category,
           metric: metricName,
           model: modelName,
-          providerId: run.providerId,
+          providerId: runProviderId,
           score,
           rank,
           status: run.status,
@@ -776,12 +890,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           tokens: run.tokens,
           runId: run.id,
           source: sourceLabel,
-          summary: `${challenge.label} · ${modelName}${score === null ? '' : ` · ${score}/100`}`,
+          summary: `${challenge.label} · ${providerName} · ${modelName}${score === null ? '' : ` · ${score}/100`}`,
           prompt: buildChallengePrompt(challenge),
           artifactPreview: run.rawOutput,
           mediaType: challenge.mediaType ?? 'none',
           mediaUrl: benchmarkMediaUrl(challenge),
-          signature: `${challenge.id}::${modelName.toLowerCase()}`
+          signature: `${challenge.id}::${runProviderId}::${modelName.toLowerCase()}`
         })
       })
     )
@@ -792,20 +906,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const canRun =
     !running &&
     (!needsRepo || Boolean(sourceRepo.trim())) &&
-    Boolean(selected?.available.ok) &&
-    selectedModels.length > 0
+    selectedBenchmarkOptions.length > 0 &&
+    !unavailableSelected
 
   const handleRun = async (): Promise<void> => {
     setError(null)
     if (!canRun) {
       if (needsRepo && !sourceRepo.trim()) setError('Pick a source repo.')
-      else if (!selected?.available.ok) setError('Local (Ollama) is unavailable. Akorith needs Local to run models.')
-      else if (selectedModels.length === 0) setError('Pick at least one local model to benchmark.')
+      else if (unavailableSelected) setError(`${benchmarkOptionLabel(unavailableSelected)} is unavailable: ${unavailableSelected.reason ?? 'provider is offline'}.`)
+      else if (selectedBenchmarkOptions.length === 0) setError('Pick at least one available benchmark model.')
       return
     }
 
     const metric = testType.metric
-    const models = selectedModels.length > 0 ? selectedModels : [model].filter(Boolean)
+    const models = selectedBenchmarkOptions
 
     // Repo-free challenges: run each model on the fixed local task once; rank
     // by throughput, token count, or artifact completeness.
@@ -813,7 +927,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
       setRunning(true)
       setClearKey((k) => k + 1)
       setRanMetric(metric)
-      setResults(models.map((m) => ({ model: m, pending: true })))
+      setResults(models.map((option) => ({ model: option.model, providerId: option.providerId, providerLabel: option.providerLabel, pending: true })))
       const done: ResultItem[] = []
       for (let i = 0; i < models.length; i++) {
         const item = await challengeOne(models[i], testType)
@@ -870,7 +984,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     setRunning(true)
     setClearKey((k) => k + 1)
     setRanMetric('tests')
-    setResults(models.map((m) => ({ model: m, pending: true })))
+    setResults(models.map((option) => ({ model: option.model, providerId: option.providerId, providerLabel: option.providerLabel, pending: true })))
     const completed: ResultItem[] = []
 
     for (let i = 0; i < models.length; i++) {
@@ -932,8 +1046,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     let genText: string
     let runModel = failedRun.model ?? model
     let tokens: number | undefined
+    const repairProviderId = failedRun.providerId || item.providerId || providerId || 'local'
+    const repairProviderLabel = item.providerLabel ?? providerDisplayName(repairProviderId, providers)
     try {
-      const res = await window.api.chat.send({ requestId: reqId, providerId, model: failedRun.model || model || undefined, prompt: repairPrompt })
+      const res = await window.api.chat.send({ requestId: reqId, providerId: repairProviderId, model: failedRun.model || model || undefined, prompt: repairPrompt })
       if (!res.ok) {
         setResults((prev) => prev.map((r, i) => (i === idx ? { ...r, error: `repair failed: ${res.error}` } : r)))
         return
@@ -967,7 +1083,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         runId,
         sourceRepo: failedRun.sourceRepo || sourceRepo.trim(),
         targetDesc: `repair: ${effectiveTarget()}`,
-        providerId,
+        providerId: repairProviderId,
         model: runModel,
         framework,
         testCommand,
@@ -978,7 +1094,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
         attempts: (failedRun.attempts ?? 1) + 1,
         timeoutMs: settings?.timeoutMs
       })
-      const next: ResultItem = res.ok ? { model: runModel, pending: false, run: res.run } : { model: runModel, pending: false, error: res.error }
+      const next: ResultItem = res.ok
+        ? { model: runModel, providerId: repairProviderId, providerLabel: repairProviderLabel, pending: false, run: res.run }
+        : { model: runModel, providerId: repairProviderId, providerLabel: repairProviderLabel, pending: false, error: res.error }
       setResults((prev) => prev.map((r, i) => (i === idx ? next : r)))
       refreshRecent()
       if (res.ok) {
@@ -1139,20 +1257,20 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <span className="sandbox-toggle-dot" />
             Sandbox output
           </button>
-          <span className="bench-local-pill">Local models only</span>
+          <span className="bench-local-pill">CLI + local providers</span>
         </div>
         <div className="test-head bench-hero">
           <div>
             <span className="bench-eyebrow">Akorith benchmark arena</span>
-            <h2 className="test-title">Local Model Battle Lab</h2>
+            <h2 className="test-title">Model Battle Lab</h2>
             <p className="test-sub">
-              Select one or more local Ollama models, run them on the same challenge, then compare speed, token use,
-              project quality signals, and sandbox test scores in one scoreboard.
+              Select Ollama, Codex/GPT, Claude, and OpenCode models, run them on the same challenge, then compare speed,
+              token use, project quality signals, and sandbox test scores in one scoreboard.
             </p>
           </div>
           <div className="bench-hero-stats">
             <div>
-              <strong>{selectedModels.length || 0}</strong>
+              <strong>{selectedBenchmarkOptions.length || 0}</strong>
               <span>models</span>
             </div>
             <div>
@@ -1160,7 +1278,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               <span>challenges</span>
             </div>
             <div>
-              <strong>{testType.metric === 'tests' ? 'sandbox' : 'local'}</strong>
+              <strong>{testType.metric === 'tests' ? 'sandbox' : 'cli/local'}</strong>
               <span>runner</span>
             </div>
           </div>
@@ -1168,12 +1286,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
         <div className="bench-flow" aria-label="Benchmark flow">
           {[
-            ['01', 'Select', 'local models'],
+            ['01', 'Select', 'providers'],
             ['02', 'Challenge', testType.label],
-            ['03', 'Battle', selectedModels.length > 1 ? 'multi model' : 'single model'],
+            ['03', 'Battle', selectedBenchmarkOptions.length > 1 ? 'multi model' : 'single model'],
             ['04', 'Score', testType.scoreHint ?? 'objective metrics']
           ].map(([num, label, detail], idx) => (
-            <div key={num} className={idx <= (results.length > 0 ? 3 : running ? 2 : selectedModels.length > 0 ? 1 : 0) ? 'is-active' : ''}>
+            <div key={num} className={idx <= (results.length > 0 ? 3 : running ? 2 : selectedBenchmarkOptions.length > 0 ? 1 : 0) ? 'is-active' : ''}>
               <span>{num}</span>
               <strong>{label}</strong>
               <em>{detail}</em>
@@ -1265,19 +1383,24 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div className="test-step-head">
               <span>{needsRepo ? '2' : '1'}</span>
               <div>
-                <strong>Choose local models</strong>
-                <p>Each selected model gets the same prompt, limits, runner, and scoring formula.</p>
+                <strong>Choose benchmark models</strong>
+                <p>Each selected provider/model gets the same prompt, limits, runner, and scoring formula.</p>
               </div>
             </div>
-            {selected && modelOptions.length > 0 ? (
+            {benchmarkProviderGroups.length > 0 ? (
               <>
                 <div className="test-model-toolbar">
                   <button
                     type="button"
                     className="test-table-btn"
                     onClick={() => {
-                      setSelectedModels(modelOptions)
-                      setModel(modelOptions[0] ?? '')
+                      const next = availableBenchmarkOptions.map((option) => option.key)
+                      setSelectedModels(next)
+                      const first = availableBenchmarkOptions[0]
+                      if (first) {
+                        setProviderId(first.providerId)
+                        setModel(first.model)
+                      }
                     }}
                   >
                     Select all
@@ -1286,27 +1409,46 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                     type="button"
                     className="test-table-btn"
                     onClick={() => {
-                      const first = model || modelOptions[0] || ''
-                      setSelectedModels(first ? [first] : [])
+                      const next = availableBenchmarkOptions.slice(0, 2)
+                      setSelectedModels(next.map((option) => option.key))
+                      const first = next[0]
+                      if (first) {
+                        setProviderId(first.providerId)
+                        setModel(first.model)
+                      }
                     }}
                   >
-                    One model
+                    Two model battle
                   </button>
                 </div>
-                <div className="test-model-grid">
-                  {modelOptions.map((m) => {
-                    const checked = selectedModels.includes(m)
-                    return (
-                      <label key={m} className={`test-model-card ${checked ? 'is-selected' : ''}`}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleModel(m)} />
-                        <span>{m}</span>
-                      </label>
-                    )
-                  })}
+                <div className="test-provider-stack">
+                  {benchmarkProviderGroups.map((group) => (
+                    <div key={group.provider.id} className={`test-provider-group ${group.available ? '' : 'is-offline'}`}>
+                      <div className="test-provider-head">
+                        <strong>{group.provider.id === 'chatgpt' ? 'Codex/GPT' : group.provider.label}</strong>
+                        <span>{group.available ? `${group.options.length} model${group.options.length === 1 ? '' : 's'}` : group.provider.available.reason ?? 'offline'}</span>
+                      </div>
+                      <div className="test-model-grid">
+                        {group.options.map((option) => {
+                          const checked = selectedModels.includes(option.key)
+                          return (
+                            <label
+                              key={option.key}
+                              className={`test-model-card ${checked ? 'is-selected' : ''} ${option.available ? '' : 'is-disabled'}`}
+                              title={option.available ? benchmarkOptionLabel(option) : option.reason ?? 'Provider unavailable'}
+                            >
+                              <input type="checkbox" checked={checked} disabled={!option.available} onChange={() => toggleModel(option)} />
+                              <span>{option.model}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </>
             ) : (
-              <div className="test-notice">Waiting for local models. Start Ollama or add a remote Ollama endpoint in Settings.</div>
+              <div className="test-notice">Waiting for benchmark providers. Start Ollama, sign in to Codex/Claude/OpenCode, or enable providers in Settings.</div>
             )}
           </section>
 
@@ -1381,7 +1523,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </button>
           ) : (
             <button type="button" className="test-btn is-primary" disabled={!canRun} onClick={() => void handleRun()}>
-              {selectedModels.length > 1 ? `Battle ${selectedModels.length} models` : 'Run local benchmark'}
+              {selectedBenchmarkOptions.length > 1 ? `Battle ${selectedBenchmarkOptions.length} models` : 'Run benchmark'}
             </button>
           )}
           {phase && <span className="test-phase">{phase}</span>}
@@ -1411,6 +1553,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   const run = r.run as TestRunRow
                   const rank = ranking.get(run.id)?.rank ?? 0
                   const score = ranking.get(run.id)?.score ?? 0
+                  const label = resultLabel(r, providers)
                   return (
                     <div key={run.id} className="bench-col">
                       <span className="bench-col-score">{score}</span>
@@ -1420,8 +1563,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                           style={{ height: `${Math.max(score, 3)}%` }}
                         />
                       </div>
-                      <span className="bench-col-name" title={r.model || providerId}>
-                        {(r.model || providerId).replace(/:.*$/, '')}
+                      <span className="bench-col-name" title={label}>
+                        {label.replace(/:.*$/, '')}
                       </span>
                     </div>
                   )
@@ -1435,11 +1578,12 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               const rank = ranking.get(run.id)?.rank ?? 0
               const score = ranking.get(run.id)?.score ?? 0
               const i = results.indexOf(r)
+              const label = resultLabel(r, providers)
               return (
                 <div key={run.id} className={`bench-row ${rank === 1 ? 'is-top' : ''}`}>
                   <div className="bench-rank">{rank === 1 ? '★' : rank}</div>
                   <div className="bench-model">
-                    <strong>{r.model || providerId}</strong>
+                    <strong>{label}</strong>
                     <span className={`bench-status ${statusColor(run.status)}`}>
                       {ranMetric === 'tests' ? run.status : 'timed'}
                     </span>
@@ -1497,7 +1641,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 <div key={`p-${i}`} className="bench-row is-muted">
                   <div className="bench-rank">·</div>
                   <div className="bench-model">
-                    <strong>{r.model || providerId}</strong>
+                    <strong>{resultLabel(r, providers)}</strong>
                     <span className="bench-status">{r.pending ? 'running…' : r.error ? 'error' : '—'}</span>
                   </div>
                   <div className="bench-metrics">
@@ -1508,7 +1652,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
             {!anyPending && leaderboard.length > 1 && (
               <div className="test-hint bench-foot">
-                {leaderboard[0].model}{' '}
+                {resultLabel(leaderboard[0], providers)}{' '}
                 {ranMetric === 'latency' ? 'is fastest' : ranMetric === 'efficiency' ? 'is leanest' : ranMetric === 'artifact' ? 'has the strongest artifact score' : 'leads'} this
                 benchmark.
               </div>

@@ -5853,6 +5853,45 @@ textarea:focus-visible {
   margin-bottom: 8px;
 }
 
+.test-provider-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.test-provider-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-input) 55%, transparent);
+  padding: 10px;
+}
+
+.test-provider-group.is-offline {
+  opacity: 0.64;
+}
+
+.test-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.test-provider-head strong {
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.test-provider-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .test-model-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5878,6 +5917,11 @@ textarea:focus-visible {
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent-strong);
+}
+
+.test-model-card.is-disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .test-model-card input {
