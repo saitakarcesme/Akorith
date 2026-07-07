@@ -1665,7 +1665,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <div>
               <span className="test-recent-title">Benchmark library</span>
               <p className="test-hint">
-                Unique model + challenge results are kept here and exported to akorith.space.
+                Unique provider + model + challenge results are kept here and exported to akorith.space.
               </p>
             </div>
             <div className="benchmark-library-actions">
@@ -1680,34 +1680,38 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           {benchmarkExportNotice && <div className={`pdf-notice ${benchmarkExportNotice.kind}`}>{benchmarkExportNotice.text}</div>}
           {benchmarks.length === 0 ? (
             <div className="benchmark-empty">
-              Run a local benchmark to publish its latest model/challenge result into the library.
+              Run a benchmark to publish its latest provider/model/challenge result into the library.
             </div>
           ) : (
             <div className="benchmark-library-list">
-              {benchmarks.map((entry) => (
-                <article key={entry.id} className={`benchmark-entry is-${entry.category}`}>
-                  <div className="benchmark-entry-score">
-                    <strong>{entry.score ?? '—'}</strong>
-                    <span>{entry.score == null ? 'score' : '/100'}</span>
-                  </div>
-                  <div className="benchmark-entry-main">
-                    <div className="benchmark-entry-titleline">
-                      <strong>{entry.challengeLabel}</strong>
-                      <span>{categoryLabel(entry.category)}</span>
-                      <span>{mediaLabel(entry.mediaType)}</span>
+              {benchmarks.map((entry) => {
+                const providerName = providerDisplayName(entry.providerId ?? 'unknown', providers)
+                const modelName = `${providerName} · ${entry.model}`
+                return (
+                  <article key={entry.id} className={`benchmark-entry is-${entry.category}`}>
+                    <div className="benchmark-entry-score">
+                      <strong>{entry.score ?? '—'}</strong>
+                      <span>{entry.score == null ? 'score' : '/100'}</span>
                     </div>
-                    <span title={entry.model}>{entry.model}</span>
-                    {entry.summary && <p>{entry.summary}</p>}
-                  </div>
-                  <div className="benchmark-entry-meta">
-                    <span>{entry.rank ? `#${entry.rank}` : 'rank —'}</span>
-                    <span>{entry.durationMs != null ? `${(entry.durationMs / 1000).toFixed(1)}s` : '—'}</span>
-                    <span>{entry.tokens ?? 0} tok</span>
-                    <span>{new Date(entry.updatedAt).toLocaleTimeString()}</span>
-                    {entry.artifactPath && <span title={entry.artifactPath}>artifact saved</span>}
-                  </div>
-                </article>
-              ))}
+                    <div className="benchmark-entry-main">
+                      <div className="benchmark-entry-titleline">
+                        <strong>{entry.challengeLabel}</strong>
+                        <span>{categoryLabel(entry.category)}</span>
+                        <span>{mediaLabel(entry.mediaType)}</span>
+                      </div>
+                      <span title={modelName}>{modelName}</span>
+                      {entry.summary && <p>{entry.summary}</p>}
+                    </div>
+                    <div className="benchmark-entry-meta">
+                      <span>{entry.rank ? `#${entry.rank}` : 'rank —'}</span>
+                      <span>{entry.durationMs != null ? `${(entry.durationMs / 1000).toFixed(1)}s` : '—'}</span>
+                      <span>{entry.tokens ?? 0} tok</span>
+                      <span>{new Date(entry.updatedAt).toLocaleTimeString()}</span>
+                      {entry.artifactPath && <span title={entry.artifactPath}>artifact saved</span>}
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           )}
         </section>
