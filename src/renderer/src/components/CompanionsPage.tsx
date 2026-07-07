@@ -134,6 +134,20 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
     setSessionId(s.id)
   }
 
+  const deleteChat = async (target: CompanionSession): Promise<void> => {
+    if (!selectedCompanion || busy) return
+    const ok = window.confirm(`Delete "${target.title}"?\n\nThis removes the local conversation messages. Memories stay.`)
+    if (!ok) return
+    pendingTurnsBySession.delete(target.id)
+    await window.api.companion.deleteSession(target.id)
+    const next = (await window.api.companion.listSessions(selectedCompanion)) as CompanionSession[]
+    setSessions(next)
+    if (sessionId === target.id) {
+      setSessionId(next[0]?.id ?? null)
+      if (next.length === 0) setMessages([])
+    }
+  }
+
   const send = async (): Promise<void> => {
     if (!companion || !draft.trim() || busy) return
     let sid = sessionId
@@ -299,10 +313,22 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
             <div className="companions-empty">No conversations yet.</div>
           ) : (
             sessions.map((s) => (
-              <button key={s.id} type="button" className={s.id === sessionId ? 'is-active' : ''} onClick={() => setSessionId(s.id)}>
-                <span className="companion-session-title">{s.title}</span>
-                <span className="companion-session-meta">{s.messageCount} msg</span>
-              </button>
+              <div key={s.id} className={`companion-session-row ${s.id === sessionId ? 'is-active' : ''}`}>
+                <button type="button" className="companion-session-open" onClick={() => setSessionId(s.id)}>
+                  <span className="companion-session-title">{s.title}</span>
+                  <span className="companion-session-meta">{s.messageCount} msg</span>
+                </button>
+                <button
+                  type="button"
+                  className="companion-session-delete"
+                  disabled={busy}
+                  onClick={() => void deleteChat(s)}
+                  title="Delete conversation"
+                  aria-label={`Delete ${s.title}`}
+                >
+                  Delete
+                </button>
+              </div>
             ))
           )}
         </div>

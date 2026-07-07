@@ -11310,8 +11310,17 @@ body {
 .companion-sessions-head { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 5px; font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
 .companion-sessions-head button { font-size: 11px; background: transparent; border: 0; color: var(--text-dim); cursor: pointer; }
 .companion-sessions { display: flex; flex-direction: column; gap: 2px; }
-.companion-sessions button { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; text-align: left; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-dim); cursor: pointer; font-size: 12px; }
-.companion-sessions button.is-active { background: var(--hover); color: var(--text); }
+.companion-session-row { display: flex; align-items: center; border-radius: var(--radius-sm); }
+.companion-session-row:hover,
+.companion-session-row:focus-within { background: rgba(255, 255, 255, 0.05); }
+.companion-session-row.is-active { background: var(--hover); }
+.companion-session-open { min-width: 0; flex: 1 1 auto; display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; text-align: left; background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 12px; }
+.companion-session-row.is-active .companion-session-open { color: var(--text); }
+.companion-session-delete { flex: 0 0 auto; margin-right: 4px; padding: 3px 6px; font-size: 10px; color: var(--text-faint); background: transparent; border: 1px solid transparent; border-radius: 999px; opacity: 0; cursor: pointer; }
+.companion-session-row:hover .companion-session-delete,
+.companion-session-row:focus-within .companion-session-delete { opacity: 1; }
+.companion-session-delete:hover { color: var(--danger); border-color: rgba(255, 99, 99, 0.2); background: rgba(255, 99, 99, 0.08); }
+.companion-session-delete:disabled { opacity: 0.35; cursor: not-allowed; }
 .companion-session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .companion-session-meta { color: var(--text-faint); font-size: 10px; flex: 0 0 auto; }
 
@@ -12208,17 +12217,16 @@ body {
   border-radius: 999px;
 }
 
-.companion-sessions button {
+.companion-session-open {
   padding: 6px 9px;
-  border-radius: var(--radius-sm);
   font-size: 11.5px;
 }
 
-.companion-sessions button:hover {
+.companion-session-row:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.companion-sessions button.is-active {
+.companion-session-row.is-active {
   background: rgba(255, 255, 255, 0.08);
 }
 
