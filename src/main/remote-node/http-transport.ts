@@ -130,6 +130,16 @@ export class RemoteNodeHttpServer {
         })
         return
       }
+      if (request.url === '/v1/revoke') {
+        const authorization = request.headers.authorization ?? ''
+        const match = /^Bearer\s+(.+)$/i.exec(authorization)
+        const device = match ? this.options.pairingAuthority.authenticate(match[1]) : null
+        if (!device) throw new RemoteNodeProtocolError('unauthorized', 'Device token is invalid or revoked.', 401)
+        const revoked = this.options.pairingAuthority.revokeDevice(device.id)
+        await this.options.persistAuthority?.(this.options.pairingAuthority.exportState())
+        json(response, 200, { revoked, deviceId: device.id })
+        return
+      }
       if (request.url !== '/v1/request') {
         json(response, 404, { error: { code: 'not_found', message: 'Endpoint not found.' } })
         return
@@ -152,7 +162,24 @@ export class RemoteNodeHttpServer {
         kind: result.kind,
         generationId: result.generationId
       })}\n`)
-      for await (const event of result.stream) response.write(`${JSON.stringify(event)}\n`)
+      let finished = false
+      const cancelOnDisconnect = (): void => {
+        if (finished) return
+        void this.options.service.handle({
+          protocolVersion: REMOTE_NODE_PROTOCOL_VERSION,
+          requestId: randomUUID(),
+          kind: 'cancel',
+          bearerToken: envelope.bearerToken,
+          body: { generationId: result.generationId }
+        }).catch(() => undefined)
+      }
+      response.once('close', cancelOnDisconnect)
+      for await (const event of result.stream) {
+        if (response.destroyed) break
+        response.write(`${JSON.stringify(event)}\n`)
+      }
+      finished = true
+      response.removeListener('close', cancelOnDisconnect)
       response.end()
     } catch (error) {
       if (!response.headersSent) errorResponse(response, error)
@@ -224,6 +251,18 @@ export class RemoteNodeHttpClient {
     return response.cancelled
   }
 
+  async revoke(signal?: AbortSignal): Promise<boolean> {
+    if (!this.deviceToken) throw new Error('Pair with the remote node before revoking this device.')
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/revoke`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.deviceToken}` },
+      signal
+    })
+    const value = await response.json() as Record<string, unknown>
+    if (!response.ok) throw new Error(this.responseError(value, response.status))
+    return value.revoked === true
+  }
+
   async *generate(body: RemoteGenerationRequest, signal?: AbortSignal): AsyncIterable<RemoteGenerationEvent> {
     const response = await this.fetchImpl(`${this.baseUrl}/v1/request`, {
       method: 'POST',
@@ -239,6 +278,7 @@ export class RemoteNodeHttpClient {
     const decoder = new TextDecoder()
     let buffer = ''
     let first = true
+    let generationId: string | null = null
     try {
       while (true) {
         const part = await reader.read()
@@ -251,6 +291,8 @@ export class RemoteNodeHttpClient {
           if (first) {
             first = false
             if (value.kind !== 'generation_stream') throw new Error('Remote generation stream header is invalid.')
+            if (typeof value.generationId !== 'string') throw new Error('Remote generation id is invalid.')
+            generationId = value.generationId
             continue
           }
           if (typeof value.type !== 'string' || typeof value.generationId !== 'string') throw new Error('Remote generation event is invalid.')
@@ -260,6 +302,9 @@ export class RemoteNodeHttpClient {
       }
     } finally {
       reader.releaseLock()
+      if (signal?.aborted && generationId) {
+        await this.cancel(generationId, AbortSignal.timeout(5_000)).catch(() => undefined)
+      }
     }
   }
 
@@ -294,4 +339,3 @@ export class RemoteNodeHttpClient {
     return typeof error.message === 'string' ? error.message.slice(0, 500) : `Remote node request failed with HTTP ${status}.`
   }
 }
-

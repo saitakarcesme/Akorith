@@ -135,6 +135,7 @@ class FixtureClient implements ManagedRemoteNodeClient {
     return catalog(this.baseUrl)
   }
 
+  async revoke(): Promise<boolean> { return true }
   async cancel(): Promise<boolean> { return true }
 
   async *generate(_body: RemoteGenerationRequest): AsyncIterable<RemoteGenerationEvent> {

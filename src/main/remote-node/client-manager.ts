@@ -293,11 +293,14 @@ export class RemoteNodeClientManager {
     }
   }
 
-  /** Local revocation removes the encrypted client credential and its connection profile. */
+  /** Revoke the device on the node first, then remove the encrypted local credential. */
   async revoke(nodeId: string): Promise<boolean> {
     await this.initialize()
     const existing = this.profiles.get(nodeId)
     if (!existing) return false
+    const handle = await this.client(nodeId)
+    const revoked = await this.withTimeout((signal) => handle.client.revoke(signal))
+    if (!revoked) throw new Error('The remote node did not revoke this device token.')
     this.clearTimer(nodeId)
     this.probeControllers.get(nodeId)?.abort()
     await this.mutate(async () => {

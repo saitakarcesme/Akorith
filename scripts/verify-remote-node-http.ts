@@ -95,6 +95,10 @@ async function main(): Promise<void> {
       () => new RemoteNodeHttpClient({ baseUrl: 'https://203.0.113.10:47841' }),
       /explicit opt-in|not allowed|Public addresses/i
     ); assertions += 1
+
+    equal(await client.revoke(), true)
+    equal(persisted.devices[0]?.revokedAt !== undefined, true)
+    await assert.rejects(client.health(), /invalid or revoked/i); assertions += 1
   } finally {
     await server.stop()
   }

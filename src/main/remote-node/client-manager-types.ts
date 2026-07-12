@@ -68,6 +68,7 @@ export interface ManagedRemoteNodeClient {
   pair(input: { pairingId: string; code: string; deviceName: string }, signal?: AbortSignal): Promise<RemoteNodePairingResult>
   health(signal?: AbortSignal): Promise<RemoteNodeHealth>
   catalog(refresh?: boolean, signal?: AbortSignal): Promise<RemoteNodeCatalog>
+  revoke(signal?: AbortSignal): Promise<boolean>
   cancel(generationId: string, signal?: AbortSignal): Promise<boolean>
   generate(body: RemoteGenerationRequest, signal?: AbortSignal): AsyncIterable<RemoteGenerationEvent>
 }
