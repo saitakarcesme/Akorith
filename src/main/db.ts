@@ -13,6 +13,7 @@ import { mkdirSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 import { applyTelemetryMigrations, backfillUsageEvents } from './telemetry/migrations'
+import { applyAutonomousLoopMigrations } from './autonomous-loop/migrations'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -533,6 +534,7 @@ export function initDb(): void {
   // large history resume on a later launch without duplicating token totals.
   applyTelemetryMigrations(nextDb)
   backfillUsageEvents(nextDb)
+  applyAutonomousLoopMigrations(nextDb)
   } catch (err) {
     nextDb.close()
     db = null
