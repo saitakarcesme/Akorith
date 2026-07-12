@@ -564,7 +564,7 @@ export function isDbReady(): boolean {
   return ready()
 }
 
-/** Phase 48: shared DB accessor so feature modules (project-loop, companions,
+/** Shared DB accessor so feature modules (autonomous loop, companions,
  *  action-agents) can own their own store files without bloating db.ts. */
 export function getDb(): Database.Database {
   return must()

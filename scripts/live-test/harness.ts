@@ -3,8 +3,8 @@
 // Runs INSIDE Electron (via scripts/live-test/main.cjs which registers tsx's
 // require hook) so `app.getPath('userData')` resolves to the REAL Akorith userData
 // directory and better-sqlite3 loads the same native build the app uses. It then
-// calls the EXACT same main-process functions the IPC handlers call (createLoop,
-// runOneCycle, sendCompanionMessage, createAgent, runAgent, ...) against the REAL
+// calls the exact same main-process functions the retained diagnostic handlers
+// call against the real
 // loopex.db. NOT raw SQL — the real app data/logic layer. Any data created is
 // visible in Akorith on next launch.
 //
@@ -12,13 +12,6 @@
 
 import { app } from 'electron'
 import * as db from '../../src/main/db'
-import * as loop from '../../src/main/project-loop/store'
-import * as loopRuns from '../../src/main/project-loop/runs'
-import * as loopEvents from '../../src/main/project-loop/events'
-import * as loopCommits from '../../src/main/project-loop/commits'
-import * as loopBacklog from '../../src/main/project-loop/backlog'
-import * as loopMemory from '../../src/main/project-loop/memory'
-import * as runner from '../../src/main/project-loop/runner'
 import * as cStore from '../../src/main/companions/store'
 import * as cSessions from '../../src/main/companions/sessions'
 import * as cMessages from '../../src/main/companions/messages'
@@ -41,33 +34,7 @@ async function dispatch(op: string, a: Record<string, unknown>): Promise<unknown
     case 'runtimeStatus':
       return runtime.localRuntimeStatus()
     case 'counts':
-      return { loops: loop.listLoops().length, companions: cStore.listCompanions().length, agents: aStore.listAgents().length }
-
-    // ---- Loop ----
-    case 'createLoop':
-      return loop.createLoop(a as never)
-    case 'listLoops':
-      return loop.listLoops()
-    case 'getLoop':
-      return loop.getLoop(a.id as string)
-    case 'runLoop':
-      return runner.runOneCycle(a.id as string)
-    case 'setLoopStatus':
-      return loop.setLoopStatus(a.id as string, a.status as never)
-    case 'listLoopRuns':
-      return loopRuns.listRuns(a.id as string)
-    case 'listLoopEvents':
-      return loopEvents.listEvents(a.id as string)
-    case 'listLoopCommits':
-      return loopCommits.listCommits(a.id as string)
-    case 'addBacklog':
-      return loopBacklog.addBacklogItem({ loopId: a.id as string, title: a.title as string, detail: a.detail as string })
-    case 'listBacklog':
-      return loopBacklog.listBacklog(a.id as string)
-    case 'addLoopMemory':
-      return loopMemory.addLoopMemory(a.id as string, (a.kind as never) ?? 'note', a.content as string)
-    case 'listLoopMemory':
-      return loopMemory.listLoopMemories(a.id as string)
+      return { companions: cStore.listCompanions().length, agents: aStore.listAgents().length }
 
     // ---- Companions ----
     case 'listCompanions':

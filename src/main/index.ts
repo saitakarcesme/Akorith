@@ -27,7 +27,6 @@ import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
-import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
 import { validateExternalUrl } from './security/external-url'
 import { registerAutonomousLoopIpc, unregisterAutonomousLoopIpc } from './autonomous-loop/ipc'
 import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonomous-loop/runtime'
@@ -419,7 +418,6 @@ async function initializeStartupData(): Promise<void> {
   try {
     await ensureDbReady()
     resumeActiveAutoLoopsAtStartup()
-    startProjectLoopAutoScheduler()
     await startAutonomousLoopRuntime()
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
@@ -432,7 +430,6 @@ app.whenReady().then(() => {
   registerStartupSnapshotIpc()
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
-  registerProjectLoopIpc()
   registerAutonomousLoopIpc()
   registerDbIpc()
   registerPtyIpc()
@@ -476,7 +473,6 @@ app.whenReady().then(() => {
 
 // No zombie shells: every PTY dies with the app.
 app.on('will-quit', () => {
-  stopProjectLoopAutoScheduler()
   unregisterAutonomousLoopIpc()
   stopAutonomousLoopRuntime()
   disposeUpdateIpc()
