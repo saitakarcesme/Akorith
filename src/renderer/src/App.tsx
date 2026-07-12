@@ -124,7 +124,7 @@ function AppChrome({
               type="button"
               className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
               onClick={onToggleWorkbench}
-              title="Toggle the bottom workbench (changes, runtime, missions)"
+              title="Toggle the bottom workbench (changes and runtime)"
             >
               Workbench
             </button>
@@ -134,7 +134,7 @@ function AppChrome({
               type="button"
               className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
               onClick={onToggleDrawer}
-              title="Show agent terminals"
+              title="Show execution terminals"
             >
               <SparkIcon size={14} />
               Activity
@@ -185,7 +185,7 @@ export default function App(): JSX.Element {
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
   // Phase 13.1: terminals are hidden by default behind an activity drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
+  // The bottom workbench contains read-only Changes and Runtime panels.
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [, setAgentStatus] = useState<AgentStatusMap>({})
   const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)

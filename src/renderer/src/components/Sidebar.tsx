@@ -927,7 +927,7 @@ export default function Sidebar({
 
           {/* Phase 33.4: provider folders (Claude / Codex / Local) are removed from
               the sidebar. The sidebar is project-first now; provider/model choice
-              lives in the composer model picker, Agent Hub, and Settings. General
+              lives in the composer model picker and Settings. General
               chats are listed in their own borderless section below. */}
         </div>
 
