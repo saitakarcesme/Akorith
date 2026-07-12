@@ -310,16 +310,16 @@ const controller = Object.freeze({
   getDocs: (): Promise<unknown> => ipcRenderer.invoke('controller:getDocs')
 })
 
-// Phase 35: plugin foundation (read-only registry + diagnostics; no execution).
 const plugins = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('plugins:list'),
-  getDiagnostics: (): Promise<unknown> => ipcRenderer.invoke('plugins:getDiagnostics'),
+  install: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:install', id),
+  update: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:update', id),
   check: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:check', id),
-  checkAll: (): Promise<unknown> => ipcRenderer.invoke('plugins:checkAll'),
   enable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:enable', id),
   disable: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:disable', id),
-  getSettings: (): Promise<unknown> => ipcRenderer.invoke('plugins:getSettings'),
-  setChromaEndpoint: (endpoint: string): Promise<unknown> => ipcRenderer.invoke('plugins:setChromaEndpoint', endpoint)
+  uninstall: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:uninstall', id),
+  connect: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:connect', id),
+  configure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:configure', id)
 })
 
 // Phase 39: in-app source updater (read-only check; ff-only update after confirm).

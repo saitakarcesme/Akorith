@@ -2027,13 +2027,14 @@ export interface PluginSettingsView {
 
 export interface PluginsApi {
   list(): Promise<PluginInfo[]>
-  getDiagnostics(): Promise<PluginDiagnostic[]>
-  check(id: string): Promise<PluginDiagnostic | null>
-  checkAll(): Promise<PluginInfo[]>
-  enable(id: string): Promise<PluginInfo[]>
-  disable(id: string): Promise<PluginInfo[]>
-  getSettings(): Promise<PluginSettingsView>
-  setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
+  install(id: string): Promise<unknown>
+  update(id: string): Promise<unknown>
+  check(id: string): Promise<unknown>
+  enable(id: string): Promise<unknown>
+  disable(id: string): Promise<unknown>
+  uninstall(id: string): Promise<unknown>
+  connect(id: string): Promise<unknown>
+  configure(id: string): Promise<unknown>
 }
 
 export type UpdateChannel = 'stable' | 'beta'
