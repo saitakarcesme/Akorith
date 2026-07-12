@@ -1,0 +1,93 @@
+name: Release desktop
+
+on:
+  push:
+    tags: ['v*.*.*', 'v*.*.*-*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run verify:existing
+      - run: npm audit --omit=dev
+
+  package-windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package and publish Windows artifacts
+        run: npx electron-builder --win --x64 --publish always --config.publish.releaseType=$env:RELEASE_TYPE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TYPE: ${{ contains(github.ref_name, '-') && 'prerelease' || 'release' }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - name: Verify updater metadata
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/latest.yml)) { throw 'latest.yml was not generated' }
+          if (-not (Get-ChildItem dist -Filter 'Akorith-Setup-*.exe')) { throw 'NSIS installer was not generated' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: akorith-windows
+          path: |
+            dist/*.exe
+            dist/*.yml
+            dist/*.blockmap
+
+  package-macos:
+    needs: validate
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package and publish macOS artifacts
+        run: npx electron-builder --mac --arm64 --publish always --config.publish.releaseType=$RELEASE_TYPE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TYPE: ${{ contains(github.ref_name, '-') && 'prerelease' || 'release' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Verify updater metadata
+        run: |
+          test -f dist/latest-mac.yml
+          find dist -name 'Akorith-*-mac-arm64.zip' -print -quit | grep .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: akorith-macos-arm64
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.yml
+            dist/*.blockmap
