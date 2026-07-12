@@ -39,6 +39,7 @@ import { RemoteNodeProvider } from './remote'
 import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
+import { recordTelemetryEvent, type TelemetryExecutionLocation } from '../telemetry'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -163,6 +164,12 @@ function agentIdForProvider(providerId: string): AgentId | null {
   if (providerId === 'opencode') return 'opencode'
   if (providerId === 'local' || providerId === 'ollama') return 'ollama'
   return null
+}
+
+function telemetryLocation(providerId: string): TelemetryExecutionLocation {
+  if (providerId === 'local' || providerId === 'ollama') return 'local'
+  if (providerId === 'remote') return 'remote'
+  return 'cloud'
 }
 
 function startProviderObservation(args: ChatSendArgs, provider: Provider, projectPath?: string): ProviderObservation | null {
@@ -391,6 +398,11 @@ export function registerChatIpc(): void {
       const promptForProvider = built.prompt
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
       let result: SendResult
+      const modelStartedAt = Date.now()
+      recordTelemetryEvent({
+        kind: 'model_request_started', requestId: args.requestId, occurredAt: modelStartedAt,
+        providerId: args.providerId, model: args.model, location: telemetryLocation(args.providerId), taskType: 'chat'
+      })
       try {
         result = await provider.send(
           promptForProvider,
@@ -401,8 +413,25 @@ export function registerChatIpc(): void {
             }
           }
         )
+        const completedAt = Date.now()
+        recordTelemetryEvent({
+          kind: 'model_request_completed', requestId: args.requestId, occurredAt: completedAt,
+          providerId: args.providerId, model: result.model, location: telemetryLocation(args.providerId), taskType: 'chat',
+          durationMs: Math.max(0, completedAt - modelStartedAt)
+        })
+        recordTelemetryEvent({
+          kind: 'token_usage', requestId: args.requestId, occurredAt: completedAt,
+          providerId: args.providerId, model: result.model, location: telemetryLocation(args.providerId), taskType: 'chat',
+          promptTokens: result.usage.promptTokens ?? 0, completionTokens: result.usage.completionTokens ?? 0,
+          costUsd: result.usage.costUsd ?? 0, estimated: result.usage.estimated
+        })
         completeProviderObservation(observation, result)
       } catch (err) {
+        recordTelemetryEvent({
+          kind: 'model_request_failed', requestId: args.requestId, occurredAt: Date.now(),
+          providerId: args.providerId, model: args.model, location: telemetryLocation(args.providerId), taskType: 'chat',
+          durationMs: Math.max(0, Date.now() - modelStartedAt), errorCode: err instanceof Error ? err.name.slice(0, 80) : 'provider_error'
+        })
         failProviderObservation(observation, err)
         throw err
       }
