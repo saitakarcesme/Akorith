@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import electronPath from 'electron'
@@ -13,13 +13,14 @@ let application
 try {
   application = await electron.launch({
     executablePath: electronPath,
-    args: ['.'],
+    args: ['.', `--user-data-dir=${join(profile, 'user-data')}`],
     cwd: root,
     env: {
       ...process.env,
       APPDATA: profile,
       LOCALAPPDATA: profile,
       HOME: profile,
+      AKORITH_SKIP_LEGACY_MIGRATION: '1',
       ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
     },
     timeout: 45_000
@@ -29,7 +30,18 @@ try {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
   await page.waitForSelector('.app-chrome')
-
+  const startup = await page.evaluate(() => window.api.app.getStartupSnapshot({}))
+  assert.ok(
+    resolve(startup.app.userDataPath).toLowerCase().startsWith(resolve(profile).toLowerCase()),
+    `E2E userData escaped its isolated profile: ${startup.app.userDataPath}`
+  )
+  assert.equal(startup.projects.length, 0, 'isolated E2E profile must not inherit user projects')
+  const screenshotDir = process.env.AKORITH_E2E_SCREENSHOT_DIR
+  const capture = async (name) => {
+    if (!screenshotDir) return
+    await mkdir(screenshotDir, { recursive: true })
+    await page.screenshot({ path: join(screenshotDir, name), fullPage: true })
+  }
   const layout = await page.evaluate(() => {
     const chrome = document.querySelector('.app-chrome')?.getBoundingClientRect()
     const content = document.querySelector('.app-content')?.getBoundingClientRect()
@@ -49,6 +61,7 @@ try {
   await more.click()
   const destinations = await page.getByRole('menu', { name: 'More destinations' }).getByRole('menuitem').allTextContents()
   assert.deepEqual(destinations.map((value) => value.trim()), ['Loop', 'Benchmark', 'Plugins'])
+  await capture('sidebar-more.png')
 
   await page.getByRole('menuitem', { name: 'Loop' }).click()
   await page.getByRole('heading', { name: 'Loop', exact: true }).waitFor()
@@ -72,6 +85,38 @@ try {
 
   await page.getByRole('button', { name: 'Dashboard' }).click()
   await page.getByRole('heading', { name: 'Dashboard', exact: true }).waitFor()
+  const dashboardLayout = await page.evaluate(() => {
+    const content = document.querySelector('.app-content')
+    const dashboard = document.querySelector('.telemetry-dashboard')
+    const heading = document.querySelector('.td-page-heading')
+    const refresh = document.querySelector('.td-refresh')
+    const contentRect = content?.getBoundingClientRect()
+    const dashboardRect = dashboard?.getBoundingClientRect()
+    const headingRect = heading?.getBoundingClientRect()
+    const refreshRect = refresh?.getBoundingClientRect()
+    return {
+      viewportWidth: window.innerWidth,
+      contentWidth: content?.clientWidth ?? 0,
+      dashboardWidth: dashboard?.clientWidth ?? 0,
+      dashboardScrollWidth: dashboard?.scrollWidth ?? 0,
+      contentRight: contentRect?.right ?? 0,
+      dashboardRight: dashboardRect?.right ?? 0,
+      headingRight: headingRect?.right ?? 0,
+      refreshRight: refreshRect?.right ?? 0,
+      dashboardPaddingRight: dashboard ? Number.parseFloat(getComputedStyle(dashboard).paddingRight) : 0
+    }
+  })
+  assert.equal(
+    dashboardLayout.dashboardScrollWidth,
+    dashboardLayout.dashboardWidth,
+    `Dashboard must not overflow its page container: ${JSON.stringify(dashboardLayout)}`
+  )
+  assert.ok(
+    dashboardLayout.dashboardRight <= dashboardLayout.contentRight + 1
+      && dashboardLayout.refreshRight <= dashboardLayout.dashboardRight - dashboardLayout.dashboardPaddingRight + 1,
+    `Dashboard controls must remain inside the padded content area: ${JSON.stringify(dashboardLayout)}`
+  )
+  await capture('dashboard.png')
   await page.locator('button[title="Settings"]').click()
   await page.getByRole('button', { name: /^Updates/ }).click()
   await page.getByRole('heading', { name: 'Updates' }).waitFor()

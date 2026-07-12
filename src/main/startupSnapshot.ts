@@ -126,6 +126,16 @@ function copyIfMissing(source: string, target: string, label: string, result: St
 
 export function prepareStartupUserData(): StartupMigrationResult {
   if (lastMigrationResult) return lastMigrationResult
+  if (process.env.AKORITH_SKIP_LEGACY_MIGRATION === '1') {
+    lastMigrationResult = {
+      attempted: false,
+      copied: [],
+      skipped: ['Legacy userData migration disabled for this isolated run.'],
+      warnings: [],
+      candidates: []
+    }
+    return lastMigrationResult
+  }
   const result: StartupMigrationResult = {
     attempted: false,
     copied: [],
