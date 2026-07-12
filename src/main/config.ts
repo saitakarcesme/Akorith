@@ -171,6 +171,11 @@ export interface UsageLimitConfig {
   notes?: string
 }
 
+export interface UpdateSettings {
+  automaticChecks: boolean
+  channel: 'stable' | 'beta'
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
@@ -182,6 +187,7 @@ export interface LoopexConfig {
   plugins?: Partial<PluginSettings>
   telemetry?: Partial<TelemetrySettings>
   usageLimits?: Partial<UsageLimitConfig>
+  updates?: Partial<UpdateSettings>
   /** Last theme selected in the renderer; read by the splash at startup. */
   theme?: AppTheme
 }
@@ -247,6 +253,11 @@ export const DEFAULT_TELEMETRY: TelemetrySettings = {
   profiles: []
 }
 
+export const DEFAULT_UPDATES: UpdateSettings = {
+  automaticChecks: true,
+  channel: 'stable'
+}
+
 export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
@@ -261,7 +272,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   isascore: DEFAULT_ISASCORE,
   controller: DEFAULT_CONTROLLER,
   plugins: DEFAULT_PLUGINS,
-  telemetry: DEFAULT_TELEMETRY
+  telemetry: DEFAULT_TELEMETRY,
+  updates: DEFAULT_UPDATES
 }
 
 function withConfigDefaults(config: LoopexConfig): LoopexConfig {
@@ -531,6 +543,26 @@ export function setUsageLimitConfig(patch: Partial<UsageLimitConfig>): UsageLimi
     ...(pick('notes', 400) ? { notes: pick('notes', 400) } : {})
   }
   config.usageLimits = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
+}
+
+export function getUpdateSettings(): UpdateSettings {
+  const value = loadConfig().updates ?? {}
+  return {
+    automaticChecks: value.automaticChecks !== false,
+    channel: value.channel === 'beta' ? 'beta' : 'stable'
+  }
+}
+
+export function setUpdateSettings(patch: Partial<UpdateSettings>): UpdateSettings {
+  const config = loadConfig()
+  const current = getUpdateSettings()
+  const next: UpdateSettings = {
+    automaticChecks: typeof patch.automaticChecks === 'boolean' ? patch.automaticChecks : current.automaticChecks,
+    channel: patch.channel === 'beta' || patch.channel === 'stable' ? patch.channel : current.channel
+  }
+  config.updates = next
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return next
 }
