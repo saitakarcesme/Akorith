@@ -35,7 +35,6 @@ async function tryPort(port: number): Promise<boolean> {
       runtime: () => ({ observedSessions: [] }),
       projects: () => [{ id: 'p1', name: 'demo' }],
       chats: () => [{ id: 'c1', title: 'hello' }],
-      missions: () => [],
       plugins: () => [{ id: 'opencode-agent', status: 'unavailable' }],
       gpu: () => ({ status: 'unavailable' }),
       ollama: () => ({ configuredBaseUrl: 'http://localhost:11434', endpointKind: 'local' })

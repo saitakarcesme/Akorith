@@ -16,11 +16,10 @@ import type {
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
-import MissionCenter from './MissionCenter'
 import UpdatePanel from './UpdatePanel'
 import RemoteNodesPanel from './RemoteNodesPanel'
 
-type SettingsTab = 'profile' | 'providers' | 'compute' | 'missions' | 'api' | 'update' | 'workflow' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'compute' | 'api' | 'update' | 'workflow' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -485,7 +484,6 @@ export default function SettingsCenter({
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
     { id: 'compute', label: 'Compute', kicker: 'Remote nodes and models' },
-    { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'update', label: 'Updates', kicker: 'Desktop release channel' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
@@ -884,12 +882,6 @@ export default function SettingsCenter({
             </section>
           )}
 
-          {activeTab === 'missions' && (
-            <section className="settings-section">
-              <MissionCenter />
-            </section>
-          )}
-
           {activeTab === 'update' && <UpdatePanel />}
 
           {activeTab === 'api' && (
@@ -1146,7 +1138,7 @@ export default function SettingsCenter({
               <div className="settings-toggle-row">
                 <div>
                   <strong>Auto-Enter for bridge sends</strong>
-                  <span>{bridgeSettings?.autoEnter ? 'Messages execute immediately in the target agent.' : 'Messages land at the prompt and wait.'}</span>
+                  <span>{bridgeSettings?.autoEnter ? 'Messages execute immediately in the target terminal.' : 'Messages land at the prompt and wait.'}</span>
                 </div>
                 <button type="button" className={bridgeSettings?.autoEnter ? 'is-active' : ''} disabled={saving === 'bridge'} onClick={() => void toggleAutoEnter()}>
                   {bridgeSettings?.autoEnter ? 'On' : 'Off'}

@@ -2,7 +2,6 @@ import { app, ipcMain } from 'electron'
 import { getControllerSettings, getLocalProviderSettings, setControllerSettings, type ControllerSettings } from '../config'
 import { agentSessionManager } from '../agents/session-manager'
 import { listProjects, listSessions } from '../db'
-import { missionStore } from '../missions/store'
 import { getGpuStatus } from '../gpu-status'
 import { createControllerServer, ENDPOINTS, type ControllerServer } from './server'
 import { controllerEvents } from './events'
@@ -40,17 +39,6 @@ const controllerData: ControllerData = {
       projectId: session.projectId,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt
-    })),
-  missions: () =>
-    missionStore.listMissions().map((mission) => ({
-      id: mission.id,
-      title: mission.title,
-      status: mission.status,
-      origin: mission.origin,
-      riskLevel: mission.riskLevel,
-      stepCount: mission.steps.length,
-      createdAt: mission.createdAt,
-      updatedAt: mission.updatedAt
     })),
   plugins: () => pluginProvider(),
   gpu: () => getGpuStatus(),

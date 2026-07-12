@@ -9,7 +9,7 @@ import { warmLocalProvider } from './providers/local'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
-import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
+import { registerAgentChatIpc } from './agent-chat'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
 import { registerGpuStatusIpc } from './gpu-status'
@@ -19,7 +19,6 @@ import { registerPluginIpc } from './plugins/manager'
 import { disposeUpdateIpc, registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
 import { registerRuntimeObservationIpc } from './agents/registry'
-import { registerMissionIpc } from './missions/inspector'
 import { closeDb, ensureDbReady, getDb, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
@@ -427,7 +426,6 @@ async function initializeStartupData(): Promise<void> {
       }
     }))
     startGpuMonitor(getDb(), remoteGpuSources)
-    resumeActiveAutoLoopsAtStartup()
     await startAutonomousLoopRuntime()
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
@@ -451,8 +449,7 @@ app.whenReady().then(() => {
   registerRouterIpc()
   registerDigestIpc()
   registerRuntimeObservationIpc()
-  registerMissionIpc()
-  registerMacroIpc()
+  registerAgentChatIpc()
   registerOllamaConnectionIpc()
   registerGitStatusIpc()
   registerGpuStatusIpc()

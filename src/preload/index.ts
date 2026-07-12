@@ -146,49 +146,11 @@ const digest = Object.freeze({
   setWorkingDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('digest:setWorkingDir', dir)
 })
 
-const macro = Object.freeze({
-  createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
-  // Phase 20: scaffold an everyday-dev project + bind an auto-commit loop to it.
-  createWorkspaceProject: (args: unknown): Promise<unknown> => ipcRenderer.invoke('workspace:createProject', args),
-  propose: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:propose', { sessionId }),
-  approve: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:approve', args),
-  recordResult: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:recordResult', args),
-  skip: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:skip', args),
-  stop: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:stop', { sessionId }),
-  complete: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:complete', { sessionId }),
-  archive: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:archive', { sessionId }),
-  remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:remove', { sessionId }),
-  setMode: (sessionId: string, mode: string): Promise<unknown> => ipcRenderer.invoke('macro:setMode', { sessionId, mode }),
-  setPlanner: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:setPlanner', args),
-  steer: (sessionId: string, choice: string): Promise<unknown> => ipcRenderer.invoke('macro:steer', { sessionId, choice }),
-  startAuto: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:startAuto', { sessionId }),
-  summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:summarize', args),
-  detectPermission: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:detectPermission', { sessionId }),
-  respondPermission: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:respondPermission', args),
-  inspectWorkspace: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:inspectWorkspace', { sessionId }),
-  syncWorkspace: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:syncWorkspace', { sessionId }),
-  listRuns: (sessionId: string, limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:listRuns', { sessionId, limit }),
-  listEvents: (sessionId: string, limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:listEvents', { sessionId, limit }),
-  get: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('macro:get', { sessionId }),
-  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('macro:list', { limit })
-})
-
 const agent = Object.freeze({
   getRuntimeSnapshot: (): Promise<unknown> => ipcRenderer.invoke('agent:getRuntimeSnapshot'),
   summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args),
   detectPermission: (terminalId: string): Promise<unknown> =>
     ipcRenderer.invoke('agent:detectPermission', { terminalId })
-})
-
-const mission = Object.freeze({
-  listTemplates: (): Promise<unknown> => ipcRenderer.invoke('mission:listTemplates'),
-  createDraft: (args: unknown): Promise<unknown> => ipcRenderer.invoke('mission:createDraft', args),
-  createFromTemplate: (templateId: string, input?: unknown): Promise<unknown> =>
-    ipcRenderer.invoke('mission:createFromTemplate', { templateId, input }),
-  list: (): Promise<unknown> => ipcRenderer.invoke('mission:list'),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('mission:get', { id }),
-  listEvents: (missionId: string): Promise<unknown> => ipcRenderer.invoke('mission:listEvents', { missionId }),
-  createSafePreviewPlan: (args: unknown): Promise<unknown> => ipcRenderer.invoke('mission:createSafePreviewPlan', args)
 })
 
 // App-level settings mirrored to config (currently the UI theme, so the
@@ -344,6 +306,6 @@ const benchmarkLab = Object.freeze({
   cancel: (runId: string): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:cancel', runId)
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, benchmarkLab, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, benchmarkLab, agent, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)

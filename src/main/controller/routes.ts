@@ -14,7 +14,6 @@ export interface ControllerData {
   runtime(): Promise<unknown> | unknown
   projects(): Promise<unknown> | unknown
   chats(): Promise<unknown> | unknown
-  missions(): Promise<unknown> | unknown
   plugins(): Promise<unknown> | unknown
   gpu(): Promise<unknown> | unknown
   ollama(): Promise<unknown> | unknown
@@ -46,11 +45,10 @@ export interface Route {
 // The published endpoint catalogue (also served at /v1/docs).
 export const ENDPOINTS: ControllerEndpoint[] = [
   { method: 'GET', path: '/health', summary: 'Liveness probe (no auth).', auth: false },
-  { method: 'GET', path: '/v1/status', summary: 'App + controller + runtime/mission/plugin summary.', auth: true },
+  { method: 'GET', path: '/v1/status', summary: 'App, controller, runtime, and plugin summary.', auth: true },
   { method: 'GET', path: '/v1/runtime', summary: 'Runtime observation snapshot (no prompts/output).', auth: true },
   { method: 'GET', path: '/v1/projects', summary: 'Managed projects (metadata only).', auth: true },
   { method: 'GET', path: '/v1/chats', summary: 'Chat/session summaries (no message bodies).', auth: true },
-  { method: 'GET', path: '/v1/missions', summary: 'Preview/draft missions (no execution).', auth: true },
   { method: 'GET', path: '/v1/plugins', summary: 'Plugin registry metadata + diagnostics.', auth: true },
   { method: 'GET', path: '/v1/gpu', summary: 'GPU/local-runtime telemetry (honest unavailable).', auth: true },
   { method: 'GET', path: '/v1/ollama', summary: 'Active Ollama endpoint/source (no secrets).', auth: true },
@@ -97,7 +95,6 @@ const routes: Route[] = [
           summary: {
             projects: await len(ctx.data.projects()),
             chats: await len(ctx.data.chats()),
-            missions: await len(ctx.data.missions()),
             plugins: await len(ctx.data.plugins())
           }
         }
@@ -107,7 +104,6 @@ const routes: Route[] = [
   { method: 'GET', path: '/v1/runtime', auth: true, summary: 'Runtime snapshot.', handler: (ctx) => dataResult(ctx.data.runtime()) },
   { method: 'GET', path: '/v1/projects', auth: true, summary: 'Managed projects.', handler: (ctx) => dataResult(ctx.data.projects()) },
   { method: 'GET', path: '/v1/chats', auth: true, summary: 'Chat summaries.', handler: (ctx) => dataResult(ctx.data.chats()) },
-  { method: 'GET', path: '/v1/missions', auth: true, summary: 'Preview missions.', handler: (ctx) => dataResult(ctx.data.missions()) },
   { method: 'GET', path: '/v1/plugins', auth: true, summary: 'Plugin registry.', handler: (ctx) => dataResult(ctx.data.plugins()) },
   { method: 'GET', path: '/v1/gpu', auth: true, summary: 'GPU telemetry.', handler: (ctx) => dataResult(ctx.data.gpu()) },
   { method: 'GET', path: '/v1/ollama', auth: true, summary: 'Ollama endpoint.', handler: (ctx) => dataResult(ctx.data.ollama()) },

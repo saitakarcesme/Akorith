@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AgentRuntimeSnapshot, GitStatusResult, Mission, ProjectRow } from '../../../preload/index.d'
+import type { AgentRuntimeSnapshot, GitStatusResult, ProjectRow } from '../../../preload/index.d'
 
-type WorkbenchTab = 'changes' | 'runtime' | 'missions'
+type WorkbenchTab = 'changes' | 'runtime'
 
 interface BottomWorkbenchProps {
   activeProject: ProjectRow | null
@@ -11,8 +11,7 @@ interface BottomWorkbenchProps {
 
 const TABS: { id: WorkbenchTab; label: string }[] = [
   { id: 'changes', label: 'Changes' },
-  { id: 'runtime', label: 'Runtime' },
-  { id: 'missions', label: 'Missions' }
+  { id: 'runtime', label: 'Runtime' }
 ]
 
 function statusWord(code: string): string {
@@ -26,17 +25,16 @@ function statusWord(code: string): string {
 }
 
 /**
- * Phase 33.17: a Codex/OpenCode-style bottom workbench. Read-only panels only:
+ * A Codex/OpenCode-style bottom workbench with read-only panels:
  * a git Changes summary for the active project (via the bounded git:status IPC),
- * a Runtime observation snapshot, and a Missions overview. It never executes
- * anything — no staging, commits, or mission runs.
+ * plus a Runtime observation snapshot. It never executes anything — no staging,
+ * commits, or commands.
  */
 export default function BottomWorkbench({ activeProject, open, onClose }: BottomWorkbenchProps): JSX.Element | null {
   const [tab, setTab] = useState<WorkbenchTab>('changes')
   const [changes, setChanges] = useState<GitStatusResult | null>(null)
   const [changesBusy, setChangesBusy] = useState(false)
   const [runtime, setRuntime] = useState<AgentRuntimeSnapshot | null>(null)
-  const [missions, setMissions] = useState<Mission[] | null>(null)
 
   const loadChanges = useCallback(async (): Promise<void> => {
     if (!activeProject?.path) {
@@ -59,7 +57,6 @@ export default function BottomWorkbench({ activeProject, open, onClose }: Bottom
     if (!open) return
     if (tab === 'changes') void loadChanges()
     else if (tab === 'runtime') void window.api.agent.getRuntimeSnapshot().then(setRuntime).catch(() => setRuntime(null))
-    else if (tab === 'missions') void window.api.mission.list().then(setMissions).catch(() => setMissions(null))
   }, [open, tab, loadChanges])
 
   if (!open) return null
@@ -154,24 +151,6 @@ export default function BottomWorkbench({ activeProject, open, onClose }: Bottom
           </div>
         )}
 
-        {tab === 'missions' && (
-          <div className="workbench-missions">
-            {!missions ? (
-              <div className="workbench-empty">No missions data.</div>
-            ) : missions.length === 0 ? (
-              <div className="workbench-empty">No mission drafts yet. Create one from Settings → Missions.</div>
-            ) : (
-              <ul className="workbench-mission-list">
-                {missions.slice(0, 12).map((mission) => (
-                  <li key={mission.id} className="workbench-mission">
-                    <span className="workbench-mission-title">{mission.title}</span>
-                    <em className={`workbench-mission-status status-${mission.status}`}>{mission.status}</em>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
       </div>
     </section>
   )
