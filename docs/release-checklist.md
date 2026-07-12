@@ -1,101 +1,58 @@
-# Akorith release checklist
+# Akorith production release checklist
 
-Practical steps to cut a build and (optionally) publish it. Tick top-to-bottom.
+This checklist is the short operational companion to
+[Production updates and releases](production-updates-releases.md). The workflow is
+fail-closed: do not manually upload replacement assets or bypass a native verification
+job.
 
-## 1. Pre-build verification
+## 1. Prepare the release commit
 
-- [ ] `npm run typecheck` passes.
-- [ ] `npm run build` passes.
-- [ ] `node --experimental-strip-types scripts/verify-macro-loop.ts` → `verify-macro-loop: ok`.
-- [ ] `node --experimental-strip-types scripts/verify-testlab.ts` → `19 passed, 0 failed`.
-- [ ] Version bumped in `package.json` if this is a release (`version`).
+- [ ] `package.json` and `package-lock.json` contain the same semantic version.
+- [ ] Stable versions use `X.Y.Z`; beta versions use `X.Y.Z-beta.N`.
+- [ ] `npm ci`, `npm run verify`, `npm run test:e2e`, `npm run build`, and
+      `npm audit --omit=dev` pass from a clean checkout.
+- [ ] `main` contains the exact release commit and has no uncommitted files.
+- [ ] Release notes describe user-visible changes and any external prerequisites.
 
-## 2. Package
+## 2. Configure protected credentials
 
-- [ ] macOS unpacked smoke build: `npm run pack:mac` → `dist/mac-arm64/Akorith.app`.
-- [ ] macOS installers (optional): `npm run dist:mac` → `.dmg` + `.zip` in `dist/`.
-- [ ] Windows (on a Windows machine): `npm run dist:win`.
-- [ ] Confirm native modules unpacked: `dist/mac-arm64/Akorith.app/Contents/Resources/app.asar.unpacked/node_modules/{node-pty,better-sqlite3}` exist.
-- [ ] Confirm `node-pty` `darwin-arm64/spawn-helper` is present and executable (`-rwxr-xr-x`).
+- [ ] Windows Authenticode certificate and password secrets are configured.
+- [ ] macOS Developer ID certificate/password and Apple notarization secrets are
+      configured.
+- [ ] No certificate, token, password, or notarization credential is committed.
+- [ ] Required GitHub environments/branch protections allow the release workflow.
 
-## 3. Launch the packaged app
+## 3. Tag and build
 
-- [ ] `open dist/mac-arm64/Akorith.app` launches without crashing.
-- [ ] App name in the **menu bar** says **Akorith** (not Electron).
-- [ ] **Dock** tooltip / Finder name says **Akorith**.
-- [ ] **Window title** says Akorith; **About Akorith** shows the right name.
-- [ ] **Icon** in Dock/Finder is the Akorith logo.
-- [ ] App data lands in `~/Library/Application Support/Akorith/` (`loopex.db`, `loopex.config.json`).
+- [ ] Create the exact matching tag from `main`, for example `v1.2.3` or
+      `v1.2.3-beta.1`, and push the tag without force.
+- [ ] Windows produces the NSIS installer, portable executable, `latest.yml` or
+      `beta.yml`, and installer blockmap.
+- [ ] macOS arm64 produces the DMG, ZIP updater payload, `latest-mac.yml` or
+      `beta-mac.yml`, and ZIP blockmap.
+- [ ] Native packaged-launch, identity, signature, Gatekeeper/notarization, metadata,
+      size, and checksum gates all pass.
 
-## 4. Functional smoke test (in the packaged app)
+## 4. Publish atomically
 
-- [ ] Workspace route opens (sidebar | center chat | right terminals).
-- [ ] Dashboard route opens.
-- [ ] Test route opens.
-- [ ] **Open Project** picks a folder and persists it.
-- [ ] **Create Project** modal: name + parent folder → creates and activates the project.
-- [ ] Olympus starts **Codex** and Atlantis starts **Claude** in the project cwd
-      (or falls back to a shell with a clear message if a CLI is missing — see §5).
-- [ ] Macro-loop: enter a goal, get one proposal, approve sends it to a terminal
-      (semi-automatic; nothing auto-runs).
-- [ ] No credentials/API keys requested or stored anywhere.
+- [ ] The workflow creates a draft GitHub Release only after both native jobs pass.
+- [ ] The transported inventory contains exactly the verified platform artifacts and
+      release manifests.
+- [ ] The draft inventory is revalidated before publication.
+- [ ] The workflow finalizes the draft; existing releases are never overwritten.
 
-## 5. Packaged-app CLI availability (macOS PATH)
+## 5. Post-release acceptance
 
-GUI apps launched from Finder inherit a minimal `PATH`. Akorith prepends common install
-dirs (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, …) at startup so logged-in
-CLIs resolve.
+- [ ] Install the signed Windows NSIS build and the notarized macOS DMG build.
+- [ ] Launch Workspace, Loop, Benchmark, Plugins, Dashboard, Remote Nodes, and Updates.
+- [ ] From the previous signed version, exercise **Check -> Download -> Restart and
+      install** against the new published release.
+- [ ] Confirm the app identity, preserved user data, current version, release notes,
+      stable/beta channel behavior, and sanitized failure messages.
+- [ ] Confirm Windows portable reports manual replacement rather than auto-update.
 
-- [ ] With `claude`/`codex` installed in Homebrew or `/usr/local/bin`, terminals start the
-      real CLI (header shows Codex/Claude, not Shell).
-- [ ] With a CLI missing, the pane falls back to a shell and prints a clear Akorith message
-      (no crash); the provider shows as unavailable in chat.
+## 6. Rollback
 
-## 6. Publish (GitHub release)
-
-- [ ] Commit + push `main` is green.
-- [ ] Tag the exact committed package version (`git tag vX.Y.Z && git push origin vX.Y.Z`).
-- [ ] Let the release workflow build and independently verify both platforms before it
-      creates/uploads/finalizes the GitHub Release. **Do not commit `dist/` artifacts** —
-      they are git-ignored, and manually uploaded assets bypass the hash-locked gate.
-- [ ] Release notes: what's new + the one-line connect prompt from the README.
-- [ ] Confirm Windows Authenticode plus macOS Developer ID/Gatekeeper/notarization gates
-      passed; the production workflow refuses to publish without them.
-
-## 7. Announcement (X/Twitter) checklist
-
-- [ ] One-sentence pitch: "Akorith orchestrates your logged-in coding agents (Claude/Codex)
-      with no API keys."
-- [ ] Screenshot or short demo clip of the 3-pane Workspace.
-- [ ] Link to the GitHub release / repo.
-- [ ] Call out: no API keys, runs your own CLI subscriptions, local data only.
-- [ ] Note current limitations honestly (semi-automatic, no autopilot).
-
-## 9. Phase 41 packaging & release (installable Akorith)
-
-- [ ] `npm run release:check` → 0 errors (identity, icons, mac/win targets, workflow, git/tag).
-- [ ] **macOS:** `npm run dist:mac` → `dist/Akorith-<version>-mac-<arch>.dmg` + `.zip`;
-      `npm run refresh:mac` backs up old copies and installs `/Applications/Akorith.app`.
-- [ ] **Windows:** build on a Windows host (`npm run dist:win`) or via CI — a macOS host
-      cannot cross-build the NSIS installer.
-- [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` with an existing tag,
-      or `git push origin v<version>`) builds signed mac+win artifacts with `--publish never`,
-      verifies native launches/signatures/metadata, then atomically finalizes the release.
-- [ ] **Identity:** packaged menu bar / Dock / Finder say Akorith; dev menu bar says Akorith
-      via `scripts/fix-dev-app-name.js`.
-- [ ] **Signing:** configure every required repository secret; missing credentials fail the
-      platform job before packaging and no release is created. See
-      `docs/production-updates-releases.md`.
-
-## 8. Phase 39 tooling (source installs)
-
-- [ ] **Keep checkouts current:** Settings → Update fast-forwards a source install to
-      `origin/main` (see `docs/update-system.md`). Replaces manual `git pull` on Mac + PC.
-- [ ] **Refresh the packaged macOS app:** `npm run pack:mac` then `npm run macos:refresh`
-      (old copies are MOVED to `~/Desktop/Akorith-old-apps-<stamp>/`, never deleted; user
-      data/config/db untouched).
-- [ ] **One-command bootstrap on a new machine:** `npm run setup` (macOS/Linux) or
-      `pwsh scripts/setup-akorith.ps1` (Windows); `npm run doctor` for a check-only pass.
-      See `docs/setup.md`.
-- [ ] **iCloud trap:** if the repo is under `~/Desktop`/`~/Documents`, relocate
-      `node_modules` out of the synced tree (the setup script prints the fix).
+Do not republish or downgrade in place. Fix forward with a new higher version, repeat all
+gates, and publish a new signed release. See the rollback section in the full production
+runbook.
