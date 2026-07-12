@@ -31,8 +31,8 @@ import { validateExternalUrl } from './security/external-url'
 import { registerAutonomousLoopIpc, unregisterAutonomousLoopIpc } from './autonomous-loop/ipc'
 import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonomous-loop/runtime'
 import { registerDashboardTelemetryIpc } from './dashboard'
-import { startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
-import { registerRemoteNodeClientIpc, startRemoteNodeClientRuntime, stopRemoteNodeClientRuntime } from './remote-node'
+import { RemoteNodeGpuSource, startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
+import { getRemoteNodeClientManager, registerRemoteNodeClientIpc, startRemoteNodeClientRuntime, stopRemoteNodeClientRuntime } from './remote-node'
 import { registerBenchmarkLabIpc, stopBenchmarkLabRuntime } from './benchmark-lab'
 
 let mainWindowRef: BrowserWindow | null = null
@@ -421,8 +421,15 @@ async function initializeStartupData(): Promise<void> {
   if (process.env.AKORITH_SKIP_DB_INIT === '1') return
   try {
     await ensureDbReady()
-    startGpuMonitor(getDb())
     await startRemoteNodeClientRuntime()
+    const remoteGpuSources = (await getRemoteNodeClientManager().list()).map((node) => new RemoteNodeGpuSource({
+      nodeId: node.id,
+      async fetchGpuSnapshot(signal) {
+        const handle = await getRemoteNodeClientManager().client(node.id)
+        return (await handle.client.health(signal)).hardware
+      }
+    }))
+    startGpuMonitor(getDb(), remoteGpuSources)
     resumeActiveAutoLoopsAtStartup()
     await startAutonomousLoopRuntime()
   } catch (err) {
