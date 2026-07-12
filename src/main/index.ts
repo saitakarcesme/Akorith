@@ -32,6 +32,7 @@ import { registerAutonomousLoopIpc, unregisterAutonomousLoopIpc } from './autono
 import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonomous-loop/runtime'
 import { registerDashboardTelemetryIpc } from './dashboard'
 import { startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
+import { registerRemoteNodeClientIpc, startRemoteNodeClientRuntime, stopRemoteNodeClientRuntime } from './remote-node'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -420,6 +421,7 @@ async function initializeStartupData(): Promise<void> {
   try {
     await ensureDbReady()
     startGpuMonitor(getDb())
+    await startRemoteNodeClientRuntime()
     resumeActiveAutoLoopsAtStartup()
     await startAutonomousLoopRuntime()
   } catch (err) {
@@ -435,6 +437,7 @@ app.whenReady().then(() => {
   registerLocalRuntimeIpc()
   registerAutonomousLoopIpc()
   registerDashboardTelemetryIpc()
+  registerRemoteNodeClientIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -480,6 +483,7 @@ app.on('will-quit', () => {
   unregisterAutonomousLoopIpc()
   stopAutonomousLoopRuntime()
   void stopGpuMonitor()
+  stopRemoteNodeClientRuntime()
   disposeUpdateIpc()
   ptyManager.killAll()
   closeDb()
