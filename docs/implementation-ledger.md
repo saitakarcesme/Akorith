@@ -229,5 +229,7 @@ is administrative and is intentionally recorded on the next generation.
 | 219 | `98dc9ba5b4a5` | docs(release): replace retired source-update runbooks | active setup and production release documentation | runbook link review; obsolete updater and macro verifier scan | operators now receive only the signed GitHub Release workflow, native verification gates, user update flow, and rollback policy |
 | 220 | `f77c556dfac4` | docs: finalize implementation ledger | delivery traceability | npm run ledger | records all implementation commits through the final production documentation cleanup |
 | 221 | `24509035a431` | style: normalize generated source endings | production source hygiene and ledger generator | npm run typecheck; npm run ledger; git diff --check | removes trailing blank lines from introduced files and makes future ledger generations whitespace-clean |
+| 222 | `111883ff8a97` | docs: record final source hygiene commit | delivery traceability | npm run ledger; git diff --check | implementation ledger records the complete whitespace-clean production history |
+| 223 | `71372c9d6f2c` | refactor(runtime): remove remaining placeholder plumbing | internal runtime observation and plugin contracts | typecheck; controller; local-runtime; plugin marketplace; placeholder scan | removes unreachable fake session capabilities and an unimplemented package transport while preserving live provider, PTY, Ollama, and observation paths |
 
-Total commits after baseline represented: **221**
+Total commits after baseline represented: **223**
