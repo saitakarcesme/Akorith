@@ -14,6 +14,7 @@ import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 import { applyTelemetryMigrations, backfillUsageEvents } from './telemetry/migrations'
 import { applyAutonomousLoopMigrations } from './autonomous-loop/migrations'
+import { applyModelCatalogMigrations } from './model-catalog/migrations'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -535,6 +536,7 @@ export function initDb(): void {
   applyTelemetryMigrations(nextDb)
   backfillUsageEvents(nextDb)
   applyAutonomousLoopMigrations(nextDb)
+  applyModelCatalogMigrations(nextDb)
   } catch (err) {
     nextDb.close()
     db = null
