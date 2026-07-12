@@ -2143,8 +2143,6 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
-  companion: CompanionApi
-  actionAgent: ActionAgentApi
 }
 
 declare global {

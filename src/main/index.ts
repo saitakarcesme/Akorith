@@ -28,8 +28,6 @@ import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSna
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
 import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
-import { registerCompanionIpc } from './companions'
-import { registerActionAgentIpc } from './action-agents'
 import { validateExternalUrl } from './security/external-url'
 
 let mainWindowRef: BrowserWindow | null = null
@@ -432,8 +430,6 @@ app.whenReady().then(() => {
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
   registerProjectLoopIpc()
-  registerCompanionIpc()
-  registerActionAgentIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()

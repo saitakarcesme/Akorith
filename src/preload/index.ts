@@ -371,51 +371,6 @@ const projectLoop = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder')
 })
 
-// Phase 50: Companions — long-memory local personalities (no actions).
-const companion = Object.freeze({
-  list: (): Promise<unknown> => ipcRenderer.invoke('companion:list'),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:get', id),
-  setModel: (id: string, model: string | null): Promise<unknown> => ipcRenderer.invoke('companion:setModel', id, model),
-  memoryCount: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:memoryCount', id),
-  listSessions: (companionId: string): Promise<unknown> => ipcRenderer.invoke('companion:listSessions', companionId),
-  createSession: (companionId: string, title?: string): Promise<unknown> => ipcRenderer.invoke('companion:createSession', companionId, title),
-  getSession: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:getSession', id),
-  deleteSession: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:deleteSession', id),
-  listMessages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:listMessages', sessionId),
-  sendMessage: (input: unknown): Promise<unknown> => ipcRenderer.invoke('companion:sendMessage', input),
-  cancelMessage: (requestId: string): void => {
-    ipcRenderer.send('companion:cancelMessage', requestId)
-  },
-  extractMemories: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('companion:extractMemories', sessionId),
-  contextInfo: (companionId: string, sessionId: string, query: string): Promise<unknown> =>
-    ipcRenderer.invoke('companion:contextInfo', companionId, sessionId, query),
-  listMemories: (companionId: string, includeArchived?: boolean): Promise<unknown> =>
-    ipcRenderer.invoke('companion:listMemories', companionId, includeArchived),
-  searchMemories: (companionId: string, query: string): Promise<unknown> =>
-    ipcRenderer.invoke('companion:searchMemories', companionId, query),
-  createMemory: (input: unknown): Promise<unknown> => ipcRenderer.invoke('companion:createMemory', input),
-  updateMemory: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('companion:updateMemory', id, patch),
-  pinMemory: (id: string, pinned: boolean): Promise<unknown> => ipcRenderer.invoke('companion:pinMemory', id, pinned),
-  archiveMemory: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:archiveMemory', id),
-  forgetMemory: (id: string): Promise<unknown> => ipcRenderer.invoke('companion:forgetMemory', id)
-})
-
-// Phase 52: Agents — reusable local action shortcuts (permissioned).
-const actionAgent = Object.freeze({
-  templates: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:templates'),
-  permissionModes: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:permissionModes'),
-  list: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:list'),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:get', id),
-  create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('actionAgent:create', input),
-  update: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('actionAgent:update', id, patch),
-  remove: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:delete', id),
-  plan: (id: string, input?: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:plan', id, input),
-  run: (id: string, input?: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:run', id, input),
-  listRuns: (id: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:listRuns', id),
-  getRun: (runId: string): Promise<unknown> => ipcRenderer.invoke('actionAgent:getRun', runId),
-  pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
-})
-
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop })
 
 contextBridge.exposeInMainWorld('api', api)
