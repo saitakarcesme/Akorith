@@ -371,6 +371,27 @@ const projectLoop = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop })
+const autonomousLoop = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:list'),
+  detail: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:detail', loopId),
+  catalog: (requestId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:catalog', requestId),
+  probe: (requestId: string, catalogModelId: string): Promise<unknown> =>
+    ipcRenderer.invoke('autonomousLoop:probe', requestId, catalogModelId),
+  create: (requestId: string, input: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('autonomousLoop:create', requestId, input),
+  cancelRequest: (requestId: string): Promise<boolean> => ipcRenderer.invoke('autonomousLoop:cancelRequest', requestId),
+  pause: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:pause', loopId),
+  resume: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:resume', loopId),
+  stop: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:stop', loopId),
+  openRepository: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:openRepository', loopId),
+  openGitHub: (loopId: string): Promise<unknown> => ipcRenderer.invoke('autonomousLoop:openGitHub', loopId),
+  onChanged: (callback: (loopId: string) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, loopId: string): void => callback(loopId)
+    ipcRenderer.on('autonomousLoop:changed', listener)
+    return () => ipcRenderer.removeListener('autonomousLoop:changed', listener)
+  }
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)
