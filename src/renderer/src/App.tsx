@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
-import Dashboard from './components/Dashboard'
+import TelemetryDashboardPage from './components/TelemetryDashboardPage'
 import PluginMarketplacePage from './components/PluginMarketplacePage'
 import BenchmarkLabPage from './components/BenchmarkLabPage'
 import AutonomousLoopPage from './components/AutonomousLoopPage'
@@ -579,7 +579,7 @@ export default function App(): JSX.Element {
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
         <AutonomousLoopPage active={view === 'loops'} />
       </div>
-      {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
+      {view === 'dashboard' && <TelemetryDashboardPage />}
       {view === 'plugins' && <PluginMarketplacePage />}
       </main>
       </div>
