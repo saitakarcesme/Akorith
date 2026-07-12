@@ -14,7 +14,7 @@ import type {
   RuntimeStatus,
   SessionRow,
   TestRunRow,
-  UpdateStatus,
+  PackagedUpdateSnapshot,
   UsageLimitView,
   UsageSummary
 } from '../../../preload/index.d'
@@ -118,7 +118,7 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
   const [controller, setController] = useState<ControllerStatus | null>(null)
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
   const [usageLimits, setUsageLimits] = useState<UsageLimitView | null>(null)
-  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [update, setUpdate] = useState<PackagedUpdateSnapshot | null>(null)
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -607,9 +607,11 @@ export default function Dashboard({ activeProject }: DashboardProps): JSX.Elemen
             <h2>Usage limits (Claude / Codex)</h2>
             <p>Akorith&apos;s recorded in-app usage and the limits you configure. Exact remaining subscription limits are not exposed by the CLIs.</p>
           </div>
-          {update && update.mode === 'git' && (
-            <span className={update.hasUpdate ? 'dash-update-badge has-update' : 'dash-update-badge'}>
-              {update.hasUpdate ? `Update available (${update.behindBy} behind)` : 'Akorith up to date'}
+          {update && (
+            <span className={update.phase === 'available' || update.phase === 'downloaded' ? 'dash-update-badge has-update' : 'dash-update-badge'}>
+              {update.phase === 'available' || update.phase === 'downloaded'
+                ? `Akorith ${update.update?.version ?? 'update'} available`
+                : update.support.supported ? 'Packaged updates ready' : 'Updates unavailable in development'}
             </span>
           )}
         </div>
