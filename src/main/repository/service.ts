@@ -213,6 +213,65 @@ export class RepositoryService {
     }
   }
 
+  /** Create a user-owned project as one direct child of an explicitly selected parent directory. */
+  async createProjectInParent(parentPath: string, input: CreateProjectInput): Promise<CreateProjectResult> {
+    const name = boundedText(input.name, 'Project name', 200)
+    const summary = boundedText(input.summary, 'Project summary', 8_000)
+    const plan = boundedText(input.plan, 'Project plan', 64 * 1024)
+    validateIdentity(input.identity)
+    const branch = validateBranchName(input.branch ?? 'main')
+    const parent = await canonicalExistingPath(parentPath)
+    const workspaceCandidate = join(parent, safeRepositorySlug(name))
+    let workspace: string | null = null
+    try {
+      await mkdir(workspaceCandidate, { recursive: false })
+      const contained = await assertPathWithinRoot(parent, workspaceCandidate, { mustExist: true })
+      if (dirname(contained.path) !== contained.root) {
+        throw new RepositoryError('unsafe-path', 'New projects must be direct children of the selected parent.', {
+          operation: 'create project in selected parent'
+        })
+      }
+      workspace = contained.path
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new RepositoryError('already-exists', 'A folder with this project name already exists in the selected parent.', {
+          operation: 'create project in selected parent', recoverable: true, cause: error
+        })
+      }
+      throw asRepositoryError(error, 'create project in selected parent')
+    }
+
+    const { hooksPath } = await this.prepare()
+    const lease = await this.leases.acquire(workspace, { owner: 'create project in selected parent' })
+    try {
+      const initialized = await runGit(this.runner, workspace, ['init', '-b', branch])
+      if (!initialized.ok) throw classifyGitFailure(initialized, 'initialize repository')
+      const identityName = await runGit(this.runner, workspace, ['config', '--local', 'user.name', input.identity.name.trim()])
+      if (!identityName.ok) throw classifyGitFailure(identityName, 'configure Git identity name')
+      const identityEmail = await runGit(this.runner, workspace, ['config', '--local', 'user.email', input.identity.email.trim()])
+      if (!identityEmail.ok) throw classifyGitFailure(identityEmail, 'configure Git identity email')
+      await writeFile(join(workspace, 'README.md'), `# ${name}\n\n${summary}\n`, { encoding: 'utf8', flag: 'wx' })
+      await writeFile(join(workspace, 'PLAN.md'), `# Project plan\n\n${plan}\n`, { encoding: 'utf8', flag: 'wx' })
+      const committed = await commitExplicitPaths(
+        this.runner, workspace, ['README.md', 'PLAN.md'], `chore: initialize ${name}`, { hooksPath }
+      )
+      if (!committed.sha) {
+        throw new RepositoryError('invalid-response', 'Initial commit did not return a revision.', {
+          operation: 'create project in selected parent'
+        })
+      }
+      return { path: workspace, initialCommitSha: committed.sha, inspection: await inspectRepository(this.runner, workspace) }
+    } catch (error) {
+      const contained = await assertPathWithinRoot(parent, workspace, { mustExist: true }).catch(() => null)
+      if (contained && dirname(contained.path) === contained.root) {
+        await rm(contained.path, { recursive: true, force: true }).catch(() => undefined)
+      }
+      throw asRepositoryError(error, 'create project in selected parent')
+    } finally {
+      await lease.release().catch(() => undefined)
+    }
+  }
+
   async inspect(repositoryPath: string): Promise<RepositoryInspection> {
     return inspectRepository(this.runner, repositoryPath)
   }
