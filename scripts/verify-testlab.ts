@@ -105,39 +105,32 @@ async function main(): Promise<void> {
   check('SOURCE git status unchanged by snapshot', before === after)
   check('snapshot excluded node_modules', !existsSync(join(snapBox, 'node_modules')))
 
-  // --- 4. a REAL bounded run: a tiny python module + generated test ---
-  console.log('\nrunTests (real pytest if installable, else install-failed path):')
-  const src = join(tmpBase, 'mathsrc')
-  mkdirSync(src, { recursive: true })
-  writeFileSync(join(src, 'mathutils.py'), 'def add(a, b):\n    return a + b\n')
+  // --- 4. a REAL bounded run with deterministic, network-free output ---
+  // This exercises process execution and metric parsing together without
+  // installing packages or relying on a globally installed pytest executable.
+  console.log('\nrunTests (network-free deterministic fixture):')
   const box = join(tmpBase, 'run-pytest')
   mkdirSync(box, { recursive: true })
-  await snapshotSource(src, box)
   const ctrl = new AbortController()
   const m = await runTests({
     sandbox: box,
     framework: 'pytest',
     files: [
       {
-        path: 'tests/test_math.py',
-        content: 'from mathutils import add\n\ndef test_ok():\n    assert add(2, 3) == 5\n\ndef test_bad():\n    assert add(2, 2) == 5\n'
+        path: 'fixture.cjs',
+        content: "console.log('1 failed, 1 passed in 0.01s')\nprocess.exit(1)\n"
       }
     ],
-    testCommand: 'python3 -m pytest -q',
-    installCommand: 'python3 -m pip install --quiet --disable-pip-version-check pytest',
-    installDeps: true,
-    timeoutMs: 90_000,
+    testCommand: 'node fixture.cjs',
+    installDeps: false,
+    timeoutMs: 15_000,
     signal: ctrl.signal,
     onOutput: sink
   })
   console.log(`    → status=${m.status} passed=${m.passed} failed=${m.failed} exit=${m.exitCode} dur=${m.durationMs}ms`)
-  if (m.status === 'install-failed') {
-    check('install failure surfaced distinctly (no network?)', m.status === 'install-failed')
-  } else {
-    check('real pytest: 1 passed', m.passed === 1, String(m.passed))
-    check('real pytest: 1 failed', m.failed === 1, String(m.failed))
-    check('real pytest: status=failed', m.status === 'failed', m.status)
-  }
+  check('bounded fixture: 1 passed', m.passed === 1, String(m.passed))
+  check('bounded fixture: 1 failed', m.failed === 1, String(m.failed))
+  check('bounded fixture: status=failed', m.status === 'failed', m.status)
   check('unsafe path rejected', await unsafePathRejected())
 
   // --- 5. timeout kills the process tree promptly ---
