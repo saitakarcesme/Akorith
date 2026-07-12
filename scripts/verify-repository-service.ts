@@ -122,6 +122,28 @@ async function main(): Promise<void> {
       assert.deepEqual(git(projectPath, ['show', '--pretty=', '--name-only', 'HEAD']).split(/\r?\n/).sort(), ['PLAN.md', 'README.md'])
     })
 
+    await check('selected-parent onboarding creates one contained user-owned project folder', async () => {
+      const selectedParent = join(root, 'selected-parent')
+      mkdirSync(selectedParent)
+      const created = await service.createProjectInParent(selectedParent, {
+        name: 'Chosen Project',
+        summary: 'A project created under the directory explicitly selected by the user.',
+        plan: '- Establish the first viable capability\n- Add deterministic validation',
+        identity: { name: 'Akorith Repository Test', email: 'repository@example.test' },
+        branch: 'main'
+      })
+      assert.equal(created.path, join(selectedParent, 'chosen-project'))
+      assert.ok(existsSync(join(created.path, 'README.md')))
+      assert.match(created.initialCommitSha, /^[0-9a-f]{40}$/)
+      await assert.rejects(
+        service.createProjectInParent(selectedParent, {
+          name: 'Chosen Project', summary: 'Duplicate fixture.', plan: '- Never overwrite existing work',
+          identity: { name: 'Akorith Repository Test', email: 'repository@example.test' }
+        }),
+        (error) => isCode(error, 'already-exists')
+      )
+    })
+
     await check('canonical containment rejects traversal and symlink escapes', async () => {
       const outside = join(root, 'outside')
       mkdirSync(outside, { recursive: true })
