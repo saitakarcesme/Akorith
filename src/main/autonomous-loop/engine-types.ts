@@ -21,6 +21,7 @@ export interface LoopModelDecision<T> {
 
 export interface LoopRepositorySession {
   checkpoint(): Promise<RepositoryCheckpoint>
+  changedPaths?(): Promise<string[]>
   restore(checkpoint: RepositoryCheckpoint, paths: readonly string[]): Promise<string[]>
   commit(paths: readonly string[], message: string): Promise<{ sha: string; paths: string[] }>
   push(branch: string): Promise<void>

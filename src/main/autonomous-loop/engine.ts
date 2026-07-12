@@ -487,8 +487,15 @@ export class AutonomousLoopEngine {
       const control = this.gate(loopId)
       const cancelled = signal?.aborted === true || asMessage(error) === 'cycle-control-requested'
       const hasCommittedChange = cycle?.commitSha !== null && cycle?.commitSha !== undefined
-      if (session && checkpoint && changedFiles.length > 0 && !hasCommittedChange) {
-        await this.restoreAttempt(session, checkpoint, changedFiles).catch(() => undefined)
+      if (session && checkpoint && !hasCommittedChange) {
+        const observedPaths = session.changedPaths
+          ? await session.changedPaths().catch(() => [])
+          : []
+        const rollbackPaths = [...new Set([...changedFiles, ...observedPaths])]
+        if (rollbackPaths.length > 0) {
+          await this.restoreAttempt(session, checkpoint, rollbackPaths).catch(() => undefined)
+          changedFiles = rollbackPaths
+        }
       }
       if (cycle) {
         const finishedAt = this.dependencies.now()

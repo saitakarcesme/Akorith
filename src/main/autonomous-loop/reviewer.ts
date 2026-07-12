@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { LoopPlannedTask, LoopReviewResult, LoopValidationResult } from './types'
 
@@ -24,12 +26,15 @@ function normalizeFile(value: string): string {
 }
 
 export async function inspectLoopDiff(root: string): Promise<LoopDiffInspection> {
-  const [names, diff] = await Promise.all([
+  const [names, diff, untracked] = await Promise.all([
     execFileAsync('git', ['diff', '--name-status', '--no-renames', 'HEAD'], {
       cwd: root, encoding: 'utf8', windowsHide: true, timeout: 10_000, maxBuffer: 2_000_000
     }),
     execFileAsync('git', ['diff', '--no-ext-diff', '--unified=1', '--no-color', 'HEAD'], {
       cwd: root, encoding: 'utf8', windowsHide: true, timeout: 15_000, maxBuffer: MAX_DIFF_CHARS * 2
+    }),
+    execFileAsync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+      cwd: root, encoding: 'utf8', windowsHide: true, timeout: 10_000, maxBuffer: 2_000_000
     })
   ])
   const changedFiles: string[] = []
@@ -41,15 +46,41 @@ export async function inspectLoopDiff(root: string): Promise<LoopDiffInspection>
     changedFiles.push(path)
     if (status === 'D') deletedFiles.push(path)
   }
-  const addedDiff = diff.stdout
+  const untrackedFiles = untracked.stdout
+    .split('\0')
+    .map(normalizeFile)
+    .filter(Boolean)
+    .slice(0, 2_000)
+  changedFiles.push(...untrackedFiles)
+
+  const trackedAdded = diff.stdout
     .split(/\r?\n/)
     .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
     .join('\n')
+  const rootPath = resolve(root)
+  const remaining = Math.max(0, MAX_DIFF_CHARS - trackedAdded.length)
+  const untrackedAdded: string[] = []
+  let untrackedChars = 0
+  for (const file of untrackedFiles) {
+    if (untrackedChars >= remaining) break
+    const absolute = resolve(rootPath, file)
+    if (absolute !== rootPath && !absolute.startsWith(`${rootPath}${sep}`)) continue
+    try {
+      const content = await readFile(absolute, 'utf8')
+      const addition = `\n+++ ${file} (untracked)\n${content.split(/\r?\n/).map((line) => `+${line}`).join('\n')}`
+      untrackedAdded.push(addition.slice(0, remaining - untrackedChars))
+      untrackedChars += addition.length
+    } catch {
+      // Binary or concurrently removed files still remain in changedFiles, but
+      // are not decoded into the review text.
+    }
+  }
+  const addedDiff = `${trackedAdded}${untrackedAdded.join('')}`
   return {
     changedFiles: [...new Set(changedFiles)].slice(0, 2_000),
     deletedFiles: [...new Set(deletedFiles)].slice(0, 2_000),
     addedDiff: addedDiff.slice(0, MAX_DIFF_CHARS),
-    truncated: addedDiff.length > MAX_DIFF_CHARS
+    truncated: trackedAdded.length + untrackedChars > MAX_DIFF_CHARS
   }
 }
 

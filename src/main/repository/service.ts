@@ -16,6 +16,7 @@ import {
   abortInProgressOperation,
   createRepositoryCheckpoint,
   inspectRepositoryRecovery,
+  listRepositoryChangedPaths,
   restoreExplicitPathsToCheckpoint
 } from './recovery'
 import { ExecFileCommandRunner, runGit, type CommandRunner } from './runner'
@@ -337,6 +338,10 @@ export class RepositoryService {
 
   async inspectRecovery(repositoryPath: string): Promise<RepositoryRecoveryReport> {
     return inspectRepositoryRecovery(this.runner, repositoryPath)
+  }
+
+  async changedPaths(repositoryPath: string, limit = 256): Promise<string[]> {
+    return listRepositoryChangedPaths(this.runner, repositoryPath, limit)
   }
 
   async restore(

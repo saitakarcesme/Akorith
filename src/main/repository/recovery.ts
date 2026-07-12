@@ -61,6 +61,31 @@ export async function inspectRepositoryRecovery(
   }
 }
 
+/** Enumerates every tracked or untracked path changed from HEAD without broad reset/clean. */
+export async function listRepositoryChangedPaths(
+  runner: CommandRunner,
+  repositoryPath: string,
+  limit = 256
+): Promise<string[]> {
+  const repository = await resolveGitRepository(runner, repositoryPath)
+  const [tracked, untracked] = await Promise.all([
+    runGit(runner, repository.root, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']),
+    runGit(runner, repository.root, ['ls-files', '--others', '--exclude-standard', '-z'])
+  ])
+  if (!tracked.ok) throw classifyGitFailure(tracked, 'list changed repository paths')
+  if (!untracked.ok) throw classifyGitFailure(untracked, 'list untracked repository paths')
+  const paths = [...new Set(
+    `${tracked.stdout}${untracked.stdout}`.split('\0').map((path) => path.trim()).filter(Boolean)
+  )]
+  if (paths.length > limit) {
+    throw new RepositoryError('invalid-pathspec', `Rollback requires at most ${limit} explicit file paths.`, {
+      operation: 'list changed repository paths',
+      recoverable: true
+    })
+  }
+  return paths
+}
+
 export async function abortInProgressOperation(
   runner: CommandRunner,
   repositoryPath: string

@@ -1,6 +1,7 @@
 import {
   commitExplicitPaths,
   createRepositoryCheckpoint,
+  listRepositoryChangedPaths,
   pushNonForce,
   restoreExplicitPathsToCheckpoint,
   type RepositoryService
@@ -53,6 +54,7 @@ export function createProductionLoopDependencies(
       })
       return {
         checkpoint: () => createRepositoryCheckpoint(options.repository.runner, loop.workspacePath),
+        changedPaths: () => listRepositoryChangedPaths(options.repository.runner, loop.workspacePath),
         restore: (checkpoint, paths) => restoreExplicitPathsToCheckpoint(
           options.repository.runner, loop.workspacePath, checkpoint, paths
         ),
@@ -190,4 +192,3 @@ export function createProductionLoopDependencies(
     now
   }
 }
-

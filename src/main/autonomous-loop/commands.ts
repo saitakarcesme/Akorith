@@ -63,14 +63,19 @@ export function parseValidationCommand(command: string): ValidationCommandParseR
 
 export async function changedFilesForValidation(root: string): Promise<string[]> {
   try {
-    const result = await execFileAsync('git', ['diff', '--name-only', '--diff-filter=ACMRTUXB', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: 8_000,
-      maxBuffer: 1_000_000
-    })
-    return [...new Set(result.stdout.split(/\r?\n/).map((file) => file.trim().replace(/\\/g, '/')).filter(Boolean))].slice(0, 2_000)
+    const [tracked, untracked] = await Promise.all([
+      execFileAsync('git', ['diff', '--name-only', '--diff-filter=ACMRTUXB', 'HEAD'], {
+        cwd: root, encoding: 'utf8', windowsHide: true, timeout: 8_000, maxBuffer: 1_000_000
+      }),
+      execFileAsync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+        cwd: root, encoding: 'utf8', windowsHide: true, timeout: 8_000, maxBuffer: 1_000_000
+      })
+    ])
+    const files = [
+      ...tracked.stdout.split(/\r?\n/),
+      ...untracked.stdout.split('\0')
+    ].map((file) => file.trim().replace(/\\/g, '/')).filter(Boolean)
+    return [...new Set(files)].slice(0, 2_000)
   } catch {
     return []
   }

@@ -168,8 +168,9 @@ export class AutonomousLoopService {
     if (!loop.activeCycleId) return
     const cycle = this.options.store.getCycle(loop.activeCycleId)
     const snapshot = this.options.store.latestSnapshot(loop.id)
-    if (cycle && cycle.commitSha === null && cycle.changedFiles.length > 0) {
-      if (!snapshot?.headSha || cycle.changedFiles.length > 256) {
+    const changedPaths = cycle?.commitSha ? [] : await this.options.repository.changedPaths(loop.workspacePath, 256)
+    if (changedPaths.length > 0) {
+      if (!snapshot?.headSha) {
         throw new Error('Interrupted Loop changes require manual repository recovery.')
       }
       await this.options.repository.restore(loop.workspacePath, {
@@ -177,7 +178,7 @@ export class AutonomousLoopService {
         headSha: snapshot.headSha,
         branch: snapshot.branch,
         createdAt: snapshot.capturedAt
-      }, cycle.changedFiles)
+      }, changedPaths)
     }
     if (cycle && cycle.status !== 'pushed' && cycle.status !== 'committed') {
       const finishedAt = this.now()
@@ -232,4 +233,3 @@ export class AutonomousLoopService {
     this.listeners.clear()
   }
 }
-
