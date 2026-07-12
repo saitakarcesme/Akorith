@@ -64,6 +64,6 @@ for (const [index, commit] of commits.entries()) {
   )
 }
 
-lines.push('', `Total commits after baseline represented: **${commits.length}**`, '')
+lines.push('', `Total commits after baseline represented: **${commits.length}**`)
 writeFileSync(outputPath, `${lines.join('\n')}\n`, 'utf8')
 process.stdout.write(`Wrote ${outputPath} with ${commits.length} commit(s).\n`)

@@ -202,4 +202,3 @@ export function assessReleaseReadiness(
     betaChannelReady: electronUpdaterDeclared && feedConfigured && allChannels && macTargets.has('zip') && winTargets.has('nsis')
   }
 }
-

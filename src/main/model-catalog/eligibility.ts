@@ -17,7 +17,6 @@ function unavailable(model: CatalogModel): ModelEligibility {
     probeFreshness: null
   }
 }
-
 function probeFailureCode(status: ProbeStatus): ModelEligibilityCode {
   switch (status) {
     case 'running':
@@ -151,4 +150,3 @@ export function evaluatePlannerEligibility(model: CatalogModel, now = Date.now()
     probeFreshness: null
   }
 }
-

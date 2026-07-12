@@ -183,4 +183,3 @@ export function validateTelemetryEventInput(input: TelemetryEventInput): void {
       break
   }
 }
-

@@ -78,4 +78,3 @@ export function capabilitiesConfirmedByProbe(
   const missing = required.filter((capability) => probe.capabilities[capability]?.outcome !== 'confirmed')
   return { confirmed: missing.length === 0, missing }
 }
-

@@ -50,7 +50,6 @@ export class ProviderStructuredExecutorClient implements StructuredExecutorClien
     }
   }
 }
-
 function previousAttempt(request: LoopExecutorRequest): string {
   if (!request.repair) return ''
   return [
@@ -146,4 +145,3 @@ export class StructuredPatchLoopExecutorAdapter implements LoopExecutorAdapter {
     }
   }
 }
-

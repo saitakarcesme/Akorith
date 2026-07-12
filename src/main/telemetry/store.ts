@@ -334,4 +334,3 @@ export class TelemetryStore {
     return rows.map(rowToEvent)
   }
 }
-

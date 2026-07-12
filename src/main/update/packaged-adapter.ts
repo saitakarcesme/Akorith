@@ -49,4 +49,3 @@ export async function loadOptionalElectronUpdater(
     return { available: false, reason: 'The electron-updater module is not installed in this build.' }
   }
 }
-

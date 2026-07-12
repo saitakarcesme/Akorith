@@ -34,4 +34,3 @@ ${bounded(request.repositoryContext, MAX_CONTEXT_CHARS)}
 
 Complete the actual edits and any focused local checks available through your coding tools. Finish with a concise operational summary containing changed files and tests attempted. Do not expose chain-of-thought.`
 }
-

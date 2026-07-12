@@ -52,4 +52,3 @@ export const EMPTY_LOOP_USAGE: Readonly<LoopTokenUsage> = Object.freeze({
   cached: 0,
   costUsd: 0
 })
-

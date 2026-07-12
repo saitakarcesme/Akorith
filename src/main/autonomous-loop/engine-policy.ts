@@ -42,4 +42,3 @@ export function isPermanentRepositoryFailure(error: unknown): boolean {
     'permission-denied', 'repository-corrupt', 'remote-mismatch'
   ].includes(code)
 }
-
