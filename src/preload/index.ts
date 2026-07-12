@@ -325,8 +325,17 @@ const plugins = Object.freeze({
 // Phase 39: in-app source updater (read-only check; ff-only update after confirm).
 const update = Object.freeze({
   status: (): Promise<unknown> => ipcRenderer.invoke('update:status'),
-  check: (): Promise<unknown> => ipcRenderer.invoke('update:check'),
-  run: (options: unknown): Promise<unknown> => ipcRenderer.invoke('update:run', options)
+  settings: (): Promise<unknown> => ipcRenderer.invoke('update:settings'),
+  setSettings: (value: unknown): Promise<unknown> => ipcRenderer.invoke('update:setSettings', value),
+  check: (channel?: string): Promise<unknown> => ipcRenderer.invoke('update:check', channel),
+  download: (): Promise<unknown> => ipcRenderer.invoke('update:download'),
+  authorizeInstall: (): Promise<unknown> => ipcRenderer.invoke('update:authorizeInstall'),
+  install: (token: string): Promise<unknown> => ipcRenderer.invoke('update:install', token),
+  onChanged: (callback: (snapshot: unknown) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, snapshot: unknown): void => callback(snapshot)
+    ipcRenderer.on('update:changed', listener)
+    return () => ipcRenderer.removeListener('update:changed', listener)
+  }
 })
 
 // Phase 39: honest usage-limit visibility (recorded local usage + configured labels).

@@ -2036,57 +2036,45 @@ export interface PluginsApi {
   setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
 }
 
-export interface UpdateStatus {
-  mode: 'git' | 'packaged'
-  runtimeMode: 'dev' | 'source' | 'packaged-windows' | 'packaged-macos' | 'packaged-other'
-  platform: string
-  executablePath: string
-  appPath: string
-  repoPath?: string
-  sourceCheckoutPath?: string
-  currentBranch?: string
-  currentCommit?: string
-  currentCommitFull?: string
-  remoteMainCommit?: string
-  remoteUrl?: string
-  behindBy: number
-  aheadBy: number
-  hasUpdate: boolean
-  isDirty: boolean
-  dirtyFiles: string[]
-  safeToUpdate: boolean
-  canUpdateInstalledApp: boolean
-  updateTarget: string
-  relaunchTarget?: string
-  warnings: string[]
-  lastCheckedAt?: number
-  appVersion: string
+export type UpdateChannel = 'stable' | 'beta'
+export type PackagedUpdatePhase = 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+
+export interface PackagedUpdateSnapshot {
+  phase: PackagedUpdatePhase
+  channel: UpdateChannel
+  currentVersion: string
+  support: { supported: boolean; code: string; reason: string }
+  update?: { version: string; releaseName?: string; releaseNotes?: string; releaseDate?: string; prerelease: boolean }
+  progress?: { percent: number; transferred: number; total: number; bytesPerSecond: number }
+  error?: { code: string; message: string; retryable: boolean; at: number }
+  checkedAt?: number
+  updatedAt: number
+  canCheck: boolean
+  canDownload: boolean
+  canAuthorizeInstall: boolean
+  manualInstallRequired: true
 }
 
-export interface UpdateLogEntry {
-  command: string
-  ok: boolean
-  output: string
-  at: number
+export interface UpdateSettingsView {
+  automaticChecks: boolean
+  channel: UpdateChannel
 }
 
-export interface UpdateRunOptions {
-  runInstall?: boolean
-  runBuild?: boolean
-}
-
-export interface UpdateRunResult {
-  ok: boolean
-  status: UpdateStatus
-  logs: UpdateLogEntry[]
-  error?: string
-  restartRecommended: boolean
+export interface InstallAuthorizationView {
+  token: string
+  expiresAt: number
+  version: string
 }
 
 export interface UpdateApi {
-  status(): Promise<UpdateStatus>
-  check(): Promise<UpdateStatus>
-  run(options: UpdateRunOptions): Promise<UpdateRunResult>
+  status(): Promise<PackagedUpdateSnapshot>
+  settings(): Promise<UpdateSettingsView>
+  setSettings(value: Partial<UpdateSettingsView>): Promise<UpdateSettingsView>
+  check(channel?: UpdateChannel): Promise<PackagedUpdateSnapshot>
+  download(): Promise<PackagedUpdateSnapshot>
+  authorizeInstall(): Promise<InstallAuthorizationView | null>
+  install(token: string): Promise<PackagedUpdateSnapshot>
+  onChanged(callback: (snapshot: PackagedUpdateSnapshot) => void): () => void
 }
 
 export interface UsageWindowRow {
