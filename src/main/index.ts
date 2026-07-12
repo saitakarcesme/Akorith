@@ -30,6 +30,7 @@ import { registerLocalRuntimeIpc } from './local-runtime'
 import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
 import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
+import { validateExternalUrl } from './security/external-url'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -352,10 +353,28 @@ function createWindow(): void {
     mainWindow.webContents.setZoomFactor(UI_ZOOM)
   })
 
-  // Any external links open in the default browser, never inside the app.
+  // External links open in the default browser only after a strict scheme
+  // check. Renderer content can never navigate the Electron window to a file,
+  // data, or javascript URL.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    const decision = validateExternalUrl(url)
+    if (decision.allowed && decision.url) void shell.openExternal(decision.url)
     return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow.webContents.getURL()
+    let sameDevelopmentOrigin = false
+    if (!app.isPackaged) {
+      try {
+        sameDevelopmentOrigin = new URL(current).origin === new URL(url).origin
+      } catch {
+        sameDevelopmentOrigin = false
+      }
+    }
+    if (url === current || sameDevelopmentOrigin) return
+    event.preventDefault()
+    const decision = validateExternalUrl(url)
+    if (decision.allowed && decision.url) void shell.openExternal(decision.url)
   })
 
   // HMR dev server URL in development, bundled file in production.
