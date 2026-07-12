@@ -19,7 +19,7 @@ import { registerGpuStatusIpc } from './gpu-status'
 import { registerRemoteTelemetryIpc } from './remote-telemetry'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
 import { registerPluginIpc } from './plugins/manager'
-import { registerUpdateIpc } from './update'
+import { disposeUpdateIpc, registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
@@ -479,6 +479,7 @@ app.on('will-quit', () => {
   stopProjectLoopAutoScheduler()
   unregisterAutonomousLoopIpc()
   stopAutonomousLoopRuntime()
+  disposeUpdateIpc()
   ptyManager.killAll()
   closeDb()
   void stopController()
