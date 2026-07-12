@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import type { CatalogModel } from '../model-catalog/types'
+import { recordTelemetryEvent } from '../telemetry'
 import { getProductionBenchmarkSuite } from './catalog'
 import { benchmarkCompatibilityKey, defaultBenchmarkRunConfiguration } from './comparability'
 import { runBenchmarkModel } from './runner'
@@ -529,6 +530,39 @@ export class BenchmarkLabService {
           onFixtureComplete: (fixtureRun) => {
             fixtureRuns.push(structuredClone(fixtureRun))
             this.options.store.saveModelRun(runningModelRun(item, fixtureRuns))
+            const outcome = fixtureRun.status === 'completed'
+              ? 'completed'
+              : fixtureRun.status === 'cancelled'
+                ? 'cancelled'
+                : 'failed'
+            recordTelemetryEvent({
+              kind: 'benchmark_task', benchmarkRunId: item.sessionId, benchmarkTaskId: fixtureRun.fixtureId,
+              suiteId: item.suite.id, suiteVersion: String(item.suite.revision), outcome,
+              occurredAt: fixtureRun.finishedAt, durationMs: fixtureRun.durationMs,
+              providerId: item.target.providerId, model: item.target.model, location: item.target.location,
+              nodeId: item.target.nodeId ?? undefined, taskType: 'benchmark', correlationId: fixtureRun.id
+            })
+            if (fixtureRun.executor) {
+              const requestId = `benchmark:${fixtureRun.id}`
+              const usage = fixtureRun.executor.usage
+              recordTelemetryEvent({
+                kind: outcome === 'completed' ? 'model_request_completed' : 'model_request_failed',
+                requestId, occurredAt: fixtureRun.finishedAt, durationMs: fixtureRun.executor.latencyMs,
+                providerId: item.target.providerId, model: item.target.model, location: item.target.location,
+                nodeId: item.target.nodeId ?? undefined, taskType: 'benchmark', correlationId: fixtureRun.id,
+                ...(outcome === 'completed' ? {} : { errorCode: fixtureRun.errorCode ?? 'benchmark_executor_failed' })
+              })
+              if (usage.inputTokens !== null && usage.outputTokens !== null) {
+                recordTelemetryEvent({
+                  kind: 'token_usage', requestId, occurredAt: fixtureRun.finishedAt,
+                  promptTokens: usage.inputTokens, completionTokens: usage.outputTokens,
+                  cachedTokens: usage.cachedTokens ?? 0, costUsd: usage.costUsd ?? 0,
+                  estimated: usage.source === 'estimated', providerId: item.target.providerId,
+                  model: item.target.model, location: item.target.location, nodeId: item.target.nodeId ?? undefined,
+                  taskType: 'benchmark', correlationId: fixtureRun.id
+                })
+              }
+            }
           }
         })
         this.options.store.saveModelRun(result)
