@@ -21,7 +21,7 @@ import { registerControllerIpc, startControllerIfEnabled, stopController } from 
 import { registerPluginIpc } from './plugins/manager'
 import { disposeUpdateIpc, registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
-import { registerAgentRegistryIpc } from './agents/registry'
+import { registerRuntimeObservationIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
 import { closeDb, ensureDbReady, getDb, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
@@ -456,7 +456,7 @@ app.whenReady().then(() => {
   registerTestIpc()
   registerBenchmarkIpc()
   registerEvaluateIpc()
-  registerAgentRegistryIpc()
+  registerRuntimeObservationIpc()
   registerMissionIpc()
   registerMacroIpc()
   registerOllamaConnectionIpc()
