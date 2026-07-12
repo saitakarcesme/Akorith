@@ -35,6 +35,7 @@ import { ClaudeProvider } from './claude'
 import { ChatGPTProvider } from './chatgpt'
 import { LocalProvider } from './local'
 import { OpenCodeProvider } from './opencode'
+import { RemoteNodeProvider } from './remote'
 import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
@@ -50,7 +51,7 @@ const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
 }
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/
-const VALID_MODEL = /^[\w.:/-]{1,64}$/
+const VALID_MODEL = /^[\w.:/-]{1,240}$/
 const MAX_PROMPT_CHARS = 200_000
 const MAX_CHAT_IMAGES = 4
 const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
@@ -87,6 +88,7 @@ function buildProviders(): Map<string, Provider> {
       console.error(`[registry] failed to load provider "${id}":`, err)
     }
   }
+  providers.set('remote', new RemoteNodeProvider())
   return providers
 }
 
