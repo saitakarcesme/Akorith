@@ -326,7 +326,12 @@ export default function PluginMarketplacePage({ api: suppliedApi, initialPlugins
       const returned = listValue(result)
       if (returned.length) setPlugins(normalizePlugins(returned))
       else if (api) await load()
-      setActionMessage(`${plugin.name}: ${String(action)} completed.`)
+      const response = recordValue(result)
+      if (response.ok === false) {
+        setActionMessage(`${plugin.name}: ${stringValue(response.reason, `${String(action)} is not available.`)}`)
+      } else {
+        setActionMessage(`${plugin.name}: ${String(action)} completed.`)
+      }
     } catch (error) {
       setActionMessage(`${plugin.name}: ${error instanceof Error ? error.message : `${String(action)} failed.`}`)
     } finally {

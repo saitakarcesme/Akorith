@@ -181,8 +181,13 @@ export class PluginMarketplaceService {
     return this.list()
   }
 
-  connect(pluginId: string): MarketplacePluginSnapshot[] {
-    return this.check(pluginId)
+  connect(pluginId: string): { ok: false; reason: string; plugins: MarketplacePluginSnapshot[] } {
+    const plugins = this.check(pluginId)
+    return {
+      ok: false,
+      reason: 'No authenticated runtime adapter is configured. The plugin remains disconnected.',
+      plugins
+    }
   }
 
   configure(pluginId: string): { ok: false; reason: string; plugins: MarketplacePluginSnapshot[] } {
