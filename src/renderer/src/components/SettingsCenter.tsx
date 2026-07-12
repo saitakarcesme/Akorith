@@ -12,8 +12,7 @@ import type {
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
   OllamaShareInfo,
-  ProviderInfo,
-  TestSettings
+  ProviderInfo
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
@@ -21,7 +20,7 @@ import MissionCenter from './MissionCenter'
 import UpdatePanel from './UpdatePanel'
 import RemoteNodesPanel from './RemoteNodesPanel'
 
-type SettingsTab = 'profile' | 'providers' | 'compute' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'compute' | 'missions' | 'api' | 'update' | 'workflow' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -58,13 +57,6 @@ function providerShortLabel(id: string, label: string): string {
   if (id.includes('chatgpt') || id.includes('codex')) return 'Cx'
   if (id.includes('local') || id.includes('ollama')) return 'Lo'
   return label.slice(0, 2)
-}
-
-function secondsLabel(ms: number): string {
-  const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.round(seconds / 60)
-  return `${minutes}m`
 }
 
 export default function SettingsCenter({
@@ -113,7 +105,6 @@ export default function SettingsCenter({
   const [telNotice, setTelNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
-  const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
   const [ollamaSettings, setOllamaSettings] = useState<OllamaConnectionSettings | null>(null)
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434')
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
@@ -136,7 +127,6 @@ export default function SettingsCenter({
     }
   }, [])
   const [digestDirDraft, setDigestDirDraft] = useState('')
-  const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
   const loadSettings = useCallback(() => {
     void window.api.bridge.getSettings().then(setBridgeSettings).catch(() => setBridgeSettings({ autoEnter: false }))
@@ -146,13 +136,6 @@ export default function SettingsCenter({
     }).catch(() => {
       setDigestSettings(null)
       setDigestDirDraft('')
-    })
-    void window.api.test.getSettings().then((settings) => {
-      setTestSettings(settings)
-      setTestSourceDraft(settings.sourceRepo ?? '')
-    }).catch(() => {
-      setTestSettings(null)
-      setTestSourceDraft('')
     })
     void window.api.ollama.getSettings().then((settings) => {
       setOllamaSettings(settings)
@@ -498,28 +481,6 @@ export default function SettingsCenter({
     await saveDigestDir(res.path)
   }
 
-  const saveTest = async (patch: Partial<TestSettings>): Promise<void> => {
-    setSaving('test')
-    try {
-      const saved = await window.api.test.setSettings(patch)
-      setTestSettings(saved)
-      setTestSourceDraft(saved.sourceRepo ?? '')
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  const saveTestSource = async (value = testSourceDraft): Promise<void> => {
-    await saveTest({ sourceRepo: value.trim() })
-  }
-
-  const chooseTestSource = async (): Promise<void> => {
-    const res = await window.api.projects.pickDirectory()
-    if (!res.ok) return
-    setTestSourceDraft(res.path)
-    await saveTestSource(res.path)
-  }
-
   const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
@@ -528,7 +489,6 @@ export default function SettingsCenter({
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
-    { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
   ]
 
@@ -1219,79 +1179,6 @@ export default function SettingsCenter({
                 <div>
                   <span>Loop folder</span>
                   <strong>{LOOP_FOLDER}</strong>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'test' && (
-            <section className="settings-section">
-              <div className="settings-section-head">
-                <div>
-                  <h2>Test Lab</h2>
-                  <p>Defaults for the guided test and PDF flow.</p>
-                </div>
-              </div>
-              <div className="settings-field is-stacked">
-                <span>Default source</span>
-                <div className="settings-path-row">
-                  <input value={testSourceDraft} spellCheck={false} placeholder="Folder path or GitHub URL" onChange={(event) => setTestSourceDraft(event.target.value)} />
-                  <button type="button" onClick={() => void chooseTestSource()}>Choose</button>
-                  <button type="button" disabled={saving === 'test'} onClick={() => void saveTestSource()}>
-                    Save
-                  </button>
-                </div>
-              </div>
-              <div className="settings-toggle-row">
-                <div>
-                  <strong>Install dependencies in sandbox</strong>
-                  <span>{testSettings?.installDeps ? 'Enabled when a lockfile is present.' : 'Skipped unless a run overrides it.'}</span>
-                </div>
-                <button
-                  type="button"
-                  className={testSettings?.installDeps ? 'is-active' : ''}
-                  disabled={!testSettings || saving === 'test'}
-                  onClick={() => void saveTest({ installDeps: !(testSettings?.installDeps ?? true) })}
-                >
-                  {testSettings?.installDeps ? 'On' : 'Off'}
-                </button>
-              </div>
-              <div className="settings-two-col">
-                <label>
-                  <span>Run timeout</span>
-                  <select
-                    className="settings-select"
-                    value={testSettings?.timeoutMs ?? 120_000}
-                    disabled={!testSettings || saving === 'test'}
-                    onChange={(event) => void saveTest({ timeoutMs: Number(event.target.value) })}
-                  >
-                    {[60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000].map((value) => (
-                      <option key={value} value={value}>{secondsLabel(value)}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Retained sandboxes</span>
-                  <select
-                    className="settings-select"
-                    value={testSettings?.keepLastN ?? 3}
-                    disabled={!testSettings || saving === 'test'}
-                    onChange={(event) => void saveTest({ keepLastN: Number(event.target.value) })}
-                  >
-                    {[0, 1, 3, 5, 10, 20].map((value) => (
-                      <option key={value} value={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="settings-readonly-grid">
-                <div>
-                  <span>Test writer</span>
-                  <strong>Local / Ollama</strong>
-                </div>
-                <div>
-                  <span>Report</span>
-                  <strong>Akorith Test Report PDF</strong>
                 </div>
               </div>
             </section>
