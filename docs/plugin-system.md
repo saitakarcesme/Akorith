@@ -1,3 +1,5 @@
+> **Superseded:** historical plugin foundation notes; see `production-plugins.md` for the current marketplace and lifecycle.
+
 # Akorith Plugin System (Phase 35 foundation)
 
 Phase 34 shipped a static Plugins page. Phase 35 turns it into a **real registry** with

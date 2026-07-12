@@ -1,3 +1,5 @@
+> **Superseded:** historical design reference; the standalone Agents product surface is no longer shipped.
+
 # Agents — reusable local action shortcuts
 
 > **Act with Agents.** An Agent turns a repeatable computer/project task into a one-click
