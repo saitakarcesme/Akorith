@@ -2115,6 +2115,136 @@ export interface UsageLimitsApi {
   setConfig(patch: Partial<UsageLimitConfig>): Promise<UsageLimitConfig>
 }
 
+export type AutonomousLoopStatus = 'setting_up' | 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'error'
+export type AutonomousLoopStage = 'idle' | 'observing' | 'analyzing' | 'inventory' | 'planning' | 'executing' | 'validating' | 'repairing' | 'reviewing' | 'committing' | 'pushing' | 'scheduling'
+
+export interface AutonomousModelSelection {
+  catalogId: string
+  providerId: string
+  model: string
+  location: 'local' | 'remote' | 'cloud'
+  nodeId?: string
+  capabilityProbeId?: string
+}
+
+export interface AutonomousLoopRecord {
+  id: string
+  projectName: string
+  status: AutonomousLoopStatus
+  stage: AutonomousLoopStage
+  repositoryId: string
+  workspacePath: string
+  remoteUrl: string
+  branch: string
+  executor: AutonomousModelSelection
+  planner: AutonomousModelSelection
+  createdAt: number
+  updatedAt: number
+  startedAt: number | null
+  stoppedAt: number | null
+  lastActivityAt: number | null
+  nextCycleAt: number | null
+  tokenUsage: { input: number; output: number; cached: number; costUsd: number }
+  commitCount: number
+  pushCount: number
+  successfulTasks: number
+  failedTasks: number
+  stopReason: string | null
+  error: string | null
+}
+
+export interface AutonomousLoopCycle {
+  id: string
+  index: number
+  status: string
+  stage: AutonomousLoopStage
+  plannedTask: null | { title: string; reason: string; kind: string; acceptanceCriteria: string[] }
+  repairAttempts: number
+  startedAt: number | null
+  finishedAt: number | null
+  durationMs: number | null
+  changedFiles: string[]
+  commitSha: string | null
+  commitMessage: string | null
+  pushed: boolean
+  summary: string | null
+  error: string | null
+}
+
+export interface AutonomousLoopEvent {
+  id: string
+  loopId: string
+  cycleId: string | null
+  occurredAt: number
+  stage: AutonomousLoopStage
+  level: 'info' | 'success' | 'warning' | 'error'
+  kind: string
+  title: string
+  summary: string
+  details: Record<string, string | number | boolean | null>
+}
+
+export interface AutonomousLoopDetail {
+  loop: AutonomousLoopRecord
+  cycles: AutonomousLoopCycle[]
+  events: AutonomousLoopEvent[]
+}
+
+export interface CatalogModelView {
+  id: string
+  providerId: string
+  providerLabel: string
+  source: 'local' | 'remote' | 'cloud'
+  modelName: string
+  displayLabel: string
+  nodeId: string | null
+  nodeName: string | null
+  availability: { status: 'available' | 'unavailable' | 'unknown'; reason: string | null }
+  contextWindowTokens: number | null
+  quantization: string | null
+  vramRequirementMb: number | null
+  currentLoadPercent: number | null
+  pingMs: number | null
+  effectiveCapabilities: Record<string, { support: 'supported' | 'unsupported' | 'unknown'; source: string; verifiedAt: number | null }>
+  latestProbe: null | { id: string; status: string; freshUntil: number | null; failureMessage?: string }
+}
+
+export interface CatalogDiscoveryView {
+  catalog: { generatedAt: number; models: CatalogModelView[]; collisions: string[] }
+  warnings: string[]
+}
+
+export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: string }
+
+export interface CreateAutonomousLoopInput {
+  source:
+    | { kind: 'new'; parentPath: string; projectName: string; remoteUrl?: string; createRemoteWithPlugin?: boolean; githubOwner?: string; githubVisibility?: 'private' | 'public' }
+    | { kind: 'existing_github'; remoteUrl: string }
+  executor: AutonomousModelSelection & { capabilityProbeId: string }
+}
+
+export interface AutonomousLoopOnboardingReview {
+  loop: AutonomousLoopRecord
+  plannerLabel: string
+  remoteAccess: { canPush: boolean | null; message: string }
+  initialIdentity: { summary: string; plan: string } | null
+}
+
+export interface AutonomousLoopApi {
+  list(): Promise<AutonomousLoopRecord[]>
+  detail(loopId: string): Promise<AutonomousLoopDetail | null>
+  catalog(requestId: string): Promise<IpcResult<CatalogDiscoveryView>>
+  probe(requestId: string, catalogModelId: string): Promise<IpcResult<{ id: string; status: string; failureMessage?: string }>>
+  create(requestId: string, input: CreateAutonomousLoopInput): Promise<IpcResult<AutonomousLoopOnboardingReview>>
+  cancelRequest(requestId: string): Promise<boolean>
+  pause(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
+  resume(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
+  stop(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
+  openRepository(loopId: string): Promise<{ ok: boolean; error?: string }>
+  openGitHub(loopId: string): Promise<{ ok: boolean; error?: string }>
+  onChanged(callback: (loopId: string) => void): () => void
+}
+
 export interface PreloadApi {
   app: AppApi
   pty: PtyApi
@@ -2143,6 +2273,7 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
+  autonomousLoop: AutonomousLoopApi
 }
 
 declare global {
