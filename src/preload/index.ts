@@ -398,6 +398,14 @@ const remoteNodes = Object.freeze({
   }
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const benchmarkLab = Object.freeze({
+  getCatalog: (): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:catalog'),
+  listRuns: (limit = 20): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:list', limit),
+  getRun: (runId: string): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:get', runId),
+  start: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:start', input),
+  cancel: (runId: string): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:cancel', runId)
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, benchmarkLab, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)

@@ -1937,6 +1937,14 @@ export interface RemoteNodesApi {
   onChanged(callback: () => void): () => void
 }
 
+export interface BenchmarkLabPreloadApi {
+  getCatalog(): Promise<unknown>
+  listRuns(limit?: number): Promise<unknown>
+  getRun(runId: string): Promise<unknown>
+  start(input: unknown): Promise<unknown>
+  cancel(runId: string): Promise<unknown>
+}
+
 export type UpdateChannel = 'stable' | 'beta'
 export type PackagedUpdatePhase = 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
 
@@ -2146,6 +2154,7 @@ export interface PreloadApi {
   digest: DigestApi
   test: TestApi
   benchmark: BenchmarkApi
+  benchmarkLab: BenchmarkLabPreloadApi
   evaluate: EvaluateApi
   macro: MacroApi
   agent: AgentApi
