@@ -41,3 +41,6 @@ jobs:
 
       - name: Build Electron bundles
         run: npm run build
+
+      - name: Exercise Electron product flows
+        run: node scripts/e2e-app-shell.mjs
