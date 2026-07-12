@@ -146,45 +146,6 @@ const digest = Object.freeze({
   setWorkingDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('digest:setWorkingDir', dir)
 })
 
-interface TestOutputPayload {
-  runId: string
-  chunk: string
-}
-
-// Phase 7 test page: generate-and-run is orchestrated by the renderer; the
-// sandboxed execution + metrics live in main behind these channels.
-const test = Object.freeze({
-  getSettings: (): Promise<unknown> => ipcRenderer.invoke('test:getSettings'),
-  setSourceRepo: (dir: string): Promise<unknown> => ipcRenderer.invoke('test:setSourceRepo', dir),
-  setSettings: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('test:setSettings', patch),
-  resolveSource: (source: string): Promise<unknown> => ipcRenderer.invoke('test:resolveSource', { source }),
-  detect: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:detect', { sourceRepo }),
-  context: (sourceRepo: string): Promise<unknown> => ipcRenderer.invoke('test:context', { sourceRepo }),
-  run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:run', args),
-  persistRun: (args: unknown): Promise<unknown> => ipcRenderer.invoke('test:persistRun', args),
-  stop: (runId: string): void => {
-    ipcRenderer.send('test:stop', { runId })
-  },
-  listRuns: (limit?: number): Promise<unknown> => ipcRenderer.invoke('test:listRuns', { limit }),
-  onOutput: (listener: (payload: { runId: string; chunk: string }) => void): (() => void) => {
-    const handler = (_event: IpcRendererEvent, payload: TestOutputPayload): void => listener(payload)
-    ipcRenderer.on('test:output', handler)
-    return () => ipcRenderer.removeListener('test:output', handler)
-  }
-})
-
-const evaluate = Object.freeze({
-  getSettings: (): Promise<unknown> => ipcRenderer.invoke('evaluate:getSettings'),
-  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('evaluate:list', { limit }),
-  run: (args: unknown): Promise<unknown> => ipcRenderer.invoke('evaluate:run', args),
-  exportPdf: (evaluationId: string): Promise<unknown> =>
-    ipcRenderer.invoke('evaluate:exportPdf', { evaluationId }),
-  revealPdf: (evaluationId: string): Promise<unknown> =>
-    ipcRenderer.invoke('evaluate:revealPdf', { evaluationId }),
-  openPdf: (evaluationId: string): Promise<unknown> =>
-    ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
-})
-
 const macro = Object.freeze({
   createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
   // Phase 20: scaffold an everyday-dev project + bind an auto-commit loop to it.
@@ -383,6 +344,6 @@ const benchmarkLab = Object.freeze({
   cancel: (runId: string): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:cancel', runId)
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmarkLab, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, benchmarkLab, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)
