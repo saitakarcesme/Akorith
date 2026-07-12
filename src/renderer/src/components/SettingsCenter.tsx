@@ -27,8 +27,9 @@ import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
 import UpdatePanel from './UpdatePanel'
+import RemoteNodesPanel from './RemoteNodesPanel'
 
-type SettingsTab = 'profile' | 'providers' | 'runtimes' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'compute' | 'runtimes' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -704,7 +705,7 @@ export default function SettingsCenter({
   const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
-    { id: 'runtimes', label: 'Models & runtimes', kicker: 'Availability and diagnostics' },
+    { id: 'compute', label: 'Compute', kicker: 'Remote nodes and models' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
@@ -1103,6 +1104,18 @@ export default function SettingsCenter({
                   authentication and a firewall. Akorith stores only endpoint config here, never secrets.
                 </div>
               </div>
+            </section>
+          )}
+
+          {activeTab === 'compute' && (
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <h2>Compute</h2>
+                  <p>Authenticated remote inference nodes and their live model catalogs.</p>
+                </div>
+              </div>
+              <RemoteNodesPanel />
             </section>
           )}
 
