@@ -9,8 +9,6 @@ import { warmLocalProvider } from './providers/local'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
-import { registerTestIpc } from './testlab-ipc'
-import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
@@ -452,8 +450,6 @@ app.whenReady().then(() => {
   registerBridgeIpc()
   registerRouterIpc()
   registerDigestIpc()
-  registerTestIpc()
-  registerEvaluateIpc()
   registerRuntimeObservationIpc()
   registerMissionIpc()
   registerMacroIpc()
