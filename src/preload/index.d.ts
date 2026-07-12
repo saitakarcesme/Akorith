@@ -438,66 +438,6 @@ export type AgentPermissionResponse =
   | { ok: false; error: string }
 
 export type AgentId = 'claude' | 'codex' | 'ollama' | 'opencode' | 'memory'
-export type AgentKind = 'cli' | 'local' | 'memory' | 'future'
-export type AgentStatus = 'unknown' | 'available' | 'missing' | 'unauthenticated' | 'disabled' | 'error'
-export type AgentCapability =
-  | 'chat'
-  | 'terminal'
-  | 'exec'
-  | 'streaming'
-  | 'file_patch'
-  | 'test_generation'
-  | 'review'
-  | 'commit'
-  | 'memory'
-  | 'skills'
-  | 'automation'
-  | 'mission_planning'
-
-export interface AgentAdapterMetadata {
-  id: AgentId
-  displayName: string
-  kind: AgentKind
-  description: string
-  executableName?: string
-  status: AgentStatus
-  capabilities: AgentCapability[]
-  currentIntegrationNotes: string[]
-  futureIntegrationNotes: string[]
-  safetyNotes: string[]
-}
-
-export type AgentIntegrationStage =
-  | 'metadata-only'
-  | 'detection-ready'
-  | 'session-placeholder-ready'
-  | 'runtime-connected-existing-provider'
-  | 'future-runtime'
-
-export interface AgentRuntimeCapability {
-  canCreateSession: boolean
-  canSendMessage: boolean
-  canStream: boolean
-  canExecute: boolean
-  canAttachToPty: boolean
-  canUseExistingProvider: boolean
-  canUseExistingTerminal: boolean
-  isPlaceholder: boolean
-}
-
-export interface AgentAdapterInfo extends AgentAdapterMetadata {
-  runtimeCapabilities: AgentRuntimeCapability
-  integrationStage: AgentIntegrationStage
-}
-
-export interface AgentDetectionResult {
-  id: AgentId
-  status: AgentStatus
-  version?: string
-  executablePath?: string
-  message?: string
-  checkedAt: number
-}
 
 export type AgentSessionId = string
 export type AgentSessionMode = 'chat' | 'terminal' | 'exec' | 'loop' | 'review' | 'memory'

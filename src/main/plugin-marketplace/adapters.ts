@@ -63,13 +63,6 @@ export interface PluginRuntimeAdapter {
   disconnect(context: PluginAdapterContext): Promise<void>
 }
 
-/** Optional package transport used by a future installer; it is intentionally not implemented here. */
-export interface PluginPackageAdapter {
-  install(manifest: PluginManifest, signal: AbortSignal): Promise<void>
-  update(currentVersion: string, manifest: PluginManifest, signal: AbortSignal): Promise<void>
-  uninstall(pluginId: string, signal: AbortSignal): Promise<void>
-}
-
 export function assertAdapterContract(manifest: PluginManifest, adapter: PluginRuntimeAdapter): void {
   if (adapter.pluginId !== manifest.id) {
     throw new Error(`Adapter ${adapter.pluginId} does not match manifest ${manifest.id}.`)

@@ -1,5 +1,4 @@
 import { loadConfig } from '../../config'
-import { existingProviderRuntimeCapability } from '../runtime'
 import type { AgentAdapter, AgentAdapterMetadata, AgentDetectionResult } from '../types'
 
 const DEFAULT_BASE_URL = 'http://localhost:11434'
@@ -63,16 +62,12 @@ const metadata: AgentAdapterMetadata = {
   kind: 'local',
   executableName: 'ollama',
   status: 'unknown',
-  description: 'Local model integration used by the Local provider, router classifier, Test Lab, and local executor loop.',
+  description: 'Local model integration used by the Local provider, router classifier, Benchmark, and autonomous execution.',
   capabilities: ['chat', 'streaming', 'file_patch', 'test_generation', 'mission_planning'],
   currentIntegrationNotes: [
     'Provider runtime lives in src/main/providers/local.ts.',
     'Connection and LAN sharing controls live in src/main/ollama-connection.ts.',
     'Local executor support validates structured workspace patch attempts before applying them.'
-  ],
-  futureIntegrationNotes: [
-    'Promote local models into the AgentAdapter registry while preserving no-API-key local-first behavior.',
-    'Use the future Mission Engine to choose local models for safe patch attempts and test generation.'
   ],
   safetyNotes: [
     'Detection only probes the configured local HTTP endpoint and does not auto-start Ollama.',
@@ -82,9 +77,5 @@ const metadata: AgentAdapterMetadata = {
 
 export const ollamaAgentAdapter: AgentAdapter = {
   metadata,
-  detect: detectOllama,
-  getRuntimeCapabilities: () =>
-    existingProviderRuntimeCapability({
-      canStream: true
-    })
+  detect: detectOllama
 }
