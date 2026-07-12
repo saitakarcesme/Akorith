@@ -13,6 +13,7 @@ import type {
   LoopValidationResult,
   RepositorySnapshot
 } from './types'
+import { recordTelemetryEvent } from '../telemetry'
 
 const LEASE_TTL_MS = 90_000
 const LEASE_HEARTBEAT_MS = 30_000
@@ -261,6 +262,10 @@ export class AutonomousLoopEngine {
 
       const now = this.dependencies.now()
       cycle = this.store.createCycle(initialCycle(loop, randomUUID(), this.store.nextCycleIndex(loop.id), now))
+      recordTelemetryEvent({
+        kind: 'loop_cycle', loopId: loop.id, occurredAt: now, outcome: 'started',
+        cycleIndex: cycle.index, taskType: 'loop', correlationId: cycle.id
+      })
       this.store.setLoopState(loop.id, {
         status: 'running', stage: 'observing', activeCycleId: cycle.id, startedAt: loop.startedAt ?? now,
         lastActivityAt: now, nextCycleAt: null, error: null
@@ -402,6 +407,10 @@ export class AutonomousLoopEngine {
           loopId, cycleId: cycle.id, stage: 'scheduling', level: 'warning', kind: 'task-reverted',
           title: 'Task reverted safely', summary: 'The repair ceiling was reached; Loop will select a different task next.'
         })
+        recordTelemetryEvent({
+          kind: 'loop_cycle', loopId: loop.id, occurredAt: finishedAt, outcome: 'reverted',
+          cycleIndex: cycle.index, durationMs: cycle.durationMs ?? undefined, taskType: 'loop', correlationId: cycle.id
+        })
         return { loopId, cycleId: cycle.id, outcome: 'reverted', nextCycleAt, error: cycle.error }
       }
 
@@ -417,6 +426,10 @@ export class AutonomousLoopEngine {
         loopId, cycleId: cycle.id, stage: 'committing', level: 'success', kind: 'commit-created',
         title: 'Commit created', summary: `${committed.sha.slice(0, 10)} ${commitMessage}`,
         details: { files: committed.paths.length }
+      })
+      recordTelemetryEvent({
+        kind: 'git_commit', repositoryId: loop.repositoryId, occurredAt: this.dependencies.now(),
+        outcome: 'completed', commitSha: committed.sha, taskType: 'git', correlationId: cycle.id, metadata: { loopId: loop.id }
       })
 
       cycle = this.setStage(loop, cycle, 'pushing')
@@ -460,6 +473,14 @@ export class AutonomousLoopEngine {
         title: 'Task committed and pushed', summary: `${planned.value.title} is now on ${loop.branch}.`,
         details: { commit: cycle.commitSha, files: cycle.changedFiles.length }
       })
+      recordTelemetryEvent({
+        kind: 'git_push', repositoryId: loop.repositoryId, occurredAt: finishedAt,
+        outcome: 'completed', remoteName: 'origin', branch: loop.branch, taskType: 'git', correlationId: cycle.id, metadata: { loopId: loop.id }
+      })
+      recordTelemetryEvent({
+        kind: 'loop_cycle', loopId: loop.id, occurredAt: finishedAt, outcome: 'completed',
+        cycleIndex: cycle.index, durationMs: cycle.durationMs ?? undefined, taskType: 'loop', correlationId: cycle.id
+      })
       return { loopId, cycleId: cycle.id, outcome: 'pushed', nextCycleAt, error: null }
     } catch (error) {
       const current = this.store.getLoop(loopId) ?? loop
@@ -477,6 +498,10 @@ export class AutonomousLoopEngine {
           finishedAt,
           durationMs: cycle.startedAt === null ? null : finishedAt - cycle.startedAt,
           error: cancelled ? 'Cycle cancelled at a safe boundary.' : asMessage(error)
+        })
+        recordTelemetryEvent({
+          kind: 'loop_cycle', loopId, occurredAt: finishedAt, outcome: cancelled ? 'cancelled' : 'failed',
+          cycleIndex: cycle.index, durationMs: cycle.durationMs ?? undefined, taskType: 'loop', correlationId: cycle.id
         })
       }
       if (control !== 'continue') return this.finishControlState(current, control)
