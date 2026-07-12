@@ -64,77 +64,85 @@ function AppChrome({
   drawerOpen: boolean
   onToggleDrawer: () => void
 }): JSX.Element {
-  const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
+  const isMac = /Mac/i.test(navigator.platform)
+  const isWindows = /Win/i.test(navigator.platform)
+  const hasCustomWindowControls = Boolean(window.api?.windowControls) && isMac
 
   return (
-    <header className="app-chrome">
-      {hasWindowControls && (
-        <div className="app-window-controls" aria-label="Window controls">
+    <header className={`app-chrome ${isMac ? 'is-mac' : isWindows ? 'is-windows' : 'is-linux'}`}>
+      <div className="app-chrome-sidebar-segment">
+        {hasCustomWindowControls && (
+          <div className="app-window-controls" aria-label="Window controls">
+            <button
+              type="button"
+              className="app-window-control is-close"
+              aria-label="Close window"
+              title="Close"
+              onClick={() => void window.api.windowControls.close()}
+            />
+            <button
+              type="button"
+              className="app-window-control is-minimize"
+              aria-label="Minimize window"
+              title="Minimize"
+              onClick={() => void window.api.windowControls.minimize()}
+            />
+            <button
+              type="button"
+              className="app-window-control is-fullscreen"
+              aria-label="Toggle fullscreen"
+              title="Fullscreen"
+              onClick={() => void window.api.windowControls.toggleFullscreen()}
+            />
+          </div>
+        )}
+        <div className="app-chrome-left">
           <button
             type="button"
-            className="app-window-control is-close"
-            aria-label="Close window"
-            title="Close"
-            onClick={() => void window.api.windowControls.close()}
-          />
-          <button
-            type="button"
-            className="app-window-control is-minimize"
-            aria-label="Minimize window"
-            title="Minimize"
-            onClick={() => void window.api.windowControls.minimize()}
-          />
-          <button
-            type="button"
-            className="app-window-control is-fullscreen"
-            aria-label="Toggle fullscreen"
-            title="Fullscreen"
-            onClick={() => void window.api.windowControls.toggleFullscreen()}
-          />
+            className="app-chrome-icon"
+            title="Toggle sidebar"
+            aria-label="Toggle sidebar"
+            onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
+          >
+            <PanelsIcon size={14} />
+          </button>
+          <button type="button" className="app-chrome-nav" title="Back" aria-label="Go back" disabled={!canGoBack} onClick={onBack}>
+            <ChevronIcon size={15} direction="left" />
+          </button>
+          <button type="button" className="app-chrome-nav" title="Forward" aria-label="Go forward" disabled={!canGoForward} onClick={onForward}>
+            <ChevronIcon size={15} direction="right" />
+          </button>
         </div>
-      )}
-      <div className="app-chrome-left">
-        <button
-          type="button"
-          className="app-chrome-icon"
-          title="Toggle sidebar"
-          onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
-        >
-          <PanelsIcon size={14} />
-        </button>
-        <button type="button" className="app-chrome-nav" title="Back" disabled={!canGoBack} onClick={onBack}>
-          <ChevronIcon size={15} direction="left" />
-        </button>
-        <button type="button" className="app-chrome-nav" title="Forward" disabled={!canGoForward} onClick={onForward}>
-          <ChevronIcon size={15} direction="right" />
-        </button>
       </div>
-      <div className="app-chrome-title">
-        <span>{title}</span>
-        {scope && <span className="app-chrome-scope">{scope}</span>}
-      </div>
-      <div className="app-chrome-right">
-        {showWorkbench && (
-          <button
-            type="button"
-            className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
-            onClick={onToggleWorkbench}
-            title="Toggle the bottom workbench (changes, runtime, missions)"
-          >
-            Workbench
-          </button>
-        )}
-        {showActivity && (
-          <button
-            type="button"
-            className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
-            onClick={onToggleDrawer}
-            title="Show agent terminals"
-          >
-            <SparkIcon size={14} />
-            Activity
-          </button>
-        )}
+      <div className="app-chrome-main-segment">
+        <div className="app-chrome-title">
+          <span>{title}</span>
+          {scope && <span className="app-chrome-scope">{scope}</span>}
+        </div>
+        <div className="app-chrome-right">
+          {showWorkbench && (
+            <button
+              type="button"
+              className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
+              onClick={onToggleWorkbench}
+              title="Toggle the bottom workbench (changes, runtime, missions)"
+            >
+              Workbench
+            </button>
+          )}
+          {showActivity && (
+            <button
+              type="button"
+              className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
+              onClick={onToggleDrawer}
+              title="Show agent terminals"
+            >
+              <SparkIcon size={14} />
+              Activity
+            </button>
+          )}
+        </div>
+        <div className="app-native-controls-reserve" aria-hidden="true" />
       </div>
     </header>
   )
@@ -535,6 +543,7 @@ export default function App(): JSX.Element {
         onProjectsChange={bumpProjects}
         onChromeWidthChange={setChromeSidebarWidth}
       />
+      <main className="app-content">
       {/* Chat-first workspace. Terminals are not part of this column anymore —
           they live in the AgentDrawer overlay (kept mounted to stay alive). */}
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
@@ -580,6 +589,7 @@ export default function App(): JSX.Element {
         <CompanionsPage active={view === 'companions'} />
       </div>
       {view === 'agents' && <AgentsPage active={view === 'agents'} />}
+      </main>
       </div>
     </div>
   )

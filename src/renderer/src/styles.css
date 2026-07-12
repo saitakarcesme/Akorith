@@ -214,30 +214,58 @@ textarea:focus-visible {
 /* ---------- top-level 3-region layout ---------- */
 
 .app {
-  display: flex;
+  display: grid;
+  grid-template-rows: var(--app-chrome-height) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   position: relative;
   height: 100%;
-  background: transparent;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
 }
 
 .app-chrome {
-  position: fixed;
-  inset: 0 0 auto 0;
+  grid-row: 1;
+  grid-column: 1;
   z-index: 120;
-  height: var(--app-chrome-height);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--chrome-sidebar-width) minmax(0, 1fr);
   color: var(--text-dim);
-  background: transparent;
-  border-bottom: 0;
+  background: var(--bg);
   user-select: none;
   -webkit-app-region: drag;
 }
 
-.app-chrome > * {
-  z-index: 1;
+.app-chrome-sidebar-segment {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  background: rgba(23, 23, 28, 0.78);
+  -webkit-app-region: drag;
+}
+
+.app-chrome-main-segment {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto var(--native-window-controls-width, 0px);
+  align-items: center;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+  -webkit-app-region: drag;
+}
+
+.app-chrome.is-windows {
+  --native-window-controls-width: 142px;
+}
+
+.app-native-controls-reserve {
+  width: var(--native-window-controls-width, 0px);
+  height: 100%;
+  pointer-events: none;
 }
 
 .app-window-controls {
@@ -310,27 +338,26 @@ textarea:focus-visible {
 }
 
 .app-chrome-left {
-  position: absolute;
-  left: 92px;
-  top: 0;
+  margin-left: 14px;
   height: var(--app-chrome-height);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   -webkit-app-region: no-drag;
 }
 
+.app-chrome.is-mac .app-chrome-left {
+  margin-left: 88px;
+}
+
 .app-chrome-title {
-  position: absolute;
-  left: max(calc(var(--chrome-sidebar-width) + 28px), 272px);
-  right: 260px;
-  top: 0;
+  min-width: 0;
   height: var(--app-chrome-height);
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
+  padding: 0 22px;
   color: var(--text);
   font-size: 14px;
   font-weight: 650;
@@ -357,13 +384,11 @@ textarea:focus-visible {
 }
 
 .app-chrome-right {
-  position: absolute;
-  right: 18px;
-  top: 0;
   height: var(--app-chrome-height);
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-right: 14px;
   -webkit-app-region: no-drag;
 }
 
@@ -394,15 +419,24 @@ textarea:focus-visible {
 }
 
 .app-main {
-  flex: 1 1 0;
+  grid-row: 2;
+  grid-column: 1;
   min-height: 0;
   min-width: 0;
-  display: flex;
-  background: transparent;
+  display: grid;
+  grid-template-columns: var(--chrome-sidebar-width) minmax(0, 1fr);
+  background: var(--bg);
+  overflow: hidden;
 }
 
-.app-main > :not(.sidebar) {
-  padding-top: var(--app-chrome-height);
+.app-content {
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
 }
 
 .app[data-theme='dark'] {
@@ -531,10 +565,12 @@ textarea:focus-visible {
 /* ---------- left sidebar ---------- */
 
 .sidebar {
+  grid-column: 1;
   position: relative;
-  flex: 0 0 var(--sidebar-width);
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  height: 100%;
+  min-height: 0;
   display: block;
   /* Light/white product navigation. Sidebar gets its own token scope so the
      dark workspace tokens never leak in — dark text + gray icons on white. */
@@ -600,7 +636,7 @@ textarea:focus-visible {
   min-width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  padding-top: var(--app-chrome-height);
+  padding-top: 0;
   background: var(--sidebar-bg);
   backdrop-filter: blur(120px) saturate(1.55);
   -webkit-backdrop-filter: blur(120px) saturate(1.55);
@@ -632,11 +668,11 @@ textarea:focus-visible {
 
 .sidebar.is-collapsed .sidebar-surface {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: var(--app-chrome-height) auto 0 0;
   z-index: 80;
   width: min(var(--sidebar-peek-width), calc(100vw - 24px));
   min-width: 0;
-  height: 100vh;
+  height: calc(100vh - var(--app-chrome-height));
   border-right: 1px solid var(--sidebar-border);
   border-radius: 0 8px 8px 0;
   box-shadow: none;
