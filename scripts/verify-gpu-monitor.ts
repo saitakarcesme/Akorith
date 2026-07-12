@@ -4,11 +4,13 @@ import {
   GpuMonitor,
   NVIDIA_SMI_ARGS,
   NVIDIA_SMI_EXECUTABLE,
+  NVIDIA_SMI_PROCESS_ARGS,
   NvidiaSmiGpuSource,
   RemoteNodeGpuSource,
   normalizeGpuDevice,
   normalizeMetric,
   parseNvidiaSmiOutput,
+  parseNvidiaProcessOutput,
   validateGpuObservation,
   type FixedGpuCommandRequest,
   type FixedGpuCommandRunner,
@@ -61,21 +63,26 @@ equal(parsedCsv.devices.length, 1, 'only valid measured NVIDIA rows are retained
 equal(parsedCsv.devices[0]?.name, 'RTX, Fixture', 'quoted CSV device names are parsed safely')
 equal(parsedCsv.devices[0]?.powerWatts, 185.5, 'NVIDIA power is normalized')
 equal(parsedCsv.warnings.length, 2, 'invalid NVIDIA rows produce bounded warnings')
+const parsedProcesses = parseNvidiaProcessOutput('GPU-abc, ollama.exe, 12288\nGPU-abc, helper.exe, 64\n')
+equal(parsedProcesses.byGpuUuid.get('GPU-abc'), 'ollama.exe', 'largest measured GPU process is attributed')
 
-let capturedCommand: FixedGpuCommandRequest | undefined
+const capturedCommands: FixedGpuCommandRequest[] = []
 const fixtureRunner: FixedGpuCommandRunner = {
   async run(request: FixedGpuCommandRequest) {
-    capturedCommand = request
+    capturedCommands.push(request)
+    if (request.args === NVIDIA_SMI_PROCESS_ARGS) return { stdout: 'GPU-123, ollama.exe, 12000\n', stderr: '' }
     return { stdout: '0, GPU-123, RTX 3090, 73, 12000, 24576, 68, 282.4\n', stderr: '' }
   }
 }
 const nvidia = new NvidiaSmiGpuSource({ runner: fixtureRunner, platform: () => 'win32', now: () => 50_000 })
 const nvidiaObservation = await nvidia.sample(new AbortController().signal)
 equal(nvidiaObservation.status, 'observed', 'supported NVIDIA fixture is observed')
-check(capturedCommand !== undefined, 'NVIDIA source invoked its fixed runner')
-equal(capturedCommand.executable, NVIDIA_SMI_EXECUTABLE, 'NVIDIA executable is fixed')
-deepEqual(capturedCommand.args, NVIDIA_SMI_ARGS, 'NVIDIA arguments are fixed')
-equal(capturedCommand.maxOutputBytes, 128 * 1024, 'NVIDIA command output is bounded')
+check(capturedCommands.length === 2, 'NVIDIA source invoked fixed device and process queries')
+equal(capturedCommands[0]?.executable, NVIDIA_SMI_EXECUTABLE, 'NVIDIA executable is fixed')
+deepEqual(capturedCommands[0]?.args, NVIDIA_SMI_ARGS, 'NVIDIA device arguments are fixed')
+deepEqual(capturedCommands[1]?.args, NVIDIA_SMI_PROCESS_ARGS, 'NVIDIA process arguments are fixed')
+equal(capturedCommands[0]?.maxOutputBytes, 128 * 1024, 'NVIDIA command output is bounded')
+if (nvidiaObservation.status === 'observed') equal(nvidiaObservation.devices[0]?.processName, 'ollama.exe', 'local process attribution reaches observation')
 
 let unsupportedInvocations = 0
 const unsupported = new NvidiaSmiGpuSource({

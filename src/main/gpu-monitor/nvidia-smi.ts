@@ -8,6 +8,10 @@ export const NVIDIA_SMI_ARGS = Object.freeze([
   '--query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw',
   '--format=csv,noheader,nounits'
 ] as const)
+export const NVIDIA_SMI_PROCESS_ARGS = Object.freeze([
+  '--query-compute-apps=gpu_uuid,process_name,used_gpu_memory',
+  '--format=csv,noheader,nounits'
+] as const)
 
 const MAX_NVIDIA_OUTPUT_BYTES = 128 * 1024
 const DEFAULT_TIMEOUT_MS = 3_000
@@ -139,6 +143,30 @@ export function parseNvidiaSmiOutput(stdout: string): ParsedNvidiaSmiOutput {
   return { devices, warnings }
 }
 
+export interface ParsedNvidiaProcesses {
+  byGpuUuid: Map<string, string>
+  warnings: string[]
+}
+
+export function parseNvidiaProcessOutput(stdout: string): ParsedNvidiaProcesses {
+  const candidates = new Map<string, { name: string; memoryMb: number }>()
+  const warnings: string[] = []
+  const lines = stdout.split(/\r?\n/).filter((line) => line.trim())
+  for (let row = 0; row < lines.length; row += 1) {
+    const fields = parseCsvLine(lines[row]!)
+    const uuid = fields?.[0]?.trim()
+    const name = fields?.[1]?.trim()
+    const memoryMb = Number(fields?.[2])
+    if (!fields || fields.length !== 3 || !uuid || !name || !Number.isFinite(memoryMb)) {
+      warnings.push(`Ignored malformed nvidia-smi process row ${row + 1}.`)
+      continue
+    }
+    const current = candidates.get(uuid)
+    if (!current || memoryMb > current.memoryMb) candidates.set(uuid, { name, memoryMb })
+  }
+  return { byGpuUuid: new Map([...candidates].map(([uuid, value]) => [uuid, value.name])), warnings }
+}
+
 export interface NvidiaSmiGpuSourceOptions {
   runner?: FixedGpuCommandRunner
   timeoutMs?: number
@@ -197,7 +225,27 @@ export class NvidiaSmiGpuSource implements GpuSampleSource {
           warnings: parsed.warnings
         }
       }
-      return { status: 'observed', observedAt: this.now(), devices: parsed.devices, warnings: parsed.warnings }
+      let devices = parsed.devices
+      const warnings = [...parsed.warnings]
+      try {
+        const processes = await this.runner.run({
+          executable: NVIDIA_SMI_EXECUTABLE,
+          args: NVIDIA_SMI_PROCESS_ARGS,
+          timeoutMs: this.timeoutMs,
+          maxOutputBytes: MAX_NVIDIA_OUTPUT_BYTES,
+          signal
+        })
+        const parsedProcesses = parseNvidiaProcessOutput(processes.stdout)
+        warnings.push(...parsedProcesses.warnings)
+        devices = devices.map((device) => {
+          const processName = parsedProcesses.byGpuUuid.get(device.id)
+          return processName ? { ...device, processName } : device
+        })
+      } catch (error) {
+        if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error
+        warnings.push('GPU process attribution is unavailable from nvidia-smi.')
+      }
+      return { status: 'observed', observedAt: this.now(), devices, warnings }
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error
       const missing = error instanceof FixedGpuCommandError && error.code === 'ENOENT'
