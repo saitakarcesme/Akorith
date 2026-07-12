@@ -1,7 +1,7 @@
 {
   "name": "akorith",
   "productName": "Akorith",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Akorith — orchestrate AI coding agents (Claude/Codex CLIs, local Ollama) with no API keys",
   "author": "Akorith",
   "main": "./out/main/index.js",
@@ -36,11 +36,18 @@
     "verify:testlab": "tsx scripts/verify-testlab.ts",
     "verify:telemetry": "node scripts/run-electron-typescript.mjs scripts/verify-telemetry.ts",
     "verify:autonomous-loop": "node scripts/run-electron-typescript.mjs scripts/verify-autonomous-loop.ts",
+    "verify:autonomous-engine": "node scripts/run-electron-typescript.mjs scripts/verify-autonomous-engine.ts",
+    "verify:loop-onboarding": "node scripts/run-electron-typescript.mjs scripts/verify-loop-onboarding.ts",
     "verify:model-catalog": "tsx scripts/verify-model-catalog.ts",
     "verify:model-catalog-store": "node scripts/run-electron-typescript.mjs scripts/verify-model-catalog-store.ts",
+    "verify:model-catalog-service": "node scripts/run-electron-typescript.mjs scripts/verify-model-catalog-service.ts",
     "verify:repository": "tsx scripts/verify-repository-service.ts",
     "verify:remote-node": "tsx scripts/verify-remote-node.ts",
-    "verify:existing": "npm run verify:agentic-loop && npm run verify:bridge-autoenter && npm run verify:conversation-context && npm run verify:critic-loop && npm run verify:external-url && npm run verify:macro-loop && npm run verify:startup-hydration && npm run verify:local-runtime && npm run verify:local-executor && npm run verify:workspace-loop && npm run verify:project-loop && npm run verify:controller && npm run verify:testlab && npm run verify:telemetry && npm run verify:autonomous-loop && npm run verify:model-catalog && npm run verify:model-catalog-store && npm run verify:repository && npm run verify:remote-node && npm run verify:plugins && npm run verify:windows-identity",
+    "verify:benchmark-lab": "tsx scripts/verify-benchmark-lab.ts",
+    "verify:benchmark-store": "node scripts/run-electron-typescript.mjs scripts/verify-benchmark-store.ts",
+    "verify:gpu-monitor": "tsx scripts/verify-gpu-monitor.ts",
+    "verify:packaged-updater": "tsx scripts/verify-packaged-updater.ts",
+    "verify:existing": "npm run verify:agentic-loop && npm run verify:bridge-autoenter && npm run verify:conversation-context && npm run verify:critic-loop && npm run verify:external-url && npm run verify:macro-loop && npm run verify:startup-hydration && npm run verify:local-runtime && npm run verify:local-executor && npm run verify:workspace-loop && npm run verify:project-loop && npm run verify:controller && npm run verify:testlab && npm run verify:telemetry && npm run verify:autonomous-loop && npm run verify:autonomous-engine && npm run verify:loop-onboarding && npm run verify:model-catalog && npm run verify:model-catalog-store && npm run verify:model-catalog-service && npm run verify:repository && npm run verify:remote-node && npm run verify:benchmark-lab && npm run verify:benchmark-store && npm run verify:gpu-monitor && npm run verify:packaged-updater && npm run verify:plugins && npm run verify:windows-identity",
     "verify": "npm run typecheck && npm test && npm run test:native && npm run verify:existing",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
@@ -66,6 +73,7 @@
   "build": {
     "appId": "com.akorith.app",
     "productName": "Akorith",
+    "generateUpdatesFilesForAllChannels": true,
     "copyright": "Copyright © 2026 Akorith",
     "npmRebuild": false,
     "directories": {
@@ -93,6 +101,11 @@
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
       "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
         "dmg",
@@ -141,6 +154,14 @@
     "portable": {
       "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "saitakarcesme",
+        "repo": "Akorith",
+        "releaseType": "release"
+      }
+    ],
     "linux": {
       "icon": "build/icon.png",
       "category": "Development",
@@ -153,6 +174,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "better-sqlite3": "^12.10.0",
+    "electron-updater": "6.8.9",
     "node-pty": "^1.1.0",
     "pdfkit": "^0.19.1",
     "react": "^18.3.1",

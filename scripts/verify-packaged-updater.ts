@@ -234,7 +234,7 @@ async function main(): Promise<void> {
     macNotarizationCredentialSignal: false,
     windowsSigningCredentialSignal: false
   })
-  check(current.status === 'blocked' && !current.electronUpdaterDeclared && !current.feedConfigured, 'current build honestly reports missing updater dependency and publication feed')
+  check(current.electronUpdaterDeclared && current.feedConfigured && current.stableChannelReady, 'current build declares updater dependency and public release feed')
   check(current.checks.some((item) => item.code === 'MAC_SIGNING_CREDENTIALS_MISSING'), 'current macOS signing readiness is not overstated')
   check(current.checks.some((item) => item.code === 'WINDOWS_SIGNING_CREDENTIALS_MISSING'), 'current Windows signing readiness is not overstated')
 
