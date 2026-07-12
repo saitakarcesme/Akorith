@@ -23,13 +23,15 @@ import { disposeUpdateIpc, registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
 import { registerAgentRegistryIpc } from './agents/registry'
 import { registerMissionIpc } from './missions/inspector'
-import { closeDb, ensureDbReady, registerDbIpc } from './db'
+import { closeDb, ensureDbReady, getDb, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
 import { validateExternalUrl } from './security/external-url'
 import { registerAutonomousLoopIpc, unregisterAutonomousLoopIpc } from './autonomous-loop/ipc'
 import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonomous-loop/runtime'
+import { registerDashboardTelemetryIpc } from './dashboard'
+import { startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -417,6 +419,7 @@ async function initializeStartupData(): Promise<void> {
   if (process.env.AKORITH_SKIP_DB_INIT === '1') return
   try {
     await ensureDbReady()
+    startGpuMonitor(getDb())
     resumeActiveAutoLoopsAtStartup()
     await startAutonomousLoopRuntime()
   } catch (err) {
@@ -431,6 +434,7 @@ app.whenReady().then(() => {
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
   registerAutonomousLoopIpc()
+  registerDashboardTelemetryIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -475,6 +479,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   unregisterAutonomousLoopIpc()
   stopAutonomousLoopRuntime()
+  void stopGpuMonitor()
   disposeUpdateIpc()
   ptyManager.killAll()
   closeDb()
