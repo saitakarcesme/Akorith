@@ -5,6 +5,9 @@
   --sidebar-glass-border: rgba(255, 255, 255, 0.065);
   --sidebar-glass-hover: rgba(255, 255, 255, 0.075);
   --sidebar-glass-active: rgba(255, 255, 255, 0.115);
+  --sidebar-row-inline: 6px;
+  --sidebar-leading-slot: 22px;
+  --sidebar-label-start: calc(var(--sidebar-row-inline) + var(--sidebar-leading-slot));
 }
 
 .app-chrome-sidebar-segment,
@@ -134,4 +137,51 @@
 .sidebar-more-menu button.is-active {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.085);
+}
+
+.project-list {
+  padding-left: 0;
+}
+
+.project-row {
+  display: grid;
+  grid-template-columns: var(--sidebar-leading-slot) minmax(0, 1fr) auto;
+  column-gap: 0;
+  padding-inline: var(--sidebar-row-inline);
+}
+
+.project-disclosure {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: 0;
+}
+
+.project-text {
+  grid-column: 2;
+  width: 100%;
+  overflow: hidden;
+}
+
+.project-row-actions {
+  grid-column: 3;
+}
+
+.project-chats {
+  margin: 1px 0 6px;
+  padding-left: 0;
+}
+
+.project-chat,
+.recent-section .recent-chat {
+  padding-left: var(--sidebar-label-start);
+}
+
+.project-chat-title,
+.project-name,
+.recent-chat-text,
+.recent-chat-text > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
