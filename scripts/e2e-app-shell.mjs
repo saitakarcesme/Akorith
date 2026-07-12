@@ -45,7 +45,7 @@ try {
   assert.ok(layout.contentTop >= layout.chromeBottom - 0.5, 'main content must start below the title bar')
   assert.equal(layout.sidebarChromeBackground, layout.sidebarBackground, 'sidebar and title-bar segment share one background stack')
 
-  const more = page.getByRole('button', { name: 'More' })
+  const more = page.locator('.sidebar-more-trigger')
   await more.click()
   const destinations = await page.getByRole('menu', { name: 'More destinations' }).getByRole('menuitem').allTextContents()
   assert.deepEqual(destinations.map((value) => value.trim()), ['Loop', 'Benchmark', 'Plugins'])

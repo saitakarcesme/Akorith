@@ -552,7 +552,7 @@ export default function Sidebar({
       )}
 
       <aside
-        className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
+        className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''} ${moreOpen ? 'has-more-menu' : ''}`}
         style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
         onMouseEnter={revealSidebar}
         onPointerEnter={revealSidebar}

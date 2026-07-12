@@ -75,6 +75,13 @@
   overflow: visible;
 }
 
+/* Backdrop-filter makes the sidebar surface its own stacking context. Keep the
+   sidebar above the adjacent workspace so the More flyout remains clickable
+   when it extends past the navigation column. */
+.sidebar.has-more-menu {
+  z-index: 100;
+}
+
 .sidebar-scroll {
   overflow-x: hidden;
   overflow-y: auto;
