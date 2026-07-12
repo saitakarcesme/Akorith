@@ -379,6 +379,12 @@ const autonomousLoop = Object.freeze({
   }
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const dashboardTelemetry = Object.freeze({
+  loadOverview: (): Promise<unknown> => ipcRenderer.invoke('dashboardTelemetry:overview'),
+  loadHeatmap: (mode: 'daily' | 'weekly' | 'cumulative'): Promise<unknown> => ipcRenderer.invoke('dashboardTelemetry:heatmap', mode),
+  loadGpuSnapshot: (): Promise<unknown> => ipcRenderer.invoke('dashboardTelemetry:gpu')
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)

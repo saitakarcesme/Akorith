@@ -1890,6 +1890,12 @@ export interface PluginsApi {
   configure(id: string): Promise<unknown>
 }
 
+export interface DashboardTelemetryApi {
+  loadOverview(): Promise<unknown>
+  loadHeatmap(mode: 'daily' | 'weekly' | 'cumulative'): Promise<unknown>
+  loadGpuSnapshot(): Promise<unknown>
+}
+
 export type UpdateChannel = 'stable' | 'beta'
 export type PackagedUpdatePhase = 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
 
@@ -2109,6 +2115,7 @@ export interface PreloadApi {
   git: GitApi
   gpu: GpuApi
   telemetry: TelemetryApi
+  dashboardTelemetry: DashboardTelemetryApi
   controller: ControllerApi
   plugins: PluginsApi
   update: UpdateApi
