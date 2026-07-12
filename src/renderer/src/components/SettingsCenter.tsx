@@ -28,7 +28,7 @@ import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
 import UpdatePanel from './UpdatePanel'
 
-type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'runtimes' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -704,7 +704,7 @@ export default function SettingsCenter({
   const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
-    { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
+    { id: 'runtimes', label: 'Models & runtimes', kicker: 'Availability and diagnostics' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
     { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
@@ -1106,15 +1106,15 @@ export default function SettingsCenter({
             </section>
           )}
 
-          {activeTab === 'agents' && (
+          {activeTab === 'runtimes' && (
             <section className="settings-section">
               <div className="settings-section-head">
                 <div>
-                  <h2>Agent Hub</h2>
-                  <p>Read-only Agent OS foundation for current and future adapters.</p>
+                  <h2>Runtime catalog</h2>
+                  <p>Read-only availability and capability diagnostics for execution adapters.</p>
                 </div>
                 <button type="button" disabled={agentBusy !== null} onClick={() => void detectAllAgents()}>
-                  {agentBusy === 'all' ? 'Detecting...' : 'Detect all'}
+                  {agentBusy === 'all' ? 'Detecting...' : 'Detect runtimes'}
                 </button>
               </div>
               <div className="agent-hub-list">
@@ -1247,7 +1247,7 @@ export default function SettingsCenter({
                           <div className="agent-session-detail">
                             <div className="agent-session-fields">
                               <div><span>Session id</span><strong>{shortId(session.id, 12)}</strong></div>
-                              <div><span>Agent</span><strong>{session.agentId}</strong></div>
+                              <div><span>Adapter</span><strong>{session.agentId}</strong></div>
                               <div><span>Mode</span><strong>{session.mode}</strong></div>
                               <div><span>Origin</span><strong>{session.origin}</strong></div>
                               <div><span>Status</span><strong>{session.status}</strong></div>
