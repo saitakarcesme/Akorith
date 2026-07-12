@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
+import { TelemetryStore } from '../telemetry/store'
 import {
   type AutonomousLoopRecord,
   type AutonomousLoopStage,
@@ -382,6 +383,7 @@ export class AutonomousLoopStore {
 
   recordModelCall(input: LoopModelCallInput): string {
     const id = randomUUID()
+    const occurredAt = input.occurredAt ?? Date.now()
     this.database.prepare(`
       INSERT INTO autonomous_loop_model_calls (
         id, loop_id, cycle_id, occurred_at, role, attempt_index, provider_id, model, catalog_id,
@@ -389,12 +391,43 @@ export class AutonomousLoopStore {
         estimated, outcome, error_code
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, input.loopId, input.cycleId ?? null, input.occurredAt ?? Date.now(), input.role,
+      id, input.loopId, input.cycleId ?? null, occurredAt, input.role,
       input.attemptIndex ?? 0, input.providerId, input.model, input.catalogId, input.location,
       input.nodeId ?? null, input.durationMs, input.tokenUsage.input, input.tokenUsage.output,
       input.tokenUsage.cached, input.tokenUsage.costUsd, input.estimated ? 1 : 0, input.outcome,
       input.errorCode ?? null
     )
+    const hasTelemetry = Boolean(this.database.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'telemetry_events'"
+    ).get())
+    if (!hasTelemetry) return id
+    const telemetry = new TelemetryStore(this.database)
+    const requestId = `loop:${id}`
+    const taskType = input.role === 'planner' ? 'planning' : input.role === 'reviewer' ? 'review' : 'code_edit'
+    const common = {
+      providerId: input.providerId,
+      model: input.model,
+      location: input.location,
+      nodeId: input.nodeId,
+      taskType,
+      correlationId: input.cycleId ?? input.loopId,
+      metadata: { loopRole: input.role, attemptIndex: input.attemptIndex ?? 0 }
+    } as const
+    try {
+      telemetry.recordMany([
+        { kind: 'model_request_started', requestId, occurredAt: Math.max(0, occurredAt - input.durationMs), ...common },
+        input.outcome === 'completed'
+          ? { kind: 'model_request_completed', requestId, occurredAt, durationMs: input.durationMs, ...common }
+          : { kind: 'model_request_failed', requestId, occurredAt, durationMs: input.durationMs, errorCode: input.errorCode, ...common },
+        {
+          kind: 'token_usage', requestId, occurredAt, promptTokens: input.tokenUsage.input,
+          completionTokens: input.tokenUsage.output, cachedTokens: input.tokenUsage.cached,
+          costUsd: input.tokenUsage.costUsd, estimated: input.estimated, ...common
+        }
+      ])
+    } catch (error) {
+      console.warn('[telemetry] loop model-call mirror failed:', error instanceof Error ? error.message : String(error))
+    }
     return id
   }
 
