@@ -2,14 +2,13 @@ import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, us
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
-  AgentsIcon,
   ChartIcon,
   ChevronIcon,
-  CompanionsIcon,
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
   LoopIcon,
+  MoreIcon,
   PanelsIcon,
   PluginIcon,
   PlusIcon,
@@ -47,14 +46,17 @@ interface SidebarProps {
 
 // Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
 // above Workspace instead (see below). Workspace stays project-scoped.
-const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
+type NavItem = { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }
+
+const NAV_ITEMS: NavItem[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
+  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon }
+]
+
+const MORE_NAV_ITEMS: NavItem[] = [
   { view: 'loops', label: 'Loop', icon: LoopIcon },
-  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
-  { view: 'plugins', label: 'Plugins', icon: PluginIcon },
-  { view: 'companions', label: 'Companions', icon: CompanionsIcon },
-  { view: 'agents', label: 'Agents', icon: AgentsIcon }
+  { view: 'plugins', label: 'Plugins', icon: PluginIcon }
 ]
 
 function storageBoolean(key: string, fallback: boolean): boolean {
@@ -170,6 +172,9 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreTriggerRef = useRef<HTMLButtonElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   // Phase 14.3/14.4: per-project overflow menu + inline rename + remove confirm.
   // The menu is rendered fixed-position (anchored to the clicked button's rect)
   // so the Projects list's own `overflow-y: auto` cannot clip it.
@@ -206,6 +211,18 @@ export default function Sidebar({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    moreMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      setMoreOpen(false)
+      moreTriggerRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [moreOpen])
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -587,6 +604,57 @@ export default function Sidebar({
             </button>
           )
         })}
+        <div className={`sidebar-more ${MORE_NAV_ITEMS.some((item) => item.view === view) ? 'has-active-item' : ''}`}>
+          <button
+            ref={moreTriggerRef}
+            type="button"
+            className="sidebar-more-trigger"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            title="More"
+            onClick={() => setMoreOpen((current) => !current)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setMoreOpen(true)
+              }
+            }}
+          >
+            <MoreIcon size={17} />
+            <span>More</span>
+          </button>
+          {moreOpen && (
+            <>
+              <button
+                type="button"
+                className="sidebar-more-backdrop"
+                aria-label="Close More menu"
+                onClick={() => setMoreOpen(false)}
+              />
+              <div ref={moreMenuRef} className="sidebar-more-menu" role="menu" aria-label="More destinations">
+                {MORE_NAV_ITEMS.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.view}
+                      type="button"
+                      role="menuitem"
+                      className={view === item.view ? 'is-active' : ''}
+                      onClick={() => {
+                        setMoreOpen(false)
+                        onNavigate(item.view)
+                      }}
+                      title={item.label}
+                    >
+                      <Icon size={17} />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </nav>
 
       <div className="sidebar-scroll">
