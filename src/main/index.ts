@@ -155,12 +155,13 @@ function resolveAppIcon(): string | undefined {
   const base = app.getAppPath()
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
   const portableFile = process.env.PORTABLE_EXECUTABLE_FILE
+  const windowsDevIconParts = ['build', 'icon.ico']
   const winCandidates = [
     process.resourcesPath ? join(process.resourcesPath, 'icon.ico') : '',
     portableDir ? join(portableDir, 'icon.ico') : '',
     portableFile ? join(dirname(portableFile), 'icon.ico') : '',
     join(dirname(process.execPath), 'icon.ico'),
-    join(base, 'build', 'icon.ico')
+    join(base, ...windowsDevIconParts)
   ]
   const candidates =
     process.platform === 'win32'
