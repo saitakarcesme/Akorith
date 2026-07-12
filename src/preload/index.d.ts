@@ -2133,7 +2133,6 @@ export interface PreloadApi {
   router: RouterApi
   digest: DigestApi
   test: TestApi
-  benchmark: BenchmarkApi
   benchmarkLab: BenchmarkLabPreloadApi
   evaluate: EvaluateApi
   macro: MacroApi

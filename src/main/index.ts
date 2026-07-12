@@ -10,7 +10,6 @@ import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
-import { registerBenchmarkIpc } from './benchmarks'
 import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
@@ -454,7 +453,6 @@ app.whenReady().then(() => {
   registerRouterIpc()
   registerDigestIpc()
   registerTestIpc()
-  registerBenchmarkIpc()
   registerEvaluateIpc()
   registerRuntimeObservationIpc()
   registerMissionIpc()

@@ -185,13 +185,6 @@ const evaluate = Object.freeze({
     ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
 })
 
-const benchmark = Object.freeze({
-  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:list', { limit }),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('benchmark:get', id),
-  upsert: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:upsert', input),
-  exportForWeb: (): Promise<unknown> => ipcRenderer.invoke('benchmark:export')
-})
-
 const macro = Object.freeze({
   createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
   // Phase 20: scaffold an everyday-dev project + bind an auto-commit loop to it.
@@ -390,6 +383,6 @@ const benchmarkLab = Object.freeze({
   cancel: (runId: string): Promise<unknown> => ipcRenderer.invoke('benchmarkLab:cancel', runId)
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, benchmarkLab, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmarkLab, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)
