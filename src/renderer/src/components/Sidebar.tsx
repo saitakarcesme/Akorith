@@ -786,7 +786,7 @@ export default function Sidebar({
                                   onBlur={() => void commitProjectRename(project)}
                                 />
                               ) : (
-                                <span className="project-name">{project.name}</span>
+                                <span className="project-name" data-sidebar-content-anchor="project-label">{project.name}</span>
                               )}
                             </span>
                             {/* Phase 38.5: per-project chat count badge removed. */}
@@ -871,7 +871,7 @@ export default function Sidebar({
                                       }
                                     }}
                                   >
-                                    <span className="project-chat-title">{chat.title}</span>
+                                    <span className="project-chat-title" data-sidebar-content-anchor="chat-label">{chat.title}</span>
                                     <span className="project-chat-time">{relativeShort(chat.updatedAt)}</span>
                                     {/* Phase 37.4: actions via a small ⋯ menu, not inline text. */}
                                     <button

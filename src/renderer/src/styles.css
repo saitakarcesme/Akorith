@@ -32,6 +32,16 @@
   --sidebar-hover: rgba(0, 0, 0, 0.045);
   --sidebar-active-bg: rgba(0, 0, 0, 0.07);
   --sidebar-active-text: #111113;
+  --sidebar-gradient: linear-gradient(
+    154deg,
+    #17352f 0%,
+    #171a20 45%,
+    #29203d 100%
+  );
+  --sidebar-glass: linear-gradient(
+    rgba(25, 26, 29, 0.78),
+    rgba(25, 26, 29, 0.86)
+  );
 
   /* Text (light on dark) */
   --text: #ececee;
@@ -107,10 +117,24 @@
   --fast: 140ms var(--ease);
   /* Phase 33.7: drives the sidebar vanish/appear fade (opacity + tiny scale). */
   --sidebar-slide: 170ms var(--ease);
-  --font-ui:
-    -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono:
-    'SF Mono', 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  /* Warm humanist typography. These system/open-source fallbacks avoid bundling
+     proprietary assets while retaining a softer, editorial character. */
+  --font-body: 'Segoe UI Variable Text', 'Inter Variable', Inter, Aptos,
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-navigation: 'Segoe UI Variable Text', 'Inter Variable', Inter, Aptos,
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Inter Variable', Inter, Aptos Display,
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-label: var(--font-navigation);
+  --font-metric: var(--font-display);
+  --font-code: 'SF Mono', 'Cascadia Code', 'Cascadia Mono', Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+  --font-ui: var(--font-body);
+  --font-mono: var(--font-code);
+  --tracking-body: -0.006em;
+  --tracking-navigation: -0.012em;
+  --tracking-heading: -0.025em;
+  --tracking-label: 0.025em;
 }
 
 * {
@@ -129,6 +153,8 @@ body,
 body {
   font-family: var(--font-ui);
   font-size: 13px;
+  line-height: 1.48;
+  letter-spacing: var(--tracking-body);
   color: var(--text);
   background: transparent;
   -webkit-font-smoothing: antialiased;
@@ -225,6 +251,15 @@ textarea:focus-visible {
   background: var(--bg);
 }
 
+h1,
+h2,
+h3,
+.page-title {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-heading);
+  text-wrap: balance;
+}
+
 .app-chrome {
   grid-row: 1;
   grid-column: 1;
@@ -244,7 +279,11 @@ textarea:focus-visible {
   min-width: 0;
   display: flex;
   align-items: center;
-  background: rgba(23, 23, 28, 0.78);
+  background-image: var(--sidebar-glass), var(--sidebar-gradient);
+  background-attachment: fixed;
+  background-size: var(--sidebar-width) 100vh;
+  backdrop-filter: blur(26px) saturate(1.12);
+  -webkit-backdrop-filter: blur(26px) saturate(1.12);
   -webkit-app-region: drag;
 }
 
@@ -460,6 +499,10 @@ textarea:focus-visible {
   /* Codex left panel: editor background (gray-800) at 55% over macOS sidebar
      vibrancy — `color-mix(in srgb, #212121 55%, transparent)`. */
   --sidebar-bg: rgba(33, 33, 33, 0.55);
+  --sidebar-glass: linear-gradient(
+    rgba(24, 25, 28, 0.78),
+    rgba(24, 25, 28, 0.86)
+  );
   --sidebar-bg-2: rgba(255, 255, 255, 0.03);
   --sidebar-panel: rgba(33, 33, 33, 0.96);
   --sidebar-raised: rgba(255, 255, 255, 0.08);
@@ -525,6 +568,10 @@ textarea:focus-visible {
   --bubble-assistant-text: #1a1c1f;
   /* Codex left panel (light): editor background #ededed at 40% over vibrancy. */
   --sidebar-bg: rgba(237, 237, 237, 0.40);
+  --sidebar-glass: linear-gradient(
+    rgba(246, 246, 245, 0.84),
+    rgba(240, 240, 239, 0.90)
+  );
   --sidebar-bg-2: rgba(26, 28, 31, 0.02);
   --sidebar-panel: rgba(255, 255, 255, 0.94);
   --sidebar-raised: rgba(26, 28, 31, 0.08);
@@ -631,15 +678,19 @@ textarea:focus-visible {
 }
 
 .sidebar-surface {
+  --sidebar-tree-content-inset: 24px;
   width: var(--sidebar-width);
   height: 100%;
   min-width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   padding-top: 0;
-  background: var(--sidebar-bg);
-  backdrop-filter: blur(120px) saturate(1.55);
-  -webkit-backdrop-filter: blur(120px) saturate(1.55);
+  background-color: var(--sidebar-bg);
+  background-image: var(--sidebar-glass), var(--sidebar-gradient);
+  background-attachment: fixed;
+  background-size: var(--sidebar-width) 100vh;
+  backdrop-filter: blur(26px) saturate(1.12);
+  -webkit-backdrop-filter: blur(26px) saturate(1.12);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
@@ -6381,7 +6432,7 @@ textarea:focus-visible {
   gap: 4px;
   min-width: 0;
   /* Phase 34.2: thinner, calmer rows (no folder icon / path subtitle). */
-  padding: 4px 6px;
+  padding: 4px 6px 4px var(--sidebar-tree-content-inset);
   color: var(--text-dim);
   background: transparent;
   border: 0;
@@ -6545,13 +6596,15 @@ textarea:focus-visible {
 
 /* Disclosure chevron toggles the project's chat list independent of selection. */
 .project-disclosure {
+  position: absolute;
+  left: 4px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 18px;
-  margin-left: -2px;
+  margin-left: 0;
   padding: 0;
   color: var(--text-faint);
   background: transparent;
@@ -6605,8 +6658,8 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 1px 0 6px 18px;
-  padding-left: 10px;
+  margin: 1px 0 6px;
+  padding-left: var(--sidebar-tree-content-inset);
   border-left: 0;
 }
 
@@ -6616,7 +6669,8 @@ textarea:focus-visible {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 3px 7px;
+  padding: 3px 6px 3px 0;
+  padding-left: 0;
   color: var(--text-dim);
   background: transparent;
   border: 0;
