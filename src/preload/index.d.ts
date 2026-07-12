@@ -855,28 +855,8 @@ export interface AgentRuntimeSnapshot {
 }
 
 export interface AgentApi {
-  /** Phase 28: read-only Agent OS metadata foundation. */
-  list(): Promise<AgentAdapterInfo[]>
-  /** Phase 28: read-only agent availability detection. */
-  detect(id: AgentId): Promise<AgentDetectionResult>
-  /** Phase 28: read-only detection for every known adapter. */
-  detectAll(): Promise<AgentDetectionResult[]>
-  /** Phase 29/30: in-memory AgentSession list; no runtime processes are started by this API. */
-  listSessions(): Promise<AgentSession[]>
-  /** Phase 29/30: read one in-memory AgentSession. */
-  getSession(id: AgentSessionId): Promise<AgentSession | null>
-  /** Phase 29/30: read in-memory session events. */
-  listSessionEvents(sessionId: AgentSessionId): Promise<AgentSessionEvent[]>
-  /** Phase 30: read observed runtime attachments and synthesized PTY metadata. */
-  listRuntimeAttachments(): Promise<AgentRuntimeAttachment[]>
-  /** Phase 30: read observed runtime attachments for one in-memory AgentSession. */
-  listRuntimeAttachmentsForSession(sessionId: AgentSessionId): Promise<AgentRuntimeAttachment[]>
-  /** Phase 30: read an on-demand runtime observation snapshot. */
+  /** Internal runtime evidence used by the workbench, not a management screen. */
   getRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
-  /** Phase 30: refresh the on-demand runtime observation snapshot; no execution side effects. */
-  refreshRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
-  /** Phase 29: create a placeholder session only; does not call providers, PTYs, or CLIs. */
-  createPlaceholderSession(args: AgentSessionCreateInput): Promise<AgentSession>
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
     terminalId: string

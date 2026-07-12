@@ -220,24 +220,8 @@ const macro = Object.freeze({
 })
 
 const agent = Object.freeze({
-  // Phase 28: read-only Agent OS metadata/detection foundation.
-  list: (): Promise<unknown> => ipcRenderer.invoke('agent:list'),
-  detect: (id: string): Promise<unknown> => ipcRenderer.invoke('agent:detect', { id }),
-  detectAll: (): Promise<unknown> => ipcRenderer.invoke('agent:detectAll'),
-  listSessions: (): Promise<unknown> => ipcRenderer.invoke('agent:listSessions'),
-  getSession: (id: string): Promise<unknown> => ipcRenderer.invoke('agent:getSession', { id }),
-  listSessionEvents: (sessionId: string): Promise<unknown> =>
-    ipcRenderer.invoke('agent:listSessionEvents', { sessionId }),
-  listRuntimeAttachments: (): Promise<unknown> => ipcRenderer.invoke('agent:listRuntimeAttachments'),
-  listRuntimeAttachmentsForSession: (sessionId: string): Promise<unknown> =>
-    ipcRenderer.invoke('agent:listRuntimeAttachmentsForSession', { sessionId }),
   getRuntimeSnapshot: (): Promise<unknown> => ipcRenderer.invoke('agent:getRuntimeSnapshot'),
-  refreshRuntimeSnapshot: (): Promise<unknown> => ipcRenderer.invoke('agent:refreshRuntimeSnapshot'),
-  createPlaceholderSession: (args: unknown): Promise<unknown> =>
-    ipcRenderer.invoke('agent:createPlaceholderSession', args),
-  // Phase 13.2: read a terminal snapshot and summarize it into chat (meta call).
   summarize: (args: unknown): Promise<unknown> => ipcRenderer.invoke('agent:summarize', args),
-  // Phase 14.1: read-only detection of a pending terminal permission/confirm prompt.
   detectPermission: (terminalId: string): Promise<unknown> =>
     ipcRenderer.invoke('agent:detectPermission', { terminalId })
 })
