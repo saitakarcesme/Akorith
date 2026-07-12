@@ -38,7 +38,8 @@
     "verify:project-loop": "tsx scripts/verify-project-loop.ts",
     "verify:companions": "tsx scripts/verify-companions.ts",
     "verify:agents": "tsx scripts/verify-agents.ts",
-    "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts"
+    "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts",
+    "ledger": "node scripts/generate-implementation-ledger.mjs"
   },
   "build": {
     "appId": "com.akorith.app",
