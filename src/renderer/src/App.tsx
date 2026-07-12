@@ -7,14 +7,12 @@ import Dashboard from './components/Dashboard'
 import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import ProjectLoopPage from './components/ProjectLoopPage'
-import CompanionsPage from './components/CompanionsPage'
-import AgentsPage from './components/AgentsPage'
 import { ChevronIcon, PanelsIcon, SparkIcon } from './components/icons'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins' | 'companions' | 'agents'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -483,11 +481,9 @@ export default function App(): JSX.Element {
             ? 'Benchmark'
             : view === 'loops'
               ? 'Loop'
-              : view === 'plugins'
+            : view === 'plugins'
                 ? 'Plugins'
-                : view === 'companions'
-                  ? 'Companions'
-                  : 'Agents'
+                : 'Workspace'
   const chromeScope =
     view === 'general'
       ? 'Model chat'
@@ -585,10 +581,6 @@ export default function App(): JSX.Element {
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
-      <div className="companions-page-wrap" style={{ display: view === 'companions' ? 'flex' : 'none' }}>
-        <CompanionsPage active={view === 'companions'} />
-      </div>
-      {view === 'agents' && <AgentsPage active={view === 'agents'} />}
       </main>
       </div>
     </div>
