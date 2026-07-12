@@ -1896,6 +1896,47 @@ export interface DashboardTelemetryApi {
   loadGpuSnapshot(): Promise<unknown>
 }
 
+export interface RemoteNodeConnectionView {
+  phase: 'idle' | 'connecting' | 'online' | 'degraded' | 'offline'
+  consecutiveFailures: number
+  lastCheckedAt?: number
+  lastHealthyAt?: number
+  nextRetryAt?: number
+  latencyMs?: number
+  error?: string
+}
+
+export interface RemoteNodeView {
+  id: string
+  nodeId: string
+  name: string
+  baseUrl: string
+  protocolVersion: string
+  deviceId: string
+  deviceName: string
+  createdAt: number
+  updatedAt: number
+  privateLanHttpAcknowledged: boolean
+  connection: RemoteNodeConnectionView
+}
+
+export interface PairRemoteNodeInputView {
+  baseUrl: string
+  pairingId: string
+  code: string
+  deviceName: string
+  acknowledgePrivateLanHttp?: boolean
+}
+
+export interface RemoteNodesApi {
+  list(): Promise<RemoteNodeView[]>
+  pair(input: PairRemoteNodeInputView): Promise<unknown>
+  test(nodeId: string): Promise<unknown>
+  catalog(nodeId: string, refresh?: boolean): Promise<unknown>
+  revoke(nodeId: string): Promise<boolean>
+  onChanged(callback: () => void): () => void
+}
+
 export type UpdateChannel = 'stable' | 'beta'
 export type PackagedUpdatePhase = 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
 
@@ -2116,6 +2157,7 @@ export interface PreloadApi {
   gpu: GpuApi
   telemetry: TelemetryApi
   dashboardTelemetry: DashboardTelemetryApi
+  remoteNodes: RemoteNodesApi
   controller: ControllerApi
   plugins: PluginsApi
   update: UpdateApi

@@ -385,6 +385,19 @@ const dashboardTelemetry = Object.freeze({
   loadGpuSnapshot: (): Promise<unknown> => ipcRenderer.invoke('dashboardTelemetry:gpu')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
+const remoteNodes = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('remoteNodes:list'),
+  pair: (input: unknown): Promise<unknown> => ipcRenderer.invoke('remoteNodes:pair', input),
+  test: (nodeId: string): Promise<unknown> => ipcRenderer.invoke('remoteNodes:test', nodeId),
+  catalog: (nodeId: string, refresh = false): Promise<unknown> => ipcRenderer.invoke('remoteNodes:catalog', nodeId, refresh),
+  revoke: (nodeId: string): Promise<boolean> => ipcRenderer.invoke('remoteNodes:revoke', nodeId),
+  onChanged: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('remoteNodes:changed', listener)
+    return () => ipcRenderer.removeListener('remoteNodes:changed', listener)
+  }
+})
+
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, dashboardTelemetry, remoteNodes, controller, plugins, update, usageLimits, localRuntime, autonomousLoop })
 
 contextBridge.exposeInMainWorld('api', api)
