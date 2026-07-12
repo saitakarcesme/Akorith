@@ -7,11 +7,10 @@ import type { ControllerEndpoint, ControllerStatus } from './types'
 
 /**
  * Read-only data providers, injected by the electron bootstrap. Routes never
- * import db/agents/electron directly, which keeps them pure and unit-testable.
+ * import database or Electron modules directly, which keeps them pure and unit-testable.
  * Every provider returns JSON-safe, metadata-only data.
  */
 export interface ControllerData {
-  agents(): Promise<unknown> | unknown
   runtime(): Promise<unknown> | unknown
   projects(): Promise<unknown> | unknown
   chats(): Promise<unknown> | unknown
@@ -48,7 +47,6 @@ export interface Route {
 export const ENDPOINTS: ControllerEndpoint[] = [
   { method: 'GET', path: '/health', summary: 'Liveness probe (no auth).', auth: false },
   { method: 'GET', path: '/v1/status', summary: 'App + controller + runtime/mission/plugin summary.', auth: true },
-  { method: 'GET', path: '/v1/agents', summary: 'Agent adapter metadata (read-only).', auth: true },
   { method: 'GET', path: '/v1/runtime', summary: 'Runtime observation snapshot (no prompts/output).', auth: true },
   { method: 'GET', path: '/v1/projects', summary: 'Managed projects (metadata only).', auth: true },
   { method: 'GET', path: '/v1/chats', summary: 'Chat/session summaries (no message bodies).', auth: true },
@@ -99,7 +97,6 @@ const routes: Route[] = [
           summary: {
             projects: await len(ctx.data.projects()),
             chats: await len(ctx.data.chats()),
-            agents: await len(ctx.data.agents()),
             missions: await len(ctx.data.missions()),
             plugins: await len(ctx.data.plugins())
           }
@@ -107,7 +104,6 @@ const routes: Route[] = [
       }
     }
   },
-  { method: 'GET', path: '/v1/agents', auth: true, summary: 'Agent adapter metadata.', handler: (ctx) => dataResult(ctx.data.agents()) },
   { method: 'GET', path: '/v1/runtime', auth: true, summary: 'Runtime snapshot.', handler: (ctx) => dataResult(ctx.data.runtime()) },
   { method: 'GET', path: '/v1/projects', auth: true, summary: 'Managed projects.', handler: (ctx) => dataResult(ctx.data.projects()) },
   { method: 'GET', path: '/v1/chats', auth: true, summary: 'Chat summaries.', handler: (ctx) => dataResult(ctx.data.chats()) },

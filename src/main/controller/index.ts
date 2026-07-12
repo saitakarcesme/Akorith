@@ -1,6 +1,5 @@
 import { app, ipcMain } from 'electron'
 import { getControllerSettings, getLocalProviderSettings, setControllerSettings, type ControllerSettings } from '../config'
-import { listAgentAdapters } from '../agents/registry'
 import { agentSessionManager } from '../agents/session-manager'
 import { listProjects, listSessions } from '../db'
 import { missionStore } from '../missions/store'
@@ -23,7 +22,6 @@ export function setControllerPluginProvider(provider: () => Promise<unknown> | u
 
 // Read-only, summary/metadata-only data. No prompts, terminal output, or secrets.
 const controllerData: ControllerData = {
-  agents: () => listAgentAdapters(),
   runtime: () => agentSessionManager.getRuntimeSnapshot({}),
   projects: () =>
     listProjects().map((project) => ({
