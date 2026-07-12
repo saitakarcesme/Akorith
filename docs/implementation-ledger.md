@@ -231,5 +231,7 @@ is administrative and is intentionally recorded on the next generation.
 | 221 | `24509035a431` | style: normalize generated source endings | production source hygiene and ledger generator | npm run typecheck; npm run ledger; git diff --check | removes trailing blank lines from introduced files and makes future ledger generations whitespace-clean |
 | 222 | `111883ff8a97` | docs: record final source hygiene commit | delivery traceability | npm run ledger; git diff --check | implementation ledger records the complete whitespace-clean production history |
 | 223 | `71372c9d6f2c` | refactor(runtime): remove remaining placeholder plumbing | internal runtime observation and plugin contracts | typecheck; controller; local-runtime; plugin marketplace; placeholder scan | removes unreachable fake session capabilities and an unimplemented package transport while preserving live provider, PTY, Ollama, and observation paths |
+| 224 | `b5860148236e` | docs: record placeholder runtime removal | delivery traceability | npm run ledger; git diff --check | implementation ledger records the final dead-placeholder cleanup |
+| 225 | `9f833d4e252e` | test(e2e): select the main app window reliably | Electron launch verification | three consecutive full Electron E2E journeys | ignores the intentionally short-lived splash window and waits for the real Akorith app chrome |
 
-Total commits after baseline represented: **223**
+Total commits after baseline represented: **225**
