@@ -131,7 +131,13 @@ function statusLabel(value: BenchmarkRunStatus): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-export default function BenchmarkLabPage({ api }: BenchmarkLabPageProps): JSX.Element {
+function resolveDefaultApi(): BenchmarkLabApi | null {
+  const bridge = (window as unknown as { api?: { benchmarkLab?: BenchmarkLabApi } }).api?.benchmarkLab
+  return bridge ?? null
+}
+
+export default function BenchmarkLabPage({ api: suppliedApi }: BenchmarkLabPageProps): JSX.Element {
+  const api = suppliedApi === undefined ? resolveDefaultApi() : suppliedApi
   const [catalog, setCatalog] = useState<BenchmarkCatalog | null>(null)
   const [runs, setRuns] = useState<BenchmarkRun[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
