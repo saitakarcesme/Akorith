@@ -465,7 +465,8 @@ export class AutonomousLoopEngine {
       const current = this.store.getLoop(loopId) ?? loop
       const control = this.gate(loopId)
       const cancelled = signal?.aborted === true || asMessage(error) === 'cycle-control-requested'
-      if ((cancelled || control !== 'continue') && session && checkpoint && changedFiles.length > 0) {
+      const hasCommittedChange = cycle?.commitSha !== null && cycle?.commitSha !== undefined
+      if (session && checkpoint && changedFiles.length > 0 && !hasCommittedChange) {
         await this.restoreAttempt(session, checkpoint, changedFiles).catch(() => undefined)
       }
       if (cycle) {
@@ -512,4 +513,3 @@ export class AutonomousLoopEngine {
     }
   }
 }
-
