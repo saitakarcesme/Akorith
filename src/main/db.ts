@@ -12,6 +12,7 @@ import { basename, isAbsolute, join, resolve, sep } from 'path'
 import { mkdirSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
+import { applyTelemetryMigrations, backfillUsageEvents } from './telemetry/migrations'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -527,6 +528,11 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'last_attempt_status', 'TEXT')
   ensureColumn('macro_sessions', 'last_validation_result', 'TEXT')
   ensureColumn('macro_sessions', 'last_commit_message', 'TEXT')
+  // Unified operational telemetry uses its own additive, versioned migrations.
+  // Legacy chat usage is translated idempotently; per-row markers let a very
+  // large history resume on a later launch without duplicating token totals.
+  applyTelemetryMigrations(nextDb)
+  backfillUsageEvents(nextDb)
   } catch (err) {
     nextDb.close()
     db = null
