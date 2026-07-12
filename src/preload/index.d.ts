@@ -1388,7 +1388,7 @@ export interface RuntimeStatus {
   checkedAt: number
 }
 
-// Phase 47: shared local-first runtime used by Loop / Companions / Agents.
+// Shared local-first runtime used by Loop and internal execution providers.
 export interface LocalModelInfo {
   id: string
   label: string

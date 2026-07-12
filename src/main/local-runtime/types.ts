@@ -1,4 +1,4 @@
-// Phase 47: shared local-first runtime contract used by Loop, Companions, and
+// Shared local-first runtime contract used by Loop and internal
 // Agents. It wraps the existing local/Ollama provider + runtime resolution
 // (ollama-connection.ts) without changing the chat provider code.
 

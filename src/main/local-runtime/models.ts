@@ -2,7 +2,7 @@ import { describeProviders } from '../providers/registry'
 import { getRuntimeStatus } from '../ollama-connection'
 import type { LocalModelInfo } from './types'
 
-// Phase 47: list the local models available to Loop/Companions/Agents. Prefers
+// List the local models available to Loop and internal execution flows. Prefers
 // the live runtime's model list (resolved endpoint), falling back to the local
 // provider's configured models.
 

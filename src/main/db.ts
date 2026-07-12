@@ -360,7 +360,7 @@ export function initDb(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_memories_loop ON project_loop_memories(loop_id, importance);
 
-    -- Phase 50: Companions — long-memory local personalities (no actions).
+    -- Legacy companion tables are retained so upgrades never delete user data.
     CREATE TABLE IF NOT EXISTS companions (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
@@ -564,8 +564,7 @@ export function isDbReady(): boolean {
   return ready()
 }
 
-/** Shared DB accessor so feature modules (autonomous loop, companions,
- *  action-agents) can own their own store files without bloating db.ts. */
+/** Shared DB accessor for persistent feature stores without bloating db.ts. */
 export function getDb(): Database.Database {
   return must()
 }

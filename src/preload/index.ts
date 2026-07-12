@@ -334,7 +334,7 @@ const appApi = Object.freeze({
   getCurrency: (fetch?: boolean): Promise<unknown> => ipcRenderer.invoke('app:getCurrency', fetch === true)
 })
 
-// Phase 47: shared local-first runtime used by Loop / Companions / Agents.
+// Shared local-first runtime used by Loop and internal execution providers.
 const localRuntime = Object.freeze({
   listModels: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:listModels'),
   defaultModel: (): Promise<unknown> => ipcRenderer.invoke('localRuntime:defaultModel'),

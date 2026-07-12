@@ -196,4 +196,4 @@ export function ComposerSendButton({
 
 // Phase 55.064: the lavender ComposerActionButton was removed — the one composer
 // send/stop control is now ComposerSendButton (the neutral .send-button circle),
-// shared by ChatPanel and Companions.
+// shared by chat-oriented surfaces.

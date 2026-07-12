@@ -86,8 +86,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   automation: 'Automation',
   model_provider: 'Model providers',
   memory: 'Memory',
-  telemetry: 'Telemetry',
-  agent: 'Agents'
+  telemetry: 'Telemetry'
 }
 
 const BUSY_STATES = new Set<MarketplaceLifecycleState>([
