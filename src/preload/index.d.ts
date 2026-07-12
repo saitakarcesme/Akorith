@@ -320,7 +320,7 @@ export interface AppApi {
   getCurrency(fetch?: boolean): Promise<AppCurrency>
 }
 
-// ---- usage (dashboard; TODO(phase 6): router reads the same data) ----
+// ---- legacy usage API retained for router compatibility ----
 
 export interface ProviderUsageSummary {
   providerId: string
@@ -635,7 +635,7 @@ export interface EvaluateApi {
 // ---- macro-loop orchestration (Phase 9) ----
 
 export type MacroStatus =
-  // TODO(phase 28): mirror src/main/loops/types.ts until a renderer-safe shared
+  // Mirrors src/main/loops/types.ts until a renderer-safe shared
   // type package can be imported by both Electron and web builds.
   | 'draft'
   | 'scheduled'

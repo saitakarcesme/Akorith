@@ -333,7 +333,7 @@ class PtyManager {
    * Anything that wants to put bytes in front of the shell — a human typing
    * in xterm or a programmatic caller — must go through here.
    *
-   * TODO(phase 4): the chat→terminal prompt bridge calls this with the
+   * The chat-to-terminal prompt bridge calls this with the
    *                planner's prompt text.
    * Phase 9: the semi-automatic macro-loop reaches this only through
    * bridgeSend() after user approval.

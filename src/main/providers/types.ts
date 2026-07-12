@@ -21,8 +21,6 @@ export interface SendResult {
   model: string
   /** The provider's raw response, kept for debugging. */
   raw?: unknown
-  // TODO(phase 5): usage feeds the dashboard.
-  // TODO(phase 6): usage feeds the router.
 }
 
 export interface SendOptions {
@@ -38,7 +36,7 @@ export interface SendOptions {
 export interface Provider {
   id: string
   label: string
-  /** Capability flags. TODO(phase 6): the router selects providers by kind. */
+  /** Capability flags consumed by routing and executor eligibility. */
   kind: ProviderKind[]
   isAvailable(): Promise<ProviderAvailability>
   listModels(): Promise<string[]>

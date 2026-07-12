@@ -935,7 +935,7 @@ export function deleteProject(projectId: string): boolean {
   return true
 }
 
-// ---- aggregations for the dashboard (and TODO(phase 6): the router) ----
+// ---- legacy usage aggregations retained for compatibility and the router ----
 
 export interface ProviderUsageSummary {
   providerId: string

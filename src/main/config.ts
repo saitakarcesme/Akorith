@@ -137,7 +137,7 @@ export interface ControllerSettings {
 export interface PluginSettings {
   /** Plugin ids the user has explicitly disabled. Built-ins default enabled. */
   disabled: string[]
-  /** Optional Chroma memory endpoint placeholder (no ingestion in Phase 35). */
+  /** Optional legacy Chroma memory endpoint metadata. */
   chromaEndpoint?: string
 }
 
