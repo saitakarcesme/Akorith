@@ -56,6 +56,19 @@ export interface PairingAuthorityOptions {
   maxTtlMs?: number
   maxAttempts?: number
   maxActiveChallenges?: number
+  persistedState?: unknown
+}
+
+export interface PersistedPairingAuthorityState {
+  schemaVersion: 1
+  devices: Array<{
+    id: string
+    name: string
+    createdAt: number
+    lastAuthenticatedAt?: number
+    revokedAt?: number
+    tokenDigestBase64: string
+  }>
 }
 
 const DUMMY_TOKEN_DIGEST = createHash('sha256').update('akorith-remote-node-invalid-token').digest()
@@ -90,6 +103,7 @@ export class PairingAuthority {
     this.maxTtlMs = Math.min(Math.max(options.maxTtlMs ?? 10 * 60_000, this.defaultTtlMs), 30 * 60_000)
     this.maxAttempts = Math.min(Math.max(options.maxAttempts ?? 5, 1), 20)
     this.maxActiveChallenges = Math.min(Math.max(options.maxActiveChallenges ?? 8, 1), 64)
+    this.restore(options.persistedState)
   }
 
   beginPairing(input: { nodeName: string; now?: number; ttlMs?: number }): PairingChallengeView {
@@ -172,6 +186,52 @@ export class PairingAuthority {
 
   listDevices(): ApprovedDeviceView[] {
     return [...this.devices.values()].map((record) => this.toView(record))
+  }
+
+  exportState(): PersistedPairingAuthorityState {
+    return {
+      schemaVersion: 1,
+      devices: [...this.devices.values()].map((record) => ({
+        id: record.id,
+        name: record.name,
+        createdAt: record.createdAt,
+        ...(record.lastAuthenticatedAt !== undefined ? { lastAuthenticatedAt: record.lastAuthenticatedAt } : {}),
+        ...(record.revokedAt !== undefined ? { revokedAt: record.revokedAt } : {}),
+        tokenDigestBase64: record.tokenDigest.toString('base64')
+      }))
+    }
+  }
+
+  private restore(value: unknown): void {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    const raw = value as Record<string, unknown>
+    if (raw.schemaVersion !== 1 || !Array.isArray(raw.devices)) return
+    for (const candidate of raw.devices.slice(0, 1_000)) {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+      const device = candidate as Record<string, unknown>
+      const id = typeof device.id === 'string' && /^[A-Za-z0-9._:-]{1,160}$/.test(device.id) ? device.id : null
+      const name = typeof device.name === 'string' ? cleanName(device.name, '') : ''
+      const createdAt = typeof device.createdAt === 'number' && Number.isSafeInteger(device.createdAt) && device.createdAt >= 0
+        ? device.createdAt
+        : null
+      let digest: Buffer
+      try { digest = Buffer.from(typeof device.tokenDigestBase64 === 'string' ? device.tokenDigestBase64 : '', 'base64') }
+      catch { continue }
+      if (!id || !name || createdAt === null || digest.length !== 32 || this.devices.has(id)) continue
+      const optionalTimestamp = (entry: unknown): number | undefined =>
+        typeof entry === 'number' && Number.isSafeInteger(entry) && entry >= createdAt ? entry : undefined
+      const record: DeviceRecord = {
+        id,
+        name,
+        createdAt,
+        tokenDigest: digest,
+        ...(optionalTimestamp(device.lastAuthenticatedAt) !== undefined
+          ? { lastAuthenticatedAt: optionalTimestamp(device.lastAuthenticatedAt) }
+          : {}),
+        ...(optionalTimestamp(device.revokedAt) !== undefined ? { revokedAt: optionalTimestamp(device.revokedAt) } : {})
+      }
+      this.devices.set(id, record)
+    }
   }
 
   private expireChallenges(now: number): void {
