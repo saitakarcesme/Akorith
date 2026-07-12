@@ -1420,133 +1420,6 @@ export interface LocalRuntimeApi {
   status(): Promise<RuntimeStatus>
 }
 
-// Phase 48: project-focused Loop.
-export type ProjectLoopMode = 'project_builder' | 'repo_grower' | 'github_loop' | 'maintenance'
-export type ProjectLoopStatus = 'active' | 'paused' | 'needs_review' | 'error' | 'completed' | 'archived'
-export type ProjectLoopAutonomy = 'manual' | 'assisted' | 'auto'
-export type ProjectLoopSafety = 'strict' | 'standard' | 'open'
-
-export interface ProjectLoop {
-  id: string
-  title: string
-  mode: ProjectLoopMode
-  status: ProjectLoopStatus
-  localPath: string
-  repoUrl?: string
-  githubOwner?: string
-  githubName?: string
-  idea?: string
-  autonomy: ProjectLoopAutonomy
-  safety: ProjectLoopSafety
-  scheduleKind: 'manual' | 'interval' | 'daily'
-  scheduleMinutes: number
-  dailyCommitTarget: number
-  minCommitsPerRun: number
-  maxCommitsPerRun: number
-  localModelProvider: string
-  localModel?: string
-  pushEnabled: boolean
-  createdAt: number
-  updatedAt: number
-  lastRunAt?: number
-  nextRunAt?: number
-  runCount: number
-  commitCount: number
-  error?: string
-  memorySummary?: string
-  roadmapSummary?: string
-}
-
-export interface ProjectLoopRun {
-  id: string
-  loopId: string
-  runIndex: number
-  status: 'pending' | 'running' | 'success' | 'no_change' | 'failed' | 'rejected'
-  startedAt: number
-  endedAt?: number
-  model?: string
-  objective?: string
-  summary?: string
-  filesChanged: number
-  commandsRun: number
-  testsRun: number
-  commitsCreated: number
-  validationResult?: string
-  nextStep?: string
-  error?: string
-}
-
-export interface ProjectLoopEvent {
-  id: string
-  loopId: string
-  runId?: string
-  kind: string
-  message: string
-  detail?: string
-  createdAt: number
-}
-
-export interface ProjectLoopCommit {
-  id: string
-  loopId: string
-  runId?: string
-  sha: string
-  message: string
-  filesChanged: number
-  createdAt: number
-  validationSummary?: string
-}
-
-export interface ProjectLoopBacklogItem {
-  id: string
-  loopId: string
-  title: string
-  detail?: string
-  category?: string
-  priority: number
-  status: 'open' | 'in_progress' | 'done' | 'dropped'
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ProjectLoopMemory {
-  id: string
-  loopId: string
-  kind: string
-  content: string
-  importance: number
-  createdAt: number
-  updatedAt: number
-}
-
-export interface RunCycleResult {
-  ok: boolean
-  run: ProjectLoopRun | null
-  committed: boolean
-  sha?: string
-  summary: string
-  error?: string
-}
-
-export interface CreateProjectLoopInput {
-  title: string
-  mode: ProjectLoopMode
-  localPath: string
-  repoUrl?: string
-  githubOwner?: string
-  githubName?: string
-  idea?: string
-  autonomy?: ProjectLoopAutonomy
-  safety?: ProjectLoopSafety
-  scheduleKind?: 'manual' | 'interval' | 'daily'
-  scheduleMinutes?: number
-  dailyCommitTarget?: number
-  minCommitsPerRun?: number
-  maxCommitsPerRun?: number
-  localModel?: string
-  pushEnabled?: boolean
-}
-
 // Phase 52: Agents — reusable local action shortcuts.
 export type AgentPermissionMode = 'preview' | 'ask_write' | 'safe_writes' | 'safe_commands' | 'manual_each'
 export type AgentRiskLevel = 'low' | 'medium' | 'high'
@@ -1757,26 +1630,6 @@ export interface CompanionApi {
   pinMemory(id: string, pinned: boolean): Promise<CompanionMemory | null>
   archiveMemory(id: string): Promise<CompanionMemory | null>
   forgetMemory(id: string): Promise<boolean>
-}
-
-export interface ProjectLoopApi {
-  list(): Promise<ProjectLoop[]>
-  get(id: string): Promise<ProjectLoop | null>
-  create(input: CreateProjectLoopInput): Promise<ProjectLoop>
-  update(id: string, patch: Partial<ProjectLoop>): Promise<ProjectLoop | null>
-  setStatus(id: string, status: ProjectLoopStatus): Promise<ProjectLoop | null>
-  archive(id: string): Promise<ProjectLoop | null>
-  remove(id: string): Promise<boolean>
-  runOnce(id: string): Promise<RunCycleResult>
-  listRuns(id: string): Promise<ProjectLoopRun[]>
-  listEvents(id: string): Promise<ProjectLoopEvent[]>
-  listCommits(id: string): Promise<ProjectLoopCommit[]>
-  listBacklog(id: string): Promise<ProjectLoopBacklogItem[]>
-  addBacklog(id: string, title: string, detail?: string): Promise<ProjectLoopBacklogItem>
-  setBacklogStatus(itemId: string, status: string): Promise<boolean>
-  listMemories(id: string): Promise<ProjectLoopMemory[]>
-  addMemory(id: string, content: string): Promise<ProjectLoopMemory>
-  pickFolder(): Promise<string | null>
 }
 
 export type OllamaAutoConnectResult =
@@ -2261,7 +2114,6 @@ export interface PreloadApi {
   update: UpdateApi
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
-  projectLoop: ProjectLoopApi
   autonomousLoop: AutonomousLoopApi
 }
 
