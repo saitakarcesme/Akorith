@@ -4,90 +4,332 @@ on:
   push:
     tags: ['v*.*.*', 'v*.*.*-*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-beta.NUMBER tag to release
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  validate:
-    runs-on: windows-latest
+  identity:
+    name: Validate release identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      version: ${{ steps.identity.outputs.version }}
+      channel: ${{ steps.identity.outputs.channel }}
+      prerelease: ${{ steps.identity.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact release tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+
+      - name: Fetch authoritative main
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Match tag, package versions, checked-out commit, and main ancestry
+        id: identity
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: node scripts/verify-release-ref.mjs --require-git
+
+  validate:
+    name: Validate application
+    needs: identity
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout validated release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.tag }}
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.12.0
           cache: npm
+
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test -- --run
-      - run: npm run verify:existing
+      - run: npm run verify
       - run: npm audit --omit=dev
 
   package-windows:
-    needs: validate
+    name: Sign and prove Windows artifacts
+    needs: [identity, validate]
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout validated release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.tag }}
+
+      - name: Require Windows signing credentials
+        shell: pwsh
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          $missing = @('WINDOWS_CSC_LINK', 'WINDOWS_CSC_KEY_PASSWORD') | Where-Object {
+            [string]::IsNullOrWhiteSpace((Get-Item "env:$_" -ErrorAction SilentlyContinue).Value)
+          }
+          if ($missing.Count) { throw "Required Windows signing secrets are unavailable: $($missing -join ', ')" }
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.12.0
           cache: npm
+
       - run: npm ci
       - run: npm run build
-      - name: Package and publish Windows artifacts
-        run: npx electron-builder --win --x64 --publish always --config.publish.releaseType=$env:RELEASE_TYPE
+
+      - name: Build signed NSIS and portable targets without publishing
+        shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TYPE: ${{ contains(github.ref_name, '-') && 'prerelease' || 'release' }}
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-      - name: Verify updater metadata
+          CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: |
+          $feedChannel = if ($env:CHANNEL -eq 'beta') { 'beta' } else { 'latest' }
+          $releaseType = if ($env:CHANNEL -eq 'beta') { 'prerelease' } else { 'release' }
+          npx electron-builder --win --x64 --config.publish.channel=$feedChannel --config.publish.releaseType=$releaseType --publish never
+
+      - name: Verify Windows signatures
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          $paths = @(
+            "dist/Akorith-Setup-$env:VERSION-x64.exe",
+            "dist/Akorith-$env:VERSION-portable-x64.exe",
+            "dist/win-unpacked/Akorith.exe"
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing signed executable: $path" }
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+              throw "Authenticode verification failed for $path ($($signature.Status))"
+            }
+          }
+
+      - name: Launch packaged Windows application
         shell: pwsh
         run: |
-          if (-not (Test-Path dist/latest.yml)) { throw 'latest.yml was not generated' }
-          if (-not (Get-ChildItem dist -Filter 'Akorith-Setup-*.exe')) { throw 'NSIS installer was not generated' }
+          $profile = Join-Path $env:RUNNER_TEMP 'akorith-release-smoke-win'
+          New-Item -ItemType Directory -Path $profile -Force | Out-Null
+          $process = Start-Process -FilePath (Resolve-Path 'dist/win-unpacked/Akorith.exe') `
+            -ArgumentList "--user-data-dir=$profile", '--disable-gpu' -PassThru
+          try {
+            Start-Sleep -Seconds 12
+            $process.Refresh()
+            if ($process.HasExited) { throw "Packaged Akorith exited during launch smoke test with code $($process.ExitCode)" }
+          } finally {
+            Get-Process -Name Akorith -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Parse updater metadata and stage a hash-locked Windows release
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+          CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: node scripts/verify-release-artifacts.mjs --platform windows --version "$env:VERSION" --channel "$env:CHANNEL" --directory dist --stage release-windows
+
       - uses: actions/upload-artifact@v4
         with:
-          name: akorith-windows
-          path: |
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
+          name: akorith-windows-verified
+          path: release-windows/*
+          if-no-files-found: error
+          retention-days: 3
 
   package-macos:
-    needs: validate
+    name: Sign, notarize, and prove macOS artifacts
+    needs: [identity, validate]
     runs-on: macos-14
+    timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout validated release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.tag }}
+
+      - name: Require macOS signing and notarization credentials
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Required macOS signing/notarization secrets are unavailable: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.12.0
           cache: npm
+
       - run: npm ci
       - run: npm run build
-      - name: Package and publish macOS artifacts
-        run: npx electron-builder --mac --arm64 --publish always --config.publish.releaseType=$RELEASE_TYPE
+
+      - name: Build signed DMG and ZIP targets without publishing
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TYPE: ${{ contains(github.ref_name, '-') && 'prerelease' || 'release' }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Verify updater metadata
+          CHANNEL: ${{ needs.identity.outputs.channel }}
         run: |
-          test -f dist/latest-mac.yml
-          find dist -name 'Akorith-*-mac-arm64.zip' -print -quit | grep .
+          set -euo pipefail
+          if [ "$CHANNEL" = beta ]; then feed_channel=beta; release_type=prerelease; else feed_channel=latest; release_type=release; fi
+          npx electron-builder --mac --arm64 --config.publish.channel="$feed_channel" --config.publish.releaseType="$release_type" --publish never
+
+      - name: Verify Developer ID signature, Gatekeeper, and notarization ticket
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          set -euo pipefail
+          app='dist/mac-arm64/Akorith.app'
+          dmg="dist/Akorith-$VERSION-mac-arm64.dmg"
+          zip="dist/Akorith-$VERSION-mac-arm64.zip"
+          test -d "$app"
+          test -s "$dmg"
+          test -s "$zip"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
+
+      - name: Launch packaged macOS application
+        run: |
+          set -euo pipefail
+          profile="$RUNNER_TEMP/akorith-release-smoke-mac"
+          mkdir -p "$profile"
+          'dist/mac-arm64/Akorith.app/Contents/MacOS/Akorith' --user-data-dir="$profile" --disable-gpu &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          sleep 12
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" || code=$?
+            echo "Packaged Akorith exited during launch smoke test with code ${code:-0}" >&2
+            exit 1
+          fi
+
+      - name: Parse updater metadata and stage a hash-locked macOS release
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+          CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: node scripts/verify-release-artifacts.mjs --platform macos --version "$VERSION" --channel "$CHANNEL" --directory dist --stage release-macos
+
       - uses: actions/upload-artifact@v4
         with:
-          name: akorith-macos-arm64
-          path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.yml
-            dist/*.blockmap
+          name: akorith-macos-verified
+          path: release-macos/*
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Atomically publish verified release
+    needs: [identity, package-windows, package-macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    environment: production-release
+    steps:
+      - name: Checkout validated release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Download both independently verified platform payloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: akorith-*-verified
+          path: release-assets
+          merge-multiple: true
+
+      - name: Recheck manifests and updater metadata after artifact transport
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+          CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: |
+          node scripts/verify-release-artifacts.mjs --verify-manifest --platform windows --version "$VERSION" --channel "$CHANNEL" --directory release-assets
+          node scripts/verify-release-artifacts.mjs --verify-manifest --platform macos --version "$VERSION" --channel "$CHANNEL" --directory release-assets
+
+      - name: Create draft, upload exact inventory, then finalize
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          VERSION: ${{ needs.identity.outputs.version }}
+          PRERELEASE: ${{ needs.identity.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; immutable releases are never overwritten." >&2
+            exit 1
+          fi
+
+          created=false
+          cleanup() {
+            code=$?
+            if [ "$code" -ne 0 ] && [ "$created" = true ]; then
+              gh release delete "$RELEASE_TAG" --yes >/dev/null 2>&1 || true
+            fi
+            exit "$code"
+          }
+          trap cleanup EXIT
+
+          create_args=("$RELEASE_TAG" --verify-tag --draft --title "Akorith $VERSION" --notes-from-tag)
+          if [ "$PRERELEASE" = true ]; then create_args+=(--prerelease); fi
+          gh release create "${create_args[@]}"
+          created=true
+
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f -printf '%p\n' | sort)
+          if [ "${#assets[@]}" -ne 10 ]; then
+            echo "Expected exactly 10 release assets from the two verified inventories; found ${#assets[@]}." >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}"
+
+          gh release view "$RELEASE_TAG" --json assets,isDraft,isPrerelease > release-state.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const state = JSON.parse(fs.readFileSync('release-state.json', 'utf8'))
+          const expected = fs.readdirSync('release-assets').sort()
+          const actual = state.assets.map((asset) => asset.name).sort()
+          if (!state.isDraft) throw new Error('release stopped being a draft before final verification')
+          if (String(state.isPrerelease) !== process.env.PRERELEASE) throw new Error('GitHub prerelease state does not match the validated channel')
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('uploaded GitHub asset inventory does not match verified local inventory')
+          NODE
+
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([ "$PRERELEASE" = true ] && echo false || echo true)"
+
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease > release-final.json
+          node - <<'NODE'
+          const state = JSON.parse(require('node:fs').readFileSync('release-final.json', 'utf8'))
+          if (state.isDraft) throw new Error('release was not finalized')
+          if (String(state.isPrerelease) !== process.env.PRERELEASE) throw new Error('final release channel is incorrect')
+          NODE
+          created=false

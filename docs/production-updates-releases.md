@@ -16,7 +16,7 @@ App ID is `com.akorith.app`, packaged product/executable name is Akorith, macOS 
 
 Settings -> Update exposes stable/beta channel selection, automatic checks, Check, Download, and explicit Install.
 
-The updater is supported only when all of these are true: the app is packaged, platform is Windows or macOS, app version is valid semantic version, `electron-updater` loaded, and a publish feed is configured. Development/source runs report `DEVELOPMENT_BUILD` and do not attempt an installed-app update.
+The updater is supported only when all of these are true: the app is packaged, it is an installed (non-portable) build, platform is Windows or macOS, app version is valid semantic version, `electron-updater` loaded, and a publish feed is configured. Development/source runs report `DEVELOPMENT_BUILD`; Windows portable builds report `PORTABLE_BUILD` with manual-upgrade guidance. Neither contacts an update feed.
 
 Safety policy is fixed:
 
@@ -24,6 +24,7 @@ Safety policy is fixed:
 - `autoInstallOnAppQuit=false`;
 - automatic checks, when enabled, begin 12 seconds after startup but do not download;
 - stable rejects prereleases; beta accepts stable and prerelease semantic versions;
+- changing channels always resets `allowDowngrade=false`; recovery uses a newer fixed release rather than an automatic downgrade;
 - release names/notes/errors/progress are validated, bounded, and credential-like text is redacted;
 - download is allowed only after a newer accepted release is available;
 - install requires the user action that creates a random, one-use authorization for the exact downloaded version;
@@ -84,19 +85,21 @@ Never place a secret in `package.json`, build configuration, `.env` committed to
    git push origin v1.0.0
    ```
 
-The tag may use `v*.*.*` or `v*.*.*-*`. The workflow can also be started manually with `workflow_dispatch`, but a tag gives the release an unambiguous version identity.
+The workflow accepts only exact `vMAJOR.MINOR.PATCH` stable tags or `vMAJOR.MINOR.PATCH-beta.NUMBER` beta tags. `workflow_dispatch` requires one of those existing tags; it applies the same package-version and `origin/main` ancestry gates as a tag push.
 
 ## GitHub Actions release workflow
 
-`.github/workflows/release.yml` has `contents: write`, concurrency per ref, and three jobs:
+`.github/workflows/release.yml` is intentionally fail-closed and has five jobs:
 
-1. **validate** on Windows: `npm ci`, typecheck, Vitest, all focused verifiers, and production dependency audit;
-2. **package-windows** on Windows: build, sign/package/publish x64 NSIS and portable artifacts, require `latest.yml` and installer, then upload artifacts;
-3. **package-macos** on macOS 14: build, sign/notarize/package/publish arm64 DMG and ZIP, require `latest-mac.yml` and ZIP, then upload artifacts.
+1. **identity** checks out the exact existing tag, accepts only `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-beta.NUMBER`, requires exact `package.json`/lockfile versions, and proves the tagged commit is contained in `origin/main`;
+2. **validate** on Windows runs the full verifier suite and production dependency audit;
+3. **package-windows** requires both Authenticode secrets, builds NSIS plus portable with `--publish never`, verifies the installer/portable/unpacked signatures, launches the packaged app, parses stable/beta YAML, and emits a SHA-512 inventory;
+4. **package-macos** requires Developer ID and Apple notarization secrets, builds DMG plus ZIP with `--publish never`, verifies `codesign`, Gatekeeper, and the stapled ticket, launches the packaged app, parses channel YAML, and emits a SHA-512 inventory;
+5. **publish** starts only after both platform jobs pass, rechecks the transported manifests, creates a private draft release, uploads the exact ten-file inventory, verifies GitHub's asset list/channel state, and only then finalizes it. A failed upload deletes the draft; existing releases are never overwritten.
 
-Packaging jobs wait for validation. A tag containing `-` publishes as `prerelease`; otherwise it publishes as `release`. electron-builder publishes directly to `saitakarcesme/Akorith` with the workflow's GitHub token.
+Packaging jobs have read-only repository permission and never receive a GitHub publication token. Only the final job has `contents: write`. Stable releases require an exact stable version; beta releases require the explicit `-beta.NUMBER` form. Manual dispatch also requires an existing validated tag and cannot turn an arbitrary branch commit into a release.
 
-Because the committed macOS config sets `notarize: true` and the workflow supplies signing/notarization variables, production release jobs should be treated as credential-requiring. A local unsigned development package is possible only with an explicit local configuration override; it is not proof of release readiness and should not replace signed release artifacts.
+Because the committed macOS config sets `notarize: true`, production release jobs are credential-requiring. Missing Windows signing, Developer ID, or Apple notarization secrets stop their native job before packaging. A local unsigned development package is possible only with an explicit local configuration override; it is not proof of release readiness and cannot enter the release publication job.
 
 ## Post-build verification
 

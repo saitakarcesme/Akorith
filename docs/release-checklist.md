@@ -54,11 +54,13 @@ CLIs resolve.
 ## 6. Publish (GitHub release)
 
 - [ ] Commit + push `main` is green.
-- [ ] Tag the release (`git tag vX.Y.Z && git push --tags`).
-- [ ] Create a GitHub Release; attach `dist/*.dmg` / `dist/*.zip` (and Windows installer
-      when built). **Do not commit `dist/` artifacts** — they are git-ignored.
+- [ ] Tag the exact committed package version (`git tag vX.Y.Z && git push origin vX.Y.Z`).
+- [ ] Let the release workflow build and independently verify both platforms before it
+      creates/uploads/finalizes the GitHub Release. **Do not commit `dist/` artifacts** —
+      they are git-ignored, and manually uploaded assets bypass the hash-locked gate.
 - [ ] Release notes: what's new + the one-line connect prompt from the README.
-- [ ] (Future) code-sign + notarize before wide distribution to avoid Gatekeeper warnings.
+- [ ] Confirm Windows Authenticode plus macOS Developer ID/Gatekeeper/notarization gates
+      passed; the production workflow refuses to publish without them.
 
 ## 7. Announcement (X/Twitter) checklist
 
@@ -76,12 +78,14 @@ CLIs resolve.
       `npm run refresh:mac` backs up old copies and installs `/Applications/Akorith.app`.
 - [ ] **Windows:** build on a Windows host (`npm run dist:win`) or via CI — a macOS host
       cannot cross-build the NSIS installer.
-- [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` or `git push origin v<version>`)
-      builds unsigned mac+win artifacts and creates a draft prerelease.
+- [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` with an existing tag,
+      or `git push origin v<version>`) builds signed mac+win artifacts with `--publish never`,
+      verifies native launches/signatures/metadata, then atomically finalizes the release.
 - [ ] **Identity:** packaged menu bar / Dock / Finder say Akorith; dev menu bar says Akorith
       via `scripts/fix-dev-app-name.js`.
-- [ ] **Signing:** artifacts are unsigned until certs are configured — never faked.
-      See `docs/packaging.md` and `docs/install.md`.
+- [ ] **Signing:** configure every required repository secret; missing credentials fail the
+      platform job before packaging and no release is created. See
+      `docs/production-updates-releases.md`.
 
 ## 8. Phase 39 tooling (source installs)
 

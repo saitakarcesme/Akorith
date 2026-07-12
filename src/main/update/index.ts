@@ -17,6 +17,7 @@ async function service(): Promise<PackagedUpdaterService> {
         runtime: {
           appVersion: app.getVersion(),
           isPackaged: app.isPackaged,
+          isPortable: process.platform === 'win32' && Boolean(process.env['PORTABLE_EXECUTABLE_FILE']),
           platform: process.platform,
           // electron-builder embeds the public GitHub Releases provider from package.json.
           feedConfigured: true

@@ -13,10 +13,11 @@ Once a release is published, grab the artifact for your OS from the repo's
   `Akorith-<version>-portable-x64.exe` (no install). Run it; a desktop/Start-menu
   shortcut named **Akorith** is created by the installer.
 
-> Builds are currently **unsigned**. macOS Gatekeeper may say the app is from an
-> unidentified developer — right-click → **Open** the first time (or
-> `xattr -dr com.apple.quarantine /Applications/Akorith.app`). Windows SmartScreen
-> may warn — choose **More info → Run anyway**. Signing/notarization is planned.
+> Official workflow releases are published only after Authenticode verification
+> on Windows and Developer ID, Gatekeeper, and notarization verification on macOS.
+> Local source builds are not official releases and may be unsigned; never bypass
+> Gatekeeper or SmartScreen for an artifact whose origin and signature you have
+> not independently verified.
 
 After installing, sign in to the agent CLIs you use (Akorith never stores these):
 `claude` login, Codex login, `opencode auth login`, `gh auth login`, and/or

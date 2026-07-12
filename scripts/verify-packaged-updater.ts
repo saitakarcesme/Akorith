@@ -34,6 +34,7 @@ class FakeUpdater implements ElectronUpdaterLike {
   autoDownload = true
   autoInstallOnAppQuit = true
   allowPrerelease = false
+  allowDowngrade = true
   channel: string | null = null
   checkCalls = 0
   downloadCalls = 0
@@ -85,6 +86,7 @@ class FakeUpdater implements ElectronUpdaterLike {
 const packagedRuntime = {
   appVersion: '1.2.3',
   isPackaged: true,
+  isPortable: false,
   platform: 'win32' as const,
   feedConfigured: true
 }
@@ -109,6 +111,8 @@ async function main(): Promise<void> {
 
   const unavailable = supportForPackagedUpdater({ ...packagedRuntime, isPackaged: false }, new FakeUpdater())
   check(unavailable.code === 'DEVELOPMENT_BUILD' && !unavailable.supported, 'development builds report updater unsupported')
+  const portable = supportForPackagedUpdater({ ...packagedRuntime, isPortable: true }, new FakeUpdater())
+  check(portable.code === 'PORTABLE_BUILD' && !portable.supported && portable.reason.includes('portable'), 'portable builds report updater unsupported with manual upgrade guidance')
   check(supportForPackagedUpdater(packagedRuntime, undefined).code === 'UPDATER_MODULE_MISSING', 'missing updater dependency is reported honestly')
   check(supportForPackagedUpdater({ ...packagedRuntime, feedConfigured: false }, new FakeUpdater()).code === 'UPDATE_FEED_MISSING', 'missing publication feed is reported honestly')
   check(supportForPackagedUpdater({ ...packagedRuntime, platform: 'linux' }, new FakeUpdater()).code === 'UNSUPPORTED_PLATFORM', 'unsupported packaged platforms are explicit')
@@ -143,6 +147,7 @@ async function main(): Promise<void> {
   })
   check(service.getSnapshot().phase === 'idle' && service.getSnapshot().canCheck, 'supported packaged updater starts idle')
   check(updater.channel === 'latest' && updater.allowPrerelease === false, 'stable channel maps to latest feed without prereleases')
+  check(updater.allowDowngrade === false, 'stable channel explicitly disables updater downgrades after channel assignment')
   const observed: string[] = []
   const unsubscribe = service.subscribe((snapshot) => observed.push(snapshot.phase))
   await service.checkForUpdates('stable')
@@ -186,6 +191,7 @@ async function main(): Promise<void> {
   const betaService = new PackagedUpdaterService({ runtime: packagedRuntime, updater: betaUpdater })
   await betaService.checkForUpdates('beta')
   check(betaService.getSnapshot().phase === 'available' && betaUpdater.channel === 'beta' && betaUpdater.allowPrerelease, 'beta channel opts into prerelease feed semantics')
+  check(betaUpdater.allowDowngrade === false, 'beta channel explicitly disables updater downgrades after channel assignment')
 
   const stableUpdater = new FakeUpdater()
   stableUpdater.checkResult = { updateInfo: { version: '2.0.0-beta.1' } }

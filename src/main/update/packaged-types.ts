@@ -19,6 +19,7 @@ export type PackagedUpdatePhase =
 export type UpdaterSupportCode =
   | 'SUPPORTED'
   | 'DEVELOPMENT_BUILD'
+  | 'PORTABLE_BUILD'
   | 'UNSUPPORTED_PLATFORM'
   | 'UPDATER_MODULE_MISSING'
   | 'UPDATE_FEED_MISSING'
@@ -27,6 +28,8 @@ export type UpdaterSupportCode =
 export interface PackagedUpdaterRuntime {
   appVersion: string
   isPackaged: boolean
+  /** True for electron-builder's Windows portable target (no install location). */
+  isPortable: boolean
   platform: NodeJS.Platform
   /**
    * True only when electron-builder has a real publish provider/feed embedded
@@ -106,6 +109,7 @@ export interface ElectronUpdaterLike {
   autoDownload: boolean
   autoInstallOnAppQuit: boolean
   allowPrerelease: boolean
+  allowDowngrade: boolean
   channel: string | null
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<unknown>
@@ -130,4 +134,3 @@ export interface ElectronUpdaterLoadResult {
 }
 
 export type UpdateModuleLoader = (specifier: string) => Promise<unknown>
-

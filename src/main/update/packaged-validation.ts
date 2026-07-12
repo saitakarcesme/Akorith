@@ -98,6 +98,13 @@ export function supportForPackagedUpdater(
   if (!runtime.isPackaged) {
     return { supported: false, code: 'DEVELOPMENT_BUILD', reason: 'Packaged updates are disabled in development and source-checkout runs.' }
   }
+  if (runtime.isPortable) {
+    return {
+      supported: false,
+      code: 'PORTABLE_BUILD',
+      reason: 'Automatic updates are unavailable in the portable build. Download a newer portable release or install Akorith with the signed installer.'
+    }
+  }
   if (runtime.platform !== 'win32' && runtime.platform !== 'darwin') {
     return { supported: false, code: 'UNSUPPORTED_PLATFORM', reason: `Packaged updates are not supported on ${runtime.platform}.` }
   }

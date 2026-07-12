@@ -119,8 +119,16 @@ for (const s of ['dist:mac', 'dist:win', 'refresh:mac', 'refresh:win']) {
 }
 
 // 6. CI workflow (shipped as a template; activate by copying into .github/workflows/)
-if (existsSync(join(root, '.github/workflows/release.yml'))) {
+const releaseWorkflowPath = join(root, '.github/workflows/release.yml')
+if (existsSync(releaseWorkflowPath)) {
   ok('release workflow active (.github/workflows/release.yml)')
+  const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8')
+  releaseWorkflow.includes('--publish never') && !releaseWorkflow.includes('--publish always')
+    ? ok('release packaging is publication-disabled until verification completes')
+    : bad('release packaging must use --publish never and must not use --publish always')
+  for (const gate of ['verify-release-ref.mjs --require-git', 'Get-AuthenticodeSignature', 'stapler validate', 'verify-release-artifacts.mjs --verify-manifest']) {
+    releaseWorkflow.includes(gate) ? ok(`release workflow gate present: ${gate}`) : bad(`release workflow gate missing: ${gate}`)
+  }
 } else if (existsSync(join(root, 'ci/release.yml'))) {
   ok('release workflow template present (ci/release.yml — copy to .github/workflows/release.yml to activate)')
 } else {
@@ -139,7 +147,7 @@ try {
 }
 
 // 7. Signing reminder (never fails)
-console.log('  note  builds are UNSIGNED unless signing certs/secrets are configured (Gatekeeper/SmartScreen will warn on other machines).')
+console.log('  note  local builds may be unsigned; the release workflow fails closed unless signing/notarization credentials and artifact verification succeed.')
 
 console.log('')
 console.log(`== ${errors} error(s), ${warnings} warning(s) ==`)

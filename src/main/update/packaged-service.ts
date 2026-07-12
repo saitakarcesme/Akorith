@@ -226,6 +226,10 @@ export class PackagedUpdaterService {
     if (!this.updater) return
     this.updater.allowPrerelease = channel === 'beta'
     this.updater.channel = channel === 'beta' ? 'beta' : 'latest'
+    // electron-updater may enable downgrades when its channel changes. Akorith
+    // never treats a lower version as an update, so reset this policy after the
+    // channel assignment on every check as a defense in depth.
+    this.updater.allowDowngrade = false
   }
 
   private attachEvents(): void {

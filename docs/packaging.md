@@ -101,34 +101,20 @@ data and never deletes legacy data. See
 
 ## Release via GitHub Actions
 
-> **Activation note:** the workflow ships as **`ci/release.yml`** (a template), not
-> `.github/workflows/release.yml`, because the repo's current GitHub token lacks the
-> `workflow` scope GitHub requires to push files under `.github/workflows/`. Activate it
-> by copying `ci/release.yml` → `.github/workflows/release.yml` — easiest via the GitHub
-> **web UI** (Add file, whose session has the scope), or locally after
-> `gh auth refresh -s workflow` then commit/push.
+The active `.github/workflows/release.yml` accepts an exact stable or beta tag whose
+package/lockfile version matches and whose commit is contained in `origin/main`. Native
+Windows and macOS jobs require signing/notarization credentials, build with
+`--publish never`, verify signatures, notarization, packaged launch, channel YAML, and
+SHA-512 inventories, then upload private workflow artifacts. Only after both platforms
+pass does the write-enabled job create a draft, upload the exact inventory, and finalize
+the GitHub Release. A failure removes the draft and existing releases are immutable.
 
-Once activated, the workflow builds **unsigned** artifacts on `macos-latest` (dmg+zip)
-and `windows-latest` (nsis+portable):
+Manual dispatch takes an existing tag and uses the same gates; it cannot publish an
+arbitrary branch. Required secret names and the complete stable/beta process are in
+[`production-updates-releases.md`](production-updates-releases.md).
 
-- **Manual:** Actions → "release" → Run workflow (optionally tick "Create a draft release").
-- **Tag:** `git tag v0.1.0 && git push origin v0.1.0` → builds + a **draft prerelease**
-  with the artifacts attached.
-
-It never publishes a public/stable release automatically — only drafts/prereleases.
-No secrets are required for unsigned builds.
-
-## Signing & notarization (future / optional)
-
-Unsigned artifacts work for local use but trigger Gatekeeper (macOS) / SmartScreen
-(Windows) on other machines. To sign later:
-
-- **macOS:** add `CSC_LINK` + `CSC_KEY_PASSWORD` (Developer ID), and for notarization
-  `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`; remove
-  `CSC_IDENTITY_AUTO_DISCOVERY: false` from the macOS CI step.
-- **Windows:** add an Authenticode cert via `CSC_LINK` / `CSC_KEY_PASSWORD`.
-
-Signing is **never faked** — until certs are configured, builds are honestly unsigned.
+Local packages may be unsigned and are suitable for development only. They cannot enter
+the production publication job and are not evidence that release signing succeeded.
 
 ## Output
 
