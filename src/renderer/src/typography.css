@@ -1,0 +1,118 @@
+:root {
+  --font-body: 'Aptos', 'Segoe UI Variable Text', 'Inter Variable', Inter,
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-navigation: 'Aptos Display', 'Segoe UI Variable Display', 'Inter Variable',
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-code: 'Cascadia Code', 'SFMono-Regular', 'SF Mono', 'Roboto Mono',
+    Consolas, 'Liberation Mono', monospace;
+
+  --type-body-size: 13.5px;
+  --type-body-line: 1.55;
+  --type-body-weight: 440;
+  --type-nav-size: 12.5px;
+  --type-nav-weight: 610;
+  --type-title-size: 25px;
+  --type-title-line: 1.18;
+  --type-title-weight: 660;
+  --type-section-size: 14px;
+  --type-section-weight: 650;
+  --type-label-size: 11px;
+  --type-label-weight: 640;
+  --type-metric-size: 22px;
+  --type-metric-weight: 610;
+}
+
+html,
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-body);
+  font-optical-sizing: auto;
+  font-synthesis: none;
+}
+
+body {
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-line);
+  letter-spacing: -0.006em;
+  text-rendering: optimizeLegibility;
+}
+
+.app-chrome,
+.sidebar-nav,
+.sidebar-section-header,
+.profile-button,
+.activity-button,
+button {
+  font-family: var(--font-navigation);
+}
+
+.sidebar-nav button,
+.sidebar-newchat,
+.project-row,
+.project-chat,
+.recent-chat {
+  font-size: var(--type-nav-size);
+  font-weight: var(--type-nav-weight);
+  letter-spacing: -0.008em;
+}
+
+h1,
+.page-title,
+.dashboard-title,
+.loops-title,
+.plugins-title,
+.test-title {
+  font-family: var(--font-navigation);
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+  letter-spacing: -0.026em;
+}
+
+h2,
+h3,
+.section-heading {
+  font-family: var(--font-navigation);
+  font-size: var(--type-section-size);
+  font-weight: var(--type-section-weight);
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+}
+
+label,
+.field-label,
+.metric-label,
+.sidebar-section-title {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1.35;
+  letter-spacing: 0.012em;
+}
+
+.metric-value,
+.dashboard-metric-value,
+.loop-stat-value,
+.benchmark-metric-value {
+  font-family: var(--font-navigation);
+  font-size: var(--type-metric-size);
+  font-weight: var(--type-metric-weight);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
+code,
+pre,
+kbd,
+samp,
+.xterm,
+.terminal-pane,
+.chat-code,
+.mono {
+  font-family: var(--font-code);
+  font-variant-ligatures: contextual;
+  letter-spacing: 0;
+}
