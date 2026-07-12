@@ -344,6 +344,22 @@ function rankAndRecommend(results: BenchmarkServiceModelResult[]): {
       rationale: `${best.modelLabel} has the highest complete validated ${CATEGORY_LABELS[category].toLowerCase()} score (${Number(best.categoryScores[categoryId]).toFixed(2)}) in this comparable workload cohort.`
     })
   }
+  const planning = comparable
+    .map((result) => {
+      const scores = [result.categoryScores['repo-understanding'], result.categoryScores['long-context']]
+        .filter((score): score is number => typeof score === 'number')
+      return { result, score: scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null }
+    })
+    .filter((entry): entry is { result: BenchmarkServiceModelResult; score: number } => entry.score !== null)
+    .sort((left, right) => right.score - left.score || left.result.modelId.localeCompare(right.result.modelId))[0]
+  if (planning) {
+    recommendations.unshift({
+      id: `planning:${planning.result.modelId}`,
+      useCase: 'Planning and reasoning',
+      modelLabel: planning.result.modelLabel,
+      rationale: `${planning.result.modelLabel} has the strongest validated repository-understanding and long-context planning outcome (${planning.score.toFixed(2)}) in this comparable cohort.`
+    })
+  }
   return { results: ranked.sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) || left.modelLabel.localeCompare(right.modelLabel)), recommendations }
 }
 

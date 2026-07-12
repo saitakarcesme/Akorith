@@ -43,10 +43,51 @@ function fixture(input: FixtureInput): BenchmarkFixture {
 
 function languageFixture(
   language: BenchmarkLanguage,
-  extension: string,
   source: string,
   testDescription: string
 ): BenchmarkFixture {
+  const files: BenchmarkFixtureFile[] = (() => {
+    switch (language) {
+      case 'cpp':
+        return [
+          { path: 'src/cache.cpp', content: source },
+          { path: 'tests/cache_test.cpp', content: '#include <cassert>\n#include "../src/cache.cpp"\nint main(){ Cache cache(2); cache.put("a",1); cache.put("a",2); assert(cache.size()==1); assert(cache.get("a")==2); Cache zero(0); zero.put("x",1); assert(zero.size()==0); }\n' }
+        ]
+      case 'go':
+        return [
+          { path: 'go.mod', content: 'module benchmark/cache\n\ngo 1.22\n' },
+          { path: 'cache/cache.go', content: source },
+          { path: 'cache/cache_test.go', content: 'package cache\nimport "testing"\nfunc TestDuplicateAndZero(t *testing.T){ c:=New(2); c.Put("a",1); c.Put("a",2); if c.Len()!=1 { t.Fatal("duplicate grew cache") }; if v,ok:=c.Get("a"); !ok||v!=2 { t.Fatal("update missing") }; z:=New(0); z.Put("x",1); if z.Len()!=0 { t.Fatal("zero stored value") } }\n' }
+        ]
+      case 'java':
+        return [
+          { path: 'src/Cache.java', content: source },
+          { path: 'tests/CacheTest.java', content: 'public final class CacheTest { public static void main(String[] args){ Cache c=new Cache(2); c.put("a",1); c.put("a",2); if(c.size()!=1||c.get("a")!=2) throw new AssertionError(); Cache z=new Cache(0); z.put("x",1); if(z.size()!=0) throw new AssertionError(); } }\n' }
+        ]
+      case 'javascript':
+        return [
+          { path: 'src/cache.mjs', content: source },
+          { path: 'tests/cache.test.mjs', content: 'import test from "node:test"; import assert from "node:assert/strict"; import { Cache } from "../src/cache.mjs"; test("duplicate and zero capacity",()=>{ const c=new Cache(2); c.put("a",1); c.put("a",2); assert.equal(c.size,1); assert.equal(c.get("a"),2); const z=new Cache(0); z.put("x",1); assert.equal(z.size,0); });\n' },
+          { path: 'package.json', content: '{"type":"module","scripts":{"test":"node --test tests/cache.test.mjs"}}\n' }
+        ]
+      case 'typescript':
+        return [
+          { path: 'src/cache.ts', content: source },
+          { path: 'tests/cache.test.ts', content: 'import test from "node:test"; import assert from "node:assert/strict"; import { Cache } from "../src/cache.ts"; test("duplicate and zero capacity",()=>{ const c=new Cache<string,number>(2); c.put("a",1); c.put("a",2); assert.equal(c.size,1); assert.equal(c.get("a"),2); const z=new Cache<string,number>(0); z.put("x",1); assert.equal(z.size,0); });\n' },
+          { path: 'package.json', content: '{"type":"module","scripts":{"test":"node --experimental-strip-types --test tests/cache.test.ts"}}\n' }
+        ]
+      case 'python':
+        return [
+          { path: 'src/cache.py', content: source },
+          { path: 'tests/test_cache.py', content: 'import sys, unittest\nsys.path.insert(0,"src")\nfrom cache import Cache\nclass CacheTest(unittest.TestCase):\n def test_duplicate_and_zero(self):\n  c=Cache(2); c.put("a",1); c.put("a",2); self.assertEqual(c.size(),1); self.assertEqual(c.get("a"),2)\n  z=Cache(0); z.put("x",1); self.assertEqual(z.size(),0)\nif __name__=="__main__": unittest.main()\n' }
+        ]
+      case 'rust':
+        return [
+          { path: 'Cargo.toml', content: '[package]\nname="cache_benchmark"\nversion="0.1.0"\nedition="2021"\n' },
+          { path: 'src/lib.rs', content: `${source}\n#[cfg(test)] mod tests { use super::*; #[test] fn duplicate_and_zero(){ let mut c=Cache::new(2); c.put("a",1); c.put("a",2); assert_eq!(c.len(),1); assert_eq!(c.get(&"a"),Some(&2)); let mut z=Cache::new(0); z.put("x",1); assert_eq!(z.len(),0); } }\n` }
+        ]
+    }
+  })()
   return fixture({
     id: `multi-language-${language}-v1`,
     category: 'multi_language',
@@ -55,7 +96,7 @@ function languageFixture(
     taskPrompt: `Repair the bounded cache implementation. Preserve public API names, handle duplicate keys and zero capacity, and keep the change focused. ${testDescription}`,
     languages: [language],
     tags: ['multi-language', 'repair', 'data-structure'],
-    files: [{ path: `src/cache.${extension}`, content: source }],
+    files,
     checks: [
       ['language-tests', `${language} test command exits successfully`, 'test_command', 60],
       ['duplicate-key', 'Updating an existing key does not grow the cache', 'behavior_assertion', 20],
@@ -110,13 +151,13 @@ const FIXTURES: BenchmarkFixture[] = [
       ['focused-diff', 'Changes remain scoped to the registry repair', 'repository_assertion', 15, false]
     ]
   }),
-  languageFixture('cpp', 'cpp', '#include <list>\n#include <unordered_map>\n// Intentionally incomplete bounded cache fixture.\n', 'Build and run the supplied C++ assertions.'),
-  languageFixture('go', 'go', 'package cache\n// Intentionally incomplete bounded cache fixture.\n', 'Run go test ./....'),
-  languageFixture('java', 'java', 'package fixture;\npublic final class Cache { /* intentionally incomplete */ }\n', 'Run the supplied JUnit harness.'),
-  languageFixture('javascript', 'js', "export class Cache { constructor(limit) { this.limit = limit; this.items = new Map(); } }\n", 'Run the Node test harness.'),
-  languageFixture('typescript', 'ts', 'export class Cache<K, V> { constructor(readonly limit: number) {} }\n', 'Run the TypeScript test and typecheck harnesses.'),
-  languageFixture('python', 'py', 'class Cache:\n    def __init__(self, limit: int):\n        self.limit = limit\n', 'Run pytest.'),
-  languageFixture('rust', 'rs', 'pub struct Cache<K, V> { capacity: usize, entries: Vec<(K, V)> }\n', 'Run cargo test.'),
+  languageFixture('cpp', '#include <list>\n#include <string>\n#include <unordered_map>\n// Implement the Cache contract exercised by tests/cache_test.cpp.\n', 'Build and run the supplied C++ assertions.'),
+  languageFixture('go', 'package cache\n// Implement New, Put, Get, and Len as exercised by cache_test.go.\n', 'Run go test ./....'),
+  languageFixture('java', 'public final class Cache { /* implement constructor, put, get, and size */ }\n', 'Compile and run the supplied Java assertion harness.'),
+  languageFixture('javascript', "export class Cache { constructor(limit) { this.limit = limit; this.items = new Map(); } }\n", 'Run the Node test harness.'),
+  languageFixture('typescript', 'export class Cache<K, V> { constructor(readonly limit: number) {} }\n', 'Run the Node 22 TypeScript test harness.'),
+  languageFixture('python', 'class Cache:\n    def __init__(self, limit: int):\n        self.limit = limit\n', 'Run the Python unittest harness.'),
+  languageFixture('rust', 'pub struct Cache<K, V> { capacity: usize, entries: Vec<(K, V)> }\n', 'Run cargo test.'),
   fixture({
     id: 'code-generation-event-ledger-v1',
     category: 'code_generation',

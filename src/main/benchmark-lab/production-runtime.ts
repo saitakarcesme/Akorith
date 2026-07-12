@@ -78,25 +78,66 @@ function selection(model: Parameters<BenchmarkRuntimeResolver['resolve']>[0]): L
   }
 }
 
-interface TestCommandResult extends RunCliResult { durationMs: number; timedOut: boolean }
+interface TestCommandResult extends RunCliResult { commandLabel: string; durationMs: number; timedOut: boolean }
+
+async function fileExists(path: string): Promise<boolean> {
+  try { return (await stat(path)).isFile() } catch { return false }
+}
+
+async function runEvidenceCommand(
+  workspace: BenchmarkWorkspace,
+  executable: string,
+  args: string[],
+  commandLabel: string,
+  signal: AbortSignal,
+  timeoutMs = 60_000
+): Promise<TestCommandResult> {
+  const startedAt = performance.now()
+  try {
+    const result = await runCli(executable, args, { cwd: workspace.rootPath!, signal, timeoutMs, maxOutputChars: 200_000 })
+    return { ...result, commandLabel, durationMs: Math.max(0, performance.now() - startedAt), timedOut: false }
+  } catch (error) {
+    if (signal.aborted) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      code: null, stdout: '', stderr: message.slice(0, 4_000), commandLabel,
+      durationMs: Math.max(0, performance.now() - startedAt), timedOut: /timed out/i.test(message)
+    }
+  }
+}
 
 async function safeTestCommand(workspace: BenchmarkWorkspace, signal: AbortSignal): Promise<TestCommandResult | null> {
   if (!workspace.rootPath) return null
   try {
     const parsed = JSON.parse(await readFile(join(workspace.rootPath, 'package.json'), 'utf8')) as { scripts?: Record<string, unknown> }
     if (typeof parsed.scripts?.test === 'string') {
-      const startedAt = performance.now()
-      try {
-        const result = await runCli('npm', ['test', '--', '--runInBand'], { cwd: workspace.rootPath, signal, timeoutMs: 60_000, maxOutputChars: 200_000 })
-        return { ...result, durationMs: Math.max(0, performance.now() - startedAt), timedOut: false }
-      } catch (error) {
-        if (signal.aborted) throw error
-        const message = error instanceof Error ? error.message : String(error)
-        return { code: null, stdout: '', stderr: message.slice(0, 4_000), durationMs: Math.max(0, performance.now() - startedAt), timedOut: /timed out/i.test(message) }
-      }
+      return runEvidenceCommand(workspace, 'npm', ['test', '--silent'], 'declared npm test', signal)
     }
   } catch {
-    // A fixture without a declared test command has no process evidence.
+    // Continue through fixed language harness detection.
+  }
+  if (await fileExists(join(workspace.rootPath, 'go.mod'))) {
+    return runEvidenceCommand(workspace, 'go', ['test', './...'], 'go test ./...', signal)
+  }
+  if (await fileExists(join(workspace.rootPath, 'Cargo.toml'))) {
+    return runEvidenceCommand(workspace, 'cargo', ['test', '--quiet'], 'cargo test --quiet', signal)
+  }
+  if (await fileExists(join(workspace.rootPath, 'tests', 'test_cache.py'))) {
+    return runEvidenceCommand(workspace, process.platform === 'win32' ? 'python' : 'python3', ['-m', 'unittest', 'discover', '-s', 'tests'], 'python unittest', signal)
+  }
+  if (await fileExists(join(workspace.rootPath, 'tests', 'cache_test.cpp'))) {
+    const binary = join(workspace.rootPath, `.akorith-cache-test${process.platform === 'win32' ? '.exe' : ''}`)
+    const compile = await runEvidenceCommand(workspace, 'g++', ['-std=c++20', 'tests/cache_test.cpp', '-o', binary], 'C++ compile', signal)
+    if (compile.code !== 0) return compile
+    const run = await runEvidenceCommand(workspace, binary, [], 'C++ assertion harness', signal)
+    return { ...run, durationMs: compile.durationMs + run.durationMs, stdout: `${compile.stdout}${run.stdout}`, stderr: `${compile.stderr}${run.stderr}` }
+  }
+  if (await fileExists(join(workspace.rootPath, 'tests', 'CacheTest.java'))) {
+    const output = join(workspace.rootPath, '.akorith-java')
+    const compile = await runEvidenceCommand(workspace, 'javac', ['-d', output, 'src/Cache.java', 'tests/CacheTest.java'], 'Java compile', signal)
+    if (compile.code !== 0) return compile
+    const run = await runEvidenceCommand(workspace, 'java', ['-cp', output, 'CacheTest'], 'Java assertion harness', signal)
+    return { ...run, durationMs: compile.durationMs + run.durationMs, stdout: `${compile.stdout}${run.stdout}`, stderr: `${compile.stderr}${run.stderr}` }
   }
   return null
 }
@@ -104,7 +145,7 @@ async function safeTestCommand(workspace: BenchmarkWorkspace, signal: AbortSigna
 function processEvidence(result: TestCommandResult | null): import('./types').BenchmarkProcessEvidence | null {
   if (!result) return null
   return {
-    commandLabel: 'declared package test',
+    commandLabel: result.commandLabel,
     exitCode: result.code,
     timedOut: result.timedOut,
     durationMs: result.durationMs,
@@ -117,25 +158,42 @@ function runtimeFor(model: Parameters<BenchmarkRuntimeResolver['resolve']>[0]): 
   const router = createAutonomousExecutorRouter(new RemoteStructuredExecutorClient(getRemoteNodeClientManager()))
   return {
     planner: {
-      id: 'akorith-deterministic-fixture-planner-v1',
-      async plan({ fixture }) {
+      id: `akorith-model-planner:${model.providerId}`,
+      async plan({ fixture, signal }) {
+        const prompt = `You are the planning phase of a reproducible coding benchmark. Produce a concise implementation plan for the selected executor. Do not reveal private chain-of-thought. Do not change or weaken tests.\n\nFixture: ${fixture.id}\nTask: ${fixture.taskPrompt}\nFiles:\n${fixture.workspaceFiles.map((file) => `- ${file.path}`).join('\n')}\nValidation:\n${fixture.validation.map((item) => `- ${item.label}`).join('\n')}`
+        if (model.source === 'remote') {
+          if (!model.nodeId) throw new Error('Remote benchmark planner is missing its node identity.')
+          const plan = await remoteProbeText(model.nodeId, model.modelName, prompt, signal, () => undefined)
+          return {
+            plan: plan.slice(0, 20_000),
+            summary: `Plan generated by ${model.displayLabel}.`,
+            usage: { source: 'unavailable', inputTokens: null, outputTokens: null, cachedTokens: null, costUsd: null }
+          }
+        }
+        const result = await sendMetaPrompt(model.providerId, model.modelName, prompt, signal)
         return {
-          plan: fixture.taskPrompt,
-          summary: `Apply the published ${fixture.id} task without changing its validation contract.`,
-          usage: { source: 'unavailable', inputTokens: null, outputTokens: null, cachedTokens: null, costUsd: null }
+          plan: result.text.slice(0, 20_000),
+          summary: `Plan generated by ${model.displayLabel}.`,
+          usage: {
+            source: result.usage.estimated ? 'estimated' : 'reported',
+            inputTokens: result.usage.promptTokens ?? null,
+            outputTokens: result.usage.completionTokens ?? null,
+            cachedTokens: null,
+            costUsd: result.usage.estimated ? null : result.usage.costUsd ?? null
+          }
         }
       }
     },
     executor: {
       id: `akorith-production-executor:${model.providerId}`,
-      async execute({ fixture, workspace, signal }) {
+      async execute({ fixture, workspace, plan, signal }) {
         if (!workspace.rootPath) throw new Error('Production benchmark workspace is unavailable.')
         const before = await snapshot(workspace.rootPath)
         const result = await router.execute({
           workspacePath: workspace.rootPath,
           selection: selection(model),
           task: benchmarkTask(fixture),
-          repositoryContext: JSON.stringify({ fixture: fixture.id, files: fixture.workspaceFiles.map((file) => file.path) }),
+          repositoryContext: JSON.stringify({ fixture: fixture.id, files: fixture.workspaceFiles.map((file) => file.path), modelPlan: plan.plan }),
           timeoutMs: fixture.timeoutMs,
           signal
         })
@@ -150,7 +208,7 @@ function runtimeFor(model: Parameters<BenchmarkRuntimeResolver['resolve']>[0]): 
             inputTokens: result.usage.input,
             outputTokens: result.usage.output,
             cachedTokens: result.usage.cached,
-            costUsd: result.usage.costUsd
+            costUsd: result.estimatedUsage ? null : result.usage.costUsd
           },
           error: result.outcome === 'completed' ? null : result.summary
         }
