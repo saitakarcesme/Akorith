@@ -28,10 +28,12 @@ const pkg = JSON.parse(read('package.json')) as {
     productName?: string
     win?: { executableName?: string; icon?: string }
     nsis?: Record<string, unknown>
+    publish?: { provider?: string; owner?: string; repo?: string }[]
   }
+  dependencies?: Record<string, string>
 }
 const main = read('src/main/index.ts')
-const updateRunner = read('src/main/update/runner.ts')
+const updateRuntime = read('src/main/update/index.ts')
 const refresh = read('scripts/refresh-windows-app.ps1')
 
 assert(pkg.productName === 'Akorith', 'package productName is Akorith')
@@ -48,7 +50,9 @@ assert(main.includes("app.setAppUserModelId(AKORITH_APP_ID)") && main.indexOf('a
 assert(main.includes("['build', 'icon.ico']") && main.includes('...(icon ? { icon } : {})'), 'BrowserWindow icon resolves to build/icon.ico on Windows')
 assert(refresh.includes('$AppId = \'com.akorith.app\'') && refresh.includes('$AppName = \'Akorith\''), 'refresh script uses Akorith app id/name')
 assert(refresh.includes('Akorith.exe') && refresh.includes('Electron.lnk'), 'refresh script handles installed exe and stale Electron shortcuts')
-assert(updateRunner.includes('refresh-windows-app.ps1'), 'update runner launches Windows refresh script for packaged updates')
-assert(!/electron-vite\s+dev|npm\s+run\s+dev/.test(updateRunner), 'packaged update runner does not relaunch dev server')
+assert(Boolean(pkg.dependencies?.['electron-updater']), 'electron-updater is a production dependency')
+assert(pkg.build?.publish?.some((entry) => entry.provider === 'github' && entry.owner === 'saitakarcesme' && entry.repo === 'Akorith'), 'public GitHub Releases feed is configured')
+assert(updateRuntime.includes('PackagedUpdaterService') && updateRuntime.includes('authorizeInstall'), 'main uses the packaged updater with explicit install authorization')
+assert(!/git\s+(?:fetch|pull|merge)|refresh-windows-app/.test(updateRuntime), 'installed update runtime does not run source Git or refresh scripts')
 
 console.log('Windows app identity verification passed.')
