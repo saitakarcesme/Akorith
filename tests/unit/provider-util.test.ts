@@ -3,7 +3,8 @@ import { runCli } from '../../src/main/providers/util'
 
 describe('provider CLI runner', () => {
   it('bounds retained stdout and records truncation', async () => {
-    const result = await runCli(process.execPath, ['-e', 'process.stdout.write("x".repeat(20000))'], {
+    const executable = process.platform === 'win32' ? 'node' : process.execPath
+    const result = await runCli(executable, ['tests/fixtures/write-large-output.cjs'], {
       timeoutMs: 10_000,
       maxOutputChars: 8_192
     })
