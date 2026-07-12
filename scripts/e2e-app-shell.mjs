@@ -10,6 +10,22 @@ const profile = await mkdtemp(join(tmpdir(), 'akorith-e2e-'))
 const consoleErrors = []
 let application
 
+async function findAppWindow(electronApplication, timeoutMs = 30_000) {
+  await electronApplication.firstWindow({ timeout: timeoutMs })
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    for (const candidate of electronApplication.windows()) {
+      try {
+        if (await candidate.locator('.app-chrome').count()) return candidate
+      } catch {
+        // The splash window is intentionally short-lived and may close here.
+      }
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50))
+  }
+  throw new Error('Akorith main window did not become ready before the E2E timeout.')
+}
+
 try {
   application = await electron.launch({
     executablePath: electronPath,
@@ -25,7 +41,7 @@ try {
     },
     timeout: 45_000
   })
-  const page = await application.firstWindow({ timeout: 30_000 })
+  const page = await findAppWindow(application)
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
