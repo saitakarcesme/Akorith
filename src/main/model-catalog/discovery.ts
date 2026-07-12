@@ -64,8 +64,8 @@ export function remoteNodeCatalogSnapshots(
         name: model.id,
         label: model.name,
         runtime: model.runtimeKind,
-        providerId: `remote-${model.runtimeKind}`,
-        providerLabel: runtime?.label ?? model.runtimeKind.replace(/_/g, ' '),
+        providerId: `remote:${catalog.node.id}:${model.runtimeKind}`,
+        providerLabel: `Remote — ${catalog.node.name}`,
         family: runtimeFamily(model.runtimeKind),
         available: {
           ok: model.available && runtime?.available === true,
