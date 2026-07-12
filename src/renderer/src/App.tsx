@@ -7,6 +7,7 @@ import TelemetryDashboardPage from './components/TelemetryDashboardPage'
 import PluginMarketplacePage from './components/PluginMarketplacePage'
 import BenchmarkLabPage from './components/BenchmarkLabPage'
 import AutonomousLoopPage from './components/AutonomousLoopPage'
+import ProductErrorBoundary from './components/ProductErrorBoundary'
 import { ChevronIcon, PanelsIcon, SparkIcon } from './components/icons'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
@@ -573,14 +574,14 @@ export default function App(): JSX.Element {
       {/* The benchmark page stays mounted while hidden so a streaming run is never
           interrupted by navigating to the Workspace or Dashboard. */}
       <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
-        <BenchmarkLabPage />
+        <ProductErrorBoundary name="Benchmark"><BenchmarkLabPage /></ProductErrorBoundary>
       </div>
       {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-        <AutonomousLoopPage active={view === 'loops'} />
+        <ProductErrorBoundary name="Loop"><AutonomousLoopPage active={view === 'loops'} /></ProductErrorBoundary>
       </div>
-      {view === 'dashboard' && <TelemetryDashboardPage />}
-      {view === 'plugins' && <PluginMarketplacePage />}
+      {view === 'dashboard' && <ProductErrorBoundary name="Dashboard"><TelemetryDashboardPage /></ProductErrorBoundary>}
+      {view === 'plugins' && <ProductErrorBoundary name="Plugins"><PluginMarketplacePage /></ProductErrorBoundary>}
       </main>
       </div>
     </div>

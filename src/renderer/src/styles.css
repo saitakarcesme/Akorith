@@ -4554,6 +4554,27 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
+.product-error-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.product-error-boundary {
+  margin: auto;
+  width: min(460px, calc(100% - 40px));
+  padding: 28px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  text-align: center;
+}
+
+.product-error-boundary span,
+.product-error-boundary p { color: var(--text-dim); }
+.product-error-boundary h1 { margin: 8px 0; font-size: 20px; }
+
 /* ---------- scrollbars ---------- */
 
 ::-webkit-scrollbar {
