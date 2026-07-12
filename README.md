@@ -90,7 +90,7 @@ See [Telemetry and privacy](docs/production-telemetry-privacy.md) for storage, b
 ## Important operational limits
 
 - Loop only offers an executor after a fresh successful code-execution probe confirms every mandatory capability. Endpoint reachability alone is insufficient.
-- The bundled GitHub marketplace manifest and repository adapter contract exist, but automatic repository creation remains unavailable until the GitHub plugin has a live authenticated runtime adapter. Pasting an existing GitHub URL remains supported.
+- Automatic GitHub repository creation uses the installed `gh` CLI account and fails closed unless `gh auth status --active --hostname github.com` succeeds. Pasting an existing GitHub URL remains supported independently.
 - Benchmark records only independently observed evidence. Metrics that a provider or host cannot report remain unavailable; Akorith does not substitute synthetic values.
 - The standalone node currently serves HTTP. Plaintext HTTP is accepted by the client only for a private address after explicit acknowledgement. Use Tailscale or a trusted LAN, do not port-forward it to the public internet, and use HTTPS for any address that is not provably private.
 - Code signing, notarization, live RTX hardware validation, and physical macOS validation require the corresponding credentials and machines. The repository contains the release workflow and validation seams, not fabricated external evidence.

@@ -4,7 +4,7 @@ import { getDb } from '../db'
 import { ModelCatalogService, ModelCatalogStore, providerRegistrySource, remoteNodeSource, type ProbeTransportResolver } from '../model-catalog'
 import { describeProviders, sendMetaPrompt } from '../providers/registry'
 import { getRemoteNodeClientManager, REMOTE_NODE_SAFETY_POLICY, type RemoteGenerationEvent, type RemoteNodeCatalog } from '../remote-node'
-import { RepositoryService } from '../repository'
+import { GitHubCliRepositoryAdapter, RepositoryService } from '../repository'
 import { AutonomousLoopEngine } from './engine'
 import { createAutonomousExecutorRouter } from './executor'
 import { LoopOnboardingService } from './onboarding'
@@ -63,7 +63,8 @@ export function getAutonomousLoopRuntime(): AutonomousLoopService {
   const database = getDb()
   const store = new AutonomousLoopStore(database)
   const repository = new RepositoryService({
-    managedRoot: join(app.getPath('userData'), 'loop-workspaces')
+    managedRoot: join(app.getPath('userData'), 'loop-workspaces'),
+    githubAdapter: new GitHubCliRepositoryAdapter()
   })
   const catalog = new ModelCatalogService({
     store: new ModelCatalogStore(database),

@@ -17,7 +17,7 @@ The user selects a local parent directory and project name and either supplies a
 7. adds `origin`, verifies non-interactive remote reachability and push access, and performs the initial non-force push;
 8. persists the Loop, its exact planner/executor identities, counters, and first activity event.
 
-Automatic repository creation is permitted only through an authenticated GitHub plugin adapter. The default repository adapter reports authentication required; it does not create or claim a remote. Supplying a real GitHub URL is the available alternative.
+Automatic repository creation uses the authenticated GitHub CLI account adapter. It runs non-interactively, validates the owner/name and returned URL, and fails closed unless the active `github.com` account passes `gh auth status`. Supplying a real GitHub URL remains an independent alternative.
 
 ### Existing GitHub project
 

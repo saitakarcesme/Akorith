@@ -299,7 +299,7 @@ function SourceStep({ source, onChange }: { source: SourceState; onChange: (next
           <label><span>GitHub remote URL</span><input required={!source.createRemoteWithPlugin} disabled={source.createRemoteWithPlugin} value={source.remoteUrl} placeholder="https://github.com/owner/repository.git" onChange={(event) => onChange({ ...source, remoteUrl: event.target.value, createRemoteWithPlugin: false })} /></label>
           <label className="aloop-check">
             <input type="checkbox" checked={source.createRemoteWithPlugin} onChange={(event) => onChange({ ...source, createRemoteWithPlugin: event.target.checked, remoteUrl: event.target.checked ? '' : source.remoteUrl })} />
-            <span>Create the required GitHub remote through the connected GitHub plugin instead</span>
+            <span>Create the required GitHub remote with the authenticated GitHub CLI account</span>
           </label>
           {source.createRemoteWithPlugin && (
             <div className="aloop-inline-fields">

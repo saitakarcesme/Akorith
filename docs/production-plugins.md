@@ -41,7 +41,7 @@ Every item below has a schema-1 manifest, semantic version, publisher/icon fallb
 | 29 | `browser-playwright` | Browser/Playwright | None; selected origins/context | Lifecycle ready; local browser adapter required |
 | 30 | `local-files-terminal` | Local Files & Terminal | None; selected workspace/command grants | Lifecycle ready; local safety adapter required |
 
-The GitHub repository-creation contract used by Loop is intentionally unavailable until the GitHub item has a live authenticated adapter. A bundled manifest or an enabled lifecycle state alone is not authentication.
+Loop's narrow repository-creation operation is backed by the user's authenticated `gh` CLI account. This dedicated adapter does not make the marketplace plugin generally connected: a bundled manifest or enabled lifecycle state alone is still never authentication for broader GitHub capabilities.
 
 ## Manifest contract
 
