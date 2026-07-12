@@ -1,9 +1,8 @@
 // SQLite persistence — main process only. The renderer reaches this
 // exclusively through the validated IPC registered below.
 //
-// usage_events is a CONTRACT: the dashboard reads it, and
-// TODO(phase 6): the router reads usage_events to pick providers by
-//                cost/volume. One row per assistant send, from SendResult.usage.
+// usage_events is a compatibility contract: chat writes one row per assistant
+// send while the telemetry migration backfills the unified event ledger.
 
 import { app, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
@@ -15,6 +14,7 @@ import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 import { applyTelemetryMigrations, backfillUsageEvents } from './telemetry/migrations'
 import { applyAutonomousLoopMigrations } from './autonomous-loop/migrations'
 import { applyModelCatalogMigrations } from './model-catalog/migrations'
+import { applyBenchmarkMigrations } from './benchmark-lab/migrations'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -535,8 +535,9 @@ export function initDb(): void {
   // large history resume on a later launch without duplicating token totals.
   applyTelemetryMigrations(nextDb)
   backfillUsageEvents(nextDb)
-  applyAutonomousLoopMigrations(nextDb)
-  applyModelCatalogMigrations(nextDb)
+    applyAutonomousLoopMigrations(nextDb)
+    applyModelCatalogMigrations(nextDb)
+    applyBenchmarkMigrations(nextDb)
   } catch (err) {
     nextDb.close()
     db = null
