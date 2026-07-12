@@ -9,7 +9,7 @@
   "scripts": {
     "predev": "node scripts/fix-dev-app-name.js && node scripts/gen-build-info.js",
     "dev": "electron-vite dev",
-    "prebuild": "node scripts/gen-build-info.js",
+    "prebuild": "node scripts/gen-build-info.js && npm run node:build",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "rebuild": "electron-rebuild -f -o better-sqlite3",
@@ -68,7 +68,9 @@
     "verify:project-loop": "tsx scripts/verify-project-loop.ts",
     "verify:plugins": "tsx scripts/verify-plugin-marketplace.ts",
     "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts",
-    "ledger": "node scripts/generate-implementation-ledger.mjs"
+    "ledger": "node scripts/generate-implementation-ledger.mjs",
+    "node:start": "tsx scripts/akorith-node.ts",
+    "node:build": "node scripts/build-akorith-node.mjs"
   },
   "build": {
     "appId": "com.akorith.app",
@@ -94,6 +96,10 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "dist-node/akorith-node.cjs",
+        "to": "node/akorith-node.cjs"
       }
     ],
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
@@ -193,6 +199,7 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "esbuild": "0.28.1",
     "jsdom": "^25.0.1",
     "playwright-core": "^1.61.1",
     "tsx": "^4.22.4",
