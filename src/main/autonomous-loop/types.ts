@@ -38,6 +38,8 @@ export type LoopProjectSource =
       projectName: string
       remoteUrl?: string
       createRemoteWithPlugin?: boolean
+      githubOwner?: string
+      githubVisibility?: 'private' | 'public'
     }
   | {
       kind: 'existing_github'

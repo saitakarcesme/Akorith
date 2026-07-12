@@ -220,7 +220,9 @@ export function validateCreateAutonomousLoopInput(input: unknown): ParsedStructu
           parentPath: boundedText(source.parentPath, 2_000),
           projectName: boundedText(source.projectName, 120),
           remoteUrl: source.remoteUrl === undefined ? undefined : boundedText(source.remoteUrl, 2_000),
-          createRemoteWithPlugin: source.createRemoteWithPlugin === true
+          createRemoteWithPlugin: source.createRemoteWithPlugin === true,
+          githubOwner: source.githubOwner === undefined ? undefined : boundedText(source.githubOwner, 100),
+          githubVisibility: source.githubVisibility === 'public' ? 'public' as const : 'private' as const
         }
       : {
           kind: 'existing_github' as const,
@@ -231,6 +233,15 @@ export function validateCreateAutonomousLoopInput(input: unknown): ParsedStructu
     (sourceValue.kind === 'existing_github' && !sourceValue.remoteUrl)
   ) {
     return { ok: false, error: 'Project source fields are missing.' }
+  }
+  if (sourceValue.kind === 'new') {
+    const hasRemote = typeof sourceValue.remoteUrl === 'string' && sourceValue.remoteUrl.length > 0
+    if (hasRemote === sourceValue.createRemoteWithPlugin) {
+      return { ok: false, error: 'Choose exactly one GitHub remote source: paste a URL or create it with the GitHub plugin.' }
+    }
+    if (sourceValue.createRemoteWithPlugin && !sourceValue.githubOwner) {
+      return { ok: false, error: 'The connected GitHub account owner is required to create a repository.' }
+    }
   }
 
   const parseSelection = (candidate: Record<string, unknown>, needsProbe: boolean) => {
