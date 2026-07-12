@@ -8,6 +8,7 @@ import {
 } from './types'
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/
+const SAFE_CATALOG_ID = /^[A-Za-z0-9][A-Za-z0-9._:%-]{0,699}$/
 const SAFE_MODEL = /^[^\0\r\n]{1,200}$/
 const SAFE_COMMAND = /^[^\0\r\n]{1,500}$/
 const MAX_TEXT = 8_000
@@ -245,7 +246,7 @@ export function validateCreateAutonomousLoopInput(input: unknown): ParsedStructu
   }
 
   const parseSelection = (candidate: Record<string, unknown>, needsProbe: boolean) => {
-    const catalogId = boundedText(candidate.catalogId, 160)
+    const catalogId = boundedText(candidate.catalogId, 700)
     const providerId = boundedText(candidate.providerId, 80)
     const model = boundedText(candidate.model, 200)
     const location = enumValue(candidate.location, ['local', 'remote', 'cloud'] as const)
@@ -256,7 +257,7 @@ export function validateCreateAutonomousLoopInput(input: unknown): ParsedStructu
       !providerId ||
       !model ||
       !location ||
-      !SAFE_ID.test(catalogId) ||
+      !SAFE_CATALOG_ID.test(catalogId) ||
       !SAFE_ID.test(providerId) ||
       !SAFE_MODEL.test(model) ||
       (nodeId !== undefined && (!nodeId || !SAFE_ID.test(nodeId))) ||

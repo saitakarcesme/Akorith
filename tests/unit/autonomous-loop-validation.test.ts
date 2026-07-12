@@ -59,6 +59,32 @@ describe('autonomous Loop structured contracts', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('accepts encoded stable catalog identities and requires one new-project remote path', () => {
+    const valid = validateCreateAutonomousLoopInput({
+      source: {
+        kind: 'new',
+        parentPath: 'C:/Projects',
+        projectName: 'Quiet Notes',
+        remoteUrl: 'https://github.com/example/quiet-notes.git'
+      },
+      executor: {
+        catalogId: 'model:local:local:this-device:qwen%3A14b',
+        providerId: 'local',
+        model: 'qwen:14b',
+        location: 'local',
+        capabilityProbeId: 'probe-encoded'
+      }
+    })
+    expect(valid.ok).toBe(true)
+    expect(validateCreateAutonomousLoopInput({
+      source: { kind: 'new', parentPath: 'C:/Projects', projectName: 'Missing Remote' },
+      executor: {
+        catalogId: 'model:local:local:this-device:qwen', providerId: 'local', model: 'qwen',
+        location: 'local', capabilityProbeId: 'probe-missing'
+      }
+    }).ok).toBe(false)
+  })
+
   it('clamps unsafe optional limits to defaults', () => {
     const limits = normalizeLoopLimits({
       maxRepairAttempts: 999,
