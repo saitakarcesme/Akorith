@@ -33,6 +33,7 @@ import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonom
 import { registerDashboardTelemetryIpc } from './dashboard'
 import { startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
 import { registerRemoteNodeClientIpc, startRemoteNodeClientRuntime, stopRemoteNodeClientRuntime } from './remote-node'
+import { registerBenchmarkLabIpc, stopBenchmarkLabRuntime } from './benchmark-lab'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -438,6 +439,7 @@ app.whenReady().then(() => {
   registerAutonomousLoopIpc()
   registerDashboardTelemetryIpc()
   registerRemoteNodeClientIpc()
+  registerBenchmarkLabIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -484,6 +486,7 @@ app.on('will-quit', () => {
   stopAutonomousLoopRuntime()
   void stopGpuMonitor()
   stopRemoteNodeClientRuntime()
+  stopBenchmarkLabRuntime()
   disposeUpdateIpc()
   ptyManager.killAll()
   closeDb()
