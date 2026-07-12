@@ -487,7 +487,7 @@ export default function SettingsCenter({
     { id: 'compute', label: 'Compute', kicker: 'Remote nodes and models' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
-    { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
+    { id: 'update', label: 'Updates', kicker: 'Desktop release channel' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
   ]
