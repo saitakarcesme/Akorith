@@ -225,6 +225,8 @@ is administrative and is intentionally recorded on the next generation.
 | 215 | `c98a0e142dba` | fix(sidebar): keep More flyout above workspace | sidebar stacking and Electron end-to-end coverage | typecheck; sidebar component tests; production build; Electron E2E shell journey | makes the More destinations clickable outside the sidebar without covering Settings and disambiguates the E2E selector |
 | 216 | `6f7d64bdff13` | fix(dashboard): constrain telemetry to content viewport | Dashboard responsive layout | dashboard component tests; production build; isolated Electron E2E layout bounds | keeps the telemetry surface shrinkable inside the app grid while preserving its own heatmap scroller |
 | 217 | `f2ac0f99b6a3` | test(e2e): isolate profiles and capture product surfaces | Electron end-to-end harness and startup migration guard | typecheck; production build; Electron E2E through Loop, Benchmark, Plugins, Dashboard, and Updates | prevents test runs from importing real user data, asserts containment, and supports optional visual artifacts |
+| 218 | `e009e409a052` | docs: refresh production implementation ledger | delivery traceability | npm run ledger | records all 217 implementation commits since the verified baseline with their areas, tests, and outcomes |
+| 219 | `98dc9ba5b4a5` | docs(release): replace retired source-update runbooks | active setup and production release documentation | runbook link review; obsolete updater and macro verifier scan | operators now receive only the signed GitHub Release workflow, native verification gates, user update flow, and rollback policy |
 
-Total commits after baseline represented: **217**
+Total commits after baseline represented: **219**
 
