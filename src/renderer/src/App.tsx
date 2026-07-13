@@ -3,17 +3,18 @@ import Sidebar from './components/Sidebar'
 import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
-import TelemetryDashboardPage from './components/TelemetryDashboardPage'
-import PluginMarketplacePage from './components/PluginMarketplacePage'
-import BenchmarkLabPage from './components/BenchmarkLabPage'
-import AutonomousLoopPage from './components/AutonomousLoopPage'
-import ProductErrorBoundary from './components/ProductErrorBoundary'
+import Dashboard from './components/Dashboard'
+import Plugins from './components/Plugins'
+import TestPage from './components/TestPage'
+import ProjectLoopPage from './components/ProjectLoopPage'
+import CompanionsPage from './components/CompanionsPage'
+import AgentsPage from './components/AgentsPage'
 import { ChevronIcon, PanelsIcon, SparkIcon } from './components/icons'
 import type { AgentStatusInfo } from './components/TerminalPane'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins' | 'companions' | 'agents'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
@@ -63,85 +64,77 @@ function AppChrome({
   drawerOpen: boolean
   onToggleDrawer: () => void
 }): JSX.Element {
-  const isMac = /Mac/i.test(navigator.platform)
-  const isWindows = /Win/i.test(navigator.platform)
-  const hasCustomWindowControls = Boolean(window.api?.windowControls) && isMac
+  const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
 
   return (
-    <header className={`app-chrome ${isMac ? 'is-mac' : isWindows ? 'is-windows' : 'is-linux'}`}>
-      <div className="app-chrome-sidebar-segment">
-        {hasCustomWindowControls && (
-          <div className="app-window-controls" aria-label="Window controls">
-            <button
-              type="button"
-              className="app-window-control is-close"
-              aria-label="Close window"
-              title="Close"
-              onClick={() => void window.api.windowControls.close()}
-            />
-            <button
-              type="button"
-              className="app-window-control is-minimize"
-              aria-label="Minimize window"
-              title="Minimize"
-              onClick={() => void window.api.windowControls.minimize()}
-            />
-            <button
-              type="button"
-              className="app-window-control is-fullscreen"
-              aria-label="Toggle fullscreen"
-              title="Fullscreen"
-              onClick={() => void window.api.windowControls.toggleFullscreen()}
-            />
-          </div>
-        )}
-        <div className="app-chrome-left">
+    <header className="app-chrome">
+      {hasWindowControls && (
+        <div className="app-window-controls" aria-label="Window controls">
           <button
             type="button"
-            className="app-chrome-icon"
-            title="Toggle sidebar"
-            aria-label="Toggle sidebar"
-            onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
-          >
-            <PanelsIcon size={14} />
-          </button>
-          <button type="button" className="app-chrome-nav" title="Back" aria-label="Go back" disabled={!canGoBack} onClick={onBack}>
-            <ChevronIcon size={15} direction="left" />
-          </button>
-          <button type="button" className="app-chrome-nav" title="Forward" aria-label="Go forward" disabled={!canGoForward} onClick={onForward}>
-            <ChevronIcon size={15} direction="right" />
-          </button>
+            className="app-window-control is-close"
+            aria-label="Close window"
+            title="Close"
+            onClick={() => void window.api.windowControls.close()}
+          />
+          <button
+            type="button"
+            className="app-window-control is-minimize"
+            aria-label="Minimize window"
+            title="Minimize"
+            onClick={() => void window.api.windowControls.minimize()}
+          />
+          <button
+            type="button"
+            className="app-window-control is-fullscreen"
+            aria-label="Toggle fullscreen"
+            title="Fullscreen"
+            onClick={() => void window.api.windowControls.toggleFullscreen()}
+          />
         </div>
+      )}
+      <div className="app-chrome-left">
+        <button
+          type="button"
+          className="app-chrome-icon"
+          title="Toggle sidebar"
+          onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
+        >
+          <PanelsIcon size={14} />
+        </button>
+        <button type="button" className="app-chrome-nav" title="Back" disabled={!canGoBack} onClick={onBack}>
+          <ChevronIcon size={15} direction="left" />
+        </button>
+        <button type="button" className="app-chrome-nav" title="Forward" disabled={!canGoForward} onClick={onForward}>
+          <ChevronIcon size={15} direction="right" />
+        </button>
       </div>
-      <div className="app-chrome-main-segment">
-        <div className="app-chrome-title">
-          <span>{title}</span>
-          {scope && <span className="app-chrome-scope">{scope}</span>}
-        </div>
-        <div className="app-chrome-right">
-          {showWorkbench && (
-            <button
-              type="button"
-              className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
-              onClick={onToggleWorkbench}
-              title="Toggle the bottom workbench (changes and runtime)"
-            >
-              Workbench
-            </button>
-          )}
-          {showActivity && (
-            <button
-              type="button"
-              className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
-              onClick={onToggleDrawer}
-              title="Show execution terminals"
-            >
-              <SparkIcon size={14} />
-              Activity
-            </button>
-          )}
-        </div>
-        <div className="app-native-controls-reserve" aria-hidden="true" />
+      <div className="app-chrome-title">
+        <span>{title}</span>
+        {scope && <span className="app-chrome-scope">{scope}</span>}
+      </div>
+      <div className="app-chrome-right">
+        {showWorkbench && (
+          <button
+            type="button"
+            className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
+            onClick={onToggleWorkbench}
+            title="Toggle the bottom workbench (changes, runtime, missions)"
+          >
+            Workbench
+          </button>
+        )}
+        {showActivity && (
+          <button
+            type="button"
+            className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
+            onClick={onToggleDrawer}
+            title="Show agent terminals"
+          >
+            <SparkIcon size={14} />
+            Activity
+          </button>
+        )}
       </div>
     </header>
   )
@@ -185,7 +178,7 @@ export default function App(): JSX.Element {
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
   // Phase 13.1: terminals are hidden by default behind an activity drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // The bottom workbench contains read-only Changes and Runtime panels.
+  // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [, setAgentStatus] = useState<AgentStatusMap>({})
   const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)
@@ -482,9 +475,11 @@ export default function App(): JSX.Element {
             ? 'Benchmark'
             : view === 'loops'
               ? 'Loop'
-            : view === 'plugins'
+              : view === 'plugins'
                 ? 'Plugins'
-                : 'Workspace'
+                : view === 'companions'
+                  ? 'Companions'
+                  : 'Agents'
   const chromeScope =
     view === 'general'
       ? 'Model chat'
@@ -540,7 +535,6 @@ export default function App(): JSX.Element {
         onProjectsChange={bumpProjects}
         onChromeWidthChange={setChromeSidebarWidth}
       />
-      <main className="app-content">
       {/* Chat-first workspace. Terminals are not part of this column anymore —
           they live in the AgentDrawer overlay (kept mounted to stay alive). */}
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
@@ -571,18 +565,21 @@ export default function App(): JSX.Element {
           />
         )}
       </div>
-      {/* The benchmark page stays mounted while hidden so a streaming run is never
+      {/* The test page stays mounted while hidden so a streaming run is never
           interrupted by navigating to the Workspace or Dashboard. */}
       <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
-        <ProductErrorBoundary name="Benchmark"><BenchmarkLabPage /></ProductErrorBoundary>
+        <TestPage active={view === 'test'} activeProject={activeProject} />
       </div>
       {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-        <ProductErrorBoundary name="Loop"><AutonomousLoopPage active={view === 'loops'} /></ProductErrorBoundary>
+        <ProjectLoopPage active={view === 'loops'} />
       </div>
-      {view === 'dashboard' && <ProductErrorBoundary name="Dashboard"><TelemetryDashboardPage /></ProductErrorBoundary>}
-      {view === 'plugins' && <ProductErrorBoundary name="Plugins"><PluginMarketplacePage /></ProductErrorBoundary>}
-      </main>
+      {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
+      {view === 'plugins' && <Plugins />}
+      <div className="companions-page-wrap" style={{ display: view === 'companions' ? 'flex' : 'none' }}>
+        <CompanionsPage active={view === 'companions'} />
+      </div>
+      {view === 'agents' && <AgentsPage active={view === 'agents'} />}
       </div>
     </div>
   )

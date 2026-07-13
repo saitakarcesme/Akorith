@@ -1,12 +1,12 @@
-// Shared execution-observation core. Electron-free and side-effect-free so it stays
+// Phase 11 agentic-loop core. Electron-free and side-effect-free so it stays
 // headlessly verifiable (scripts/verify-agentic-loop.ts): terminal-snapshot
 // bounding, permission-prompt detection, executor-result summarization (model
-// JSON parse + heuristic fallback), and conservative permission policy gates.
+// JSON parse + heuristic fallback), and the Auto-Mode safety policy/stop gates.
 //
 // Nothing here writes to a terminal, a DB, or a provider. The orchestrator
-// calls these helpers and routes any actual send through bridgeSend().
+// (macro.ts) calls these and routes any actual send through bridgeSend().
 
-export type AgentRiskLevel = 'low' | 'medium' | 'high'
+import type { MacroRiskLevel } from './macro-core'
 
 export type LoopMode = 'approval' | 'auto'
 
@@ -80,7 +80,7 @@ export interface PermissionDetection {
   kind: PermissionKind
   /** Literal response to send (e.g. "1", "y", "" for Enter). Empty when review-only. */
   suggestedAction: string
-  riskLevel: AgentRiskLevel
+  riskLevel: MacroRiskLevel
   rationale: string
   requiresUserReview: boolean
   matchedText?: string
@@ -135,7 +135,7 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
     const oneTimeYes = numbered.find(
       (o) => /\b(yes|proceed|approve|allow)\b/i.test(o.label) && !ALWAYS_ALLOW.test(o.label)
     )
-    const risk: AgentRiskLevel = destructive ? 'high' : 'medium'
+    const risk: MacroRiskLevel = destructive ? 'high' : 'medium'
     const options: PermissionOption[] = numbered.map((o) => ({
       value: o.num,
       label: `${o.num}. ${o.label}`,
@@ -202,7 +202,7 @@ export function detectPermissionPrompt(snapshot: string): PermissionDetection {
 
   // Yes/No confirmations: "Do you want to proceed?", "continue? (y/n)", "confirm".
   if (/\b(do you want to proceed|are you sure|continue\?|confirm\b|proceed\?|\(y\/n\)|\[y\/n\])/i.test(lower)) {
-    const risk: AgentRiskLevel = destructive ? 'high' : permanentOption ? 'medium' : 'low'
+    const risk: MacroRiskLevel = destructive ? 'high' : permanentOption ? 'medium' : 'low'
     return {
       detected: true,
       kind: 'yes_no',

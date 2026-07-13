@@ -11,7 +11,7 @@ import {
   rollbackLocalExecutorPatch,
   validateLocalExecutorAction
 } from '../src/main/local-executor.ts'
-import { commitExplicitPaths, ExecFileCommandRunner } from '../src/main/repository/index.ts'
+import { commitPhase } from '../src/main/workspace.ts'
 
 let gitOk = true
 try {
@@ -91,17 +91,9 @@ async function main(): Promise<void> {
       revertOnNoCommit: false
     })
     assert.equal(valid.score.shouldCommit, true, 'valid patch with passing validation can commit')
-    const hooksPath = join(commitRepo, '.empty-hooks')
-    await mkdir(hooksPath)
-    const committed = await commitExplicitPaths(
-      new ExecFileCommandRunner(),
-      commitRepo,
-      valid.changedFiles,
-      'fix: local executor helper',
-      { hooksPath }
-    )
+    const committed = await commitPhase(commitRepo, 'local executor helper', valid.changedFiles)
     assert.equal(committed.committed, true, 'valid local attempt commits')
-    assert.equal(committed.message, 'fix: local executor helper')
+    assert.match(committed.message ?? '', /^Phase 1: /)
     const committedFiles = git(commitRepo, ['show', '--name-only', '--pretty=', 'HEAD'])
     assert.match(committedFiles, /src\/app\.ts|src\\app\.ts/, 'local commit includes touched file')
     assert.doesNotMatch(committedFiles, /user\.txt/, 'local commit does not sweep unrelated dirty files')

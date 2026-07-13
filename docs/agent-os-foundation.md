@@ -1,5 +1,3 @@
-> **Superseded:** historical foundation notes; see `production-architecture.md` for the current production architecture.
-
 # Agent OS Foundation
 
 Phase 28 adds a behavior-preserving foundation for turning Akorith into a local-first AI Agent Control Center. This phase does not replace the existing provider registry, PTY manager, macro loop, local executor, Test Lab, settings, or current user workflow.

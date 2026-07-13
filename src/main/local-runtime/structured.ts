@@ -3,7 +3,7 @@ import { extractJson, parseJsonLoose } from './json'
 import type { LocalRuntimeSendOptions, LocalStructuredResult } from './types'
 
 // Phase 47: structured (JSON) output from the local model with tolerant parsing
-// and a single repair retry. Used by internal planning flows.
+// and a single repair retry. Used by Loop/Companions/Agents planners.
 
 export { extractJson, parseJsonLoose }
 

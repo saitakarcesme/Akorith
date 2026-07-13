@@ -320,7 +320,7 @@ export interface AppApi {
   getCurrency(fetch?: boolean): Promise<AppCurrency>
 }
 
-// ---- legacy usage API retained for router compatibility ----
+// ---- usage (dashboard; TODO(phase 6): router reads the same data) ----
 
 export interface ProviderUsageSummary {
   providerId: string
@@ -398,6 +398,266 @@ export interface DigestApi {
   setWorkingDir(dir: string): Promise<DigestSettings>
 }
 
+// ---- test page (Phase 7) ----
+
+export interface TestSettings {
+  sourceRepo: string
+  installDeps: boolean
+  timeoutMs: number
+  keepLastN: number
+  defaultProviderId: string
+}
+
+export type TestFramework = 'pytest' | 'jest' | 'vitest' | 'npm-test' | 'unknown'
+
+export interface TestDetection {
+  framework: TestFramework
+  testCommand: string
+  installCommand: string
+  lockfile: string
+  suggestedTestPath: string
+  note?: string
+}
+
+export interface TestGeneratedFile {
+  path: string
+  content: string
+}
+
+export interface TestRunRequest {
+  runId: string
+  sourceRepo: string
+  targetDesc?: string
+  providerId?: string
+  model?: string
+  framework: string
+  testCommand: string
+  installCommand?: string
+  installDeps?: boolean
+  files: TestGeneratedFile[]
+  tokens?: number
+  attempts?: number
+  timeoutMs?: number
+}
+
+export interface TestRunRow {
+  id: string
+  ts: number
+  sourceRepo: string
+  targetDesc: string | null
+  providerId: string | null
+  model: string | null
+  framework: string | null
+  passed: number | null
+  failed: number | null
+  errored: number | null
+  durationMs: number | null
+  exitCode: number | null
+  tokens: number | null
+  attempts: number | null
+  sandboxPath: string | null
+  generatedFiles: TestGeneratedFile[] | null
+  rawOutput: string | null
+  status: string | null
+}
+
+export type TestRunResponse = { ok: true; run: TestRunRow } | { ok: false; error: string }
+
+export interface TestRepoContext {
+  tree: string
+  samples: { path: string; content: string }[]
+  fileCount: number
+}
+
+export type TestResolveSourceResponse =
+  | { ok: true; path: string; label: string; cloned: boolean }
+  | { ok: false; error: string }
+
+export interface TestApi {
+  getSettings(): Promise<TestSettings>
+  setSourceRepo(dir: string): Promise<TestSettings>
+  setSettings(patch: Partial<TestSettings>): Promise<TestSettings>
+  /** Accept a local repo path or a GitHub repo URL and return a local path for Test Lab. */
+  resolveSource(source: string): Promise<TestResolveSourceResponse>
+  /** Auto-detect framework/test/install commands for the source repo. */
+  detect(sourceRepo: string): Promise<TestDetection | { error: string }>
+  /** Phase 14.1: bounded, read-only repo structure + sample files for the generator. */
+  context(sourceRepo: string): Promise<TestRepoContext | { error: string }>
+  /** Snapshot → (install) → run in a fresh ephemeral sandbox; persists the run. */
+  run(args: TestRunRequest): Promise<TestRunResponse>
+  /** Persist a synthetic benchmark run that did not need a sandbox. */
+  persistRun(args: Omit<TestRunRow, 'id' | 'ts'> & { id?: string; ts?: number }): Promise<TestRunResponse>
+  /** Abort an in-flight run (kills the whole process tree). */
+  stop(runId: string): void
+  listRuns(limit?: number): Promise<TestRunRow[]>
+  /** Subscribe to live sandbox output. Returns an unsubscribe fn. */
+  onOutput(listener: (payload: { runId: string; chunk: string }) => void): () => void
+}
+
+// ---- benchmark library (public showcase/export layer) ----
+
+export type BenchmarkCategory = 'general' | 'ui' | 'game' | 'repo'
+export type BenchmarkMediaType = 'none' | 'image' | 'video' | 'interactive' | 'artifact'
+
+export interface BenchmarkEntry {
+  id: string
+  signature: string
+  createdAt: number
+  updatedAt: number
+  challengeId: string
+  challengeLabel: string
+  category: BenchmarkCategory
+  metric: string
+  model: string
+  providerId: string | null
+  score: number | null
+  rank: number | null
+  status: string | null
+  durationMs: number | null
+  tokens: number | null
+  runId: string | null
+  source: string | null
+  summary: string | null
+  prompt: string | null
+  artifactPreview: string | null
+  artifactPath: string | null
+  mediaType: BenchmarkMediaType
+  mediaUrl: string | null
+}
+
+export type BenchmarkUpsertInput = Omit<BenchmarkEntry, 'id' | 'createdAt' | 'updatedAt' | 'signature' | 'artifactPath'> & {
+  id?: string
+  signature?: string
+}
+
+export interface BenchmarkApi {
+  list(limit?: number): Promise<BenchmarkEntry[]>
+  get(id: string): Promise<BenchmarkEntry | null>
+  upsert(input: BenchmarkUpsertInput): Promise<BenchmarkEntry>
+  exportForWeb(): Promise<{ ok: true; path: string; count: number } | { ok: false; error: string }>
+}
+
+// ---- evaluate + PDF reports (Phase 8) ----
+
+export interface IsaScoreWeights {
+  tests: number
+  speed: number
+  tokens: number
+  quality: number
+}
+
+export interface IsaScoreSettings {
+  weights: IsaScoreWeights
+}
+
+export type EvaluationKind = 'single' | 'comparison'
+export type IsaDimensionName = 'tests' | 'speed' | 'tokens' | 'quality'
+
+export interface IsaDimensionScore {
+  score: number | null
+  weight: number
+  effectiveWeight: number
+  value: string
+  formula: string
+  omitted?: boolean
+}
+
+export interface IsaRunScore {
+  testRunId: string
+  model: string
+  providerId: string | null
+  status: string | null
+  objective: {
+    passed: number | null
+    failed: number | null
+    errored: number | null
+    passRate: number | null
+    durationMs: number | null
+    tokens: number | null
+  }
+  dimensions: Record<IsaDimensionName, IsaDimensionScore>
+  totalScore: number
+  qualityRationale?: string
+  rank?: number
+}
+
+export interface IsaScorePayload {
+  version: 1
+  formulas: {
+    tests: string
+    speed: string
+    tokens: string
+    quality: string
+    total: string
+  }
+  qualityRequested: boolean
+  qualityIncluded: boolean
+  qualityFailure?: string
+  judgeUsage?: ChatUsage
+  codeAvailability: Record<string, string[]>
+  runs: IsaRunScore[]
+}
+
+export interface EvaluationRow {
+  id: string
+  ts: number
+  kind: EvaluationKind
+  testRunIds: string[]
+  judgeModel: string | null
+  dimensionScores: IsaScorePayload
+  weights: IsaScoreWeights
+  totalScore: number
+  rationale: string | null
+  pdfPath: string | null
+}
+
+export interface EvaluateRunRequest {
+  testRunIds: string[]
+  includeQuality: boolean
+  judgeProviderId?: string
+  judgeModel?: string
+}
+
+export type EvaluateRunResponse = { ok: true; evaluation: EvaluationRow } | { ok: false; error: string }
+export type EvaluatePdfResponse =
+  | { ok: true; evaluation: EvaluationRow; pdfPath: string }
+  | { ok: false; error: string }
+
+export interface EvaluateApi {
+  getSettings(): Promise<IsaScoreSettings>
+  list(limit?: number): Promise<EvaluationRow[]>
+  run(args: EvaluateRunRequest): Promise<EvaluateRunResponse>
+  exportPdf(evaluationId: string): Promise<EvaluatePdfResponse>
+  revealPdf(evaluationId: string): Promise<{ ok: true } | { ok: false; error: string }>
+  openPdf(evaluationId: string): Promise<{ ok: true } | { ok: false; error: string }>
+}
+
+// ---- macro-loop orchestration (Phase 9) ----
+
+export type MacroStatus =
+  // TODO(phase 28): mirror src/main/loops/types.ts until a renderer-safe shared
+  // type package can be imported by both Electron and web builds.
+  | 'draft'
+  | 'scheduled'
+  | 'idle'
+  | 'preparing_context'
+  | 'proposing'
+  | 'awaiting_approval'
+  | 'sending'
+  | 'awaiting_executor_result'
+  | 'summarizing'
+  | 'awaiting_permission'
+  | 'auto_running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+  | 'archived'
+  | 'error'
+
+export type MacroMode = 'approval' | 'auto'
+export type MacroExecutorType = 'pty' | 'local'
+
 export interface PermissionOption {
   value: string
   label: string
@@ -438,6 +698,66 @@ export type AgentPermissionResponse =
   | { ok: false; error: string }
 
 export type AgentId = 'claude' | 'codex' | 'ollama' | 'opencode' | 'memory'
+export type AgentKind = 'cli' | 'local' | 'memory' | 'future'
+export type AgentStatus = 'unknown' | 'available' | 'missing' | 'unauthenticated' | 'disabled' | 'error'
+export type AgentCapability =
+  | 'chat'
+  | 'terminal'
+  | 'exec'
+  | 'streaming'
+  | 'file_patch'
+  | 'test_generation'
+  | 'review'
+  | 'commit'
+  | 'memory'
+  | 'skills'
+  | 'automation'
+  | 'mission_planning'
+
+export interface AgentAdapterMetadata {
+  id: AgentId
+  displayName: string
+  kind: AgentKind
+  description: string
+  executableName?: string
+  status: AgentStatus
+  capabilities: AgentCapability[]
+  currentIntegrationNotes: string[]
+  futureIntegrationNotes: string[]
+  safetyNotes: string[]
+}
+
+export type AgentIntegrationStage =
+  | 'metadata-only'
+  | 'detection-ready'
+  | 'session-placeholder-ready'
+  | 'runtime-connected-existing-provider'
+  | 'future-runtime'
+
+export interface AgentRuntimeCapability {
+  canCreateSession: boolean
+  canSendMessage: boolean
+  canStream: boolean
+  canExecute: boolean
+  canAttachToPty: boolean
+  canUseExistingProvider: boolean
+  canUseExistingTerminal: boolean
+  isPlaceholder: boolean
+}
+
+export interface AgentAdapterInfo extends AgentAdapterMetadata {
+  runtimeCapabilities: AgentRuntimeCapability
+  integrationStage: AgentIntegrationStage
+}
+
+export interface AgentDetectionResult {
+  id: AgentId
+  status: AgentStatus
+  version?: string
+  executablePath?: string
+  message?: string
+  checkedAt: number
+}
 
 export type AgentSessionId = string
 export type AgentSessionMode = 'chat' | 'terminal' | 'exec' | 'loop' | 'review' | 'memory'
@@ -535,8 +855,28 @@ export interface AgentRuntimeSnapshot {
 }
 
 export interface AgentApi {
-  /** Internal runtime evidence used by the workbench, not a management screen. */
+  /** Phase 28: read-only Agent OS metadata foundation. */
+  list(): Promise<AgentAdapterInfo[]>
+  /** Phase 28: read-only agent availability detection. */
+  detect(id: AgentId): Promise<AgentDetectionResult>
+  /** Phase 28: read-only detection for every known adapter. */
+  detectAll(): Promise<AgentDetectionResult[]>
+  /** Phase 29/30: in-memory AgentSession list; no runtime processes are started by this API. */
+  listSessions(): Promise<AgentSession[]>
+  /** Phase 29/30: read one in-memory AgentSession. */
+  getSession(id: AgentSessionId): Promise<AgentSession | null>
+  /** Phase 29/30: read in-memory session events. */
+  listSessionEvents(sessionId: AgentSessionId): Promise<AgentSessionEvent[]>
+  /** Phase 30: read observed runtime attachments and synthesized PTY metadata. */
+  listRuntimeAttachments(): Promise<AgentRuntimeAttachment[]>
+  /** Phase 30: read observed runtime attachments for one in-memory AgentSession. */
+  listRuntimeAttachmentsForSession(sessionId: AgentSessionId): Promise<AgentRuntimeAttachment[]>
+  /** Phase 30: read an on-demand runtime observation snapshot. */
   getRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
+  /** Phase 30: refresh the on-demand runtime observation snapshot; no execution side effects. */
+  refreshRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>
+  /** Phase 29: create a placeholder session only; does not call providers, PTYs, or CLIs. */
+  createPlaceholderSession(args: AgentSessionCreateInput): Promise<AgentSession>
   /** Phase 13.2: summarize a terminal's recent output into chat (meta call; no usage_event). */
   summarize(args: {
     terminalId: string
@@ -549,6 +889,443 @@ export interface AgentApi {
   }): Promise<AgentSummaryResponse>
   /** Phase 14.1: read-only detection of a pending terminal permission/confirm prompt. */
   detectPermission(terminalId: string): Promise<AgentPermissionResponse>
+}
+
+export interface MacroSessionRow {
+  id: string
+  createdAt: number
+  updatedAt: number
+  status: MacroStatus
+  goal: string
+  plannerProvider: string
+  plannerModel: string | null
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+  repoDigestSnapshot: string | null
+  finalScore: number | null
+  stopReason: string | null
+  mode: MacroMode
+  autoActions: string | null
+  pauseReason: string | null
+  /** Phase 20 autonomous workspace loop. */
+  workspaceDir: string | null
+  autoCommit: boolean
+  tokenBudget: number
+  tokensUsed: number
+  /** Phase 21: plain-language loop label. */
+  title: string | null
+  /** Phase 22: the user's chosen next direction (consumed by the next plan). */
+  pendingSteering: string | null
+  /** Loop purpose/cadence metadata. */
+  loopIntent: string | null
+  cadenceMinutes: number
+  /** Phase 23.2 Loop Operations Center metadata. */
+  loopType: string | null
+  targetType: string | null
+  targetRef: string | null
+  scheduleKind: string | null
+  scheduleDetail: string | null
+  nextRunAt: number | null
+  stopCondition: string | null
+  maxRuns: number
+  maxCommits: number
+  runCount: number
+  commitBehavior: string | null
+  pushEnabled: boolean
+  testCommands: string | null
+  reportFormat: string | null
+  safetyLevel: string | null
+  latestResult: string | null
+  archivedAt: number | null
+  /** Phase 27 Local Executor Loop. */
+  executorType: MacroExecutorType
+  executorProvider: string | null
+  executorModel: string | null
+  lastAttemptStatus: string | null
+  lastValidationResult: string | null
+  lastCommitMessage: string | null
+}
+
+export interface MacroTurnRow {
+  id: string
+  sessionId: string
+  turnIndex: number
+  createdAt: number
+  status: string
+  proposal: string | null
+  editedProposal: string | null
+  sentPrompt: string | null
+  executorResultSummary: string | null
+  plannerRationale: string | null
+  expectedResult: string | null
+  confidenceScore: number | null
+  goodEnoughScore: number | null
+  riskLevel: string | null
+  providerUsed: string | null
+  modelUsed: string | null
+  error: string | null
+  summarizerConfidence: number | null
+  permissionDetection: string | null
+  terminalSnapshotMeta: string | null
+  autoAction: string | null
+  resultStatus: string | null
+  criticScore: number | null
+  criticVerdict: string | null
+  criticReview: string | null
+  /** Phase 22: JSON array of 3 suggested next directions. */
+  nextOptions: string | null
+}
+
+export interface MacroState {
+  session: MacroSessionRow
+  turns: MacroTurnRow[]
+}
+
+export interface MacroCreateRequest {
+  goal: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations: number
+  goodEnoughThreshold: number
+  includeRepoDigest: boolean
+  mode?: MacroMode
+  /** Phase 20: bind the loop to a git workspace and auto-commit each phase. */
+  workspaceDir?: string | null
+  autoCommit?: boolean
+  tokenBudget?: number
+}
+
+export interface ProjectIdea {
+  name: string
+  slug: string
+  summary: string
+  firstGoal: string
+}
+
+export interface WorkspaceCreateRequest {
+  seed?: string
+  basePath?: string
+  plannerProvider: string
+  plannerModel?: string
+  targetTerminal: string
+  maxIterations?: number
+  goodEnoughThreshold?: number
+  tokenBudget?: number
+  mode?: MacroMode
+  loopIntent?: 'continuous' | 'monitor' | 'daily-build' | 'custom'
+  cadenceMinutes?: number
+  loopType?: string
+  targetType?: string
+  targetRef?: string
+  scheduleKind?: string
+  scheduleDetail?: string
+  autonomyLevel?: string
+  stopCondition?: string
+  maxRuns?: number
+  maxCommits?: number
+  commitBehavior?: string
+  pushEnabled?: boolean
+  testCommands?: string
+  reportFormat?: string
+  safetyLevel?: string
+  executorType?: MacroExecutorType
+  executorProvider?: string
+  executorModel?: string
+}
+
+export type WorkspaceCreateResponse =
+  | { ok: true; idea: ProjectIdea; project: ProjectRow; state: MacroState; workspaceDir: string }
+  | { ok: false; error: string }
+
+export type LoopSyncState = 'synced' | 'ahead' | 'behind' | 'diverged' | 'dirty' | 'missing' | 'not_git' | 'no_remote' | 'unknown'
+
+export interface LoopWorkspaceStatus {
+  ok: boolean
+  workspaceDir: string
+  repositoryDir: string | null
+  branch: string | null
+  remoteUrl: string | null
+  head: string | null
+  headSubject: string | null
+  ahead: number
+  behind: number
+  dirty: boolean
+  staged: number
+  unstaged: number
+  untracked: number
+  commitCount: number
+  phaseCount: number
+  lastPhase: number
+  lastCommitAt: number | null
+  syncState: LoopSyncState
+  error?: string
+}
+
+export type MacroResponse = { ok: true; state: MacroState } | { ok: false; error: string; state?: MacroState }
+export type MacroDeleteResponse = { ok: true } | { ok: false; error: string }
+export type MacroSummarizeResponse =
+  | { ok: true; state: MacroState; summaryText?: string }
+  | { ok: false; error: string; state?: MacroState }
+export type PermissionDetectResponse = { ok: true; detection: PermissionDetection } | { ok: false; error: string }
+export type LoopWorkspaceStatusResponse =
+  | { ok: true; status: LoopWorkspaceStatus }
+  | { ok: false; error: string; status?: LoopWorkspaceStatus }
+
+export interface LoopRunRow {
+  id: string
+  loopId: string
+  runIndex: number
+  startedAt: number
+  endedAt: number | null
+  status: string
+  providerId: string | null
+  model: string | null
+  summary: string | null
+  actionsTaken: unknown
+  filesChanged: string[] | null
+  commandsExecuted: string[] | null
+  testBuildResults: string | null
+  commitsCreated: string[] | null
+  nextSuggestedStep: string | null
+  error: string | null
+}
+
+export interface LoopEventRow {
+  id: string
+  loopId: string
+  runId: string | null
+  ts: number
+  type: string
+  message: string
+  severity: 'info' | 'success' | 'warning' | 'error'
+  metadata: unknown
+}
+
+export interface MacroApi {
+  createSession(args: MacroCreateRequest): Promise<MacroResponse>
+  /** Phase 20: scaffold an everyday-dev project and bind an auto-commit loop to it. */
+  createWorkspaceProject(args: WorkspaceCreateRequest): Promise<WorkspaceCreateResponse>
+  propose(sessionId: string): Promise<MacroResponse>
+  approve(args: { sessionId: string; turnId: string; editedProposal?: string }): Promise<MacroResponse>
+  recordResult(args: { sessionId: string; turnId: string; summary: string }): Promise<MacroResponse>
+  skip(args: { sessionId: string; turnId: string }): Promise<MacroResponse>
+  stop(sessionId: string): Promise<MacroResponse>
+  complete(sessionId: string): Promise<MacroResponse>
+  archive(sessionId: string): Promise<MacroResponse>
+  remove(sessionId: string): Promise<MacroDeleteResponse>
+  /** Phase 11: switch Approval/Auto mode. */
+  setMode(sessionId: string, mode: MacroMode): Promise<MacroResponse>
+  /** Switch the loop's planner model/provider, optionally with the executor target. */
+  setPlanner(args: {
+    sessionId: string
+    plannerProvider: string
+    plannerModel?: string | null
+    targetTerminal?: string
+    executorType?: MacroExecutorType
+    executorProvider?: string | null
+    executorModel?: string | null
+  }): Promise<MacroResponse>
+  /** Phase 22: steer the next step toward a chosen direction (loop keeps running). */
+  steer(sessionId: string, choice: string): Promise<MacroResponse>
+  /** Phase 11: begin the cautious Auto-Mode loop (returns immediately). */
+  startAuto(sessionId: string): Promise<MacroResponse>
+  /** Phase 11: summarize a turn's executor result from the terminal snapshot. */
+  summarize(args: { sessionId: string; turnId: string }): Promise<MacroSummarizeResponse>
+  /** Phase 11: read-only permission-prompt detection for the target terminal. */
+  detectPermission(sessionId: string): Promise<PermissionDetectResponse>
+  /** Phase 11: send a (user-approved) response to a detected permission prompt. */
+  respondPermission(args: { sessionId: string; turnId: string; action: string }): Promise<MacroResponse>
+  /** Phase 24: read-only AkorithLoop git status for this loop workspace. */
+  inspectWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
+  /** Phase 24: pull/rebase and push this loop workspace to AkorithLoop. */
+  syncWorkspace(sessionId: string): Promise<LoopWorkspaceStatusResponse>
+  /** Phase 24: persisted per-run ledger rows. */
+  listRuns(sessionId: string, limit?: number): Promise<LoopRunRow[]>
+  /** Phase 24: persisted loop event ledger rows. */
+  listEvents(sessionId: string, limit?: number): Promise<LoopEventRow[]>
+  get(sessionId: string): Promise<MacroState | null>
+  list(limit?: number): Promise<MacroSessionRow[]>
+}
+
+// ---- Mission Engine skeleton (Phase 32: preview-only, in-memory) ----
+
+export type MissionId = string
+export type MissionStatus =
+  | 'draft'
+  | 'ready'
+  | 'planning'
+  | 'awaiting_user_choice'
+  | 'running'
+  | 'paused'
+  | 'reviewing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'unsupported'
+
+export type MissionStepId = string
+export type MissionStepKind =
+  | 'inspect'
+  | 'plan'
+  | 'execute'
+  | 'test'
+  | 'review'
+  | 'commit'
+  | 'handoff'
+  | 'memory'
+  | 'user_choice'
+  | 'report'
+
+export type MissionStepStatus =
+  | 'pending'
+  | 'ready'
+  | 'running'
+  | 'blocked'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'unsupported'
+
+export type MissionAgentRole =
+  | 'planner'
+  | 'executor'
+  | 'reviewer'
+  | 'tester'
+  | 'committer'
+  | 'memory'
+  | 'observer'
+
+export type MissionRiskLevel = 'low' | 'medium' | 'high' | 'destructive'
+export type MissionPermissionMode =
+  | 'read_only'
+  | 'ask_before_write'
+  | 'allow_safe_writes'
+  | 'allow_commits'
+  | 'manual_only'
+export type MissionOrigin = 'dashboard' | 'loop' | 'agent_hub' | 'workspace' | 'system'
+
+export interface MissionStep {
+  id: MissionStepId
+  missionId: MissionId
+  index: number
+  title: string
+  kind: MissionStepKind
+  status: MissionStepStatus
+  agentRole?: MissionAgentRole
+  preferredAgentId?: AgentId
+  dependsOn?: MissionStepId[]
+  riskLevel: MissionRiskLevel
+  permissionMode: MissionPermissionMode
+  createdAt: number
+  updatedAt: number
+  summary?: string
+  safePreview?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface Mission {
+  id: MissionId
+  title: string
+  description?: string
+  status: MissionStatus
+  projectPath?: string
+  createdAt: number
+  updatedAt: number
+  origin: MissionOrigin
+  permissionMode: MissionPermissionMode
+  riskLevel: MissionRiskLevel
+  steps: MissionStep[]
+  metadata?: Record<string, unknown>
+  notes?: string[]
+}
+
+export interface MissionEvent {
+  id: string
+  missionId: MissionId
+  stepId?: MissionStepId
+  type: string
+  message: string
+  timestamp: number
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionPolicy {
+  id: string
+  name: string
+  permissionMode: MissionPermissionMode
+  allowProviderCalls: boolean
+  allowPtyWrites: boolean
+  allowFileWrites: boolean
+  allowTests: boolean
+  allowCommits: boolean
+  allowPush: boolean
+  requireUserApprovalForRiskAbove?: MissionRiskLevel
+}
+
+export interface MissionCreateInput {
+  title?: string
+  description?: string
+  projectPath?: string
+  origin?: MissionOrigin
+  permissionMode?: MissionPermissionMode
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionTemplateStep {
+  title: string
+  kind: MissionStepKind
+  agentRole?: MissionAgentRole
+  preferredAgentId?: AgentId
+  dependsOn?: number[]
+  riskLevel?: MissionRiskLevel
+  permissionMode?: MissionPermissionMode
+  status?: MissionStepStatus
+  summary?: string
+  safePreview?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionTemplate {
+  id: string
+  title: string
+  description: string
+  riskLevel: MissionRiskLevel
+  permissionMode: MissionPermissionMode
+  steps: MissionTemplateStep[]
+  notes?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionPreviewPlan {
+  title: string
+  description?: string
+  origin: MissionOrigin
+  permissionMode: MissionPermissionMode
+  riskLevel: MissionRiskLevel
+  policy: MissionPolicy
+  steps: MissionStep[]
+  warnings: string[]
+  notes: string[]
+}
+
+export interface MissionApi {
+  /** Phase 32: list preview-only mission templates. */
+  listTemplates(): Promise<MissionTemplate[]>
+  /** Phase 32: create an in-memory draft mission only. Does not execute. */
+  createDraft(args: MissionCreateInput): Promise<Mission>
+  /** Phase 32: create an in-memory draft mission from a preview template only. */
+  createFromTemplate(templateId: string, input?: MissionCreateInput): Promise<Mission | null>
+  /** Phase 32: list in-memory draft/preview missions. */
+  list(): Promise<Mission[]>
+  /** Phase 32: read one in-memory mission. */
+  get(id: MissionId): Promise<Mission | null>
+  /** Phase 32: read mission event metadata. No prompts, commands, or terminal output are exposed. */
+  listEvents(missionId: MissionId): Promise<MissionEvent[]>
+  /** Phase 32: build a safe preview plan without storing or executing it. */
+  createSafePreviewPlan(args: MissionCreateInput): Promise<MissionPreviewPlan>
 }
 
 // ---- app settings (Phase 15: theme mirrored for the startup splash) ----
@@ -631,7 +1408,7 @@ export interface RuntimeStatus {
   checkedAt: number
 }
 
-// Shared local-first runtime used by Loop and internal execution providers.
+// Phase 47: shared local-first runtime used by Loop / Companions / Agents.
 export interface LocalModelInfo {
   id: string
   label: string
@@ -641,6 +1418,365 @@ export interface LocalRuntimeApi {
   listModels(): Promise<LocalModelInfo[]>
   defaultModel(): Promise<string | undefined>
   status(): Promise<RuntimeStatus>
+}
+
+// Phase 48: project-focused Loop.
+export type ProjectLoopMode = 'project_builder' | 'repo_grower' | 'github_loop' | 'maintenance'
+export type ProjectLoopStatus = 'active' | 'paused' | 'needs_review' | 'error' | 'completed' | 'archived'
+export type ProjectLoopAutonomy = 'manual' | 'assisted' | 'auto'
+export type ProjectLoopSafety = 'strict' | 'standard' | 'open'
+
+export interface ProjectLoop {
+  id: string
+  title: string
+  mode: ProjectLoopMode
+  status: ProjectLoopStatus
+  localPath: string
+  repoUrl?: string
+  githubOwner?: string
+  githubName?: string
+  idea?: string
+  autonomy: ProjectLoopAutonomy
+  safety: ProjectLoopSafety
+  scheduleKind: 'manual' | 'interval' | 'daily'
+  scheduleMinutes: number
+  dailyCommitTarget: number
+  minCommitsPerRun: number
+  maxCommitsPerRun: number
+  localModelProvider: string
+  localModel?: string
+  pushEnabled: boolean
+  createdAt: number
+  updatedAt: number
+  lastRunAt?: number
+  nextRunAt?: number
+  runCount: number
+  commitCount: number
+  error?: string
+  memorySummary?: string
+  roadmapSummary?: string
+}
+
+export interface ProjectLoopRun {
+  id: string
+  loopId: string
+  runIndex: number
+  status: 'pending' | 'running' | 'success' | 'no_change' | 'failed' | 'rejected'
+  startedAt: number
+  endedAt?: number
+  model?: string
+  objective?: string
+  summary?: string
+  filesChanged: number
+  commandsRun: number
+  testsRun: number
+  commitsCreated: number
+  validationResult?: string
+  nextStep?: string
+  error?: string
+}
+
+export interface ProjectLoopEvent {
+  id: string
+  loopId: string
+  runId?: string
+  kind: string
+  message: string
+  detail?: string
+  createdAt: number
+}
+
+export interface ProjectLoopCommit {
+  id: string
+  loopId: string
+  runId?: string
+  sha: string
+  message: string
+  filesChanged: number
+  createdAt: number
+  validationSummary?: string
+}
+
+export interface ProjectLoopBacklogItem {
+  id: string
+  loopId: string
+  title: string
+  detail?: string
+  category?: string
+  priority: number
+  status: 'open' | 'in_progress' | 'done' | 'dropped'
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ProjectLoopMemory {
+  id: string
+  loopId: string
+  kind: string
+  content: string
+  importance: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface RunCycleResult {
+  ok: boolean
+  run: ProjectLoopRun | null
+  committed: boolean
+  sha?: string
+  summary: string
+  error?: string
+}
+
+export interface CreateProjectLoopInput {
+  title: string
+  mode: ProjectLoopMode
+  localPath: string
+  repoUrl?: string
+  githubOwner?: string
+  githubName?: string
+  idea?: string
+  autonomy?: ProjectLoopAutonomy
+  safety?: ProjectLoopSafety
+  scheduleKind?: 'manual' | 'interval' | 'daily'
+  scheduleMinutes?: number
+  dailyCommitTarget?: number
+  minCommitsPerRun?: number
+  maxCommitsPerRun?: number
+  localModel?: string
+  pushEnabled?: boolean
+}
+
+// Phase 52: Agents — reusable local action shortcuts.
+export type AgentPermissionMode = 'preview' | 'ask_write' | 'safe_writes' | 'safe_commands' | 'manual_each'
+export type AgentRiskLevel = 'low' | 'medium' | 'high'
+
+export interface ActionAgent {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  templateId: string
+  localModelProvider: string
+  localModel?: string
+  allowedRoot?: string
+  permissionMode: AgentPermissionMode
+  allowCommands: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+  lastRunAt?: number
+  runCount: number
+}
+
+export interface AgentTemplateInfo {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  defaultPermission: AgentPermissionMode
+  allowCommands: boolean
+  needsRoot: boolean
+  note?: string
+}
+
+export interface ActionAgentRun {
+  id: string
+  agentId: string
+  status: 'planning' | 'awaiting_approval' | 'running' | 'completed' | 'failed' | 'stopped'
+  startedAt: number
+  endedAt?: number
+  input?: string
+  summary?: string
+  riskLevel?: AgentRiskLevel
+  filesChanged: number
+  commandsRun: number
+  error?: string
+}
+
+export interface ActionAgentEvent {
+  id: string
+  runId: string
+  agentId: string
+  kind: string
+  message: string
+  detail?: string
+  createdAt: number
+}
+
+export interface ActionAgentArtifact {
+  id: string
+  runId: string
+  agentId: string
+  kind: string
+  title: string
+  content: string
+  createdAt: number
+}
+
+export interface AgentPlanStep {
+  kind: 'read' | 'write' | 'command' | 'report' | 'ask'
+  title: string
+  reason: string
+  requiresPermission: boolean
+}
+
+export interface AgentPlan {
+  type: 'agent_plan'
+  summary: string
+  riskLevel: AgentRiskLevel
+  steps: AgentPlanStep[]
+}
+
+export interface AgentPlanResult {
+  ok: boolean
+  plan?: AgentPlan
+  raw?: string
+  error?: string
+}
+
+export interface AgentRunResult {
+  ok: boolean
+  run: ActionAgentRun | null
+  events: ActionAgentEvent[]
+  artifacts: ActionAgentArtifact[]
+  previewOnly: boolean
+  error?: string
+}
+
+export interface CreateActionAgentInput {
+  name: string
+  description?: string
+  templateId?: string
+  allowedRoot?: string
+  permissionMode?: AgentPermissionMode
+  allowCommands?: boolean
+  localModel?: string
+  icon?: string
+  category?: string
+}
+
+export interface ActionAgentApi {
+  templates(): Promise<AgentTemplateInfo[]>
+  permissionModes(): Promise<{ id: AgentPermissionMode; description: string }[]>
+  list(): Promise<ActionAgent[]>
+  get(id: string): Promise<ActionAgent | null>
+  create(input: CreateActionAgentInput): Promise<ActionAgent>
+  update(id: string, patch: Partial<ActionAgent>): Promise<ActionAgent | null>
+  remove(id: string): Promise<boolean>
+  plan(id: string, input?: string): Promise<AgentPlanResult>
+  run(id: string, input?: string): Promise<AgentRunResult>
+  listRuns(id: string): Promise<ActionAgentRun[]>
+  getRun(runId: string): Promise<{ run: ActionAgentRun | null; events: ActionAgentEvent[]; artifacts: ActionAgentArtifact[] }>
+  pickFolder(): Promise<string | null>
+}
+
+// Phase 50: Companions.
+export type CompanionMemoryType =
+  | 'preference' | 'project' | 'decision' | 'idea' | 'goal' | 'personal_context'
+  | 'writing_style' | 'technical_context' | 'warning' | 'relationship' | 'recurring_topic'
+
+export interface Companion {
+  id: string
+  name: string
+  tagline: string
+  tags: string[]
+  builtin: boolean
+  model?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CompanionSession {
+  id: string
+  companionId: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+}
+
+export interface CompanionMessage {
+  id: string
+  sessionId: string
+  companionId: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: number
+}
+
+export interface CompanionMemory {
+  id: string
+  companionId: string
+  type: CompanionMemoryType
+  title: string
+  content: string
+  importance: number
+  confidence: number
+  sourceSessionId?: string
+  pinned: boolean
+  createdAt: number
+  updatedAt: number
+  lastUsedAt?: number
+  archivedAt?: number
+  tags: string[]
+}
+
+export interface CompanionContextInfo {
+  recentMessageCount: number
+  usedMemories: { id: string; title: string; type: CompanionMemoryType }[]
+}
+
+export interface SendCompanionMessageResult {
+  ok: boolean
+  reply?: CompanionMessage
+  contextInfo?: CompanionContextInfo
+  error?: string
+}
+
+export interface CompanionApi {
+  list(): Promise<Companion[]>
+  get(id: string): Promise<Companion | null>
+  setModel(id: string, model: string | null): Promise<Companion | null>
+  memoryCount(id: string): Promise<number>
+  listSessions(companionId: string): Promise<CompanionSession[]>
+  createSession(companionId: string, title?: string): Promise<CompanionSession>
+  getSession(id: string): Promise<CompanionSession | null>
+  deleteSession(id: string): Promise<boolean>
+  listMessages(sessionId: string): Promise<CompanionMessage[]>
+  sendMessage(input: { companionId: string; sessionId: string; prompt: string; model?: string; requestId?: string }): Promise<SendCompanionMessageResult>
+  cancelMessage(requestId: string): void
+  extractMemories(sessionId: string): Promise<{ ok: boolean; created: CompanionMemory[]; error?: string }>
+  contextInfo(companionId: string, sessionId: string, query: string): Promise<CompanionContextInfo>
+  listMemories(companionId: string, includeArchived?: boolean): Promise<CompanionMemory[]>
+  searchMemories(companionId: string, query: string): Promise<CompanionMemory[]>
+  createMemory(input: { companionId: string; type: CompanionMemoryType; title: string; content: string; importance?: number; tags?: string[] }): Promise<CompanionMemory>
+  updateMemory(id: string, patch: Partial<CompanionMemory>): Promise<CompanionMemory | null>
+  pinMemory(id: string, pinned: boolean): Promise<CompanionMemory | null>
+  archiveMemory(id: string): Promise<CompanionMemory | null>
+  forgetMemory(id: string): Promise<boolean>
+}
+
+export interface ProjectLoopApi {
+  list(): Promise<ProjectLoop[]>
+  get(id: string): Promise<ProjectLoop | null>
+  create(input: CreateProjectLoopInput): Promise<ProjectLoop>
+  update(id: string, patch: Partial<ProjectLoop>): Promise<ProjectLoop | null>
+  setStatus(id: string, status: ProjectLoopStatus): Promise<ProjectLoop | null>
+  archive(id: string): Promise<ProjectLoop | null>
+  remove(id: string): Promise<boolean>
+  runOnce(id: string): Promise<RunCycleResult>
+  listRuns(id: string): Promise<ProjectLoopRun[]>
+  listEvents(id: string): Promise<ProjectLoopEvent[]>
+  listCommits(id: string): Promise<ProjectLoopCommit[]>
+  listBacklog(id: string): Promise<ProjectLoopBacklogItem[]>
+  addBacklog(id: string, title: string, detail?: string): Promise<ProjectLoopBacklogItem>
+  setBacklogStatus(itemId: string, status: string): Promise<boolean>
+  listMemories(id: string): Promise<ProjectLoopMemory[]>
+  addMemory(id: string, content: string): Promise<ProjectLoopMemory>
+  pickFolder(): Promise<string | null>
 }
 
 export type OllamaAutoConnectResult =
@@ -891,110 +2027,66 @@ export interface PluginSettingsView {
 
 export interface PluginsApi {
   list(): Promise<PluginInfo[]>
-  install(id: string): Promise<unknown>
-  update(id: string): Promise<unknown>
-  check(id: string): Promise<unknown>
-  enable(id: string): Promise<unknown>
-  disable(id: string): Promise<unknown>
-  uninstall(id: string): Promise<unknown>
-  connect(id: string): Promise<unknown>
-  configure(id: string): Promise<unknown>
+  getDiagnostics(): Promise<PluginDiagnostic[]>
+  check(id: string): Promise<PluginDiagnostic | null>
+  checkAll(): Promise<PluginInfo[]>
+  enable(id: string): Promise<PluginInfo[]>
+  disable(id: string): Promise<PluginInfo[]>
+  getSettings(): Promise<PluginSettingsView>
+  setChromaEndpoint(endpoint: string): Promise<PluginSettingsView>
 }
 
-export interface DashboardTelemetryApi {
-  loadOverview(): Promise<unknown>
-  loadHeatmap(mode: 'daily' | 'weekly' | 'cumulative'): Promise<unknown>
-  loadGpuSnapshot(): Promise<unknown>
-}
-
-export interface RemoteNodeConnectionView {
-  phase: 'idle' | 'connecting' | 'online' | 'degraded' | 'offline'
-  consecutiveFailures: number
+export interface UpdateStatus {
+  mode: 'git' | 'packaged'
+  runtimeMode: 'dev' | 'source' | 'packaged-windows' | 'packaged-macos' | 'packaged-other'
+  platform: string
+  executablePath: string
+  appPath: string
+  repoPath?: string
+  sourceCheckoutPath?: string
+  currentBranch?: string
+  currentCommit?: string
+  currentCommitFull?: string
+  remoteMainCommit?: string
+  remoteUrl?: string
+  behindBy: number
+  aheadBy: number
+  hasUpdate: boolean
+  isDirty: boolean
+  dirtyFiles: string[]
+  safeToUpdate: boolean
+  canUpdateInstalledApp: boolean
+  updateTarget: string
+  relaunchTarget?: string
+  warnings: string[]
   lastCheckedAt?: number
-  lastHealthyAt?: number
-  nextRetryAt?: number
-  latencyMs?: number
+  appVersion: string
+}
+
+export interface UpdateLogEntry {
+  command: string
+  ok: boolean
+  output: string
+  at: number
+}
+
+export interface UpdateRunOptions {
+  runInstall?: boolean
+  runBuild?: boolean
+}
+
+export interface UpdateRunResult {
+  ok: boolean
+  status: UpdateStatus
+  logs: UpdateLogEntry[]
   error?: string
-}
-
-export interface RemoteNodeView {
-  id: string
-  nodeId: string
-  name: string
-  baseUrl: string
-  protocolVersion: string
-  deviceId: string
-  deviceName: string
-  createdAt: number
-  updatedAt: number
-  privateLanHttpAcknowledged: boolean
-  connection: RemoteNodeConnectionView
-}
-
-export interface PairRemoteNodeInputView {
-  baseUrl: string
-  pairingId: string
-  code: string
-  deviceName: string
-  acknowledgePrivateLanHttp?: boolean
-}
-
-export interface RemoteNodesApi {
-  list(): Promise<RemoteNodeView[]>
-  pair(input: PairRemoteNodeInputView): Promise<unknown>
-  test(nodeId: string): Promise<unknown>
-  catalog(nodeId: string, refresh?: boolean): Promise<unknown>
-  revoke(nodeId: string): Promise<boolean>
-  onChanged(callback: () => void): () => void
-}
-
-export interface BenchmarkLabPreloadApi {
-  getCatalog(): Promise<unknown>
-  listRuns(limit?: number): Promise<unknown>
-  getRun(runId: string): Promise<unknown>
-  start(input: unknown): Promise<unknown>
-  cancel(runId: string): Promise<unknown>
-}
-
-export type UpdateChannel = 'stable' | 'beta'
-export type PackagedUpdatePhase = 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
-
-export interface PackagedUpdateSnapshot {
-  phase: PackagedUpdatePhase
-  channel: UpdateChannel
-  currentVersion: string
-  support: { supported: boolean; code: string; reason: string }
-  update?: { version: string; releaseName?: string; releaseNotes?: string; releaseDate?: string; prerelease: boolean }
-  progress?: { percent: number; transferred: number; total: number; bytesPerSecond: number }
-  error?: { code: string; message: string; retryable: boolean; at: number }
-  checkedAt?: number
-  updatedAt: number
-  canCheck: boolean
-  canDownload: boolean
-  canAuthorizeInstall: boolean
-  manualInstallRequired: true
-}
-
-export interface UpdateSettingsView {
-  automaticChecks: boolean
-  channel: UpdateChannel
-}
-
-export interface InstallAuthorizationView {
-  token: string
-  expiresAt: number
-  version: string
+  restartRecommended: boolean
 }
 
 export interface UpdateApi {
-  status(): Promise<PackagedUpdateSnapshot>
-  settings(): Promise<UpdateSettingsView>
-  setSettings(value: Partial<UpdateSettingsView>): Promise<UpdateSettingsView>
-  check(channel?: UpdateChannel): Promise<PackagedUpdateSnapshot>
-  download(): Promise<PackagedUpdateSnapshot>
-  authorizeInstall(): Promise<InstallAuthorizationView | null>
-  install(token: string): Promise<PackagedUpdateSnapshot>
-  onChanged(callback: (snapshot: PackagedUpdateSnapshot) => void): () => void
+  status(): Promise<UpdateStatus>
+  check(): Promise<UpdateStatus>
+  run(options: UpdateRunOptions): Promise<UpdateRunResult>
 }
 
 export interface UsageWindowRow {
@@ -1023,136 +2115,6 @@ export interface UsageLimitsApi {
   setConfig(patch: Partial<UsageLimitConfig>): Promise<UsageLimitConfig>
 }
 
-export type AutonomousLoopStatus = 'setting_up' | 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'error'
-export type AutonomousLoopStage = 'idle' | 'observing' | 'analyzing' | 'inventory' | 'planning' | 'executing' | 'validating' | 'repairing' | 'reviewing' | 'committing' | 'pushing' | 'scheduling'
-
-export interface AutonomousModelSelection {
-  catalogId: string
-  providerId: string
-  model: string
-  location: 'local' | 'remote' | 'cloud'
-  nodeId?: string
-  capabilityProbeId?: string
-}
-
-export interface AutonomousLoopRecord {
-  id: string
-  projectName: string
-  status: AutonomousLoopStatus
-  stage: AutonomousLoopStage
-  repositoryId: string
-  workspacePath: string
-  remoteUrl: string
-  branch: string
-  executor: AutonomousModelSelection
-  planner: AutonomousModelSelection
-  createdAt: number
-  updatedAt: number
-  startedAt: number | null
-  stoppedAt: number | null
-  lastActivityAt: number | null
-  nextCycleAt: number | null
-  tokenUsage: { input: number; output: number; cached: number; costUsd: number }
-  commitCount: number
-  pushCount: number
-  successfulTasks: number
-  failedTasks: number
-  stopReason: string | null
-  error: string | null
-}
-
-export interface AutonomousLoopCycle {
-  id: string
-  index: number
-  status: string
-  stage: AutonomousLoopStage
-  plannedTask: null | { title: string; reason: string; kind: string; acceptanceCriteria: string[] }
-  repairAttempts: number
-  startedAt: number | null
-  finishedAt: number | null
-  durationMs: number | null
-  changedFiles: string[]
-  commitSha: string | null
-  commitMessage: string | null
-  pushed: boolean
-  summary: string | null
-  error: string | null
-}
-
-export interface AutonomousLoopEvent {
-  id: string
-  loopId: string
-  cycleId: string | null
-  occurredAt: number
-  stage: AutonomousLoopStage
-  level: 'info' | 'success' | 'warning' | 'error'
-  kind: string
-  title: string
-  summary: string
-  details: Record<string, string | number | boolean | null>
-}
-
-export interface AutonomousLoopDetail {
-  loop: AutonomousLoopRecord
-  cycles: AutonomousLoopCycle[]
-  events: AutonomousLoopEvent[]
-}
-
-export interface CatalogModelView {
-  id: string
-  providerId: string
-  providerLabel: string
-  source: 'local' | 'remote' | 'cloud'
-  modelName: string
-  displayLabel: string
-  nodeId: string | null
-  nodeName: string | null
-  availability: { status: 'available' | 'unavailable' | 'unknown'; reason: string | null }
-  contextWindowTokens: number | null
-  quantization: string | null
-  vramRequirementMb: number | null
-  currentLoadPercent: number | null
-  pingMs: number | null
-  effectiveCapabilities: Record<string, { support: 'supported' | 'unsupported' | 'unknown'; source: string; verifiedAt: number | null }>
-  latestProbe: null | { id: string; status: string; freshUntil: number | null; failureMessage?: string }
-}
-
-export interface CatalogDiscoveryView {
-  catalog: { generatedAt: number; models: CatalogModelView[]; collisions: string[] }
-  warnings: string[]
-}
-
-export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: string }
-
-export interface CreateAutonomousLoopInput {
-  source:
-    | { kind: 'new'; parentPath: string; projectName: string; remoteUrl?: string; createRemoteWithPlugin?: boolean; githubOwner?: string; githubVisibility?: 'private' | 'public' }
-    | { kind: 'existing_github'; remoteUrl: string }
-  executor: AutonomousModelSelection & { capabilityProbeId: string }
-}
-
-export interface AutonomousLoopOnboardingReview {
-  loop: AutonomousLoopRecord
-  plannerLabel: string
-  remoteAccess: { canPush: boolean | null; message: string }
-  initialIdentity: { summary: string; plan: string } | null
-}
-
-export interface AutonomousLoopApi {
-  list(): Promise<AutonomousLoopRecord[]>
-  detail(loopId: string): Promise<AutonomousLoopDetail | null>
-  catalog(requestId: string): Promise<IpcResult<CatalogDiscoveryView>>
-  probe(requestId: string, catalogModelId: string): Promise<IpcResult<{ id: string; status: string; failureMessage?: string }>>
-  create(requestId: string, input: CreateAutonomousLoopInput): Promise<IpcResult<AutonomousLoopOnboardingReview>>
-  cancelRequest(requestId: string): Promise<boolean>
-  pause(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
-  resume(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
-  stop(loopId: string): Promise<IpcResult<AutonomousLoopRecord>>
-  openRepository(loopId: string): Promise<{ ok: boolean; error?: string }>
-  openGitHub(loopId: string): Promise<{ ok: boolean; error?: string }>
-  onChanged(callback: (loopId: string) => void): () => void
-}
-
 export interface PreloadApi {
   app: AppApi
   pty: PtyApi
@@ -1163,22 +2125,26 @@ export interface PreloadApi {
   usage: UsageApi
   router: RouterApi
   digest: DigestApi
-  benchmarkLab: BenchmarkLabPreloadApi
+  test: TestApi
+  benchmark: BenchmarkApi
+  evaluate: EvaluateApi
+  macro: MacroApi
   agent: AgentApi
+  mission: MissionApi
   settings: SettingsApi
   windowControls: WindowControlsApi
   ollama: OllamaApi
   git: GitApi
   gpu: GpuApi
   telemetry: TelemetryApi
-  dashboardTelemetry: DashboardTelemetryApi
-  remoteNodes: RemoteNodesApi
   controller: ControllerApi
   plugins: PluginsApi
   update: UpdateApi
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
-  autonomousLoop: AutonomousLoopApi
+  projectLoop: ProjectLoopApi
+  companion: CompanionApi
+  actionAgent: ActionAgentApi
 }
 
 declare global {

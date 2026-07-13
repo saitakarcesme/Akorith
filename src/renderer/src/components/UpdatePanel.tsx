@@ -1,164 +1,269 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { PackagedUpdateSnapshot, UpdateChannel, UpdateSettingsView } from '../../../preload/index.d'
+import type { BuildInfo, UpdateLogEntry, UpdateRunResult, UpdateStatus } from '../../../preload/index.d'
 
-function timestamp(value?: number): string {
-  return value ? new Date(value).toLocaleString() : 'Not checked yet'
+// Phase 39: Settings → Update. A safe source updater for git/dev installs. It checks
+// origin/main and fast-forwards only — it never discards local changes.
+
+function shortTime(ts?: number): string {
+  if (!ts) return 'not checked'
+  return new Date(ts).toLocaleString()
 }
 
-function bytes(value: number): string {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / 1024 ** 2).toFixed(1)} MB`
+function runtimeLabel(status: UpdateStatus): string {
+  if (status.runtimeMode === 'packaged-windows') return 'Packaged Windows app'
+  if (status.runtimeMode === 'packaged-macos') return 'Packaged macOS app'
+  if (status.runtimeMode === 'packaged-other') return 'Packaged app'
+  if (status.runtimeMode === 'dev') return 'Dev/source mode'
+  return 'Source checkout'
 }
 
 export default function UpdatePanel(): JSX.Element {
-  const [snapshot, setSnapshot] = useState<PackagedUpdateSnapshot | null>(null)
-  const [settings, setSettings] = useState<UpdateSettingsView | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [status, setStatus] = useState<UpdateStatus | null>(null)
+  const [busy, setBusy] = useState<'check' | 'run' | null>(null)
+  const [runInstall, setRunInstall] = useState(true)
+  const [runBuild, setRunBuild] = useState(false)
+  const [logs, setLogs] = useState<UpdateLogEntry[]>([])
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  // Phase 42 (Remote Ollama): which commit this app was built from.
+  const [build, setBuild] = useState<BuildInfo | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
-    const [nextSnapshot, nextSettings] = await Promise.all([
-      window.api.update.status(),
-      window.api.update.settings()
-    ])
-    setSnapshot(nextSnapshot)
-    setSettings(nextSettings)
+    try {
+      setStatus(await window.api.update.status())
+    } catch {
+      setStatus(null)
+    }
+    try {
+      setBuild(await window.api.app.getBuildInfo())
+    } catch {
+      setBuild(null)
+    }
   }, [])
 
   useEffect(() => {
-    void load().catch((error) => setNotice(error instanceof Error ? error.message : String(error)))
-    return window.api.update.onChanged(setSnapshot)
+    void load()
   }, [load])
 
-  const setPreference = async (patch: Partial<UpdateSettingsView>): Promise<void> => {
-    const next = await window.api.update.setSettings(patch)
-    setSettings(next)
-  }
-
   const check = async (): Promise<void> => {
-    setBusy(true)
+    setBusy('check')
     setNotice(null)
     try {
-      const next = await window.api.update.check(settings?.channel)
-      setSnapshot(next)
-      if (next.phase === 'not-available') setNotice('Akorith is up to date.')
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error))
+      const next = await window.api.update.check()
+      setStatus(next)
+      setNotice(
+        next.mode !== 'git'
+          ? { kind: 'info', text: 'This is not a source/git install.' }
+          : next.hasUpdate
+            ? { kind: 'info', text: `Update available — ${next.behindBy} commit(s) behind origin/main.` }
+            : { kind: 'ok', text: 'Up to date with origin/main.' }
+      )
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
-  const download = async (): Promise<void> => {
-    setBusy(true)
+  const run = async (): Promise<void> => {
+    setBusy('run')
     setNotice(null)
-    try { setSnapshot(await window.api.update.download()) }
-    catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
-    finally { setBusy(false) }
-  }
-
-  const install = async (): Promise<void> => {
-    setBusy(true)
-    setNotice(null)
+    setLogs([])
     try {
-      const authorization = await window.api.update.authorizeInstall()
-      if (!authorization) {
-        setNotice('The downloaded update is no longer ready to install. Check again.')
-        return
+      const res: UpdateRunResult = await window.api.update.run({ runInstall, runBuild })
+      setStatus(res.status)
+      setLogs(res.logs)
+      if (res.ok) {
+        setNotice({
+          kind: 'ok',
+          text:
+            res.status.runtimeMode === 'packaged-windows'
+              ? 'Started the packaged Windows refresh. Akorith may close while the installer updates and relaunches it.'
+              : res.restartRecommended
+                ? 'Updated to latest main. Restart Akorith to load the new build.'
+                : 'Already up to date.'
+        })
+      } else {
+        setNotice({ kind: 'error', text: res.error ?? 'Update failed.' })
       }
-      setSnapshot(await window.api.update.install(authorization.token))
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error))
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
   return (
-    <section className="settings-section" aria-labelledby="updates-heading">
+    <section className="settings-section">
       <div className="settings-section-head">
         <div>
-          <h2 id="updates-heading">Updates</h2>
-          <p>Install signed Akorith releases from GitHub. Installed apps never pull or execute source repository commands.</p>
+          <h2>Update</h2>
+          <p>Keep source checkouts current with GitHub <code>main</code>, or refresh the installed Windows package from a clean source checkout.</p>
         </div>
-        <button type="button" disabled={busy || !snapshot?.canCheck} onClick={() => void check()}>
-          {snapshot?.phase === 'checking' ? 'Checking…' : 'Check now'}
+        <button type="button" disabled={busy !== null} onClick={() => void check()}>
+          {busy === 'check' ? 'Checking…' : 'Check for updates'}
         </button>
       </div>
 
-      {!snapshot || !settings ? (
-        <div className="settings-hint">Loading packaged update status…</div>
+      {build && (
+        <div className="settings-hint">
+          Akorith build: <code>{build.version}</code> · commit <code>{build.gitCommit}</code> ·{' '}
+          {build.packaged ? 'packaged' : 'dev'}
+          {build.gitBranch && build.gitBranch !== 'unknown' ? ` · ${build.gitBranch}` : ''}
+        </div>
+      )}
+
+      {!status ? (
+        <div className="settings-hint">Loading update status…</div>
+      ) : status.mode === 'packaged' ? (
+        <div className="update-packaged">
+          <div className="ollama-status is-info">{runtimeLabel(status)}</div>
+          <div className="ctrl-grid">
+            <div className="ctrl-field">
+              <span>Executable</span>
+              <code>{status.executablePath}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Source checkout</span>
+              <code>{status.sourceCheckoutPath ?? 'not found'}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Update target</span>
+              <code>{status.updateTarget}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Relaunch target</span>
+              <code>{status.relaunchTarget ?? status.executablePath}</code>
+            </div>
+          </div>
+          {status.sourceCheckoutPath && (
+            <div className="settings-hint">
+              Source commit <code>{status.currentCommit ?? '-'}</code> / origin main <code>{status.remoteMainCommit ?? '-'}</code>.
+              {status.hasUpdate ? ' Installed app refresh is available.' : ' Installed app appears current for the detected source.'}
+            </div>
+          )}
+          {status.warnings.length > 0 && (
+            <div className="update-warnings">
+              {status.warnings.map((w, i) => (
+                <div key={i} className="ollama-status is-info">{w}</div>
+              ))}
+            </div>
+          )}
+          {status.runtimeMode === 'packaged-windows' ? (
+            <>
+              <div className="settings-checks">
+                <label>
+                  <input type="checkbox" checked={runInstall} onChange={(e) => setRunInstall(e.target.checked)} />
+                  <span>Run npm install in the source checkout before building installer</span>
+                </label>
+              </div>
+              <div className="settings-action-row">
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={busy !== null || !status.canUpdateInstalledApp}
+                  title={status.canUpdateInstalledApp ? 'Update source if needed, build/install Windows package, and relaunch Akorith.exe' : 'A clean source checkout is required'}
+                  onClick={() => void run()}
+                >
+                  {busy === 'run' ? 'Starting refresh...' : 'Update installed Windows app'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="settings-hint">Packaged macOS/other updates require a manual installer refresh from a source checkout for now.</p>
+          )}
+          {notice && <div className={`ollama-status is-${notice.kind}`}>{notice.text}</div>}
+          {logs.length > 0 && (
+            <div className="update-logs">
+              {logs.map((entry, i) => (
+                <div key={i} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
+                  <div className="update-log-cmd">
+                    <span>{entry.ok ? 'ok' : 'error'}</span>
+                    <code>{entry.command}</code>
+                  </div>
+                  {entry.output && <pre className="update-log-out">{entry.output}</pre>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <>
           <div className="ctrl-grid">
-            <div className="ctrl-field"><span>Current version</span><code>{snapshot.currentVersion}</code></div>
-            <div className="ctrl-field"><span>Channel</span><code>{settings.channel}</code></div>
-            <div className="ctrl-field"><span>Last checked</span><code>{timestamp(snapshot.checkedAt)}</code></div>
-            <div className="ctrl-field"><span>Status</span><code>{snapshot.phase.replace('-', ' ')}</code></div>
+            <div className="ctrl-field">
+              <span>Branch</span>
+              <code>{status.currentBranch}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Current commit</span>
+              <code>{status.currentCommit ?? '—'}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>origin/main</span>
+              <code>{status.remoteMainCommit ?? '—'}</code>
+            </div>
+            <div className="ctrl-field">
+              <span>Status</span>
+              <code>
+                {status.hasUpdate ? `${status.behindBy} behind` : 'up to date'}
+                {status.aheadBy > 0 ? ` · ${status.aheadBy} ahead` : ''}
+                {status.isDirty ? ' · local changes' : ''}
+              </code>
+            </div>
           </div>
+
+          <div className="settings-hint">Last checked {shortTime(status.lastCheckedAt)} · remote {status.remoteUrl ?? '—'}</div>
+
+          {status.warnings.length > 0 && (
+            <div className="update-warnings">
+              {status.warnings.map((w, i) => (
+                <div key={i} className="ollama-status is-info">{w}</div>
+              ))}
+            </div>
+          )}
 
           <div className="settings-checks">
             <label>
-              <input
-                type="checkbox"
-                checked={settings.automaticChecks}
-                onChange={(event) => void setPreference({ automaticChecks: event.target.checked })}
-              />
-              <span>Check automatically after startup</span>
+              <input type="checkbox" checked={runInstall} onChange={(e) => setRunInstall(e.target.checked)} />
+              <span>Run npm install after update (if dependencies changed)</span>
             </label>
             <label>
-              <span>Update channel</span>
-              <select
-                value={settings.channel}
-                onChange={(event) => void setPreference({ channel: event.target.value as UpdateChannel })}
-              >
-                <option value="stable">Stable</option>
-                <option value="beta">Beta / prerelease</option>
-              </select>
+              <input type="checkbox" checked={runBuild} onChange={(e) => setRunBuild(e.target.checked)} />
+              <span>Run npm run build after update (verify the new build)</span>
             </label>
           </div>
 
-          {!snapshot.support.supported && (
-            <div className="ollama-status is-info">{snapshot.support.reason}</div>
-          )}
-          {snapshot.error && (
-            <div className="ollama-status is-error">{snapshot.error.message}</div>
-          )}
-          {notice && <div className="ollama-status is-info">{notice}</div>}
-
-          {snapshot.update && (
-            <div className="update-packaged">
-              <div className="update-log-cmd">
-                <strong>{snapshot.update.releaseName || `Akorith ${snapshot.update.version}`}</strong>
-                <code>{snapshot.update.prerelease ? 'prerelease' : 'stable'}</code>
-              </div>
-              {snapshot.update.releaseNotes && <div className="settings-note">{snapshot.update.releaseNotes}</div>}
-            </div>
-          )}
-
-          {snapshot.progress && (
-            <div className="update-progress" aria-label={`Download ${snapshot.progress.percent.toFixed(0)} percent`}>
-              <div className="update-progress-track"><span style={{ width: `${snapshot.progress.percent}%` }} /></div>
-              <span>{snapshot.progress.percent.toFixed(0)}% · {bytes(snapshot.progress.transferred)} of {bytes(snapshot.progress.total)}</span>
-            </div>
-          )}
-
           <div className="settings-action-row">
-            {snapshot.canDownload && (
-              <button type="button" className="is-primary" disabled={busy} onClick={() => void download()}>
-                Download update
-              </button>
-            )}
-            {snapshot.canAuthorizeInstall && (
-              <button type="button" className="is-primary" disabled={busy} onClick={() => void install()}>
-                Restart and install
-              </button>
-            )}
+            <button
+              type="button"
+              className="is-primary"
+              disabled={busy !== null || !status.safeToUpdate}
+              title={status.safeToUpdate ? 'Fast-forward to origin/main' : 'No safe update available (up to date, dirty tree, or origin/main missing)'}
+              onClick={() => void run()}
+            >
+              {busy === 'run' ? 'Updating…' : 'Update to latest main'}
+            </button>
           </div>
 
+          {notice && <div className={`ollama-status is-${notice.kind}`}>{notice.text}</div>}
+
+          {logs.length > 0 && (
+            <div className="update-logs">
+              {logs.map((entry, i) => (
+                <div key={i} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
+                  <div className="update-log-cmd">
+                    <span>{entry.ok ? '✓' : '✕'}</span>
+                    <code>{entry.command}</code>
+                  </div>
+                  {entry.output && <pre className="update-log-out">{entry.output}</pre>}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="settings-note">
-            Downloads never install automatically. “Restart and install” creates a short-lived, one-use authorization for this exact release.
+            The updater only ever runs <code>git fetch</code>, <code>git switch main</code>, and
+            <code> git merge --ff-only</code> (plus the optional npm steps you choose). It never resets, discards
+            changes, or force-pushes. Restart Akorith after updating to load the new build.
           </div>
         </>
       )}

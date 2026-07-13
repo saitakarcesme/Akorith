@@ -42,6 +42,36 @@ export class AgentSessionManager {
   private readonly events = new Map<AgentSessionId, AgentSessionEvent[]>()
   private readonly runtimeAttachments = new Map<string, AgentRuntimeAttachment>()
 
+  createPlaceholderSession(input: AgentSessionCreateInput): AgentSession {
+    const now = Date.now()
+    const session: AgentSession = {
+      id: randomUUID(),
+      agentId: input.agentId,
+      mode: input.mode,
+      origin: input.origin,
+      status: 'created',
+      projectPath: input.projectPath,
+      title: input.title,
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+      metadata: {
+        ...(input.metadata ?? {}),
+        placeholder: true,
+        runtime: 'phase-29-session-plumbing'
+      }
+    }
+    this.sessions.set(session.id, session)
+    this.appendSessionEvent({
+      sessionId: session.id,
+      agentId: session.agentId,
+      type: 'created',
+      message: 'Placeholder AgentSession created. No runtime process was started.',
+      metadata: { mode: session.mode, origin: session.origin }
+    })
+    return cloneSession(session)
+  }
+
   createObservedSession(
     input: AgentSessionCreateInput & {
       status?: AgentSessionStatus
@@ -231,6 +261,17 @@ export class AgentSessionManager {
     return (this.events.get(sessionId) ?? []).map(cloneEvent)
   }
 
+  stopSession(id: AgentSessionId): AgentSession | null {
+    const stopped = this.updateSessionStatus(id, 'stopped', { error: undefined })
+    if (!stopped) return null
+    this.appendSessionEvent({
+      sessionId: id,
+      agentId: stopped.agentId,
+      type: 'stopped',
+      message: 'Placeholder AgentSession stopped. No runtime process was killed.'
+    })
+    return stopped
+  }
 }
 
 export const agentSessionManager = new AgentSessionManager()

@@ -1,5 +1,3 @@
-> **Superseded:** historical Loop implementation notes; see `production-autonomous-loop.md` for the current engine.
-
 # Loop — autonomous local project builder
 
 > **Build with Loop.** Give Akorith a project idea, a local repo, or a GitHub URL, and local

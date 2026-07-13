@@ -1,5 +1,3 @@
-> **Superseded:** historical design reference; the Companions product surface is no longer shipped.
-
 # Companions — long-memory local personalities
 
 > **Think with Companions.** Athena and Zeus are memory-first local AI personalities. They

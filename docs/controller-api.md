@@ -1,4 +1,4 @@
-# Akorith Controller API
+# Akorith Controller API (Phase 35)
 
 An **optional**, local HTTP API so Akorith can be inspected programmatically by local
 scripts, CLIs, plugins, and (on a trusted private network) other devices and future
@@ -13,8 +13,8 @@ is a separate, opt-in surface.
   and the UI warns about it. (This mirrors Local Studio's loopback-default + key-for-LAN model.)
 - **Token-protected.** A bearer token is generated locally on first enable. Every
   endpoint except `GET /health` requires `Authorization: Bearer <token>`.
-- **Read-only.** No command execution, no terminal/file/git writes, and no
-  prompt-send. The only `POST` is `/v1/controller/refresh`, which
+- **Read-only in Phase 35.** No command execution, no terminal/file/git writes, no
+  prompt-send, no mission execution. The only `POST` is `/v1/controller/refresh`, which
   just re-runs read-only snapshots.
 - **Restrictive CORS.** Only loopback or explicitly-allowed origins are echoed.
 - The token is stored in **local config** (`loopex.config.json`), not an OS keychain, and
@@ -31,10 +31,12 @@ reported as `lastError` and never crash the app.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/health` | no | Liveness: `{ ok, app, version, time }` |
-| GET | `/v1/status` | yes | App + controller + in-memory summaries (projects/chats/plugins) |
+| GET | `/v1/status` | yes | App + controller + in-memory summaries (projects/chats/agents/missions/plugins) |
+| GET | `/v1/agents` | yes | Agent adapter metadata |
 | GET | `/v1/runtime` | yes | Runtime observation snapshot (no prompts/terminal output) |
 | GET | `/v1/projects` | yes | Managed projects (metadata only) |
 | GET | `/v1/chats` | yes | Chat/session **summaries** (titles + metadata, never message bodies) |
+| GET | `/v1/missions` | yes | Preview/draft missions (no execution) |
 | GET | `/v1/plugins` | yes | Plugin registry metadata + diagnostics |
 | GET | `/v1/gpu` | yes | GPU/local-runtime telemetry (honest unavailable) |
 | GET | `/v1/ollama` | yes | Configured Ollama endpoint/source (no secrets) |
@@ -69,7 +71,7 @@ heartbeat ticks only while at least one client is connected.
 - Verified by `npm run verify:controller` (boots on an ephemeral loopback port, checks
   auth + read endpoints, shuts down).
 
-## Remote telemetry
+## Remote telemetry (Phase 36)
 
 The read-only `/v1/gpu` and `/v1/ollama` endpoints are the basis for **remote GPU
 telemetry**: a Mac reads the GPU of a PC running local models by adding a remote telemetry
@@ -80,7 +82,7 @@ a trusted private network (Tailscale/VPN/LAN) — never public. The Mac stores
 logged), and `telemetry:getStatus` picks the first healthy profile by priority, else
 honest local GPU. No new controller endpoints and no change to controller security.
 
-## Deliberate limits
+## Not in Phase 35/36 (deliberately)
 
 No execution/write tier, no OpenAI-compatible proxy, no model lifecycle, no CLI/TUI yet.
 A future Akorith CLI talking to this controller is the recommended next step.

@@ -10,24 +10,12 @@ export interface RunCliOptions {
   cwd?: string
   /** Called once per complete stdout line, as output arrives. */
   onStdoutLine?: (line: string) => void
-  /** Maximum retained characters per output stream. Streaming callbacks still receive every complete line. */
-  maxOutputChars?: number
 }
 
 export interface RunCliResult {
   code: number | null
   stdout: string
   stderr: string
-  stdoutTruncated?: boolean
-  stderrTruncated?: boolean
-}
-
-const DEFAULT_MAX_OUTPUT_CHARS = 2_000_000
-
-function retainTail(current: string, next: string, limit: number): { value: string; truncated: boolean } {
-  const combined = current + next
-  if (combined.length <= limit) return { value: combined, truncated: false }
-  return { value: combined.slice(-limit), truncated: true }
 }
 
 /**
@@ -46,11 +34,8 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
 
     let stdout = ''
     let stderr = ''
-    let stdoutTruncated = false
-    let stderrTruncated = false
     let lineBuffer = ''
     let settled = false
-    const maxOutputChars = Math.max(8_192, Math.min(options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS, 20_000_000))
 
     const finish = (fn: () => void): void => {
       if (settled) return
@@ -94,9 +79,7 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8')
-      const retained = retainTail(stdout, text, maxOutputChars)
-      stdout = retained.value
-      stdoutTruncated ||= retained.truncated
+      stdout += text
       if (options.onStdoutLine) {
         lineBuffer += text
         const lines = lineBuffer.split(/\r?\n/)
@@ -107,15 +90,13 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       }
     })
     child.stderr.on('data', (chunk: Buffer) => {
-      const retained = retainTail(stderr, chunk.toString('utf8'), maxOutputChars)
-      stderr = retained.value
-      stderrTruncated ||= retained.truncated
+      stderr += chunk.toString('utf8')
     })
 
     child.on('error', (err) => finish(() => reject(err)))
     child.on('close', (code) => {
       if (options.onStdoutLine && lineBuffer.trim()) options.onStdoutLine(lineBuffer)
-      finish(() => resolve({ code, stdout, stderr, stdoutTruncated, stderrTruncated }))
+      finish(() => resolve({ code, stdout, stderr }))
     })
 
     if (options.stdin !== undefined) {

@@ -165,7 +165,7 @@ export function IconButton({
 
 /**
  * Phase 55.060: the one composer send/stop control, shared by the normal chat
- * (ChatPanel) and any future compact composer so they remain visually identical. It
+ * (ChatPanel) and the Companion composer so they are visually identical. It
  * renders the existing `.send-button` circle (44px, --accent, scale-on-active,
  * .is-stop danger) — icon-only, no text label.
  */
@@ -196,4 +196,4 @@ export function ComposerSendButton({
 
 // Phase 55.064: the lavender ComposerActionButton was removed — the one composer
 // send/stop control is now ComposerSendButton (the neutral .send-button circle),
-// shared by chat-oriented surfaces.
+// shared by ChatPanel and Companions.

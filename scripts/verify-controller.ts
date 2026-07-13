@@ -32,9 +32,11 @@ async function tryPort(port: number): Promise<boolean> {
     getSettings: () => settings,
     saveSettings: (patch) => Object.assign(settings, patch),
     data: {
+      agents: () => [{ id: 'codex' }],
       runtime: () => ({ observedSessions: [] }),
       projects: () => [{ id: 'p1', name: 'demo' }],
       chats: () => [{ id: 'c1', title: 'hello' }],
+      missions: () => [],
       plugins: () => [{ id: 'opencode-agent', status: 'unavailable' }],
       gpu: () => ({ status: 'unavailable' }),
       ollama: () => ({ configuredBaseUrl: 'http://localhost:11434', endpointKind: 'local' })

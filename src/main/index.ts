@@ -9,27 +9,27 @@ import { warmLocalProvider } from './providers/local'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
-import { registerAgentChatIpc } from './agent-chat'
+import { registerTestIpc } from './testlab-ipc'
+import { registerBenchmarkIpc } from './benchmarks'
+import { registerEvaluateIpc } from './evaluate'
+import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
 import { registerGpuStatusIpc } from './gpu-status'
 import { registerRemoteTelemetryIpc } from './remote-telemetry'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
 import { registerPluginIpc } from './plugins/manager'
-import { disposeUpdateIpc, registerUpdateIpc } from './update'
+import { registerUpdateIpc } from './update'
 import { registerUsageLimitsIpc } from './usage-limits'
-import { registerRuntimeObservationIpc } from './agents/registry'
-import { closeDb, ensureDbReady, getDb, registerDbIpc } from './db'
+import { registerAgentRegistryIpc } from './agents/registry'
+import { registerMissionIpc } from './missions/inspector'
+import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
-import { validateExternalUrl } from './security/external-url'
-import { registerAutonomousLoopIpc, unregisterAutonomousLoopIpc } from './autonomous-loop/ipc'
-import { startAutonomousLoopRuntime, stopAutonomousLoopRuntime } from './autonomous-loop/runtime'
-import { registerDashboardTelemetryIpc } from './dashboard'
-import { RemoteNodeGpuSource, startGpuMonitor, stopGpuMonitor } from './gpu-monitor'
-import { getRemoteNodeClientManager, registerRemoteNodeClientIpc, startRemoteNodeClientRuntime, stopRemoteNodeClientRuntime } from './remote-node'
-import { registerBenchmarkLabIpc, stopBenchmarkLabRuntime } from './benchmark-lab'
+import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
+import { registerCompanionIpc } from './companions'
+import { registerActionAgentIpc } from './action-agents'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -155,13 +155,12 @@ function resolveAppIcon(): string | undefined {
   const base = app.getAppPath()
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
   const portableFile = process.env.PORTABLE_EXECUTABLE_FILE
-  const windowsDevIconParts = ['build', 'icon.ico']
   const winCandidates = [
     process.resourcesPath ? join(process.resourcesPath, 'icon.ico') : '',
     portableDir ? join(portableDir, 'icon.ico') : '',
     portableFile ? join(dirname(portableFile), 'icon.ico') : '',
     join(dirname(process.execPath), 'icon.ico'),
-    join(base, ...windowsDevIconParts)
+    join(base, 'build', 'icon.ico')
   ]
   const candidates =
     process.platform === 'win32'
@@ -352,28 +351,10 @@ function createWindow(): void {
     mainWindow.webContents.setZoomFactor(UI_ZOOM)
   })
 
-  // External links open in the default browser only after a strict scheme
-  // check. Renderer content can never navigate the Electron window to a file,
-  // data, or javascript URL.
+  // Any external links open in the default browser, never inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const decision = validateExternalUrl(url)
-    if (decision.allowed && decision.url) void shell.openExternal(decision.url)
+    shell.openExternal(url)
     return { action: 'deny' }
-  })
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const current = mainWindow.webContents.getURL()
-    let sameDevelopmentOrigin = false
-    if (!app.isPackaged) {
-      try {
-        sameDevelopmentOrigin = new URL(current).origin === new URL(url).origin
-      } catch {
-        sameDevelopmentOrigin = false
-      }
-    }
-    if (url === current || sameDevelopmentOrigin) return
-    event.preventDefault()
-    const decision = validateExternalUrl(url)
-    if (decision.allowed && decision.url) void shell.openExternal(decision.url)
   })
 
   // HMR dev server URL in development, bundled file in production.
@@ -417,16 +398,8 @@ async function initializeStartupData(): Promise<void> {
   if (process.env.AKORITH_SKIP_DB_INIT === '1') return
   try {
     await ensureDbReady()
-    await startRemoteNodeClientRuntime()
-    const remoteGpuSources = (await getRemoteNodeClientManager().list()).map((node) => new RemoteNodeGpuSource({
-      nodeId: node.id,
-      async fetchGpuSnapshot(signal) {
-        const handle = await getRemoteNodeClientManager().client(node.id)
-        return (await handle.client.health(signal)).hardware
-      }
-    }))
-    startGpuMonitor(getDb(), remoteGpuSources)
-    await startAutonomousLoopRuntime()
+    resumeActiveAutoLoopsAtStartup()
+    startProjectLoopAutoScheduler()
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
   }
@@ -438,18 +411,21 @@ app.whenReady().then(() => {
   registerStartupSnapshotIpc()
   registerBuildInfoIpc()
   registerLocalRuntimeIpc()
-  registerAutonomousLoopIpc()
-  registerDashboardTelemetryIpc()
-  registerRemoteNodeClientIpc()
-  registerBenchmarkLabIpc()
+  registerProjectLoopIpc()
+  registerCompanionIpc()
+  registerActionAgentIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
   registerBridgeIpc()
   registerRouterIpc()
   registerDigestIpc()
-  registerRuntimeObservationIpc()
-  registerAgentChatIpc()
+  registerTestIpc()
+  registerBenchmarkIpc()
+  registerEvaluateIpc()
+  registerAgentRegistryIpc()
+  registerMissionIpc()
+  registerMacroIpc()
   registerOllamaConnectionIpc()
   registerGitStatusIpc()
   registerGpuStatusIpc()
@@ -480,12 +456,7 @@ app.whenReady().then(() => {
 
 // No zombie shells: every PTY dies with the app.
 app.on('will-quit', () => {
-  unregisterAutonomousLoopIpc()
-  stopAutonomousLoopRuntime()
-  void stopGpuMonitor()
-  stopRemoteNodeClientRuntime()
-  stopBenchmarkLabRuntime()
-  disposeUpdateIpc()
+  stopProjectLoopAutoScheduler()
   ptyManager.killAll()
   closeDb()
   void stopController()

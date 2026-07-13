@@ -500,7 +500,7 @@ export default function ChatPanel({
    */
   const runAgentSummary = async (terminalId: string, opts: { auto: boolean; lastPrompt?: string }): Promise<void> => {
     if (!selected?.available.ok) {
-      if (!opts.auto) showToast('error', 'Select an available provider to summarize terminal output.')
+      if (!opts.auto) showToast('error', 'Select an available provider to summarize agent output.')
       return
     }
     setSummarizingAgent(true)
@@ -999,7 +999,7 @@ export default function ChatPanel({
           <span className="permission-tag">waiting for your answer</span>
           {detection.riskLevel !== 'low' && <span className="permission-risk">{detection.riskLevel} risk</span>}
         </div>
-        <div className="permission-question">{detection.question || detection.matchedText || 'The executor is asking for confirmation in the terminal.'}</div>
+        <div className="permission-question">{detection.question || detection.matchedText || 'The agent is asking for confirmation in the terminal.'}</div>
         <div className="permission-actions">
           {options.map((opt, i) => (
             <button
@@ -1111,9 +1111,9 @@ export default function ChatPanel({
               className="composer-file-input"
               onChange={(event) => void addImageFiles(event.target.files)}
             />
-            {/* Primary: target executor selector stays visible in a workspace. */}
+            {/* Primary: target agent selector stays visible in a workspace. */}
             {hasProject && (
-              <div className="route-seg" role="group" aria-label="Target executor">
+              <div className="route-seg" role="group" aria-label="Target agent">
                 {TERMINALS.map((t) => (
                   <button
                     key={t.id}
@@ -1189,7 +1189,7 @@ export default function ChatPanel({
                             void runAgentSummary(bridgeTarget, { auto: false })
                           }}
                         >
-                          <span>{summarizingAgent ? 'Reading…' : `Summarize ${TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? 'terminal'} output`}</span>
+                          <span>{summarizingAgent ? 'Reading…' : `Summarize ${TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? 'agent'} output`}</span>
                         </button>
                         <button
                           type="button"
@@ -1199,7 +1199,7 @@ export default function ChatPanel({
                             onToggleDrawer()
                           }}
                         >
-                          <span>{drawerOpen ? 'Hide terminals' : 'Show terminals'}</span>
+                          <span>{drawerOpen ? 'Hide agents' : 'Show agents'}</span>
                         </button>
                       </>
                     )}
@@ -1242,7 +1242,7 @@ export default function ChatPanel({
               </button>
             </div>
             {activeProject && !activeProject.path && (
-              <div className="ws-hero-note">Selected “{activeProject.name}” has no folder yet — open one to start execution terminals.</div>
+              <div className="ws-hero-note">Selected “{activeProject.name}” has no folder yet — open one to start agents.</div>
             )}
           </div>
         </div>
@@ -1272,7 +1272,7 @@ export default function ChatPanel({
                     <div className={`agent-summary-head ${m.summary.needsAttention ? 'needs-attention' : ''}`}>
                       <SparkIcon size={13} />
                       <span>{m.summary.source}</span>
-                      <em>terminal output summary</em>
+                      <em>agent output summary</em>
                     </div>
                   )}
                   {m.images && m.images.length > 0 && (

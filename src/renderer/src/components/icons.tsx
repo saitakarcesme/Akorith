@@ -103,16 +103,6 @@ export function PlusIcon(props: IconProps): JSX.Element {
   )
 }
 
-export function MoreIcon(props: IconProps): JSX.Element {
-  return (
-    <IconShell {...props}>
-      <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
-    </IconShell>
-  )
-}
-
 export function ChevronIcon(props: IconProps & { direction?: 'left' | 'right' | 'down' | 'up' }): JSX.Element {
   const direction = props.direction ?? 'right'
   const path =
@@ -220,6 +210,29 @@ export function StopIcon(props: IconProps): JSX.Element {
   return (
     <IconShell {...props}>
       <rect x="6.5" y="6.5" width="11" height="11" rx="2.4" fill="currentColor" stroke="none" />
+    </IconShell>
+  )
+}
+
+// Phase 43: Companions (personality-driven companion agents) — orbit/heart mark.
+export function CompanionsIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <circle cx="12" cy="9" r="3.2" />
+      <path d="M6 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+      <circle cx="19" cy="6" r="1.4" />
+    </IconShell>
+  )
+}
+
+// Phase 43: Agents (coding agents / nodes) — connected-nodes mark.
+export function AgentsIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <circle cx="6" cy="7" r="2.2" />
+      <circle cx="18" cy="7" r="2.2" />
+      <circle cx="12" cy="17" r="2.2" />
+      <path d="M7.6 8.6l3 6.2M16.4 8.6l-3 6.2M8.2 7h7.6" />
     </IconShell>
   )
 }

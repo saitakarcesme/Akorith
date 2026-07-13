@@ -1,8 +1,6 @@
 node_modules/
 out/
 dist/
-dist-node/
-coverage/
 *.log
 *.tsbuildinfo
 .DS_Store

@@ -1,5 +1,3 @@
-> **Superseded:** historical safety notes; see `production-autonomous-loop.md` and `production-remote-node.md` for current controls.
-
 # Safety model (Loop · Companions · Agents)
 
 Akorith's new features are local-first and deliberately conservative. Safety is **deterministic

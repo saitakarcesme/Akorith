@@ -2,7 +2,7 @@ import { getRuntimeStatus } from '../ollama-connection'
 import type { RuntimeStatus } from '../ollama-connection'
 
 // Phase 47: the shared local-runtime status — a thin passthrough to the existing
-// resolver so model consumers report the same source/readiness.
+// resolver so Loop/Companions/Agents all report the same source/readiness.
 
 export type { RuntimeStatus }
 

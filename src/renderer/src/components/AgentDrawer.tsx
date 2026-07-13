@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { ProjectRow } from '../../../preload/index.d'
 import TerminalPane, { type AgentStatusInfo } from './TerminalPane'
 
-/** Where the execution terminals are docked. Switching modes never
+/** Phase 33.16: where the agent terminals are docked. Switching modes never
  *  remounts the TerminalPanes (same component tree, only the container class
  *  changes), so the PTYs and their buffers keep running. */
 export type AgentDockMode = 'drawer' | 'dock' | 'full' | 'right'
@@ -285,7 +285,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
           />
         )}
         <header className="agent-drawer-header">
-          <div className="agent-drawer-title">Execution activity</div>
+          <div className="agent-drawer-title">Agent activity</div>
           <div className="agent-drawer-cwd" title={activeProject.path}>{activeProject.path}</div>
           <div className="agent-dock-seg" role="group" aria-label="Terminal dock mode">
             {modeButtons.map((button) => (
@@ -300,7 +300,7 @@ export default function AgentDrawer({ activeProject, open, onClose, onAgentStatu
               </button>
             ))}
           </div>
-          <button type="button" className="agent-drawer-close" onClick={onClose} title="Hide execution terminals">
+          <button type="button" className="agent-drawer-close" onClick={onClose} title="Hide agents">
             ✕
           </button>
         </header>

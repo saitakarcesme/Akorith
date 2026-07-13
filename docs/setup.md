@@ -73,7 +73,6 @@ mkdir -p "$EXT" && rm -rf node_modules && ln -s "$EXT" node_modules && npm insta
 
 ## Keeping machines current
 
-Installed builds update through **Settings -> Updates** using signed GitHub Release
-artifacts; they do not update from a source checkout. See
-[`docs/update-system.md`](update-system.md). Developers should keep this checkout current
-with normal reviewed Git operations and rebuild explicitly when working from source.
+Use **Settings → Update** in the app to fast-forward this checkout to GitHub
+`main` (see `docs/update-system.md`). To refresh the packaged macOS app, run
+`npm run macos:refresh` after `npm run pack:mac`.

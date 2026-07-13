@@ -4,7 +4,7 @@ import { localRuntimeStatus } from './status'
 import type { LocalModelInfo } from './types'
 import type { RuntimeStatus } from '../ollama-connection'
 
-// Shared local-first runtime used by Loop and internal execution flows.
+// Phase 47: shared local-first runtime used by Loop, Companions, and Agents.
 
 export * from './types'
 export { sendLocal } from './send'

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  AgentAdapterInfo,
+  AgentDetectionResult,
+  AgentId,
+  AgentRuntimeAttachment,
+  AgentRuntimeSnapshot,
+  AgentSession,
+  AgentSessionMode,
+  AgentStatus,
   BridgeSettings,
   DigestSettings,
   ControllerConfigView,
@@ -12,14 +20,15 @@ import type {
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
   OllamaShareInfo,
-  ProviderInfo
+  ProviderInfo,
+  TestSettings
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
 import { CloseIcon } from './icons'
+import MissionCenter from './MissionCenter'
 import UpdatePanel from './UpdatePanel'
-import RemoteNodesPanel from './RemoteNodesPanel'
 
-type SettingsTab = 'profile' | 'providers' | 'compute' | 'api' | 'update' | 'workflow' | 'safety'
+type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
 
 interface SettingsCenterProps {
   theme: AppTheme
@@ -56,6 +65,124 @@ function providerShortLabel(id: string, label: string): string {
   if (id.includes('chatgpt') || id.includes('codex')) return 'Cx'
   if (id.includes('local') || id.includes('ollama')) return 'Lo'
   return label.slice(0, 2)
+}
+
+function secondsLabel(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  return `${minutes}m`
+}
+
+function capabilityLabel(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function agentStatusClass(status: AgentStatus): string {
+  if (status === 'available') return 'is-ok'
+  if (status === 'unknown') return 'is-info'
+  if (status === 'disabled') return 'is-warning'
+  return 'is-error'
+}
+
+function integrationStageLabel(value: string): string {
+  return value
+    .split('-')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function runtimeSummary(agent: AgentAdapterInfo): string {
+  const runtime = agent.runtimeCapabilities
+  const bits: string[] = []
+  if (runtime.canUseExistingProvider) bits.push('existing provider active')
+  if (runtime.canUseExistingTerminal) bits.push('existing terminal active')
+  if (runtime.canStream) bits.push('streaming available in current runtime')
+  if (runtime.canExecute) bits.push('exec available in current runtime')
+  if (runtime.isPlaceholder) bits.push('AgentSession runtime is placeholder only')
+  return bits.join(' / ') || 'metadata only'
+}
+
+function relativeTime(ts?: number): string {
+  if (!ts) return 'not checked'
+  const seconds = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  if (seconds < 5) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.round(minutes / 60)}h ago`
+}
+
+function dateTimeLabel(ts?: number): string {
+  if (!ts) return 'n/a'
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(ts))
+}
+
+function shortId(value?: string, size = 8): string {
+  if (!value) return 'n/a'
+  return value.length <= size + 3 ? value : `${value.slice(0, size)}...`
+}
+
+function sourceLabel(value?: string): string {
+  if (!value) return 'n/a'
+  const normalized = value.replace(/\\/g, '/')
+  const parts = normalized.split('/')
+  return parts.slice(-2).join('/')
+}
+
+function placeholderModeForAgent(agent: AgentAdapterInfo): AgentSessionMode {
+  if (agent.id === 'memory') return 'memory'
+  if (agent.id === 'ollama') return 'chat'
+  if (agent.id === 'codex') return 'exec'
+  return 'terminal'
+}
+
+function observedRuntimeState(agent: AgentAdapterInfo, snapshot: AgentRuntimeSnapshot | null): string {
+  if (!snapshot) return 'not checked'
+  if (snapshot.activeProviderCalls.some((attachment) => attachment.agentId === agent.id)) return 'active provider call'
+  if (snapshot.activePtySessions.some((attachment) => attachment.agentId === agent.id)) return 'active terminal'
+  if (agent.id === 'ollama' && snapshot.ollamaStatus?.status === 'observed') return 'local runtime available'
+  if (agent.id === 'opencode') return 'metadata / detection only'
+  if (agent.id === 'memory') return 'future memory / skills'
+  return 'idle'
+}
+
+function runtimeStateTone(state: string): string {
+  if (state.includes('active') || state.includes('available')) return 'is-ok'
+  if (state.includes('future') || state.includes('metadata')) return 'is-info'
+  return 'is-muted'
+}
+
+function safeMetadataSummary(metadata?: Record<string, unknown>): string {
+  if (!metadata) return 'no metadata'
+  const blocked = /(prompt|content|text|output|secret|token|password|env|command)/i
+  const parts = Object.entries(metadata)
+    .filter(([key]) => !blocked.test(key))
+    .slice(0, 6)
+    .map(([key, value]) => {
+      const rendered =
+        typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+          ? String(value)
+          : value === null
+            ? 'null'
+            : Array.isArray(value)
+              ? `${value.length} item${value.length === 1 ? '' : 's'}`
+              : 'object'
+      return `${key}: ${rendered.slice(0, 80)}`
+    })
+  return parts.length ? parts.join(' / ') : 'metadata hidden by safety filter'
+}
+
+function attachmentsForSession(session: AgentSession, attachments: AgentRuntimeAttachment[]): AgentRuntimeAttachment[] {
+  return attachments.filter((attachment) => attachment.sessionId === session.id)
 }
 
 export default function SettingsCenter({
@@ -104,6 +231,7 @@ export default function SettingsCenter({
   const [telNotice, setTelNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
+  const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
   const [ollamaSettings, setOllamaSettings] = useState<OllamaConnectionSettings | null>(null)
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434')
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
@@ -126,7 +254,16 @@ export default function SettingsCenter({
     }
   }, [])
   const [digestDirDraft, setDigestDirDraft] = useState('')
+  const [testSourceDraft, setTestSourceDraft] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
+  const [agentAdapters, setAgentAdapters] = useState<AgentAdapterInfo[]>([])
+  const [agentDetections, setAgentDetections] = useState<Partial<Record<AgentId, AgentDetectionResult>>>({})
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>([])
+  const [runtimeAttachments, setRuntimeAttachments] = useState<AgentRuntimeAttachment[]>([])
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<AgentRuntimeSnapshot | null>(null)
+  const [expandedAgentSessionId, setExpandedAgentSessionId] = useState<string | null>(null)
+  const [agentBusy, setAgentBusy] = useState<string | null>(null)
+
   const loadSettings = useCallback(() => {
     void window.api.bridge.getSettings().then(setBridgeSettings).catch(() => setBridgeSettings({ autoEnter: false }))
     void window.api.digest.getSettings().then((settings) => {
@@ -136,6 +273,13 @@ export default function SettingsCenter({
       setDigestSettings(null)
       setDigestDirDraft('')
     })
+    void window.api.test.getSettings().then((settings) => {
+      setTestSettings(settings)
+      setTestSourceDraft(settings.sourceRepo ?? '')
+    }).catch(() => {
+      setTestSettings(null)
+      setTestSourceDraft('')
+    })
     void window.api.ollama.getSettings().then((settings) => {
       setOllamaSettings(settings)
       setOllamaEndpoint(settings.baseUrl)
@@ -144,6 +288,10 @@ export default function SettingsCenter({
       setOllamaEndpoint('http://localhost:11434')
     })
     void window.api.ollama.getShareInfo().then(setOllamaShare).catch(() => setOllamaShare(null))
+    void window.api.agent.list().then(setAgentAdapters).catch(() => setAgentAdapters([]))
+    void window.api.agent.listSessions().then(setAgentSessions).catch(() => setAgentSessions([]))
+    void window.api.agent.listRuntimeAttachments().then(setRuntimeAttachments).catch(() => setRuntimeAttachments([]))
+    void window.api.agent.getRuntimeSnapshot().then(setRuntimeSnapshot).catch(() => setRuntimeSnapshot(null))
   }, [])
 
   useEffect(() => {
@@ -480,15 +628,103 @@ export default function SettingsCenter({
     await saveDigestDir(res.path)
   }
 
+  const saveTest = async (patch: Partial<TestSettings>): Promise<void> => {
+    setSaving('test')
+    try {
+      const saved = await window.api.test.setSettings(patch)
+      setTestSettings(saved)
+      setTestSourceDraft(saved.sourceRepo ?? '')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const saveTestSource = async (value = testSourceDraft): Promise<void> => {
+    await saveTest({ sourceRepo: value.trim() })
+  }
+
+  const chooseTestSource = async (): Promise<void> => {
+    const res = await window.api.projects.pickDirectory()
+    if (!res.ok) return
+    setTestSourceDraft(res.path)
+    await saveTestSource(res.path)
+  }
+
+  const detectAgent = async (id: AgentId): Promise<void> => {
+    setAgentBusy(id)
+    try {
+      const result = await window.api.agent.detect(id)
+      setAgentDetections((current) => ({ ...current, [id]: result }))
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const detectAllAgents = async (): Promise<void> => {
+    setAgentBusy('all')
+    try {
+      const results = await window.api.agent.detectAll()
+      const next: Partial<Record<AgentId, AgentDetectionResult>> = {}
+      for (const result of results) next[result.id] = result
+      setAgentDetections((current) => ({ ...current, ...next }))
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const createPlaceholderSession = async (agent: AgentAdapterInfo): Promise<void> => {
+    setAgentBusy(`session:${agent.id}`)
+    try {
+      await window.api.agent.createPlaceholderSession({
+        agentId: agent.id,
+        mode: placeholderModeForAgent(agent),
+        origin: 'agent_hub',
+        title: `${agent.displayName} placeholder`,
+        metadata: { integrationStage: agent.integrationStage }
+      })
+      setAgentSessions(await window.api.agent.listSessions())
+      setRuntimeAttachments(await window.api.agent.listRuntimeAttachments())
+      setRuntimeSnapshot(await window.api.agent.getRuntimeSnapshot())
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
+  const refreshRuntimeSnapshot = async (): Promise<void> => {
+    setAgentBusy('runtime')
+    try {
+      setRuntimeSnapshot(await window.api.agent.refreshRuntimeSnapshot())
+      setRuntimeAttachments(await window.api.agent.listRuntimeAttachments())
+      setAgentSessions(await window.api.agent.listSessions())
+    } finally {
+      setAgentBusy(null)
+    }
+  }
+
   const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
     { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
     { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
-    { id: 'compute', label: 'Compute', kicker: 'Remote nodes and models' },
+    { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
+    { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
-    { id: 'update', label: 'Updates', kicker: 'Desktop release channel' },
+    { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
+    { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
   ]
+
+  const observedSessions = useMemo(() => {
+    const byId = new Map<string, AgentSession>()
+    for (const session of runtimeSnapshot?.observedSessions ?? []) byId.set(session.id, session)
+    for (const session of agentSessions) {
+      if (session.metadata?.observed === true) byId.set(session.id, session)
+    }
+    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+  }, [agentSessions, runtimeSnapshot])
+
+  const activeProviderCalls = runtimeSnapshot?.activeProviderCalls.length ?? 0
+  const activePtySessions = runtimeSnapshot?.activePtySessions.length ?? 0
+  const hasRuntimeActivity = observedSessions.length > 0 || activeProviderCalls > 0 || activePtySessions > 0
 
   return (
     <div
@@ -870,15 +1106,204 @@ export default function SettingsCenter({
             </section>
           )}
 
-          {activeTab === 'compute' && (
+          {activeTab === 'agents' && (
             <section className="settings-section">
               <div className="settings-section-head">
                 <div>
-                  <h2>Compute</h2>
-                  <p>Authenticated remote inference nodes and their live model catalogs.</p>
+                  <h2>Agent Hub</h2>
+                  <p>Read-only Agent OS foundation for current and future adapters.</p>
                 </div>
+                <button type="button" disabled={agentBusy !== null} onClick={() => void detectAllAgents()}>
+                  {agentBusy === 'all' ? 'Detecting...' : 'Detect all'}
+                </button>
               </div>
-              <RemoteNodesPanel />
+              <div className="agent-hub-list">
+                {agentAdapters.map((agent) => {
+                  const detection = agentDetections[agent.id]
+                  const status = detection?.status ?? agent.status
+                  const runtimeState = observedRuntimeState(agent, runtimeSnapshot)
+                  return (
+                    <div className="agent-hub-row" key={agent.id}>
+                      <div className="agent-hub-main">
+                        <div className="agent-hub-title">
+                          <strong>{agent.displayName}</strong>
+                          <span className={`settings-chip ${agentStatusClass(status)}`}>{status}</span>
+                        </div>
+                        <div className="agent-hub-stage">
+                          <span>{integrationStageLabel(agent.integrationStage)}</span>
+                          <em>{runtimeSummary(agent)}</em>
+                        </div>
+                        <div className="agent-runtime-state">
+                          <span className={`settings-chip ${runtimeStateTone(runtimeState)}`}>{runtimeState}</span>
+                          <em>current observed runtime state</em>
+                        </div>
+                        <p>{agent.description}</p>
+                        <div className="agent-capability-list">
+                          {agent.capabilities.map((capability) => (
+                            <span key={capability}>{capabilityLabel(capability)}</span>
+                          ))}
+                        </div>
+                        <div className="agent-note">{agent.currentIntegrationNotes[0]}</div>
+                        <div className="agent-note is-future">{agent.futureIntegrationNotes[0]}</div>
+                        {detection?.message && <div className="agent-note is-detection">{detection.message}</div>}
+                      </div>
+                      <div className="agent-hub-actions">
+                        <button
+                          type="button"
+                          className="agent-detect-btn"
+                          disabled={agentBusy !== null}
+                          onClick={() => void detectAgent(agent.id)}
+                        >
+                          {agentBusy === agent.id ? 'Checking...' : 'Detect'}
+                        </button>
+                        <button
+                          type="button"
+                          className="agent-detect-btn"
+                          disabled={agentBusy !== null}
+                          onClick={() => void createPlaceholderSession(agent)}
+                        >
+                          {agentBusy === `session:${agent.id}` ? 'Creating...' : 'Placeholder'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="settings-divider" />
+              <div className="agent-runtime-panel">
+                <div className="agent-runtime-head">
+                  <div>
+                    <strong>Runtime Observation</strong>
+                    <span>Checked {relativeTime(runtimeSnapshot?.checkedAt)}</span>
+                  </div>
+                  <button type="button" disabled={agentBusy !== null} onClick={() => void refreshRuntimeSnapshot()}>
+                    {agentBusy === 'runtime' ? 'Checking...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="agent-runtime-grid">
+                  <div>
+                    <span>Observed sessions</span>
+                    <strong>{observedSessions.length}</strong>
+                  </div>
+                  <div>
+                    <span>Provider calls</span>
+                    <strong>{activeProviderCalls}</strong>
+                  </div>
+                  <div>
+                    <span>PTY sessions</span>
+                    <strong>{activePtySessions}</strong>
+                  </div>
+                  <div>
+                    <span>Ollama</span>
+                    <strong>{runtimeSnapshot?.ollamaStatus?.status ?? 'unknown'}</strong>
+                  </div>
+                </div>
+                {!hasRuntimeActivity && (
+                  <div className="agent-empty-state">
+                    <strong>No active runtime observed yet.</strong>
+                    <span>Run a chat provider call or open a terminal to see read-only runtime activity here.</span>
+                  </div>
+                )}
+                {runtimeSnapshot?.activeProviderCalls.slice(0, 3).map((attachment) => (
+                  <div className="agent-runtime-row" key={attachment.id}>
+                    <span>{attachment.title ?? attachment.kind}</span>
+                    <em>{attachment.status} - {attachment.agentId ?? 'system'} - {relativeTime(attachment.lastActivityAt ?? attachment.updatedAt)}</em>
+                  </div>
+                ))}
+                {runtimeSnapshot?.activePtySessions.slice(0, 4).map((attachment) => (
+                  <div className="agent-runtime-row" key={attachment.id}>
+                    <span>{attachment.title ?? attachment.externalId ?? attachment.kind}</span>
+                    <em>{attachment.status} - {attachment.agentId ?? 'system'} - {relativeTime(attachment.lastActivityAt ?? attachment.updatedAt)}</em>
+                  </div>
+                ))}
+                {runtimeSnapshot?.notes?.map((note) => <div className="agent-note" key={note}>{note}</div>)}
+              </div>
+              <div className="settings-divider" />
+              <div className="agent-session-panel">
+                <div>
+                  <strong>Observed session inspector</strong>
+                  <span>{observedSessions.length ? `${observedSessions.length} observed` : 'No observed sessions'}</span>
+                </div>
+                {observedSessions.length === 0 ? (
+                  <div className="agent-empty-state">
+                    <strong>No runtime session history yet.</strong>
+                    <span>Observation only - existing providers and terminals remain the active runtime.</span>
+                  </div>
+                ) : (
+                  observedSessions.map((session) => {
+                    const relatedAttachments = attachmentsForSession(session, runtimeAttachments)
+                    const expanded = expandedAgentSessionId === session.id
+                    return (
+                      <div className="agent-session-item" key={session.id}>
+                        <button
+                          type="button"
+                          className={`agent-session-row is-clickable ${expanded ? 'is-active' : ''}`}
+                          onClick={() => setExpandedAgentSessionId((current) => (current === session.id ? null : session.id))}
+                        >
+                          <span>{session.title ?? `${session.agentId} session`}</span>
+                          <em>{shortId(session.id)} - {session.mode} - {session.status} - {relatedAttachments.length} attachment{relatedAttachments.length === 1 ? '' : 's'}</em>
+                        </button>
+                        {expanded && (
+                          <div className="agent-session-detail">
+                            <div className="agent-session-fields">
+                              <div><span>Session id</span><strong>{shortId(session.id, 12)}</strong></div>
+                              <div><span>Agent</span><strong>{session.agentId}</strong></div>
+                              <div><span>Mode</span><strong>{session.mode}</strong></div>
+                              <div><span>Origin</span><strong>{session.origin}</strong></div>
+                              <div><span>Status</span><strong>{session.status}</strong></div>
+                              <div><span>Created</span><strong>{dateTimeLabel(session.createdAt)}</strong></div>
+                              <div><span>Updated</span><strong>{dateTimeLabel(session.updatedAt)}</strong></div>
+                              <div><span>Activity</span><strong>{dateTimeLabel(session.lastActivityAt)}</strong></div>
+                            </div>
+                            {session.projectPath && <div className="agent-safe-path" title={session.projectPath}>Project: {session.projectPath}</div>}
+                            {session.error && <div className="agent-note is-error">{session.error}</div>}
+                            <div className="agent-attachment-list">
+                              {relatedAttachments.length === 0 ? (
+                                <div className="agent-note">No runtime attachments are linked to this observed session.</div>
+                              ) : (
+                                relatedAttachments.map((attachment) => (
+                                  <div className="agent-attachment-row" key={attachment.id}>
+                                    <div>
+                                      <strong>{attachment.kind}</strong>
+                                      <span>{attachment.status} - {attachment.agentId ?? 'system'} - {sourceLabel(attachment.sourceFile)}</span>
+                                    </div>
+                                    <div>
+                                      <span>External</span>
+                                      <strong>{shortId(attachment.externalId, 10)}</strong>
+                                    </div>
+                                    <div>
+                                      <span>Updated</span>
+                                      <strong>{dateTimeLabel(attachment.updatedAt)}</strong>
+                                    </div>
+                                    {attachment.projectPath && <p title={attachment.projectPath}>Project: {attachment.projectPath}</p>}
+                                    <p>Metadata: {safeMetadataSummary(attachment.metadata)}</p>
+                                    {attachment.error && <p className="is-error">Error: {attachment.error}</p>}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              {agentSessions.some((session) => session.metadata?.placeholder === true) && (
+                <div className="agent-placeholder-strip">
+                  <strong>Placeholder sessions</strong>
+                  <span>{agentSessions.filter((session) => session.metadata?.placeholder === true).length} in memory for adapter plumbing only.</span>
+                </div>
+              )}
+              <div className="settings-note">
+                Runtime observation intentionally avoids storing full prompts, terminal output, secrets, command contents, or hidden IPC payloads. This layer is read-only in Phase 31.
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'missions' && (
+            <section className="settings-section">
+              <MissionCenter />
             </section>
           )}
 
@@ -1138,7 +1563,7 @@ export default function SettingsCenter({
               <div className="settings-toggle-row">
                 <div>
                   <strong>Auto-Enter for bridge sends</strong>
-                  <span>{bridgeSettings?.autoEnter ? 'Messages execute immediately in the target terminal.' : 'Messages land at the prompt and wait.'}</span>
+                  <span>{bridgeSettings?.autoEnter ? 'Messages execute immediately in the target agent.' : 'Messages land at the prompt and wait.'}</span>
                 </div>
                 <button type="button" className={bridgeSettings?.autoEnter ? 'is-active' : ''} disabled={saving === 'bridge'} onClick={() => void toggleAutoEnter()}>
                   {bridgeSettings?.autoEnter ? 'On' : 'Off'}
@@ -1171,6 +1596,79 @@ export default function SettingsCenter({
                 <div>
                   <span>Loop folder</span>
                   <strong>{LOOP_FOLDER}</strong>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'test' && (
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <h2>Test Lab</h2>
+                  <p>Defaults for the guided test and PDF flow.</p>
+                </div>
+              </div>
+              <div className="settings-field is-stacked">
+                <span>Default source</span>
+                <div className="settings-path-row">
+                  <input value={testSourceDraft} spellCheck={false} placeholder="Folder path or GitHub URL" onChange={(event) => setTestSourceDraft(event.target.value)} />
+                  <button type="button" onClick={() => void chooseTestSource()}>Choose</button>
+                  <button type="button" disabled={saving === 'test'} onClick={() => void saveTestSource()}>
+                    Save
+                  </button>
+                </div>
+              </div>
+              <div className="settings-toggle-row">
+                <div>
+                  <strong>Install dependencies in sandbox</strong>
+                  <span>{testSettings?.installDeps ? 'Enabled when a lockfile is present.' : 'Skipped unless a run overrides it.'}</span>
+                </div>
+                <button
+                  type="button"
+                  className={testSettings?.installDeps ? 'is-active' : ''}
+                  disabled={!testSettings || saving === 'test'}
+                  onClick={() => void saveTest({ installDeps: !(testSettings?.installDeps ?? true) })}
+                >
+                  {testSettings?.installDeps ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className="settings-two-col">
+                <label>
+                  <span>Run timeout</span>
+                  <select
+                    className="settings-select"
+                    value={testSettings?.timeoutMs ?? 120_000}
+                    disabled={!testSettings || saving === 'test'}
+                    onChange={(event) => void saveTest({ timeoutMs: Number(event.target.value) })}
+                  >
+                    {[60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000].map((value) => (
+                      <option key={value} value={value}>{secondsLabel(value)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Retained sandboxes</span>
+                  <select
+                    className="settings-select"
+                    value={testSettings?.keepLastN ?? 3}
+                    disabled={!testSettings || saving === 'test'}
+                    onChange={(event) => void saveTest({ keepLastN: Number(event.target.value) })}
+                  >
+                    {[0, 1, 3, 5, 10, 20].map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="settings-readonly-grid">
+                <div>
+                  <span>Test writer</span>
+                  <strong>Local / Ollama</strong>
+                </div>
+                <div>
+                  <span>Report</span>
+                  <strong>Akorith Test Report PDF</strong>
                 </div>
               </div>
             </section>

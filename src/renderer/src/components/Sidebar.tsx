@@ -2,13 +2,14 @@ import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, us
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
 import {
+  AgentsIcon,
   ChartIcon,
   ChevronIcon,
+  CompanionsIcon,
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
   LoopIcon,
-  MoreIcon,
   PanelsIcon,
   PluginIcon,
   PlusIcon,
@@ -46,17 +47,14 @@ interface SidebarProps {
 
 // Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
 // above Workspace instead (see below). Workspace stays project-scoped.
-type NavItem = { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }
-
-const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
-  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon }
-]
-
-const MORE_NAV_ITEMS: NavItem[] = [
   { view: 'loops', label: 'Loop', icon: LoopIcon },
+  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
-  { view: 'plugins', label: 'Plugins', icon: PluginIcon }
+  { view: 'plugins', label: 'Plugins', icon: PluginIcon },
+  { view: 'companions', label: 'Companions', icon: CompanionsIcon },
+  { view: 'agents', label: 'Agents', icon: AgentsIcon }
 ]
 
 function storageBoolean(key: string, fallback: boolean): boolean {
@@ -172,9 +170,6 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
-  const moreTriggerRef = useRef<HTMLButtonElement>(null)
-  const moreMenuRef = useRef<HTMLDivElement>(null)
   // Phase 14.3/14.4: per-project overflow menu + inline rename + remove confirm.
   // The menu is rendered fixed-position (anchored to the clicked button's rect)
   // so the Projects list's own `overflow-y: auto` cannot clip it.
@@ -211,18 +206,6 @@ export default function Sidebar({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen])
-
-  useEffect(() => {
-    if (!moreOpen) return
-    moreMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      setMoreOpen(false)
-      moreTriggerRef.current?.focus()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [moreOpen])
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -552,7 +535,7 @@ export default function Sidebar({
       )}
 
       <aside
-        className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''} ${moreOpen ? 'has-more-menu' : ''}`}
+        className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
         style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
         onMouseEnter={revealSidebar}
         onPointerEnter={revealSidebar}
@@ -604,57 +587,6 @@ export default function Sidebar({
             </button>
           )
         })}
-        <div className={`sidebar-more ${MORE_NAV_ITEMS.some((item) => item.view === view) ? 'has-active-item' : ''}`}>
-          <button
-            ref={moreTriggerRef}
-            type="button"
-            className="sidebar-more-trigger"
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            title="More"
-            onClick={() => setMoreOpen((current) => !current)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault()
-                setMoreOpen(true)
-              }
-            }}
-          >
-            <MoreIcon size={17} />
-            <span>More</span>
-          </button>
-          {moreOpen && (
-            <>
-              <button
-                type="button"
-                className="sidebar-more-backdrop"
-                aria-label="Close More menu"
-                onClick={() => setMoreOpen(false)}
-              />
-              <div ref={moreMenuRef} className="sidebar-more-menu" role="menu" aria-label="More destinations">
-                {MORE_NAV_ITEMS.map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <button
-                      key={item.view}
-                      type="button"
-                      role="menuitem"
-                      className={view === item.view ? 'is-active' : ''}
-                      onClick={() => {
-                        setMoreOpen(false)
-                        onNavigate(item.view)
-                      }}
-                      title={item.label}
-                    >
-                      <Icon size={17} />
-                      <span>{item.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </>
-          )}
-        </div>
       </nav>
 
       <div className="sidebar-scroll">
@@ -786,7 +718,7 @@ export default function Sidebar({
                                   onBlur={() => void commitProjectRename(project)}
                                 />
                               ) : (
-                                <span className="project-name" data-sidebar-content-anchor="project-label">{project.name}</span>
+                                <span className="project-name">{project.name}</span>
                               )}
                             </span>
                             {/* Phase 38.5: per-project chat count badge removed. */}
@@ -871,7 +803,7 @@ export default function Sidebar({
                                       }
                                     }}
                                   >
-                                    <span className="project-chat-title" data-sidebar-content-anchor="chat-label">{chat.title}</span>
+                                    <span className="project-chat-title">{chat.title}</span>
                                     <span className="project-chat-time">{relativeShort(chat.updatedAt)}</span>
                                     {/* Phase 37.4: actions via a small ⋯ menu, not inline text. */}
                                     <button
@@ -927,7 +859,7 @@ export default function Sidebar({
 
           {/* Phase 33.4: provider folders (Claude / Codex / Local) are removed from
               the sidebar. The sidebar is project-first now; provider/model choice
-              lives in the composer model picker and Settings. General
+              lives in the composer model picker, Agent Hub, and Settings. General
               chats are listed in their own borderless section below. */}
         </div>
 

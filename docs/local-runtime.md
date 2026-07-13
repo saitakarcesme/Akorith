@@ -1,5 +1,3 @@
-> **Superseded:** historical runtime notes; see `production-architecture.md` and `production-remote-node.md` for the current system.
-
 # Shared local runtime
 
 Loop, Companions, and Agents all send prompts through one **local-first** runtime
