@@ -45,12 +45,21 @@ interface SidebarProps {
   onChromeWidthChange?: (width: number) => void
 }
 
-// Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
-// above Workspace instead (see below). Workspace stays project-scoped.
-const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
+interface NavItem {
+  view: AppView
+  label: string
+  icon: (props: { size?: number }) => JSX.Element
+}
+
+// Keep the everyday destinations visible. Less-frequent tools live in the
+// hover/focus More menu below, mirroring Codex's quiet primary navigation.
+const PRIMARY_NAV_ITEMS: NavItem[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
+  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon }
+]
+
+const MORE_NAV_ITEMS: NavItem[] = [
   { view: 'loops', label: 'Loop', icon: LoopIcon },
-  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon },
   { view: 'companions', label: 'Companions', icon: CompanionsIcon },
@@ -169,6 +178,8 @@ export default function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreHoverSuppressed = useRef(false)
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   // Phase 14.3/14.4: per-project overflow menu + inline rename + remove confirm.
   // The menu is rendered fixed-position (anchored to the clicked button's rect)
@@ -309,6 +320,18 @@ export default function Sidebar({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [chatRowMenu])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        moreHoverSuppressed.current = true
+        setMoreOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [moreOpen])
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
@@ -572,7 +595,7 @@ export default function Sidebar({
             <span>New chat</span>
           </button>
         </div>
-        {NAV_ITEMS.map((item) => {
+        {PRIMARY_NAV_ITEMS.map((item) => {
           const Icon = item.icon
           return (
             <button
@@ -587,6 +610,65 @@ export default function Sidebar({
             </button>
           )
         })}
+        <div
+          className={`sidebar-more ${moreOpen ? 'is-open' : ''}`}
+          onMouseEnter={() => {
+            if (!moreHoverSuppressed.current) setMoreOpen(true)
+          }}
+          onMouseLeave={() => {
+            moreHoverSuppressed.current = false
+            setMoreOpen(false)
+          }}
+          onFocus={() => {
+            if (!moreHoverSuppressed.current) setMoreOpen(true)
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              moreHoverSuppressed.current = false
+              setMoreOpen(false)
+            }
+          }}
+        >
+          <button
+            type="button"
+            className={`sidebar-more-trigger ${MORE_NAV_ITEMS.some((item) => item.view === view) ? 'is-active' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            onClick={() => {
+              if (moreOpen) {
+                moreHoverSuppressed.current = true
+                setMoreOpen(false)
+              } else {
+                moreHoverSuppressed.current = false
+                setMoreOpen(true)
+              }
+            }}
+          >
+            <ChevronIcon size={14} direction={moreOpen ? 'down' : 'right'} />
+            <span>More...</span>
+          </button>
+          <div className="sidebar-more-menu" role="menu" aria-label="More destinations">
+            {MORE_NAV_ITEMS.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.view}
+                  type="button"
+                  role="menuitem"
+                  className={view === item.view ? 'is-active' : ''}
+                  onClick={() => {
+                    moreHoverSuppressed.current = true
+                    setMoreOpen(false)
+                    onNavigate(item.view)
+                  }}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </nav>
 
       <div className="sidebar-scroll">
