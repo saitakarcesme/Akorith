@@ -214,15 +214,18 @@ textarea:focus-visible {
 /* ---------- top-level 3-region layout ---------- */
 
 .app {
-  display: flex;
+  display: grid;
+  grid-template-rows: var(--app-chrome-height) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   position: relative;
   height: 100%;
   background: transparent;
 }
 
 .app-chrome {
-  position: fixed;
-  inset: 0 0 auto 0;
+  position: relative;
+  grid-row: 1;
+  grid-column: 1;
   z-index: 120;
   height: var(--app-chrome-height);
   display: flex;
@@ -230,7 +233,13 @@ textarea:focus-visible {
   justify-content: space-between;
   padding: 0;
   color: var(--text-dim);
-  background: transparent;
+  background: linear-gradient(
+    to right,
+    var(--sidebar-bg) 0,
+    var(--sidebar-bg) var(--chrome-sidebar-width),
+    var(--bg) var(--chrome-sidebar-width),
+    var(--bg) 100%
+  );
   border-bottom: 0;
   user-select: none;
   -webkit-app-region: drag;
@@ -394,6 +403,8 @@ textarea:focus-visible {
 }
 
 .app-main {
+  grid-row: 2;
+  grid-column: 1;
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
@@ -402,7 +413,7 @@ textarea:focus-visible {
 }
 
 .app-main > :not(.sidebar) {
-  padding-top: var(--app-chrome-height);
+  padding-top: 0;
 }
 
 .app[data-theme='dark'] {
@@ -600,7 +611,7 @@ textarea:focus-visible {
   min-width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  padding-top: var(--app-chrome-height);
+  padding-top: 0;
   background: var(--sidebar-bg);
   backdrop-filter: blur(120px) saturate(1.55);
   -webkit-backdrop-filter: blur(120px) saturate(1.55);
@@ -632,11 +643,11 @@ textarea:focus-visible {
 
 .sidebar.is-collapsed .sidebar-surface {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: var(--app-chrome-height) auto 0 0;
   z-index: 80;
   width: min(var(--sidebar-peek-width), calc(100vw - 24px));
   min-width: 0;
-  height: 100vh;
+  height: auto;
   border-right: 1px solid var(--sidebar-border);
   border-radius: 0 8px 8px 0;
   box-shadow: none;
@@ -657,7 +668,7 @@ textarea:focus-visible {
 
 .sidebar-hover-zone {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: var(--app-chrome-height) auto 0 0;
   z-index: 78;
   width: 22px;
 }
@@ -12740,4 +12751,520 @@ body {
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--text-dim);
+}
+
+/* ============================================================================
+   Codex-density navigation + Plugins refinement
+   ========================================================================== */
+
+/* The late Phase 45 rule enlarged the entire UI to 14px. Keep content compact
+   like Codex while leaving terminal font sizing under terminal control. */
+body {
+  font-size: 12.5px;
+}
+
+.sidebar,
+.chat-panel,
+.composer-input,
+.model-select,
+.macro-panel,
+.test-page {
+  font-size: 12.5px;
+}
+
+.chat-msg,
+.chat-msg.user {
+  font-size: 12.5px;
+}
+
+.app-chrome-title {
+  font-size: 12.5px;
+}
+
+/* Compact More menu: hover for pointer users, focus/click for keyboard users. */
+.sidebar-more {
+  position: relative;
+  min-width: 0;
+}
+
+.sidebar-more-trigger {
+  width: 100%;
+}
+
+.sidebar-more-trigger svg {
+  flex: 0 0 auto;
+  transition: transform var(--fast);
+}
+
+.sidebar-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 2px;
+  right: 2px;
+  z-index: 72;
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  background: #212121;
+  border: 1px solid var(--sidebar-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: opacity var(--fast), transform var(--fast), visibility var(--fast);
+}
+
+.app[data-theme='light'] .sidebar-more-menu {
+  background: #ffffff;
+}
+
+.sidebar-more.is-open .sidebar-more-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+
+.sidebar-more-menu button {
+  width: 100%;
+  padding: 7px 9px;
+}
+
+/* Plugins now follows Codex's information hierarchy: search, installed strip,
+   quiet filters, then compact two-column rows. Detail noise is opt-in. */
+.plugins-inner {
+  width: min(780px, 100%);
+  max-width: none;
+  margin: 0 auto;
+  padding: 44px 26px 56px;
+  gap: 0;
+}
+
+.plugins-header {
+  display: block;
+  padding: 0;
+}
+
+.plugins-header h1 {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.plugins-header p {
+  max-width: none;
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.plugins-search {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 0 11px;
+  color: var(--text-faint);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.plugins-search:focus-within {
+  color: var(--text-dim);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.plugins-search svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.plugins-search input[type='search'] {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+}
+
+.plugins-search input[type='search']::-webkit-search-cancel-button {
+  opacity: 0.55;
+}
+
+.plugins-installed {
+  margin-top: 26px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.plugins-section-head,
+.plugin-group-head,
+.plugins-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plugins-section-head h2,
+.plugin-group-head h2 {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.plugins-header-actions {
+  gap: 8px;
+}
+
+.plugins-tag,
+.plugins-recheck {
+  padding: 5px 10px;
+  font-size: 10.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.plugins-recheck {
+  color: var(--text);
+  cursor: pointer;
+}
+
+.plugins-recheck:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+
+.plugins-recheck:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.plugins-installed-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 34px;
+  margin-top: 12px;
+}
+
+.plugin-installed-mark,
+.plugin-card-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.plugin-installed-mark {
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.plugin-installed-mark:hover {
+  background: var(--hover-strong);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.plugin-installed-mark.status-available,
+.plugin-installed-mark.status-built_in {
+  box-shadow: inset 0 -2px 0 rgba(95, 179, 126, 0.75);
+}
+
+.plugin-installed-mark.status-unavailable,
+.plugin-installed-mark.status-error {
+  box-shadow: inset 0 -2px 0 rgba(201, 168, 95, 0.75);
+}
+
+.plugins-empty-inline {
+  align-self: center;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.plugins-browser-toolbar {
+  margin-top: 18px;
+}
+
+.plugins-filters {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.plugins-filter {
+  padding: 5px 11px;
+  font-size: 11px;
+}
+
+.plugins-kind-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.plugins-kind-filter select {
+  max-width: 150px;
+  padding: 5px 24px 5px 9px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  background-color: var(--bg-raised);
+  border-color: var(--border);
+  border-radius: 999px;
+}
+
+.plugins-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 28px;
+}
+
+.plugin-group-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.plugin-group-head > span {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.plugins-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+}
+
+.plugin-card {
+  min-width: 0;
+  display: block;
+  padding: 13px 7px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.plugin-card:hover {
+  background: var(--hover);
+  border-color: var(--border-soft);
+}
+
+.plugin-card.is-open {
+  grid-column: 1 / -1;
+  background: var(--bg-soft);
+  border-radius: 10px;
+}
+
+.plugin-card-summary {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto 26px;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plugin-card-mark {
+  width: 34px;
+  height: 34px;
+}
+
+.plugin-card-copy {
+  min-width: 0;
+}
+
+.plugin-card-head {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.plugin-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.plugin-card-version {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.plugin-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.plugin-status {
+  align-self: start;
+  padding: 2px 7px;
+  font-size: 8.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+}
+
+.plugin-more-button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.plugin-more-button:hover {
+  color: var(--text);
+  background: var(--hover-strong);
+}
+
+.plugin-details {
+  gap: 9px;
+  margin: 11px 0 0 46px;
+  padding: 11px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 10.5px;
+}
+
+.plugin-diagnostic {
+  padding: 7px 9px;
+  font-size: 10.5px;
+}
+
+.plugin-actions {
+  gap: 7px;
+  padding-top: 9px;
+}
+
+.plugin-toggle,
+.plugin-check,
+.plugin-install {
+  font-size: 10.5px;
+}
+
+.plugin-check,
+.plugin-install {
+  padding: 5px 10px;
+}
+
+.plugin-details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--text-faint);
+}
+
+.plugin-details-meta code {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  overflow-wrap: anywhere;
+}
+
+.plugins-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 42px 20px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.plugins-empty-state strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.plugins-empty-state span {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.plugins-note {
+  max-width: none;
+  margin-top: 28px;
+  padding-top: 14px;
+  font-size: 10.5px;
+  border-top: 1px solid var(--border-soft);
+}
+
+@media (max-width: 1000px) {
+  .plugins-list {
+    grid-template-columns: 1fr;
+  }
+
+  .plugin-card.is-open {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .plugins-inner {
+    padding: 28px 16px 40px;
+  }
+
+  .plugins-section-head,
+  .plugins-browser-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plugin-card-summary {
+    grid-template-columns: 36px minmax(0, 1fr) 26px;
+  }
+
+  .plugin-status {
+    display: none;
+  }
+
+  .plugin-details {
+    margin-left: 0;
+  }
 }
