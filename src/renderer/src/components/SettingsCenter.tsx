@@ -707,7 +707,7 @@ export default function SettingsCenter({
     { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
     { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
     { id: 'api', label: 'API', kicker: 'Controller (optional)' },
-    { id: 'update', label: 'Update', kicker: 'Keep this checkout current' },
+    { id: 'update', label: 'Update', kicker: 'Install the latest Akorith' },
     { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
     { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
     { id: 'safety', label: 'Data', kicker: 'Storage and safety' }

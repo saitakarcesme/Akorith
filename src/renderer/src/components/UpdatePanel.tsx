@@ -184,7 +184,11 @@ export default function UpdatePanel(): JSX.Element {
                 title={status.canUpdateInstalledApp ? `Download, verify, and install ${status.releaseTag}` : 'No compatible newer release is available'}
                 onClick={() => void run()}
               >
-                {busy === 'run' ? 'Downloading and verifying…' : `Install ${status.releaseTag ?? 'latest release'}`}
+                {busy === 'run'
+                  ? 'Downloading and verifying…'
+                  : status.canUpdateInstalledApp
+                    ? `Install ${status.releaseTag ?? 'latest release'}`
+                    : 'Up to date'}
               </button>
             </div>
           ) : status.runtimeMode === 'packaged-windows' ? (
