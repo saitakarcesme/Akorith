@@ -116,17 +116,19 @@ interface MachineGpuPanelProps {
 
 function MachineGpuPanel({ eyebrow, name, status, note }: MachineGpuPanelProps): JSX.Element {
   const devices = status?.gpus ?? []
+  const cpu = status?.cpu
   const memory = machineMemory(devices)
   const observed = status?.status === 'observed' && devices.length > 0
 
   return (
-    <section className="gpu-machine" aria-label={`${name} GPU telemetry`}>
+    <section className="gpu-machine" aria-label={`${name} compute telemetry`}>
       <header className="gpu-machine-head">
         <div>
           <span>{eyebrow}</span>
           <strong>{name}</strong>
         </div>
         <div className="gpu-machine-summary">
+          <span>CPU <strong>{cpu ? `${Math.round(cpu.utilizationPercent)}%` : '—'}</strong></span>
           <span>GPUS <strong>{devices.length || '—'}</strong></span>
           <span>VRAM <strong>{memory.total ? `${memoryLabel(memory.used)}/${memoryLabel(memory.total)}` : '—'}</strong></span>
           <span>UTIL <strong>{averageMetric(devices, 'utilizationPercent')}</strong></span>
@@ -134,8 +136,20 @@ function MachineGpuPanel({ eyebrow, name, status, note }: MachineGpuPanelProps):
         </div>
       </header>
 
-      {observed ? (
+      {cpu || observed ? (
         <div className="gpu-device-list">
+          {cpu && (
+            <div className="gpu-device-row cpu-device-row">
+              <span className="gpu-device-index">CPU</span>
+              <span className="gpu-device-name" title={cpu.name}>{cpu.name}</span>
+              <span className="gpu-device-track" aria-hidden="true">
+                <span style={{ width: `${Math.max(0, Math.min(100, cpu.utilizationPercent))}%` }} />
+              </span>
+              <span className="gpu-device-memory">{cpu.logicalCores} cores</span>
+              <span className="gpu-device-util">{Math.round(cpu.utilizationPercent)}%</span>
+              <span className="gpu-device-temp">—</span>
+            </div>
+          )}
           {devices.map((device, index) => {
             const utilization = Math.max(0, Math.min(100, device.utilizationPercent ?? 0))
             const memoryRatio = device.memoryTotalMb
@@ -319,7 +333,7 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
         <header className="gpu-console-head">
           <div>
             <span>COMPUTE TELEMETRY</span>
-            <h2>GPU usage</h2>
+            <h2>Compute usage</h2>
           </div>
           <button type="button" className="dash-refresh" disabled={gpuBusy} onClick={() => void loadGpu()}>
             {gpuBusy ? 'Refreshing…' : 'Refresh'}

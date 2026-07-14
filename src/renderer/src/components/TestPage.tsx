@@ -361,6 +361,14 @@ function scoreLabel(score: number | null): string {
   return score === null ? 'omitted' : score.toFixed(1)
 }
 
+function benchmarkScoreBand(score: number | null): string {
+  if (score == null) return 'is-empty'
+  if (score >= 90) return 'is-excellent'
+  if (score >= 75) return 'is-strong'
+  if (score >= 55) return 'is-mid'
+  return 'is-low'
+}
+
 function categoryLabel(category: BenchmarkCategory): string {
   switch (category) {
     case 'ui':
@@ -1320,17 +1328,29 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     exported: benchmarks.filter((entry) => entry.mediaType !== 'none').length
   }
   const benchmarkPerformance = summarizeBenchmarkPerformance(benchmarks, providers)
-  const benchmarkCategorySummary = (['general', 'ui', 'game', 'repo'] as BenchmarkCategory[]).map((category) => ({
-    category,
-    label: categoryLabel(category),
-    count: benchmarks.filter((entry) => entry.category === category).length
+  const benchmarkChallenges = Array.from(
+    new Map(benchmarks.map((entry) => [entry.challengeId, { id: entry.challengeId, label: entry.challengeLabel }])).values()
+  ).slice(0, 6)
+  const benchmarkMatrix = benchmarkPerformance.slice(0, 7).map((performance) => ({
+    ...performance,
+    scores: benchmarkChallenges.map((challenge) => {
+      const entry = benchmarks.find(
+        (candidate) =>
+          benchmarkModelKey(candidate.providerId ?? 'unknown', candidate.model) === performance.key &&
+          candidate.challengeId === challenge.id
+      )
+      return entry?.score ?? null
+    })
   }))
-  const selectedModelSummary = selectedBenchmarkOptions.length
-    ? selectedBenchmarkOptions
-        .slice(0, 2)
-        .map((option) => benchmarkOptionLabel(option))
-        .join('  ·  ')
-    : 'No models selected'
+  const scoredBenchmarks = benchmarks.filter((entry) => entry.score != null)
+  const libraryAverageScore = scoredBenchmarks.length
+    ? Math.round(scoredBenchmarks.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / scoredBenchmarks.length)
+    : null
+  const fastestBenchmark = benchmarks.reduce<BenchmarkEntry | null>((fastest, entry) => {
+    if (entry.durationMs == null || entry.durationMs <= 0) return fastest
+    if (!fastest || fastest.durationMs == null || entry.durationMs < fastest.durationMs) return entry
+    return fastest
+  }, null)
 
   return (
     <div className={`test-page ${sandboxOpen ? '' : 'sandbox-collapsed'}`}>
@@ -1363,67 +1383,83 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             <summary>
               <span>
                 <small>Models</small>
-                <strong>{selectedModelSummary}</strong>
+                <span className="benchmark-picker-preview">
+                  {selectedBenchmarkOptions.length ? (
+                    <>
+                      {selectedBenchmarkOptions.slice(0, 3).map((option) => <i key={option.key}>{option.model || 'default'}</i>)}
+                      {selectedBenchmarkOptions.length > 3 && <i>+{selectedBenchmarkOptions.length - 3}</i>}
+                    </>
+                  ) : (
+                    <strong>No models selected</strong>
+                  )}
+                </span>
               </span>
               <em>{selectedBenchmarkOptions.length} selected</em>
             </summary>
             {benchmarkProviderGroups.length > 0 ? (
               <div className="benchmark-picker-body">
-                <div className="test-model-toolbar">
-                  <button
-                    type="button"
-                    className="test-table-btn"
-                    onClick={() => {
-                      const next = availableBenchmarkOptions.map((option) => option.key)
-                      setSelectedModels(next)
-                      const first = availableBenchmarkOptions[0]
-                      if (first) {
-                        setProviderId(first.providerId)
-                        setModel(first.model)
-                      }
-                    }}
-                  >
-                    Select all
-                  </button>
-                  <button
-                    type="button"
-                    className="test-table-btn"
-                    onClick={() => {
-                      const next = availableBenchmarkOptions.slice(0, 2)
-                      setSelectedModels(next.map((option) => option.key))
-                      const first = next[0]
-                      if (first) {
-                        setProviderId(first.providerId)
-                        setModel(first.model)
-                      }
-                    }}
-                  >
-                    Two model battle
-                  </button>
+                <div className="benchmark-picker-toolbar">
+                  <div>
+                    <strong>Build your lineup</strong>
+                    <span>Mix local and cloud models in the same benchmark.</span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className="test-table-btn"
+                      onClick={() => {
+                        const next = availableBenchmarkOptions.map((option) => option.key)
+                        setSelectedModels(next)
+                        const first = availableBenchmarkOptions[0]
+                        if (first) {
+                          setProviderId(first.providerId)
+                          setModel(first.model)
+                        }
+                      }}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="test-table-btn"
+                      onClick={() => {
+                        const next = availableBenchmarkOptions.slice(0, 2)
+                        setSelectedModels(next.map((option) => option.key))
+                        const first = next[0]
+                        if (first) {
+                          setProviderId(first.providerId)
+                          setModel(first.model)
+                        }
+                      }}
+                    >
+                      Pick two
+                    </button>
+                  </div>
                 </div>
-                <div className="test-provider-stack">
+                <div className="benchmark-provider-grid">
                   {benchmarkProviderGroups.map((group) => (
-                    <div key={group.provider.id} className={`test-provider-group ${group.available ? '' : 'is-offline'}`}>
-                      <div className="test-provider-head">
+                    <section key={group.provider.id} className={`benchmark-provider-lane ${group.available ? '' : 'is-offline'}`}>
+                      <header>
                         <strong>{group.provider.id === 'chatgpt' ? 'Codex/GPT' : group.provider.label}</strong>
                         <span>{group.available ? `${group.options.length} model${group.options.length === 1 ? '' : 's'}` : group.provider.available.reason ?? 'offline'}</span>
-                      </div>
-                      <div className="test-model-grid">
+                      </header>
+                      <div className="benchmark-model-pills">
                         {group.options.map((option) => {
                           const checked = selectedModels.includes(option.key)
                           return (
                             <label
                               key={option.key}
-                              className={`test-model-card ${checked ? 'is-selected' : ''} ${option.available ? '' : 'is-disabled'}`}
+                              className={`benchmark-model-pill ${checked ? 'is-selected' : ''} ${option.available ? '' : 'is-disabled'}`}
                               title={option.available ? benchmarkOptionLabel(option) : option.reason ?? 'Provider unavailable'}
                             >
                               <input type="checkbox" checked={checked} disabled={!option.available} onChange={() => toggleModel(option)} />
+                              <span className="benchmark-model-check" aria-hidden="true" />
                               <span>{option.model}</span>
                             </label>
                           )
                         })}
                       </div>
-                    </div>
+                    </section>
                   ))}
                 </div>
               </div>
@@ -1724,87 +1760,73 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
             </div>
           ) : (
             <>
-              <div className="benchmark-library-viz">
-                <section className="benchmark-performance-panel" aria-labelledby="benchmark-performance-title">
+              <div className="benchmark-insight-strip">
+                <div><span>Leader</span><strong>{benchmarkPerformance[0]?.label ?? '—'}</strong></div>
+                <div><span>Library average</span><strong>{libraryAverageScore == null ? '—' : `${libraryAverageScore}/100`}</strong></div>
+                <div><span>Fastest run</span><strong>{fastestBenchmark?.durationMs == null ? '—' : `${(fastestBenchmark.durationMs / 1000).toFixed(1)}s`}</strong></div>
+                <div><span>Challenges</span><strong>{benchmarkChallenges.length}</strong></div>
+              </div>
+
+              <div className="benchmark-atlas">
+                <section className="benchmark-matrix-panel" aria-labelledby="benchmark-matrix-title">
                   <div className="benchmark-panel-title">
                     <div>
-                      <strong id="benchmark-performance-title">Model performance</strong>
-                      <span>Average score across saved challenges</span>
+                      <strong id="benchmark-matrix-title">Performance matrix</strong>
+                      <span>Models × saved challenges</span>
                     </div>
-                    <div className="benchmark-axis" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
                   </div>
-                  <div className="benchmark-performance-chart">
-                    {benchmarkPerformance.map((item, index) => (
-                      <div className="benchmark-performance-row" key={item.key}>
-                        <span className="benchmark-performance-rank">{index + 1}</span>
-                        <span className="benchmark-performance-name" title={item.label}>{item.label}</span>
-                        <div
-                          className="benchmark-performance-track"
-                          role="img"
-                          aria-label={`${item.label}: average score ${item.averageScore} out of 100`}
-                        >
-                          <span style={{ width: `${Math.max(item.averageScore, 2)}%` }} />
-                        </div>
-                        <strong>{item.averageScore}</strong>
-                        <span className="benchmark-performance-meta">
-                          {item.runs} run{item.runs === 1 ? '' : 's'}
-                          {item.averageDurationMs == null ? '' : ` · ${(item.averageDurationMs / 1000).toFixed(1)}s`}
-                          {item.averageTokens == null ? '' : ` · ${item.averageTokens} tok`}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="benchmark-matrix-scroll">
+                    <table className="benchmark-matrix">
+                      <thead>
+                        <tr>
+                          <th>Model</th>
+                          {benchmarkChallenges.map((challenge) => <th key={challenge.id} title={challenge.label}>{challenge.label}</th>)}
+                          <th>Avg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {benchmarkMatrix.map((item) => (
+                          <tr key={item.key}>
+                            <th title={item.label}>{item.label}</th>
+                            {item.scores.map((score, index) => (
+                              <td key={benchmarkChallenges[index].id}>
+                                <span
+                                  className={`benchmark-score-cell ${benchmarkScoreBand(score)}`}
+                                  title={`${benchmarkChallenges[index].label}: ${score ?? 'no result'}`}
+                                >
+                                  {score ?? '—'}
+                                </span>
+                              </td>
+                            ))}
+                            <td><strong>{item.averageScore}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </section>
 
-                <aside className="benchmark-category-panel" aria-labelledby="benchmark-category-title">
+                <aside className="benchmark-latest-feed" aria-labelledby="benchmark-latest-title">
                   <div className="benchmark-panel-title">
                     <div>
-                      <strong id="benchmark-category-title">Coverage</strong>
-                      <span>Saved result mix</span>
+                      <strong id="benchmark-latest-title">Latest runs</strong>
+                      <span>Most recent snapshots</span>
                     </div>
                   </div>
-                  <div className="benchmark-category-chart">
-                    {benchmarkCategorySummary.map((item) => (
-                      <div key={item.category}>
-                        <span>{item.label}</span>
-                        <div role="img" aria-label={`${item.label}: ${item.count} saved results`}>
-                          <span style={{ width: `${benchmarkSummary.total ? (item.count / benchmarkSummary.total) * 100 : 0}%` }} />
-                        </div>
-                        <strong>{item.count}</strong>
-                      </div>
-                    ))}
+                  <div>
+                    {benchmarks.slice(0, 6).map((entry) => {
+                      const providerName = providerDisplayName(entry.providerId ?? 'unknown', providers)
+                      const modelName = `${providerName} · ${entry.model}`
+                      return (
+                        <article key={entry.id} className="benchmark-feed-row">
+                          <span className={`benchmark-feed-score ${benchmarkScoreBand(entry.score)}`}>{entry.score ?? '—'}</span>
+                          <div><strong title={modelName}>{modelName}</strong><span>{entry.challengeLabel}</span></div>
+                          <small>{entry.durationMs == null ? '—' : `${(entry.durationMs / 1000).toFixed(1)}s`}</small>
+                        </article>
+                      )
+                    })}
                   </div>
                 </aside>
-              </div>
-
-              <div className="benchmark-recent-visual">
-                <div className="benchmark-panel-title">
-                  <div>
-                    <strong>Recent results</strong>
-                    <span>Latest challenge snapshots</span>
-                  </div>
-                </div>
-                <div className="benchmark-recent-grid">
-                  {benchmarks.slice(0, 8).map((entry) => {
-                    const providerName = providerDisplayName(entry.providerId ?? 'unknown', providers)
-                    const modelName = `${providerName} · ${entry.model}`
-                    return (
-                      <article key={entry.id} className={`benchmark-recent-card is-${entry.category}`}>
-                        <div>
-                          <span>{entry.challengeLabel}</span>
-                          <strong title={modelName}>{modelName}</strong>
-                        </div>
-                        <div className="benchmark-recent-score">
-                          <span><i style={{ width: `${Math.max(entry.score ?? 0, 2)}%` }} /></span>
-                          <strong>{entry.score ?? '—'}</strong>
-                        </div>
-                        <small>
-                          {entry.durationMs == null ? '—' : `${(entry.durationMs / 1000).toFixed(1)}s`} · {entry.tokens ?? 0} tok
-                        </small>
-                      </article>
-                    )
-                  })}
-                </div>
               </div>
             </>
           )}

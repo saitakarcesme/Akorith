@@ -168,7 +168,7 @@ export default function CompanionsPage({ active }: { active: boolean }): JSX.Ele
         sessionId: sid,
         companionId: companion.id,
         role: 'assistant',
-        content: 'Thinking...',
+        content: 'Akorithing...',
         createdAt: Date.now() + 1,
         pending: true,
         tone: 'thinking'

@@ -1843,12 +1843,20 @@ export interface GpuOllamaInfo {
   note?: string
 }
 
+export interface CpuStatus {
+  name: string
+  logicalCores: number
+  utilizationPercent: number
+  source: 'os-times'
+}
+
 export interface GpuStatusResult {
   status: 'observed' | 'unavailable'
   reason?: string
   platform: string
   source: 'nvidia-smi' | 'system-profiler' | 'none'
   gpus: GpuDevice[]
+  cpu?: CpuStatus
   ollama: GpuOllamaInfo
 }
 

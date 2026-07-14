@@ -1306,7 +1306,7 @@ export default function ChatPanel({
                       )}
                     </div>
                   ) : m.status === 'streaming' && !m.text ? (
-                    // Phase 37.7: a calm monochrome "Thinking" indicator until the
+                    // Akorith-branded progress indicator until the
                     // first tokens arrive (persists while the request is pending).
                     <div className="chat-thinking" role="status" aria-live="polite">
                       <span className="chat-thinking-dots">
@@ -1314,7 +1314,7 @@ export default function ChatPanel({
                         <span />
                         <span />
                       </span>
-                      <span className="chat-thinking-label">Thinking…</span>
+                      <span className="chat-thinking-label">Akorithing…</span>
                     </div>
                   ) : (
                     <div className="chat-msg-text">{m.text}</div>

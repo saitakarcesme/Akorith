@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { execFile } from 'child_process'
-import { platform } from 'os'
+import { cpus, platform } from 'os'
 import { getLocalProviderSettings } from './config'
 
 // Phase 34.6: read-only, honest GPU / local-runtime telemetry. It NEVER fabricates
@@ -24,6 +24,13 @@ export interface GpuOllamaInfo {
   note?: string
 }
 
+export interface CpuStatus {
+  name: string
+  logicalCores: number
+  utilizationPercent: number
+  source: 'os-times'
+}
+
 export interface GpuStatusResult {
   status: 'observed' | 'unavailable'
   /** Why telemetry is unavailable, when it is. */
@@ -31,11 +38,50 @@ export interface GpuStatusResult {
   platform: NodeJS.Platform
   source: 'nvidia-smi' | 'system-profiler' | 'none'
   gpus: GpuDevice[]
+  cpu?: CpuStatus
   ollama: GpuOllamaInfo
 }
 
 const NVIDIA_TIMEOUT_MS = 3_000
 const SYSTEM_PROFILER_TIMEOUT_MS = 5_000
+const CPU_SAMPLE_MS = 180
+
+interface CpuTimeSnapshot {
+  idle: number
+  total: number
+}
+
+function cpuTimeSnapshot(): CpuTimeSnapshot | null {
+  const cores = cpus()
+  if (!cores.length) return null
+  return cores.reduce<CpuTimeSnapshot>(
+    (sum, core) => {
+      const total = Object.values(core.times).reduce((timeSum, value) => timeSum + value, 0)
+      return { idle: sum.idle + core.times.idle, total: sum.total + total }
+    },
+    { idle: 0, total: 0 }
+  )
+}
+
+async function readCpuStatus(): Promise<CpuStatus | undefined> {
+  const cores = cpus()
+  const first = cpuTimeSnapshot()
+  if (!cores.length || !first) return undefined
+  await new Promise<void>((resolve) => setTimeout(resolve, CPU_SAMPLE_MS))
+  const second = cpuTimeSnapshot()
+  if (!second) return undefined
+  const totalDelta = second.total - first.total
+  const idleDelta = second.idle - first.idle
+  const utilizationPercent = totalDelta > 0
+    ? Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100))
+    : 0
+  return {
+    name: cores[0].model.trim() || `${cores.length}-core CPU`,
+    logicalCores: cores.length,
+    utilizationPercent,
+    source: 'os-times'
+  }
+}
 
 function runNvidiaSmi(): Promise<{ ok: boolean; stdout: string; missing: boolean }> {
   return new Promise((resolve) => {
@@ -125,15 +171,16 @@ function ollamaInfo(): GpuOllamaInfo {
 export async function getGpuStatus(): Promise<GpuStatusResult> {
   const plat = platform()
   const ollama = ollamaInfo()
+  const cpu = await readCpuStatus()
 
   if (plat === 'win32' || plat === 'linux') {
     const res = await runNvidiaSmi()
     if (res.ok) {
       const gpus = parseNvidia(res.stdout)
       if (gpus.length > 0) {
-        return { status: 'observed', platform: plat, source: 'nvidia-smi', gpus, ollama }
+        return { status: 'observed', platform: plat, source: 'nvidia-smi', gpus, cpu, ollama }
       }
-      return { status: 'unavailable', reason: 'nvidia-smi returned no GPUs.', platform: plat, source: 'nvidia-smi', gpus: [], ollama }
+      return { status: 'unavailable', reason: 'nvidia-smi returned no GPUs.', platform: plat, source: 'nvidia-smi', gpus: [], cpu, ollama }
     }
     return {
       status: 'unavailable',
@@ -143,6 +190,7 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
       platform: plat,
       source: 'none',
       gpus: [],
+      cpu,
       ollama
     }
   }
@@ -157,6 +205,7 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
         platform: plat,
         source: 'system-profiler',
         gpus,
+        cpu,
         ollama
       }
     }
@@ -166,6 +215,7 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
       platform: plat,
       source: 'none',
       gpus: [],
+      cpu,
       ollama
     }
   }
@@ -176,6 +226,7 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
     platform: plat,
     source: 'none',
     gpus: [],
+    cpu,
     ollama
   }
 }
@@ -191,6 +242,7 @@ export function registerGpuStatusIpc(): void {
         platform: platform(),
         source: 'none',
         gpus: [],
+        cpu: await readCpuStatus(),
         ollama: ollamaInfo()
       }
     }

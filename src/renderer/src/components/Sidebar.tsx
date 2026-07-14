@@ -556,6 +556,7 @@ export default function Sidebar({
         >
       {/* The top chrome owns sidebar collapse; this nav stays focused on
           destinations and creation. */}
+      <div className="sidebar-brand" aria-label="Akorith">Akorith</div>
       <nav className="sidebar-nav" aria-label="Primary">
         <div className="sidebar-newchat-row">
           <button
