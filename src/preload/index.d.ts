@@ -1862,6 +1862,7 @@ export interface GpuStatusResult {
 
 export interface GpuApi {
   getStatus(): Promise<GpuStatusResult>
+  getCpuStatus(): Promise<CpuStatus | undefined>
 }
 
 export interface RemoteTelemetryProfileView {

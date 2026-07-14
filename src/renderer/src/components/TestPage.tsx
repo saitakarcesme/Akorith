@@ -1592,7 +1592,8 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           </div>
         </details>}
 
-        <div className="test-actions">
+        <div className={`test-actions ${running ? 'is-running' : ''}`}>
+          {phase && <span className="test-phase"><i aria-hidden="true" />{phase}</span>}
           {running ? (
             <button type="button" className="test-btn is-stop" onClick={stop}>
               Stop
@@ -1602,7 +1603,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
               {selectedBenchmarkOptions.length > 1 ? `Battle ${selectedBenchmarkOptions.length} models` : 'Run benchmark'}
             </button>
           )}
-          {phase && <span className="test-phase">{phase}</span>}
         </div>
         {error && <div className="test-notice">{error}</div>}
 
@@ -1713,15 +1713,22 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
             {results
               .filter((r) => !r.run)
-              .map((r, i) => (
-                <div key={`p-${i}`} className="bench-row is-muted">
-                  <div className="bench-rank">·</div>
+              .map((r) => (
+                <div
+                  key={`pending-${r.providerId ?? 'provider'}-${r.model || 'default'}`}
+                  className={`bench-row is-muted ${r.pending ? 'is-running' : ''}`}
+                >
+                  <div className="bench-rank">{r.pending ? <span className="bench-running-orb" aria-hidden="true" /> : '·'}</div>
                   <div className="bench-model">
                     <strong>{resultLabel(r, providers)}</strong>
-                    <span className="bench-status">{r.pending ? 'running…' : r.error ? 'error' : '—'}</span>
+                    <span className={`bench-status ${r.pending ? 'is-running' : ''}`}>
+                      {r.pending ? 'RUNNING' : r.error ? 'error' : '—'}
+                    </span>
                   </div>
                   <div className="bench-metrics">
-                    <span className="bench-note">{r.pending ? 'running…' : 'no result — skipped in ranking'}</span>
+                    <span className="bench-note">
+                      {r.pending ? <><i aria-hidden="true" />Akorithing…</> : 'no result — skipped in ranking'}
+                    </span>
                   </div>
                 </div>
               ))}

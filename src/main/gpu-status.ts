@@ -63,7 +63,7 @@ function cpuTimeSnapshot(): CpuTimeSnapshot | null {
   )
 }
 
-async function readCpuStatus(): Promise<CpuStatus | undefined> {
+export async function getCpuStatus(): Promise<CpuStatus | undefined> {
   const cores = cpus()
   const first = cpuTimeSnapshot()
   if (!cores.length || !first) return undefined
@@ -171,7 +171,7 @@ function ollamaInfo(): GpuOllamaInfo {
 export async function getGpuStatus(): Promise<GpuStatusResult> {
   const plat = platform()
   const ollama = ollamaInfo()
-  const cpu = await readCpuStatus()
+  const cpu = await getCpuStatus()
 
   if (plat === 'win32' || plat === 'linux') {
     const res = await runNvidiaSmi()
@@ -232,6 +232,13 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
 }
 
 export function registerGpuStatusIpc(): void {
+  ipcMain.handle('cpu:getStatus', async (): Promise<CpuStatus | undefined> => {
+    try {
+      return await getCpuStatus()
+    } catch {
+      return undefined
+    }
+  })
   ipcMain.handle('gpu:getStatus', async (): Promise<GpuStatusResult> => {
     try {
       return await getGpuStatus()
@@ -242,7 +249,7 @@ export function registerGpuStatusIpc(): void {
         platform: platform(),
         source: 'none',
         gpus: [],
-        cpu: await readCpuStatus(),
+        cpu: await getCpuStatus(),
         ollama: ollamaInfo()
       }
     }

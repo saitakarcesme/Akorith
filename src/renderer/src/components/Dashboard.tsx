@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import type {
   DailyUsageRow,
   GpuDevice,
@@ -9,6 +9,8 @@ import type {
   TestRunRow,
   UsageSummary
 } from '../../../preload/index.d'
+import { useProfileIdentity } from '../profileIdentity'
+import { ProfileAvatar } from './ProfileAvatar'
 
 const ACTIVITY_WEEKS = 53
 
@@ -107,14 +109,57 @@ function averageMetric(devices: GpuDevice[], key: 'utilizationPercent' | 'temper
   return `${Math.round(observed.reduce((sum, value) => sum + value, 0) / observed.length)}${key === 'temperatureC' ? '°' : '%'}`
 }
 
+function smoothWavePath(values: number[]): string {
+  const safeValues = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0]
+  const points = safeValues.map((value, index) => ({
+    x: (index / Math.max(1, safeValues.length - 1)) * 640,
+    y: 58 - (Math.max(0, Math.min(100, value)) / 100) * 50
+  }))
+  let path = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]
+    const point = points[index]
+    const midpoint = (previous.x + point.x) / 2
+    path += ` C ${midpoint.toFixed(1)} ${previous.y.toFixed(1)}, ${midpoint.toFixed(1)} ${point.y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+  }
+  return path
+}
+
+function CpuUsageWave({ values, current }: { values: number[]; current: number }): JSX.Element {
+  const samples = values.length ? values : [current, current]
+  const path = smoothWavePath(samples)
+  const id = useId().replace(/:/g, '')
+  const strokeId = `compute-wave-stroke-${id}`
+  const areaId = `compute-wave-area-${id}`
+  return (
+    <div className="compute-wave" role="img" aria-label={`CPU utilization history, currently ${Math.round(current)} percent`}>
+      <svg viewBox="0 0 640 64" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id={strokeId} x1="0" x2="1">
+            <stop offset="0" stopColor="#6fda9d" />
+            <stop offset="1" stopColor="#9a6cf0" />
+          </linearGradient>
+          <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#906ce8" stopOpacity=".22" />
+            <stop offset="1" stopColor="#65d49a" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path className="compute-wave-area" d={`${path} L 640 64 L 0 64 Z`} style={{ fill: `url(#${areaId})` }} />
+        <path className="compute-wave-line" d={path} style={{ stroke: `url(#${strokeId})` }} />
+      </svg>
+    </div>
+  )
+}
+
 interface MachineGpuPanelProps {
   eyebrow: string
   name: string
   status: GpuStatusResult | null
   note?: string
+  cpuHistory?: number[]
 }
 
-function MachineGpuPanel({ eyebrow, name, status, note }: MachineGpuPanelProps): JSX.Element {
+function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: MachineGpuPanelProps): JSX.Element {
   const devices = status?.gpus ?? []
   const cpu = status?.cpu
   const memory = machineMemory(devices)
@@ -142,9 +187,7 @@ function MachineGpuPanel({ eyebrow, name, status, note }: MachineGpuPanelProps):
             <div className="gpu-device-row cpu-device-row">
               <span className="gpu-device-index">CPU</span>
               <span className="gpu-device-name" title={cpu.name}>{cpu.name}</span>
-              <span className="gpu-device-track" aria-hidden="true">
-                <span style={{ width: `${Math.max(0, Math.min(100, cpu.utilizationPercent))}%` }} />
-              </span>
+              <CpuUsageWave values={cpuHistory} current={cpu.utilizationPercent} />
               <span className="gpu-device-memory">{cpu.logicalCores} cores</span>
               <span className="gpu-device-util">{Math.round(cpu.utilizationPercent)}%</span>
               <span className="gpu-device-temp">—</span>
@@ -192,8 +235,9 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
   const [remoteTelemetry, setRemoteTelemetry] = useState<TelemetryStatus | null>(null)
   const [remoteProfiles, setRemoteProfiles] = useState<RemoteTelemetryProfileView[]>([])
   const [gpuBusy, setGpuBusy] = useState(false)
+  const [cpuHistory, setCpuHistory] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
-  const displayName = useMemo(() => localStorage.getItem('akorith.displayName')?.trim() || 'Ibrahim', [])
+  const { identity } = useProfileIdentity()
 
   const loadGpu = useCallback(async (): Promise<void> => {
     setGpuBusy(true)
@@ -204,6 +248,10 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
         window.api.telemetry.getProfiles()
       ])
       setLocalGpu(local)
+      const initialCpu = local.cpu
+      if (initialCpu) {
+        setCpuHistory((current) => [...current, initialCpu.utilizationPercent].slice(-56))
+      }
       setRemoteTelemetry(remote)
       setRemoteProfiles(profiles)
     } catch (reason) {
@@ -230,6 +278,22 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
       cancelled = true
     }
   }, [loadGpu])
+
+  useEffect(() => {
+    let cancelled = false
+    const sampleCpu = async (): Promise<void> => {
+      const cpu = await window.api.gpu.getCpuStatus().catch(() => undefined)
+      if (cancelled || !cpu) return
+      setCpuHistory((current) => [...current, cpu.utilizationPercent].slice(-56))
+      setLocalGpu((current) => current ? { ...current, cpu } : current)
+    }
+    const timer = window.setInterval(() => void sampleCpu(), 1800)
+    void sampleCpu()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const dailyTotals = useMemo(() => {
     const totals = new Map<string, { tokens: number; events: number }>()
@@ -288,7 +352,8 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
       <section className="profile-overview">
         <header className="profile-heading">
           <span>Profile</span>
-          <h1>{displayName}</h1>
+          <ProfileAvatar name={identity.displayName} photo={identity.profilePhoto} size="large" />
+          <h1>{identity.displayName}</h1>
           <div>@local · <strong>Akorith</strong></div>
         </header>
 
@@ -340,7 +405,7 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
           </button>
         </header>
 
-        <MachineGpuPanel eyebrow="CURRENT COMPUTER" name="This Mac" status={localGpu} />
+        <MachineGpuPanel eyebrow="CURRENT COMPUTER" name="This Mac" status={localGpu} cpuHistory={cpuHistory} />
         <MachineGpuPanel
           eyebrow="CONNECTED COMPUTER"
           name={remoteName}

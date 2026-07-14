@@ -285,7 +285,8 @@ const git = Object.freeze({
 
 // Phase 34.6: read-only GPU / local-runtime telemetry (no writes, no polling).
 const gpu = Object.freeze({
-  getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus')
+  getStatus: (): Promise<unknown> => ipcRenderer.invoke('gpu:getStatus'),
+  getCpuStatus: (): Promise<unknown> => ipcRenderer.invoke('cpu:getStatus')
 })
 
 // Phase 36: remote GPU/runtime telemetry via a remote Akorith controller (read-only).

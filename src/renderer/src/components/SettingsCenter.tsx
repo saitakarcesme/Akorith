@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AgentAdapterInfo,
   AgentDetectionResult,
@@ -15,7 +15,6 @@ import type {
   ControllerStatus,
   RemoteTelemetryProfileView,
   TailscaleStatus,
-  UsageLimitConfig,
   OllamaConnectionSettings,
   OllamaEndpointSuggestion,
   OllamaRemoteProfile,
@@ -24,8 +23,14 @@ import type {
   TestSettings
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
+import claudeLogo from '../assets/plugin-logos/claude.svg'
+import ollamaLogo from '../assets/plugin-logos/ollama.png'
+import openaiLogo from '../assets/plugin-logos/openai.svg'
+import opencodeLogo from '../assets/plugin-logos/opencode.png'
+import { profilePhotoFromFile } from '../profileIdentity'
 import { CloseIcon } from './icons'
 import MissionCenter from './MissionCenter'
+import { ProfileAvatar } from './ProfileAvatar'
 import UpdatePanel from './UpdatePanel'
 
 type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'update' | 'workflow' | 'test' | 'safety'
@@ -33,9 +38,11 @@ type SettingsTab = 'profile' | 'providers' | 'agents' | 'missions' | 'api' | 'up
 interface SettingsCenterProps {
   theme: AppTheme
   displayName: string
+  profilePhoto: string | null
   providers: ProviderInfo[]
   onThemeChange: (theme: AppTheme) => void
   onDisplayNameChange: (name: string) => void
+  onProfilePhotoChange: (photo: string | null) => void
   onRefreshProviders: () => void
   onClose: () => void
 }
@@ -52,19 +59,13 @@ function shortEndpointLabel(value: string): string {
   }
 }
 
-function providerTone(id: string): string {
+function providerLogo(id: string): string | undefined {
   const normalized = id.toLowerCase()
-  if (normalized.includes('claude')) return 'tone-claude'
-  if (normalized.includes('chatgpt') || normalized.includes('codex')) return 'tone-codex'
-  if (normalized.includes('local') || normalized.includes('ollama')) return 'tone-local'
-  return 'tone-neutral'
-}
-
-function providerShortLabel(id: string, label: string): string {
-  if (id.includes('claude')) return 'Cl'
-  if (id.includes('chatgpt') || id.includes('codex')) return 'Cx'
-  if (id.includes('local') || id.includes('ollama')) return 'Lo'
-  return label.slice(0, 2)
+  if (normalized.includes('claude')) return claudeLogo
+  if (normalized.includes('chatgpt') || normalized.includes('codex')) return openaiLogo
+  if (normalized.includes('local') || normalized.includes('ollama')) return ollamaLogo
+  if (normalized.includes('opencode')) return opencodeLogo
+  return undefined
 }
 
 function secondsLabel(ms: number): string {
@@ -188,34 +189,17 @@ function attachmentsForSession(session: AgentSession, attachments: AgentRuntimeA
 export default function SettingsCenter({
   theme,
   displayName,
+  profilePhoto,
   providers,
   onThemeChange,
   onDisplayNameChange,
+  onProfilePhotoChange,
   onRefreshProviders,
   onClose
 }: SettingsCenterProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
-  // Phase 39: user-configured usage-limit labels (no secrets).
-  const [limits, setLimits] = useState<UsageLimitConfig>({})
-  const [limitsBusy, setLimitsBusy] = useState(false)
-  const [limitsSaved, setLimitsSaved] = useState(false)
-  useEffect(() => {
-    void window.api.usageLimits
-      .get()
-      .then((view) => setLimits(view.config))
-      .catch(() => setLimits({}))
-  }, [])
-  const saveLimits = async (): Promise<void> => {
-    setLimitsBusy(true)
-    try {
-      const saved = await window.api.usageLimits.setConfig(limits)
-      setLimits(saved)
-      setLimitsSaved(true)
-      setTimeout(() => setLimitsSaved(false), 2000)
-    } finally {
-      setLimitsBusy(false)
-    }
-  }
+  const [profilePhotoBusy, setProfilePhotoBusy] = useState(false)
+  const [profilePhotoError, setProfilePhotoError] = useState<string | null>(null)
   // Phase 35: controller API state.
   const [ctrlConfig, setCtrlConfig] = useState<ControllerConfigView | null>(null)
   const [ctrlStatus, setCtrlStatus] = useState<ControllerStatus | null>(null)
@@ -307,10 +291,21 @@ export default function SettingsCenter({
     ? `${reachableEndpoint?.label ?? 'Network endpoint'} can be used from another Akorith instance when Ollama is running on this machine.`
     : 'Start Ollama with LAN exposure or connect through VPN/Tailscale to share local models.'
 
-  const availableProviders = useMemo(
-    () => providers.filter((provider) => provider.available.ok).length,
-    [providers]
-  )
+  const handleProfilePhoto = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) return
+    setProfilePhotoBusy(true)
+    setProfilePhotoError(null)
+    try {
+      onProfilePhotoChange(await profilePhotoFromFile(file))
+    } catch (reason) {
+      setProfilePhotoError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      input.value = ''
+      setProfilePhotoBusy(false)
+    }
+  }
 
   const updateOllamaSetting = <K extends keyof OllamaConnectionSettings>(key: K, value: OllamaConnectionSettings[K]): void => {
     setOllamaSettings((settings) => (settings ? { ...settings, [key]: value } : settings))
@@ -701,16 +696,14 @@ export default function SettingsCenter({
     }
   }
 
-  const tabs: { id: SettingsTab; label: string; kicker: string }[] = [
-    { id: 'profile', label: 'Profile', kicker: 'Identity and theme' },
-    { id: 'providers', label: 'Providers', kicker: 'Claude, ChatGPT, Ollama' },
-    { id: 'agents', label: 'Agents', kicker: 'Agent OS foundation' },
-    { id: 'missions', label: 'Missions', kicker: 'Preview engine' },
-    { id: 'api', label: 'API', kicker: 'Controller (optional)' },
-    { id: 'update', label: 'Update', kicker: 'Install the latest Akorith' },
-    { id: 'workflow', label: 'Workflow', kicker: 'Bridge and repo context' },
-    { id: 'test', label: 'Test Lab', kicker: 'Defaults and reports' },
-    { id: 'safety', label: 'Data', kicker: 'Storage and safety' }
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'profile', label: 'General' },
+    { id: 'providers', label: 'Providers' },
+    { id: 'api', label: 'Remote' },
+    { id: 'workflow', label: 'Workflow' },
+    { id: 'test', label: 'Benchmark' },
+    { id: 'safety', label: 'Data' },
+    { id: 'update', label: 'Update' }
   ]
 
   const observedSessions = useMemo(() => {
@@ -737,7 +730,6 @@ export default function SettingsCenter({
       <div className="settings-header">
         <div>
           <div className="settings-title">Settings</div>
-          <div className="settings-subtitle">Akorith workspace controls</div>
         </div>
         <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Back to workspace">
           <CloseIcon size={16} />
@@ -754,7 +746,6 @@ export default function SettingsCenter({
               onClick={() => setActiveTab(tab.id)}
             >
               <span>{tab.label}</span>
-              <em>{tab.kicker}</em>
             </button>
           ))}
         </nav>
@@ -764,8 +755,23 @@ export default function SettingsCenter({
             <section className="settings-section">
               <div className="settings-section-head">
                 <div>
-                  <h2>Profile</h2>
-                  <p>Local display and app appearance.</p>
+                  <h2>General</h2>
+                </div>
+              </div>
+              <div className="settings-profile-photo">
+                <ProfileAvatar name={displayName} photo={profilePhoto} size="large" />
+                <div>
+                  <strong>Profile photo</strong>
+                  <div className="settings-profile-photo-actions">
+                    <label className="settings-photo-button">
+                      <input type="file" accept="image/*" onChange={(event) => void handleProfilePhoto(event)} />
+                      {profilePhotoBusy ? 'Preparing…' : profilePhoto ? 'Change photo' : 'Choose photo'}
+                    </label>
+                    {profilePhoto && (
+                      <button type="button" onClick={() => onProfilePhotoChange(null)}>Remove</button>
+                    )}
+                  </div>
+                  {profilePhotoError && <p className="settings-photo-error">{profilePhotoError}</p>}
                 </div>
               </div>
               <label>
@@ -783,53 +789,6 @@ export default function SettingsCenter({
                   </button>
                 </div>
               </div>
-              <div className="settings-summary-grid">
-                <div className="settings-summary-item">
-                  <span>Available providers</span>
-                  <strong>{availableProviders}/{providers.length || 0}</strong>
-                </div>
-                <div className="settings-summary-item">
-                  <span>Auto-Enter</span>
-                  <strong>{bridgeSettings?.autoEnter ? 'On' : 'Off'}</strong>
-                </div>
-                <div className="settings-summary-item">
-                  <span>Repo context</span>
-                  <strong>{digestSettings?.enabled ? 'On' : 'Off'}</strong>
-                </div>
-              </div>
-
-              {/* Phase 39: usage-limit labels (shown on the Dashboard). No secrets. */}
-              <div className="settings-divider" />
-              <div className="settings-field is-stacked">
-                <span>Usage limits (Claude / Codex)</span>
-                <p className="settings-hint">
-                  Akorith can&apos;t read your remaining subscription limits (the CLIs don&apos;t expose them), so enter your
-                  own known limits here to compare against Akorith&apos;s recorded in-app usage on the Dashboard. No secrets.
-                </p>
-                <div className="limits-grid">
-                  <label className="limits-field">
-                    <span>Claude 5-hour limit</span>
-                    <input value={limits.claude5h ?? ''} placeholder="e.g. 45 messages" onChange={(e) => setLimits((l) => ({ ...l, claude5h: e.target.value }))} />
-                  </label>
-                  <label className="limits-field">
-                    <span>Claude weekly limit</span>
-                    <input value={limits.claudeWeekly ?? ''} placeholder="e.g. plan tier" onChange={(e) => setLimits((l) => ({ ...l, claudeWeekly: e.target.value }))} />
-                  </label>
-                  <label className="limits-field">
-                    <span>Codex 5-hour limit</span>
-                    <input value={limits.codex5h ?? ''} placeholder="e.g. 150 messages" onChange={(e) => setLimits((l) => ({ ...l, codex5h: e.target.value }))} />
-                  </label>
-                  <label className="limits-field">
-                    <span>Codex weekly limit</span>
-                    <input value={limits.codexWeekly ?? ''} placeholder="e.g. plan tier" onChange={(e) => setLimits((l) => ({ ...l, codexWeekly: e.target.value }))} />
-                  </label>
-                </div>
-                <div className="settings-action-row">
-                  <button type="button" className="is-primary" disabled={limitsBusy} onClick={() => void saveLimits()}>
-                    {limitsBusy ? 'Saving…' : limitsSaved ? 'Saved' : 'Save usage limits'}
-                  </button>
-                </div>
-              </div>
             </section>
           )}
 
@@ -843,11 +802,11 @@ export default function SettingsCenter({
                 <button type="button" onClick={onRefreshProviders}>Refresh</button>
               </div>
               <div className="provider-status-list">
-                {providers.map((provider) => (
-                  <div className="provider-status-row" key={provider.id}>
-                    <span className={`provider-badge ${providerTone(provider.id)}`}>
-                      {providerShortLabel(provider.id, provider.label)}
-                    </span>
+                {providers.map((provider) => {
+                  const logo = providerLogo(provider.id)
+                  return (
+                  <div className={`provider-status-row ${logo ? '' : 'has-no-logo'}`} key={provider.id}>
+                    {logo && <span className="provider-logo"><img src={logo} alt="" /></span>}
                     <div>
                       <strong>{provider.label}</strong>
                       <em>{provider.models.length ? `${provider.models.length} model${provider.models.length === 1 ? '' : 's'}` : 'No models listed'}</em>
@@ -857,7 +816,8 @@ export default function SettingsCenter({
                     </span>
                     {!provider.available.ok && <p>{provider.available.reason ?? 'Provider is unavailable.'}</p>}
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               <div className="settings-divider" />
@@ -1313,11 +1273,8 @@ export default function SettingsCenter({
             <section className="settings-section">
               <div className="settings-section-head">
                 <div>
-                  <h2>Controller API</h2>
-                  <p>
-                    Optional local HTTP API for scripts, CLIs, and plugins. Disabled by default, loopback-only,
-                    token-protected, and read-only in this phase.
-                  </p>
+                  <h2>Remote access</h2>
+                  <p>Connect another Akorith computer to Dashboard telemetry.</p>
                 </div>
                 {ctrlStatus && (
                   <span className={`ctrl-pill ${ctrlStatus.running ? 'is-running' : 'is-stopped'}`}>
@@ -1336,11 +1293,14 @@ export default function SettingsCenter({
                         disabled={ctrlBusy}
                         onChange={(event) => void toggleController(event.target.checked)}
                       />
-                      <span>Enable controller API</span>
+                      <span>Share this computer</span>
                     </label>
                     <span className="ctrl-readonly">Read-only · {ctrlStatus.sseEnabled ? 'SSE on' : 'SSE off'}</span>
                   </div>
 
+                  <details className="settings-advanced">
+                    <summary>Controller details</summary>
+                    <div className="settings-advanced-body">
                   <div className="ctrl-grid">
                     <div className="ctrl-field">
                       <span>Host</span>
@@ -1444,32 +1404,27 @@ export default function SettingsCenter({
                     </>
                   )}
 
-                  <div className="settings-note">
-                    The token is stored in local config (loopex.config.json), not an OS keychain. It is never logged.
-                    Phase 35 exposes read-only endpoints only — no command, terminal, file, git, prompt-send, or mission
-                    execution.
-                  </div>
+                  <div className="settings-note">Read-only access. The controller cannot run commands or send prompts.</div>
+                    </div>
+                  </details>
 
                   {/* Phase 36: remote telemetry profiles (read the PC's GPU on the Mac) */}
                   <div className="settings-divider" />
                   <div className="settings-field is-stacked">
                     <div className="ollama-remote-head">
-                      <span>Remote telemetry profiles</span>
+                      <span>Connected computers</span>
                       <button type="button" onClick={addTelProfile}>
-                        Add remote runtime
+                        Add computer
                       </button>
                     </div>
                     <p className="settings-hint">
-                      Point at another Akorith Controller (e.g. the PC running Ollama, with the Controller API enabled and
-                      Allow-LAN on over Tailscale/VPN). The Dashboard then shows that machine&apos;s GPU. Read-only; token
-                      required.
+                      Add another Akorith controller URL and token to show that computer on the Dashboard.
                     </p>
                     {telNotice && <div className={`ollama-status is-${telNotice.kind}`}>{telNotice.text}</div>}
 
                     {telProfiles.length === 0 ? (
                       <div className="ollama-remote-empty">
-                        No remote telemetry yet. Add the PC controller&apos;s base URL (e.g. http://100.x.x.x:47832) and its
-                        token to show the PC&apos;s GPU on this Mac.
+                        No connected computer yet.
                       </div>
                     ) : (
                       <div className="ollama-remote-list">
@@ -1539,11 +1494,7 @@ export default function SettingsCenter({
                       </div>
                     )}
 
-                    <div className="settings-note">
-                      On the PC: enable the Controller API, turn on Allow-LAN only on a trusted private network (Tailscale/
-                      VPN/LAN), and copy its base URL + token. On this Mac: add a profile with that URL and token. Never
-                      expose the controller publicly.
-                    </div>
+                    <div className="settings-note">Use a trusted private network such as Tailscale, VPN, or LAN.</div>
                   </div>
                 </>
               ) : (

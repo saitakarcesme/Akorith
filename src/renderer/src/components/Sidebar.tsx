@@ -1,6 +1,7 @@
 import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
+import { useProfileIdentity } from '../profileIdentity'
 import {
   ChartIcon,
   ChevronIcon,
@@ -11,9 +12,9 @@ import {
   PanelsIcon,
   PluginIcon,
   PlusIcon,
-  SettingsIcon,
-  UserIcon
+  SettingsIcon
 } from './icons'
+import { ProfileAvatar } from './ProfileAvatar'
 import SettingsCenter from './SettingsCenter'
 
 interface SidebarProps {
@@ -56,14 +57,6 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
 function storageBoolean(key: string, fallback: boolean): boolean {
   try {
     return localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true'
-  } catch {
-    return fallback
-  }
-}
-
-function storageString(key: string, fallback: string): string {
-  try {
-    return localStorage.getItem(key) ?? fallback
   } catch {
     return fallback
   }
@@ -181,7 +174,7 @@ export default function Sidebar({
   const [projectBusy, setProjectBusy] = useState<'open' | 'create' | null>(null)
   const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [displayName, setDisplayName] = useState(() => storageString('akorith.displayName', 'Ibrahim'))
+  const { identity, updateIdentity } = useProfileIdentity()
 
   const loadProviders = useCallback(() => {
     window.api.chat
@@ -255,7 +248,7 @@ export default function Sidebar({
   }, [sidebarWidth])
 
   useEffect(() => {
-    onChromeWidthChange?.(sidebarCollapsed && !sidebarPeeking ? 0 : sidebarWidth)
+    onChromeWidthChange?.(sidebarCollapsed ? (sidebarPeeking ? sidebarWidth + 36 : 0) : sidebarWidth)
   }, [onChromeWidthChange, sidebarCollapsed, sidebarPeeking, sidebarWidth])
 
   // Phase 38.3: drag the right edge to resize the open sidebar.
@@ -281,10 +274,6 @@ export default function Sidebar({
   useEffect(() => {
     localStorage.setItem('akorith.expandedProjects', JSON.stringify(expandedProjects))
   }, [expandedProjects])
-
-  useEffect(() => {
-    localStorage.setItem('akorith.displayName', displayName)
-  }, [displayName])
 
   // Close row actions on Escape. These menus render inside the sidebar, avoiding
   // the full-window portal/backdrop path that could blank the app.
@@ -940,14 +929,15 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-profile">
-        <button type="button" className="profile-button" onClick={() => setSettingsOpen((value) => !value)} title="Settings">
-          <UserIcon size={17} />
-          <span>
-            <strong>{displayName.trim() || 'User'}</strong>
-            <em>Local profile</em>
-          </span>
-          <SettingsIcon size={16} />
-        </button>
+        <div className="sidebar-profile-row">
+          <button type="button" className="profile-identity-button" onClick={() => setSettingsOpen(true)} title="Profile settings">
+            <ProfileAvatar name={identity.displayName} photo={identity.profilePhoto} />
+            <strong>{identity.displayName.trim() || 'User'}</strong>
+          </button>
+          <button type="button" className="profile-settings-button" onClick={() => setSettingsOpen((value) => !value)} aria-label="Settings" title="Settings">
+            <SettingsIcon size={17} />
+          </button>
+        </div>
       </div>
         </div>
 
@@ -1036,10 +1026,12 @@ export default function Sidebar({
         <div className="settings-page-host">
           <SettingsCenter
             theme={theme}
-            displayName={displayName}
+            displayName={identity.displayName}
+            profilePhoto={identity.profilePhoto}
             providers={providers}
             onThemeChange={onThemeChange}
-            onDisplayNameChange={setDisplayName}
+            onDisplayNameChange={(displayName) => updateIdentity({ displayName })}
+            onProfilePhotoChange={(profilePhoto) => updateIdentity({ profilePhoto })}
             onRefreshProviders={loadProviders}
             onClose={() => setSettingsOpen(false)}
           />
