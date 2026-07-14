@@ -1,9 +1,10 @@
 # Akorith — In-App Update System
 
-Akorith ships an in-app **source updater** for git/dev installs. It keeps a local
-checkout current with GitHub `main` without you dropping to a terminal. It is
-deliberately conservative: **read-only check first, fast-forward only, never
-discards your work.**
+Akorith ships an in-app updater for packaged macOS apps and git/dev installs.
+Packaged Macs download the matching Apple Silicon or Intel zip from the latest
+stable GitHub Release, verify the artifact and app identity, keep a rollback
+copy, install it, and relaunch. Source installs keep a local checkout current
+with GitHub `main` without you dropping to a terminal.
 
 Open it at **Settings → Update**. The Dashboard also shows a small
 "up to date / update available" badge.
@@ -20,7 +21,7 @@ Backing git commands (all bounded, no shell):
 `fetch origin`, `rev-parse origin/main`, `status --porcelain`,
 `rev-list --left-right --count HEAD...origin/main`.
 
-## What the update does
+## What a source update does
 
 Enabled **only** when a clean fast-forward is possible (working tree clean, on or
 able to switch to `main`, `origin/main` reachable, and you click Update):
@@ -64,11 +65,16 @@ installer build with executable signing/resource editing disabled. It still
 installs the generated NSIS installer and never treats `dist/win-unpacked` as an
 installed app.
 
-Packaged macOS/other app updates still require a manual installer/app refresh
-from a source checkout.
+In packaged macOS mode, Akorith checks the latest stable GitHub Release, selects
+the zip matching the running CPU architecture, verifies the advertised size and
+SHA-256 digest when GitHub supplies one, validates the bundle id/version, backs
+up the current app under `~/Library/Application Support/Akorith/Update Backups`,
+then swaps and relaunches the app. The app never executes release-provided scripts.
+
+Other packaged platforms continue to use their platform-specific flow; packaged
+Windows can rebuild from a clean local source checkout.
 
 ## Keeping Mac + PC in sync
 
-On each machine that runs Akorith from source: open **Settings → Update**, click
-**Check for updates**, then **Update to latest main**. That replaces the manual
-`git pull` on both machines.
+Open **Settings → Update**, click **Check for updates**, then install the offered
+release. Source-mode machines use **Update to latest main** instead.

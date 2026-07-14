@@ -10,6 +10,26 @@ import type { UpdateStatus } from './types'
 
 const GIT_TIMEOUT_MS = 25_000
 const MAX_BUFFER = 1024 * 1024
+const RELEASE_API = 'https://api.github.com/repos/saitakarcesme/Akorith/releases/latest'
+const RELEASE_TIMEOUT_MS = 12_000
+const RELEASE_CACHE_MS = 5 * 60_000
+
+export interface ReleaseAsset {
+  name: string
+  url: string
+  size: number
+  digest?: string
+}
+
+export interface LatestRelease {
+  version: string
+  tag: string
+  url: string
+  publishedAt?: string
+  asset?: ReleaseAsset
+}
+
+let cachedRelease: { value: LatestRelease | null; checkedAt: number } | null = null
 
 export interface GitResult {
   ok: boolean
@@ -50,6 +70,110 @@ function expectedWindowsExe(): string | undefined {
   return local ? join(local, 'Programs', 'Akorith', 'Akorith.exe') : undefined
 }
 
+function versionParts(value: string): number[] {
+  return value.replace(/^v/i, '').split(/[+-]/)[0].split('.').map((part) => Number(part) || 0)
+}
+
+export function versionIsNewer(candidate: string, current: string): boolean {
+  const left = versionParts(candidate)
+  const right = versionParts(current)
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0)
+    if (difference !== 0) return difference > 0
+  }
+  return false
+}
+
+function assetForCurrentMac(assets: Array<Record<string, unknown>>): ReleaseAsset | undefined {
+  const architecture = process.arch === 'arm64' ? 'arm64' : 'x64'
+  const candidates = assets.filter((asset) => {
+    const name = typeof asset.name === 'string' ? asset.name.toLowerCase() : ''
+    return name.endsWith('.zip') && name.includes('mac') && name.includes(architecture)
+  })
+  const asset = candidates[0]
+  if (!asset || typeof asset.name !== 'string' || typeof asset.browser_download_url !== 'string') return undefined
+  return {
+    name: asset.name,
+    url: asset.browser_download_url,
+    size: typeof asset.size === 'number' ? asset.size : 0,
+    ...(typeof asset.digest === 'string' ? { digest: asset.digest } : {})
+  }
+}
+
+export async function fetchLatestRelease(force = false): Promise<LatestRelease | null> {
+  if (!force && cachedRelease && Date.now() - cachedRelease.checkedAt < RELEASE_CACHE_MS) return cachedRelease.value
+  try {
+    const response = await fetch(RELEASE_API, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': `Akorith/${app.getVersion()}`
+      },
+      signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS)
+    })
+    if (!response.ok) {
+      cachedRelease = { value: null, checkedAt: Date.now() }
+      return null
+    }
+    const raw = await response.json() as Record<string, unknown>
+    const tag = typeof raw.tag_name === 'string' ? raw.tag_name : ''
+    const version = tag.replace(/^v/i, '')
+    if (!tag || !version) return null
+    const release: LatestRelease = {
+      version,
+      tag,
+      url: typeof raw.html_url === 'string' ? raw.html_url : 'https://github.com/saitakarcesme/Akorith/releases',
+      ...(typeof raw.published_at === 'string' ? { publishedAt: raw.published_at } : {}),
+      ...(Array.isArray(raw.assets) ? { asset: assetForCurrentMac(raw.assets as Array<Record<string, unknown>>) } : {})
+    }
+    cachedRelease = { value: release, checkedAt: Date.now() }
+    return release
+  } catch {
+    cachedRelease = { value: null, checkedAt: Date.now() }
+    return null
+  }
+}
+
+async function packagedMacStatus(force: boolean): Promise<UpdateStatus> {
+  const appVersion = app.getVersion()
+  const latest = await fetchLatestRelease(force)
+  const hasUpdate = Boolean(latest && versionIsNewer(latest.version, appVersion))
+  const asset = latest?.asset
+  const warnings: string[] = []
+  if (!latest) warnings.push('GitHub Releases could not be reached, or no stable release exists yet.')
+  if (hasUpdate && !asset) warnings.push(`Release ${latest?.tag ?? ''} has no macOS ${process.arch} zip asset.`)
+  return {
+    mode: 'packaged',
+    runtimeMode: 'packaged-macos',
+    platform: process.platform,
+    executablePath: process.execPath,
+    appPath: app.getAppPath(),
+    appVersion,
+    behindBy: 0,
+    aheadBy: 0,
+    hasUpdate,
+    isDirty: false,
+    dirtyFiles: [],
+    safeToUpdate: Boolean(hasUpdate && asset),
+    canUpdateInstalledApp: Boolean(hasUpdate && asset),
+    updateTarget: 'Installed macOS app from GitHub Releases',
+    relaunchTarget: process.execPath,
+    warnings,
+    lastCheckedAt: Date.now(),
+    ...(latest ? {
+      releaseVersion: latest.version,
+      releaseTag: latest.tag,
+      releaseUrl: latest.url,
+      releasePublishedAt: latest.publishedAt,
+      releaseAssetName: asset?.name,
+      releaseAssetUrl: asset?.url,
+      releaseAssetSize: asset?.size,
+      releaseAssetDigest: asset?.digest
+    } : {})
+  }
+}
+
 async function findSourceCheckout(): Promise<string | undefined> {
   const candidates = [
     process.env['AKORITH_SOURCE_DIR'],
@@ -76,6 +200,7 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 }
 
 export async function getUpdateStatus(fetch: boolean): Promise<UpdateStatus> {
+  if (app.isPackaged && process.platform === 'darwin') return packagedMacStatus(fetch)
   const appVersion = app.getVersion()
   const cwd = repoRoot()
   const executablePath = process.execPath

@@ -73,6 +73,7 @@ mkdir -p "$EXT" && rm -rf node_modules && ln -s "$EXT" node_modules && npm insta
 
 ## Keeping machines current
 
-Use **Settings → Update** in the app to fast-forward this checkout to GitHub
-`main` (see `docs/update-system.md`). To refresh the packaged macOS app, run
-`npm run macos:refresh` after `npm run pack:mac`.
+Use **Settings → Update** in the app to install the latest packaged macOS release
+or fast-forward a source checkout to GitHub `main` (see `docs/update-system.md`).
+The `npm run pack:mac` / `npm run refresh:mac` path remains available to developers
+who are testing an unreleased local build.

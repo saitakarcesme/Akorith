@@ -32,6 +32,14 @@ export interface UpdateStatus {
   warnings: string[]
   lastCheckedAt?: number
   appVersion: string
+  releaseVersion?: string
+  releaseTag?: string
+  releaseUrl?: string
+  releasePublishedAt?: string
+  releaseAssetName?: string
+  releaseAssetUrl?: string
+  releaseAssetSize?: number
+  releaseAssetDigest?: string
 }
 
 export interface UpdateLogEntry {

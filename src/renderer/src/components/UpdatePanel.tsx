@@ -51,8 +51,12 @@ export default function UpdatePanel(): JSX.Element {
       const next = await window.api.update.check()
       setStatus(next)
       setNotice(
-        next.mode !== 'git'
-          ? { kind: 'info', text: 'This is not a source/git install.' }
+        next.runtimeMode === 'packaged-macos'
+          ? next.hasUpdate
+            ? { kind: 'info', text: `Akorith ${next.releaseVersion ?? ''} is ready to install from GitHub Releases.` }
+            : { kind: 'ok', text: `Akorith ${next.appVersion} is up to date.` }
+          : next.mode !== 'git'
+            ? { kind: 'info', text: 'This packaged app uses its platform update flow.' }
           : next.hasUpdate
             ? { kind: 'info', text: `Update available — ${next.behindBy} commit(s) behind origin/main.` }
             : { kind: 'ok', text: 'Up to date with origin/main.' }
@@ -76,7 +80,9 @@ export default function UpdatePanel(): JSX.Element {
         setNotice({
           kind: 'ok',
           text:
-            res.status.runtimeMode === 'packaged-windows'
+            res.status.runtimeMode === 'packaged-macos' && res.restartRecommended
+              ? `Akorith ${res.status.releaseVersion ?? ''} was verified. The app will restart to finish installing it.`
+              : res.status.runtimeMode === 'packaged-windows'
               ? 'Started the packaged Windows refresh. Akorith may close while the installer updates and relaunches it.'
               : res.restartRecommended
                 ? 'Updated to latest main. Restart Akorith to load the new build.'
@@ -97,7 +103,7 @@ export default function UpdatePanel(): JSX.Element {
       <div className="settings-section-head">
         <div>
           <h2>Update</h2>
-          <p>Keep source checkouts current with GitHub <code>main</code>, or refresh the installed Windows package from a clean source checkout.</p>
+          <p>Install packaged macOS updates directly from GitHub Releases. Source runs continue to use safe, fast-forward-only Git updates.</p>
         </div>
         <button type="button" disabled={busy !== null} onClick={() => void check()}>
           {busy === 'check' ? 'Checking…' : 'Check for updates'}
@@ -117,24 +123,45 @@ export default function UpdatePanel(): JSX.Element {
       ) : status.mode === 'packaged' ? (
         <div className="update-packaged">
           <div className="ollama-status is-info">{runtimeLabel(status)}</div>
-          <div className="ctrl-grid">
-            <div className="ctrl-field">
-              <span>Executable</span>
-              <code>{status.executablePath}</code>
+          {status.runtimeMode === 'packaged-macos' ? (
+            <div className="ctrl-grid">
+              <div className="ctrl-field">
+                <span>Installed</span>
+                <code>Akorith {status.appVersion}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Latest release</span>
+                <code>{status.releaseTag ?? 'not available'}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Architecture</span>
+                <code>{status.releaseAssetName?.includes('arm64') ? 'Apple Silicon' : status.releaseAssetName?.includes('x64') ? 'Intel' : '—'}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Status</span>
+                <code>{status.hasUpdate ? 'update available' : 'up to date'}</code>
+              </div>
             </div>
-            <div className="ctrl-field">
-              <span>Source checkout</span>
-              <code>{status.sourceCheckoutPath ?? 'not found'}</code>
+          ) : (
+            <div className="ctrl-grid">
+              <div className="ctrl-field">
+                <span>Executable</span>
+                <code>{status.executablePath}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Source checkout</span>
+                <code>{status.sourceCheckoutPath ?? 'not found'}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Update target</span>
+                <code>{status.updateTarget}</code>
+              </div>
+              <div className="ctrl-field">
+                <span>Relaunch target</span>
+                <code>{status.relaunchTarget ?? status.executablePath}</code>
+              </div>
             </div>
-            <div className="ctrl-field">
-              <span>Update target</span>
-              <code>{status.updateTarget}</code>
-            </div>
-            <div className="ctrl-field">
-              <span>Relaunch target</span>
-              <code>{status.relaunchTarget ?? status.executablePath}</code>
-            </div>
-          </div>
+          )}
           {status.sourceCheckoutPath && (
             <div className="settings-hint">
               Source commit <code>{status.currentCommit ?? '-'}</code> / origin main <code>{status.remoteMainCommit ?? '-'}</code>.
@@ -143,12 +170,24 @@ export default function UpdatePanel(): JSX.Element {
           )}
           {status.warnings.length > 0 && (
             <div className="update-warnings">
-              {status.warnings.map((w, i) => (
-                <div key={i} className="ollama-status is-info">{w}</div>
+              {status.warnings.map((warning) => (
+                <div key={warning} className="ollama-status is-info">{warning}</div>
               ))}
             </div>
           )}
-          {status.runtimeMode === 'packaged-windows' ? (
+          {status.runtimeMode === 'packaged-macos' ? (
+            <div className="settings-action-row">
+              <button
+                type="button"
+                className="is-primary"
+                disabled={busy !== null || !status.canUpdateInstalledApp}
+                title={status.canUpdateInstalledApp ? `Download, verify, and install ${status.releaseTag}` : 'No compatible newer release is available'}
+                onClick={() => void run()}
+              >
+                {busy === 'run' ? 'Downloading and verifying…' : `Install ${status.releaseTag ?? 'latest release'}`}
+              </button>
+            </div>
+          ) : status.runtimeMode === 'packaged-windows' ? (
             <>
               <div className="settings-checks">
                 <label>
@@ -169,13 +208,13 @@ export default function UpdatePanel(): JSX.Element {
               </div>
             </>
           ) : (
-            <p className="settings-hint">Packaged macOS/other updates require a manual installer refresh from a source checkout for now.</p>
+            <p className="settings-hint">Automatic packaged updates are currently available on macOS.</p>
           )}
           {notice && <div className={`ollama-status is-${notice.kind}`}>{notice.text}</div>}
           {logs.length > 0 && (
             <div className="update-logs">
-              {logs.map((entry, i) => (
-                <div key={i} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
+              {logs.map((entry) => (
+                <div key={`${entry.at}-${entry.command}`} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
                   <div className="update-log-cmd">
                     <span>{entry.ok ? 'ok' : 'error'}</span>
                     <code>{entry.command}</code>
@@ -215,8 +254,8 @@ export default function UpdatePanel(): JSX.Element {
 
           {status.warnings.length > 0 && (
             <div className="update-warnings">
-              {status.warnings.map((w, i) => (
-                <div key={i} className="ollama-status is-info">{w}</div>
+              {status.warnings.map((warning) => (
+                <div key={warning} className="ollama-status is-info">{warning}</div>
               ))}
             </div>
           )}
@@ -248,8 +287,8 @@ export default function UpdatePanel(): JSX.Element {
 
           {logs.length > 0 && (
             <div className="update-logs">
-              {logs.map((entry, i) => (
-                <div key={i} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
+              {logs.map((entry) => (
+                <div key={`${entry.at}-${entry.command}`} className={`update-log ${entry.ok ? 'is-ok' : 'is-err'}`}>
                   <div className="update-log-cmd">
                     <span>{entry.ok ? '✓' : '✕'}</span>
                     <code>{entry.command}</code>

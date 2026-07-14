@@ -1,6 +1,10 @@
 import { execFile, spawn } from 'child_process'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { createHash } from 'crypto'
+import { app } from 'electron'
+import { constants, existsSync } from 'fs'
+import { access, mkdir, mkdtemp, writeFile } from 'fs/promises'
+import { homedir, tmpdir } from 'os'
+import { dirname, join } from 'path'
 import { getUpdateStatus, maskRemoteUrl, repoRoot, runGit } from './checker'
 import type { UpdateLogEntry, UpdateRunOptions, UpdateRunResult } from './types'
 
@@ -9,6 +13,7 @@ import type { UpdateLogEntry, UpdateRunOptions, UpdateRunResult } from './types'
 // remote-supplied commands. npm steps run fixed arguments only.
 
 const NPM_TIMEOUT_MS = 8 * 60_000
+const MAX_RELEASE_BYTES = 500 * 1024 * 1024
 
 /** Bound + mask command output before it is shown/logged. */
 function safeOutput(text: string, max = 4000): string {
@@ -40,6 +45,105 @@ function launchWindowsRefresh(cwd: string): { ok: boolean; output: string } {
   return { ok: true, output: `Started Windows refresh script: ${script}` }
 }
 
+function runFile(file: string, args: string[], timeout = 60_000): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    execFile(file, args, { timeout, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+      resolve({ ok: !err, output: safeOutput(`${stdout ?? ''}\n${stderr ?? ''}`.trim()) })
+    })
+  })
+}
+
+function currentMacAppBundle(): string | undefined {
+  if (process.platform !== 'darwin') return undefined
+  const bundle = dirname(dirname(dirname(process.execPath)))
+  return bundle.endsWith('.app') ? bundle : undefined
+}
+
+async function readPlistValue(appBundle: string, key: string): Promise<string> {
+  const plist = join(appBundle, 'Contents', 'Info.plist')
+  const result = await runFile('/usr/bin/plutil', ['-extract', key, 'raw', plist], 10_000)
+  return result.ok ? result.output.trim() : ''
+}
+
+async function downloadReleaseAsset(url: string, expectedSize: number | undefined, expectedDigest: string | undefined, target: string): Promise<string> {
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'https:' || !(parsed.hostname === 'github.com' || parsed.hostname.endsWith('.githubusercontent.com'))) {
+    throw new Error('Refusing an update asset outside GitHub.')
+  }
+  if (expectedSize && expectedSize > MAX_RELEASE_BYTES) throw new Error('The release asset is unexpectedly large.')
+  const response = await fetch(url, {
+    headers: { 'User-Agent': `Akorith/${app.getVersion()}` },
+    signal: AbortSignal.timeout(3 * 60_000)
+  })
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status} for the update asset.`)
+  const declaredSize = Number(response.headers.get('content-length') ?? 0)
+  if (declaredSize > MAX_RELEASE_BYTES) throw new Error('The release download exceeds the safety limit.')
+  const bytes = Buffer.from(await response.arrayBuffer())
+  if (bytes.length === 0 || bytes.length > MAX_RELEASE_BYTES) throw new Error('The release download is empty or too large.')
+  if (expectedSize && bytes.length !== expectedSize) throw new Error('The downloaded release size does not match GitHub metadata.')
+  const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+  if (expectedDigest?.startsWith('sha256:') && digest.toLowerCase() !== expectedDigest.toLowerCase()) {
+    throw new Error('The downloaded release failed SHA-256 verification.')
+  }
+  await writeFile(target, bytes, { mode: 0o600 })
+  return digest
+}
+
+async function launchMacReleaseUpdate(pre: Awaited<ReturnType<typeof getUpdateStatus>>, log: (command: string, ok: boolean, output: string) => void): Promise<void> {
+  const assetUrl = pre.releaseAssetUrl
+  const assetName = pre.releaseAssetName
+  const nextVersion = pre.releaseVersion
+  const currentBundle = currentMacAppBundle()
+  if (!assetUrl || !assetName || !nextVersion || !currentBundle) throw new Error('The macOS release metadata is incomplete.')
+
+  await access(dirname(currentBundle), constants.W_OK)
+  const workDir = await mkdtemp(join(tmpdir(), 'akorith-update-'))
+  const zipPath = join(workDir, assetName)
+  const digest = await downloadReleaseAsset(assetUrl, pre.releaseAssetSize, pre.releaseAssetDigest, zipPath)
+  log(`download ${assetName}`, true, `${pre.releaseAssetSize ?? 0} bytes · ${digest}`)
+
+  const extractDir = join(workDir, 'expanded')
+  await mkdir(extractDir, { recursive: true })
+  const expanded = await runFile('/usr/bin/ditto', ['-x', '-k', zipPath, extractDir], 2 * 60_000)
+  log('verify and expand release', expanded.ok, expanded.output || 'Archive expanded.')
+  if (!expanded.ok) throw new Error('The macOS release archive could not be expanded.')
+
+  const stagedBundle = join(extractDir, 'Akorith.app')
+  if (!existsSync(stagedBundle)) throw new Error('The release archive does not contain Akorith.app.')
+  const [bundleId, bundleVersion] = await Promise.all([
+    readPlistValue(stagedBundle, 'CFBundleIdentifier'),
+    readPlistValue(stagedBundle, 'CFBundleShortVersionString')
+  ])
+  if (bundleId !== 'com.akorith.app') throw new Error('The release bundle identifier is not Akorith.')
+  if (bundleVersion !== nextVersion) throw new Error(`Release version mismatch: expected ${nextVersion}, received ${bundleVersion || 'unknown'}.`)
+  log('verify Akorith.app identity', true, `${bundleId} · ${bundleVersion}`)
+
+  const stamp = Date.now()
+  const preparedBundle = join(dirname(currentBundle), `.Akorith-update-${stamp}.app`)
+  const backupDir = join(homedir(), 'Library', 'Application Support', 'Akorith', 'Update Backups')
+  const backupBundle = join(backupDir, `Akorith-${app.getVersion()}-${stamp}.app`)
+  await mkdir(backupDir, { recursive: true })
+
+  const helper = [
+    'while /bin/kill -0 "$1" 2>/dev/null; do /bin/sleep 0.25; done',
+    'if ! /usr/bin/ditto "$2" "$4"; then exit 21; fi',
+    'if ! /bin/mv "$3" "$5"; then exit 22; fi',
+    'if /bin/mv "$4" "$3"; then',
+    '  /usr/bin/open "$3"',
+    'else',
+    '  /bin/mv "$5" "$3"',
+    '  exit 23',
+    'fi'
+  ].join('\n')
+  const child = spawn('/bin/sh', ['-c', helper, 'akorith-updater', String(process.pid), stagedBundle, currentBundle, preparedBundle, backupBundle], {
+    detached: true,
+    stdio: 'ignore'
+  })
+  child.unref()
+  log('install and relaunch Akorith', true, `Prepared ${nextVersion}; Akorith will restart.`)
+  setTimeout(() => app.quit(), 650)
+}
+
 export async function runUpdate(options: UpdateRunOptions): Promise<UpdateRunResult> {
   const logs: UpdateLogEntry[] = []
   const log = (command: string, ok: boolean, output: string): void => {
@@ -48,6 +152,20 @@ export async function runUpdate(options: UpdateRunOptions): Promise<UpdateRunRes
 
   // Re-check freshly (with a fetch) before touching anything.
   const pre = await getUpdateStatus(true)
+  if (pre.mode === 'packaged' && pre.runtimeMode === 'packaged-macos') {
+    if (!pre.hasUpdate) return { ok: true, status: pre, logs, restartRecommended: false }
+    if (!pre.canUpdateInstalledApp) {
+      return { ok: false, status: pre, logs, error: pre.warnings[0] ?? 'No compatible macOS release asset is available.', restartRecommended: false }
+    }
+    try {
+      await launchMacReleaseUpdate(pre, log)
+      return { ok: true, status: pre, logs, restartRecommended: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      log('macOS release update', false, error)
+      return { ok: false, status: pre, logs, error, restartRecommended: false }
+    }
+  }
   if (pre.mode === 'packaged' && pre.runtimeMode === 'packaged-windows') {
     if (!pre.sourceCheckoutPath || !pre.canUpdateInstalledApp) {
       return { ok: false, status: pre, logs, error: 'Packaged Windows update needs a clean Akorith source checkout.', restartRecommended: false }

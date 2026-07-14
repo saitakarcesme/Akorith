@@ -1,7 +1,7 @@
 {
   "name": "akorith",
   "productName": "Akorith",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Akorith — orchestrate AI coding agents (Claude/Codex CLIs, local Ollama) with no API keys",
   "author": "Akorith",
   "main": "./out/main/index.js",
@@ -19,6 +19,7 @@
     "verify:local-executor": "node --experimental-strip-types scripts/verify-local-executor.ts",
     "verify:controller": "tsx scripts/verify-controller.ts",
     "verify:startup-hydration": "tsx scripts/verify-startup-hydration.ts",
+    "verify:update-version": "tsx scripts/verify-update-version.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
     "doctor": "bash scripts/setup-akorith.sh --check",
