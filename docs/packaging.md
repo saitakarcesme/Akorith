@@ -105,7 +105,7 @@ The active `.github/workflows/release.yml` workflow builds **unsigned** Apple Si
 and Intel macOS artifacts (dmg+zip), plus Windows x64 (NSIS+portable):
 
 - **Manual:** Actions → "release" → Run workflow to build downloadable CI artifacts.
-- **Tag:** `git tag v0.2.0 && git push origin v0.2.0` → builds and publishes a stable
+- **Tag:** `git tag v<version> && git push origin v<version>` → builds and publishes a stable
   GitHub Release with the artifacts attached. Packaged macOS apps discover this release
   from Settings → Update and select the zip matching their architecture.
 
