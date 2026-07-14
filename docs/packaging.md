@@ -101,22 +101,15 @@ data and never deletes legacy data. See
 
 ## Release via GitHub Actions
 
-> **Activation note:** the workflow ships as **`ci/release.yml`** (a template), not
-> `.github/workflows/release.yml`, because the repo's current GitHub token lacks the
-> `workflow` scope GitHub requires to push files under `.github/workflows/`. Activate it
-> by copying `ci/release.yml` → `.github/workflows/release.yml` — easiest via the GitHub
-> **web UI** (Add file, whose session has the scope), or locally after
-> `gh auth refresh -s workflow` then commit/push.
+The active `.github/workflows/release.yml` workflow builds **unsigned** Apple Silicon
+and Intel macOS artifacts (dmg+zip), plus Windows x64 (NSIS+portable):
 
-Once activated, the workflow builds **unsigned** artifacts on `macos-latest` (dmg+zip)
-and `windows-latest` (nsis+portable):
+- **Manual:** Actions → "release" → Run workflow to build downloadable CI artifacts.
+- **Tag:** `git tag v0.2.0 && git push origin v0.2.0` → builds and publishes a stable
+  GitHub Release with the artifacts attached. Packaged macOS apps discover this release
+  from Settings → Update and select the zip matching their architecture.
 
-- **Manual:** Actions → "release" → Run workflow (optionally tick "Create a draft release").
-- **Tag:** `git tag v0.1.0 && git push origin v0.1.0` → builds + a **draft prerelease**
-  with the artifacts attached.
-
-It never publishes a public/stable release automatically — only drafts/prereleases.
-No secrets are required for unsigned builds.
+No secrets are required for unsigned builds beyond GitHub's built-in workflow token.
 
 ## Signing & notarization (future / optional)
 

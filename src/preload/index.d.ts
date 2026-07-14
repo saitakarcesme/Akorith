@@ -1847,7 +1847,7 @@ export interface GpuStatusResult {
   status: 'observed' | 'unavailable'
   reason?: string
   platform: string
-  source: 'nvidia-smi' | 'none'
+  source: 'nvidia-smi' | 'system-profiler' | 'none'
   gpus: GpuDevice[]
   ollama: GpuOllamaInfo
 }
@@ -2061,6 +2061,14 @@ export interface UpdateStatus {
   warnings: string[]
   lastCheckedAt?: number
   appVersion: string
+  releaseVersion?: string
+  releaseTag?: string
+  releaseUrl?: string
+  releasePublishedAt?: string
+  releaseAssetName?: string
+  releaseAssetUrl?: string
+  releaseAssetSize?: number
+  releaseAssetDigest?: string
 }
 
 export interface UpdateLogEntry {

@@ -77,7 +77,8 @@ CLIs resolve.
 - [ ] **Windows:** build on a Windows host (`npm run dist:win`) or via CI — a macOS host
       cannot cross-build the NSIS installer.
 - [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` or `git push origin v<version>`)
-      builds unsigned mac+win artifacts and creates a draft prerelease.
+      builds unsigned Apple Silicon/Intel macOS and Windows artifacts; version tags
+      publish a stable release used by the in-app macOS updater.
 - [ ] **Identity:** packaged menu bar / Dock / Finder say Akorith; dev menu bar says Akorith
       via `scripts/fix-dev-app-name.js`.
 - [ ] **Signing:** artifacts are unsigned until certs are configured — never faked.
@@ -87,9 +88,9 @@ CLIs resolve.
 
 - [ ] **Keep checkouts current:** Settings → Update fast-forwards a source install to
       `origin/main` (see `docs/update-system.md`). Replaces manual `git pull` on Mac + PC.
-- [ ] **Refresh the packaged macOS app:** `npm run pack:mac` then `npm run macos:refresh`
-      (old copies are MOVED to `~/Desktop/Akorith-old-apps-<stamp>/`, never deleted; user
-      data/config/db untouched).
+- [ ] **Update packaged macOS:** Settings → Update installs the latest stable GitHub
+      Release. For an unreleased local build, use `npm run pack:mac` then
+      `npm run refresh:mac` (old copies are moved aside; user data/config/db untouched).
 - [ ] **One-command bootstrap on a new machine:** `npm run setup` (macOS/Linux) or
       `pwsh scripts/setup-akorith.ps1` (Windows); `npm run doctor` for a check-only pass.
       See `docs/setup.md`.

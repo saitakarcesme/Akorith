@@ -121,16 +121,17 @@ stores secrets — it only prints the sign-in commands for the tools you use. Se
 [`docs/setup.md`](docs/setup.md).
 
 Maintainers cut releases via the GitHub Actions **release** workflow
-(`workflow_dispatch` or pushing a `v*` tag). It ships as `ci/release.yml` and is activated by
-copying it to `.github/workflows/release.yml` (one-time; needs a `workflow`-scoped token or
+(`workflow_dispatch` or pushing a `v*` tag). The active workflow lives at
+`.github/workflows/release.yml` (changing it via GitHub CLI requires a `workflow`-scoped token or
 the GitHub web UI) — see [`docs/packaging.md`](docs/packaging.md).
 
 ## Keeping machines current (in-app updates)
 
-Tired of `git pull` on every Mac and PC? Open **Settings → Update**: it checks GitHub `main`,
-shows how far behind you are, and **fast-forwards safely** (`git fetch` → `git switch main` →
-`git merge --ff-only`, with optional `npm install`/`build`). It never resets, discards local
-changes, or force-pushes. See [`docs/update-system.md`](docs/update-system.md).
+Tired of manually replacing the app? Open **Settings → Update**: packaged Macs download,
+verify, install, and relaunch the latest stable GitHub Release. Source installs check GitHub
+`main` and **fast-forward safely** (`git fetch` → `git switch main` → `git merge --ff-only`).
+The updater keeps a rollback copy and never resets or discards local source changes. See
+[`docs/update-system.md`](docs/update-system.md).
 
 ## Managing projects and chats
 

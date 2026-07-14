@@ -29,12 +29,13 @@ export interface GpuStatusResult {
   /** Why telemetry is unavailable, when it is. */
   reason?: string
   platform: NodeJS.Platform
-  source: 'nvidia-smi' | 'none'
+  source: 'nvidia-smi' | 'system-profiler' | 'none'
   gpus: GpuDevice[]
   ollama: GpuOllamaInfo
 }
 
 const NVIDIA_TIMEOUT_MS = 3_000
+const SYSTEM_PROFILER_TIMEOUT_MS = 5_000
 
 function runNvidiaSmi(): Promise<{ ok: boolean; stdout: string; missing: boolean }> {
   return new Promise((resolve) => {
@@ -75,6 +76,32 @@ function parseNvidia(stdout: string): GpuDevice[] {
     })
   }
   return devices
+}
+
+function runSystemProfiler(): Promise<{ ok: boolean; stdout: string }> {
+  return new Promise((resolve) => {
+    execFile(
+      'system_profiler',
+      ['SPDisplaysDataType', '-json'],
+      { timeout: SYSTEM_PROFILER_TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024, windowsHide: true },
+      (err, stdout) => resolve({ ok: !err, stdout: err ? '' : stdout ?? '' })
+    )
+  })
+}
+
+function parseMacDisplays(stdout: string): GpuDevice[] {
+  try {
+    const parsed = JSON.parse(stdout) as { SPDisplaysDataType?: Array<Record<string, unknown>> }
+    return (parsed.SPDisplaysDataType ?? [])
+      .map((display) => {
+        const name = [display.sppci_model, display._name]
+          .find((value) => typeof value === 'string' && value.trim())
+        return name ? { name: String(name) } : null
+      })
+      .filter((device): device is GpuDevice => device !== null)
+  } catch {
+    return []
+  }
 }
 
 function ollamaInfo(): GpuOllamaInfo {
@@ -121,9 +148,21 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
   }
 
   if (plat === 'darwin') {
+    const profiler = await runSystemProfiler()
+    const gpus = profiler.ok ? parseMacDisplays(profiler.stdout) : []
+    if (gpus.length > 0) {
+      return {
+        status: 'observed',
+        reason: 'GPU hardware is observed with system_profiler. Live utilization and temperature require privileged macOS telemetry and are intentionally left blank.',
+        platform: plat,
+        source: 'system-profiler',
+        gpus,
+        ollama
+      }
+    }
     return {
       status: 'unavailable',
-      reason: 'GPU utilization is not available without privileged telemetry on macOS. Akorith does not request elevated access or fabricate utilization.',
+      reason: 'GPU hardware could not be read with system_profiler. Akorith does not request elevated access or fabricate utilization.',
       platform: plat,
       source: 'none',
       gpus: [],
