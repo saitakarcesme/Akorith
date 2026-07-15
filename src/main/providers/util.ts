@@ -8,6 +8,8 @@ export interface RunCliOptions {
   signal?: AbortSignal
   timeoutMs?: number
   cwd?: string
+  /** Per-invocation environment overrides. Never mutates the app process env. */
+  env?: NodeJS.ProcessEnv
   /** Called once per complete stdout line, as output arrives. */
   onStdoutLine?: (line: string) => void
 }
@@ -29,7 +31,7 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       shell: process.platform === 'win32',
       windowsHide: true,
       cwd: options.cwd,
-      env: process.env
+      env: options.env ? { ...process.env, ...options.env } : process.env
     })
 
     let stdout = ''

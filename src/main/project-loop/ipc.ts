@@ -1,5 +1,6 @@
 import { dialog, ipcMain } from 'electron'
-import { mkdirSync } from 'fs'
+import { existsSync, mkdirSync, statSync } from 'fs'
+import { basename, resolve } from 'path'
 import {
   createLoop,
   getLoop,
@@ -19,6 +20,7 @@ import { runOneCycle } from './runner'
 import { kickProjectLoopAutoScheduler } from './scheduler'
 import type { BacklogItemStatus, ProjectLoopStatus } from './types'
 import { runGoalToCompletion } from './goal'
+import { isRepo } from './git'
 
 const activeGoals = new Map<string, AbortController>()
 
@@ -112,5 +114,12 @@ export function registerProjectLoopIpc(): void {
     const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
     if (res.canceled || res.filePaths.length === 0) return null
     return res.filePaths[0]
+  })
+
+  ipcMain.handle('projectLoop:inspectTarget', async (_event, input: unknown) => {
+    if (typeof input !== 'string' || input.length === 0 || input.length > 4096) throw new Error('invalid target path')
+    const path = resolve(input)
+    if (!existsSync(path) || !statSync(path).isDirectory()) throw new Error('The selected folder is not available.')
+    return { path, name: basename(path), isRepo: await isRepo(path) }
   })
 }

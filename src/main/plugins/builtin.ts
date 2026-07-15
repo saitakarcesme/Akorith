@@ -7,15 +7,15 @@ import type { PluginManifest } from './types'
 export const BUILTIN_PLUGINS: PluginManifest[] = [
   {
     id: 'opencode-agent',
-    name: 'OpenCode Agent (Gaia)',
+    name: 'OpenCode CLI',
     version: '1.0.0',
     kind: 'agent',
-    description: 'OpenCode runs as the Gaia agent terminal (between Olympus and Atlantis). Prompts route to Gaia via the bridge and its output is captured/summarized into chat. Diagnostics report the CLI version and OpenCode Go sign-in status.',
+    description: 'OpenCode runs locally behind Workspace and Goal. Its streamed events are rendered as one conversational project-editing flow.',
     status: 'planned',
     permissions: ['terminal_read', 'terminal_write', 'filesystem_read', 'git_read'],
     docsUrl: 'docs/phase-37-sidebar-chat-opencode-gaia.md',
     safetyNotes: [
-      'Gaia uses the existing PTY/bridge invariant — no new write path.',
+      'Workspace and Goal stay scoped to the selected project directory.',
       'OpenCode Go login is interactive (opencode auth login); Akorith never stores or prints tokens.'
     ],
     builtIn: true

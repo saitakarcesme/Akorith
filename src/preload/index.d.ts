@@ -1799,6 +1799,7 @@ export interface ProjectLoopApi {
   listMemories(id: string): Promise<ProjectLoopMemory[]>
   addMemory(id: string, content: string): Promise<ProjectLoopMemory>
   pickFolder(): Promise<string | null>
+  inspectTarget(path: string): Promise<{ path: string; name: string; isRepo: boolean }>
 }
 
 export type OllamaAutoConnectResult =

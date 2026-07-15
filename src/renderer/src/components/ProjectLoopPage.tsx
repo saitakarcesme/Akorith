@@ -1,36 +1,77 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ProjectLoop, ProjectLoopCommit, ProjectLoopEvent, ProjectLoopRun, ProjectRow } from '../../../preload/index.d'
-import { PauseIcon, PlayIcon, SparkIcon, StopIcon } from './icons'
-import { formatModelLabel } from '../modelLabels'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  ChatActivity,
+  ProjectLoop,
+  ProjectLoopCommit,
+  ProjectLoopEvent,
+  ProjectLoopRun,
+  ProjectRow,
+  ProviderInfo
+} from '../../../preload/index.d'
+import { FolderOpenIcon, LoopIcon, SendIcon, StopIcon } from './icons'
+import { ComposerSendButton } from './CreationPrimitives'
+import ModelPicker from './ModelPicker'
+import WorkspaceActivity from './WorkspaceActivity'
 
 interface ProjectLoopPageProps {
   active: boolean
   activeProject: ProjectRow | null
 }
 
-interface GoalModelOption {
-  id: string
-  providerId: string
-  model: string
-  label: string
+interface GoalTarget {
+  path: string
+  name: string
+  isRepo: boolean
 }
 
-function statusLabel(status: ProjectLoop['status']): string {
-  if (status === 'needs_review') return 'Needs review'
-  return status.charAt(0).toUpperCase() + status.slice(1)
+function goalActivities(events: ProjectLoopEvent[]): ChatActivity[] {
+  return events.map((event): ChatActivity => {
+    const isError = event.kind === 'error' || event.kind === 'run_failed'
+    const isCommand = event.kind === 'validation_run'
+    const isFile = event.kind === 'patch_applied' || event.kind === 'committed'
+    const isReasoning = event.kind === 'planned' || event.kind === 'patch_proposed' || event.kind === 'patch_validated'
+    return {
+      kind: isError ? 'warning' : isCommand ? 'command' : isFile ? 'file' : isReasoning ? 'reasoning' : 'status',
+      label: event.message,
+      detail: event.detail,
+      status: isError ? 'error' : event.kind === 'run_started' || event.kind === 'resumed' ? 'running' : 'complete',
+      timestamp: event.createdAt
+    }
+  })
+}
+
+function goalStep(events: ProjectLoopEvent[], completed: boolean): number {
+  if (completed) return 6
+  const kinds = new Set(events.map((event) => event.kind))
+  if (kinds.has('committed') || kinds.has('run_succeeded')) return 6
+  if (kinds.has('patch_applied') || kinds.has('validation_run')) return 5
+  if (kinds.has('patch_validated')) return 4
+  if (kinds.has('patch_proposed')) return 3
+  if (kinds.has('planned')) return 2
+  return 1
 }
 
 export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPageProps): JSX.Element {
-  const [goal, setGoal] = useState('')
-  const [models, setModels] = useState<GoalModelOption[]>([])
+  const [target, setTarget] = useState<GoalTarget | null>(null)
+  const [draft, setDraft] = useState('')
+  const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
+  const [providerId, setProviderId] = useState('')
   const [model, setModel] = useState('')
   const [loop, setLoop] = useState<ProjectLoop | null>(null)
   const [events, setEvents] = useState<ProjectLoopEvent[]>([])
   const [runs, setRuns] = useState<ProjectLoopRun[]>([])
   const [commits, setCommits] = useState<ProjectLoopCommit[]>([])
   const [running, setRunning] = useState(false)
-  const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const initialized = useRef(false)
+
+  const loadProviders = useCallback(async (): Promise<ProviderInfo[]> => {
+    const list = await window.api.chat.listProviders()
+    const executors = list.filter((provider) => provider.available.ok && provider.kind.includes('executor'))
+    setProviders(executors)
+    setProviderId((current) => executors.some((provider) => provider.id === current) ? current : executors[0]?.id ?? '')
+    return executors
+  }, [])
 
   const refresh = useCallback(async (id: string): Promise<void> => {
     const [nextLoop, nextEvents, nextRuns, nextCommits] = await Promise.all([
@@ -40,49 +81,46 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
       window.api.projectLoop.listCommits(id)
     ])
     setLoop(nextLoop)
-    setEvents(nextEvents)
+    setEvents([...nextEvents].reverse())
     setRuns(nextRuns)
     setCommits(nextCommits)
-    if (nextLoop && nextLoop.status !== 'active') setRunning(false)
+    setRunning(nextLoop?.status === 'active')
   }, [])
 
   useEffect(() => {
-    if (!active) return
-    void Promise.all([window.api.chat.listProviders(), window.api.projectLoop.list()])
-      .then(([providers, loops]) => {
-        const available = providers
-          .filter((provider) => provider.available.ok && provider.kind.includes('executor'))
-          .flatMap((provider) => (provider.models.length ? provider.models : ['default']).map((modelId) => ({
-            id: `${provider.id}::${modelId}`,
-            providerId: provider.id,
-            model: modelId,
-            label: `${provider.label} · ${formatModelLabel(modelId, provider.id)}`
-          })))
-        setModels(available)
-        setModel((current) => current || available[0]?.id || '')
-        const restored = activeProject?.path
-          ? loops.find((item) => item.localPath === activeProject.path && item.status !== 'archived') ?? null
-          : null
-        if (restored) {
-          setLoop(restored)
-          setGoal(restored.idea ?? restored.title)
-          setModel(`${restored.localModelProvider}::${restored.localModel ?? 'default'}`)
-          void refresh(restored.id)
-        } else {
-          setLoop(null)
-          setEvents([])
-          setRuns([])
-          setCommits([])
-        }
-      })
+    if (!active || initialized.current) return
+    initialized.current = true
+    void loadProviders()
       .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
-  }, [active, activeProject?.path, refresh])
+  }, [active, loadProviders])
+
+  const selectedProvider = providers?.find((provider) => provider.id === providerId)
 
   useEffect(() => {
-    if (!active || !loop || (!running && loop.status !== 'active')) return
-    const timer = window.setInterval(() => void refresh(loop.id), 1000)
+    setModel((current) => selectedProvider?.models.includes(current) ? current : selectedProvider?.models[0] ?? '')
+  }, [selectedProvider])
+
+  useEffect(() => {
+    if (!active || !loop || !running) return
+    const timer = window.setInterval(() => void refresh(loop.id), 900)
     return () => window.clearInterval(timer)
-  }, [active, loop?.id, loop?.status, running, refresh])
+  }, [active, loop?.id, running, refresh])
+
+  const chooseTarget = async (kind: 'folder' | 'repo' | 'current'): Promise<void> => {
+    setError(null)
+    try {
+      const selectedPath = kind === 'current' ? activeProject?.path ?? null : await window.api.projectLoop.pickFolder()
+      if (!selectedPath) return
+      const inspected = await window.api.projectLoop.inspectTarget(selectedPath)
+      if (kind === 'repo' && !inspected.isRepo) {
+        setError('Choose a folder that already contains a Git repository.')
+        return
+      }
+      setTarget(inspected)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }
 
   const runGoal = useCallback((id: string): void => {
     setRunning(true)
@@ -93,27 +131,46 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
       .finally(() => setRunning(false))
   }, [refresh])
 
-  const start = async (): Promise<void> => {
-    const selectedModel = models.find((item) => item.id === model)
-    if (!activeProject?.path || !goal.trim() || !selectedModel) return
+  const submit = async (): Promise<void> => {
+    const prompt = draft.trim()
+    if (!prompt || !target || !selectedProvider?.available.ok || running) return
+    setDraft('')
     setError(null)
     try {
+      if (loop) {
+        const updated = await window.api.projectLoop.update(loop.id, {
+          localModelProvider: providerId,
+          localModel: model || 'default'
+        })
+        await window.api.projectLoop.editGoal(loop.id, prompt)
+        setLoop((current) => current
+          ? {
+              ...(updated ?? current),
+              idea: prompt,
+              title: prompt.replace(/\s+/g, ' ').slice(0, 80),
+              status: 'active'
+            }
+          : current)
+        runGoal(loop.id)
+        return
+      }
       const created = await window.api.projectLoop.create({
-        title: goal.trim().replace(/\s+/g, ' ').slice(0, 80),
-        mode: 'repo_grower',
-        localPath: activeProject.path,
-        idea: goal.trim(),
+        title: prompt.replace(/\s+/g, ' ').slice(0, 80),
+        mode: target.isRepo ? 'repo_grower' : 'project_builder',
+        localPath: target.path,
+        idea: prompt,
         autonomy: 'assisted',
         safety: 'standard',
         scheduleKind: 'manual',
-        localModelProvider: selectedModel.providerId,
-        localModel: selectedModel.model,
+        localModelProvider: providerId,
+        localModel: model || 'default',
         pushEnabled: false
       })
-      await window.api.projectLoop.addBacklog(created.id, goal.trim().replace(/\s+/g, ' ').slice(0, 160), goal.trim())
+      await window.api.projectLoop.addBacklog(created.id, prompt.replace(/\s+/g, ' ').slice(0, 160), prompt)
       setLoop(created)
       runGoal(created.id)
     } catch (reason) {
+      setDraft(prompt)
       setError(reason instanceof Error ? reason.message : String(reason))
     }
   }
@@ -125,77 +182,117 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     void refresh(loop.id)
   }
 
-  const saveEdit = async (): Promise<void> => {
-    if (!loop || !goal.trim()) return
-    await window.api.projectLoop.editGoal(loop.id, goal.trim())
-    setEditing(false)
-    void refresh(loop.id)
-  }
-
-  const clear = async (): Promise<void> => {
-    if (!loop) return
-    await window.api.projectLoop.pauseGoal(loop.id)
-    await window.api.projectLoop.archive(loop.id)
+  const newGoal = async (keepTarget = true): Promise<void> => {
+    if (loop) {
+      if (running) await window.api.projectLoop.pauseGoal(loop.id)
+      await window.api.projectLoop.archive(loop.id)
+    }
     setLoop(null)
-    setGoal('')
     setEvents([])
     setRuns([])
     setCommits([])
+    setDraft('')
     setRunning(false)
+    setError(null)
+    if (!keepTarget) setTarget(null)
   }
 
-  const visibleEvents = events.slice(-8)
-  const completedSteps = events.filter((event) => ['inspected', 'planned', 'patch_proposed', 'patch_validated', 'patch_applied', 'committed'].includes(event.kind)).length
-  const step = running ? Math.min(6, Math.max(1, completedSteps + 1)) : loop?.status === 'completed' ? 6 : Math.min(6, Math.max(1, completedSteps))
-  const lastRun = runs.at(-1)
-  const summary = useMemo(() => lastRun?.summary || events.at(-1)?.message || 'Waiting to begin', [events, lastRun])
+  const activities = useMemo(() => goalActivities(events), [events])
+  const lastRun = runs[0]
+  const failed = loop?.status === 'error' || loop?.status === 'needs_review'
+  const finished = loop?.status === 'completed'
+  const canSend = Boolean(target && draft.trim() && selectedProvider?.available.ok && !running)
+  const resultText = lastRun?.summary || (failed ? lastRun?.error || loop?.error : '')
+
+  const composer = target ? (
+    <div className="composer goal-composer">
+      <div className="composer-box">
+        <textarea
+          className="composer-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }}
+          placeholder={loop ? `Add a follow-up goal for ${target.name}…` : `Describe a goal for ${target.name}…`}
+          rows={2}
+          spellCheck={false}
+        />
+        <div className="composer-controls">
+          <div className="composer-controls-left">
+            <ModelPicker
+              providers={providers}
+              providerId={providerId}
+              model={model}
+              disabled={running}
+              onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }}
+              onRefresh={() => void loadProviders()}
+            />
+            <button type="button" className="composer-chip goal-target-chip" onClick={() => void newGoal(false)}>
+              <FolderOpenIcon size={13} />{target.name}
+            </button>
+          </div>
+          {running
+            ? <ComposerSendButton stop onClick={() => void pause()}><StopIcon size={16} /></ComposerSendButton>
+            : <ComposerSendButton disabled={!canSend} onClick={() => void submit()}><SendIcon size={16} /></ComposerSendButton>}
+        </div>
+      </div>
+      <div className="context-bar">
+        <span className="context-chip"><span className="context-dot" />{running ? 'Goal running locally' : finished ? 'Goal completed' : failed ? 'Goal needs review' : 'Goal ready'}</span>
+        {loop && <button type="button" className="context-clear" onClick={() => void newGoal(true)}>New goal</button>}
+      </div>
+      <div className="composer-info">goal {target.name} · {selectedProvider?.label ?? 'model'} · local project · push off</div>
+    </div>
+  ) : null
 
   return (
     <main className="goal-page">
-      <div className="goal-page-inner">
-        <header className="goal-header">
-          <div><span>LONG-RUNNING WORK</span><h1>Goal</h1><p>Give Akorith one concrete outcome. It keeps working locally until the result is complete or needs your review.</p></div>
-          {activeProject?.path && <code>{activeProject.name}</code>}
-        </header>
-
-        {!activeProject?.path ? (
-          <div className="goal-empty"><SparkIcon size={22} /><h2>Open a project first</h2><p>Goals are always scoped to one local project folder.</p></div>
-        ) : !loop ? (
-          <section className="goal-create">
-            <label htmlFor="goal-input">What should Akorith finish?</label>
-            <textarea id="goal-input" value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Example: Add profile photo upload, verify it in Electron, and make all relevant tests pass." rows={5} />
-            <div className="goal-create-footer">
-              <label>Model · local CLI<select value={model} onChange={(event) => setModel(event.target.value)}>{models.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
-              <button type="button" className="goal-primary" disabled={!goal.trim() || !model} onClick={() => void start()}><PlayIcon size={15} />Start goal</button>
+      {!target ? (
+        <div className="goal-target-hero">
+          <div className="goal-target-inner">
+            <span className="goal-eyebrow">LONG-RUNNING WORK</span>
+            <h1>Where should Akorith work?</h1>
+            <p>Choose one local folder or Git repository. The Goal keeps working there until the outcome is complete or needs your review.</p>
+            <div className="goal-target-actions">
+              {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseTarget('current')}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
+              <button type="button" className={`ws-hero-btn ${activeProject?.path ? '' : 'is-primary'}`} onClick={() => void chooseTarget('folder')}><FolderOpenIcon size={16} />Choose folder</button>
+              <button type="button" className="ws-hero-btn" onClick={() => void chooseTarget('repo')}><LoopIcon size={16} />Choose repository</button>
             </div>
-          </section>
-        ) : (
-          <>
-            <section className={`goal-progress is-${loop.status}`}>
-              <div className="goal-progress-top">
-                <div className="goal-pulse"><span /></div>
-                <div className="goal-progress-copy"><span>{running ? 'Akorithing…' : statusLabel(loop.status)}</span>{editing ? <textarea value={goal} onChange={(event) => setGoal(event.target.value)} rows={3} /> : <strong>{loop.idea ?? loop.title}</strong>}</div>
-                <div className="goal-step"><i />Step {step} / 6</div>
-              </div>
-              <div className="goal-actions">
-                {editing ? <button type="button" onClick={() => void saveEdit()}>Save goal</button> : <button type="button" onClick={() => setEditing(true)} disabled={running}>Edit</button>}
-                {running ? <button type="button" onClick={() => void pause()}><PauseIcon size={13} />Pause</button> : loop.status !== 'completed' && <button type="button" onClick={() => runGoal(loop.id)}><PlayIcon size={13} />Resume</button>}
-                <button type="button" className="is-danger" onClick={() => void clear()}><StopIcon size={13} />Clear</button>
-              </div>
-            </section>
-
-            <section className="goal-live">
-              <div className="goal-live-head"><div><span>LIVE PROGRESS</span><h2>{summary}</h2></div><em>{commits.length} commit{commits.length === 1 ? '' : 's'} · {runs.length} attempt{runs.length === 1 ? '' : 's'}</em></div>
-              <div className="goal-event-list">
-                {visibleEvents.map((event) => <div className={`goal-event is-${event.kind}`} key={event.id}><i /><div><strong>{event.message}</strong>{event.detail && <span>{event.detail}</span>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}
-                {visibleEvents.length === 0 && <div className="goal-event is-waiting"><i /><div><strong>Preparing the first step</strong></div></div>}
-              </div>
-              {lastRun && <div className="goal-result"><span>Latest result</span><strong>{lastRun.status}</strong><em>{lastRun.filesChanged} files · {lastRun.commandsRun} checks</em>{lastRun.error && <p>{lastRun.error}</p>}</div>}
-            </section>
-          </>
-        )}
-        {error && <div className="goal-error">{error}</div>}
-      </div>
+            {error && <div className="goal-inline-error">{error}</div>}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="goal-transcript">
+            <div className="goal-transcript-col">
+              {!loop ? (
+                <div className="goal-ready-state">
+                  <span className="goal-eyebrow">{target.isRepo ? 'REPOSITORY' : 'FOLDER'} · {target.name}</span>
+                  <h1>What should Akorith finish?</h1>
+                  <p>Describe one concrete outcome below. Akorith will edit the project, verify its work, and keep a local commit history.</p>
+                </div>
+              ) : (
+                <>
+                  <article className="chat-msg user"><div className="chat-msg-text">{loop.idea ?? loop.title}</div></article>
+                  <article className={`chat-msg assistant ${failed ? 'error' : ''}`}>
+                    <WorkspaceActivity
+                      activities={activities}
+                      startedAt={lastRun?.startedAt ?? loop.createdAt}
+                      active={running}
+                      failed={failed}
+                      step={goalStep(events, Boolean(finished))}
+                    />
+                    {!running && resultText && <div className="chat-msg-text goal-result-copy">{resultText}</div>}
+                    {!running && (finished || commits.length > 0) && (
+                      <div className="chat-msg-meta"><span>{commits.length} local commit{commits.length === 1 ? '' : 's'} · {lastRun?.filesChanged ?? 0} changed files · push off</span></div>
+                    )}
+                  </article>
+                </>
+              )}
+              {error && <div className="goal-inline-error">{error}</div>}
+            </div>
+          </div>
+          <div className="composer-dock goal-composer-dock">{composer}</div>
+        </>
+      )}
     </main>
   )
 }

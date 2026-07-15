@@ -45,7 +45,7 @@ assert(pkg.build?.nsis?.uninstallerIcon === 'build/icon.ico', 'NSIS uninstaller 
 assert(pkg.build?.nsis?.installerHeaderIcon === 'build/icon.ico', 'NSIS header icon is configured')
 assert(existsSync(join(root, 'build/icon.ico')), 'build/icon.ico exists')
 assert(main.includes("app.setAppUserModelId(AKORITH_APP_ID)") && main.indexOf('app.setAppUserModelId') < main.indexOf('createWindow()'), 'main sets AppUserModelID before BrowserWindow creation')
-assert(main.includes("['build', 'icon.ico']") && main.includes('...(icon ? { icon } : {})'), 'BrowserWindow icon resolves to build/icon.ico on Windows')
+assert(main.includes("join(base, 'build', 'icon.ico')") && main.includes('...(icon ? { icon } : {})'), 'BrowserWindow icon resolves to build/icon.ico on Windows')
 assert(refresh.includes('$AppId = \'com.akorith.app\'') && refresh.includes('$AppName = \'Akorith\''), 'refresh script uses Akorith app id/name')
 assert(refresh.includes('Akorith.exe') && refresh.includes('Electron.lnk'), 'refresh script handles installed exe and stale Electron shortcuts')
 assert(updateRunner.includes('refresh-windows-app.ps1'), 'update runner launches Windows refresh script for packaged updates')

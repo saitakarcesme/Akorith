@@ -432,16 +432,20 @@ export default function ChatPanel({
         <>
           <div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}>
             <div className="chat-messages-col">
-              {messages.map((message) => (
+              {messages.map((message) => {
+                const activityOwnsError = message.status === 'error' && (message.activities ?? []).some((activity) => activity.status === 'error')
+                const showAssistantText = message.status === 'streaming' ? Boolean(message.text) : !activityOwnsError
+                return (
                 <article key={message.id} className={`chat-msg ${message.role} ${message.status}`}>
                   {message.images?.length ? <div className="chat-image-strip">{message.images.map((image, index) => <img key={index} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} />)}</div> : null}
                   {message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
-                  {message.role === 'assistant' && message.status === 'streaming' && !message.text ? null : message.role === 'assistant' ? (
+                  {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant' ? (
                     <div className="chat-msg-text">{splitFences(message.text).map((segment, index) => segment.type === 'code' ? <div className="chat-code" key={index}><div className="chat-code-header"><span>{segment.lang ?? 'code'}</span>{copyButton(segment.content, `${message.id}-${index}`)}</div><pre>{segment.content}</pre></div> : renderProse(segment.content, `${message.id}-${index}`))}</div>
                   ) : <div className="chat-msg-text">{message.text}</div>}
-                  {message.role === 'assistant' && message.status !== 'streaming' && message.text && <div className="chat-msg-meta"><span>{message.meta ? `${message.meta.provider} · ${formatModelLabel(message.meta.model, message.meta.provider)}${message.meta.usage && usageLine(message.meta.usage) ? ` · ${usageLine(message.meta.usage)}` : ''}` : message.status === 'error' ? 'Task stopped' : ''}</span>{copyButton(message.text, `${message.id}-all`)}</div>}
+                  {message.role === 'assistant' && showAssistantText && message.text && <div className="chat-msg-meta"><span>{message.meta ? `${message.meta.provider} · ${formatModelLabel(message.meta.model, message.meta.provider)}${message.meta.usage && usageLine(message.meta.usage) ? ` · ${usageLine(message.meta.usage)}` : ''}` : message.status === 'error' ? 'Task stopped' : ''}</span>{copyButton(message.text, `${message.id}-all`)}</div>}
                 </article>
-              ))}
+                )
+              })}
             </div>
           </div>
           <div className="composer-dock">{composer}</div>

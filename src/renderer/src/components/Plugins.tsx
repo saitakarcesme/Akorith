@@ -5,7 +5,7 @@ import browserLogo from '../assets/plugin-logos/browser.png'
 import chromaLogo from '../assets/plugin-logos/chroma.ico'
 import githubLogo from '../assets/plugin-logos/github.png'
 import ollamaLogo from '../assets/plugin-logos/ollama.png'
-import opencodeLogo from '../assets/plugin-logos/opencode.png'
+import opencodeLogo from '../assets/plugin-logos/opencode-square.svg'
 
 type PluginTab = 'plugins' | 'apps' | 'mcps'
 
@@ -34,7 +34,7 @@ const PLUGIN_LOGOS: Record<string, string> = {
 }
 
 function conciseDescription(plugin: PluginInfo): string {
-  if (plugin.id === 'opencode-agent') return 'Run OpenCode as the Gaia coding agent'
+  if (plugin.id === 'opencode-agent') return 'Run OpenCode locally for Workspace and Goal tasks'
   if (plugin.id === 'github-workbench') return 'Triage repositories, pull requests, issues, and checks'
   if (plugin.id === 'remote-ollama-telemetry') return 'Read GPU and runtime telemetry from a connected computer'
   if (plugin.id === 'hermes-memory') return 'Share durable memory and reusable skills across projects'

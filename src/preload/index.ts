@@ -393,7 +393,8 @@ const projectLoop = Object.freeze({
     ipcRenderer.invoke('projectLoop:setBacklogStatus', itemId, status),
   listMemories: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listMemories', id),
   addMemory: (id: string, content: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:addMemory', id, content),
-  pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder')
+  pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder'),
+  inspectTarget: (path: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:inspectTarget', path)
 })
 
 // Phase 50: Companions — long-memory local personalities (no actions).

@@ -26,8 +26,22 @@ export class ClaudeProvider implements Provider {
   async isAvailable(): Promise<ProviderAvailability> {
     try {
       const res = await runCli('claude', ['--version'], { timeoutMs: 15_000 })
-      if (res.code === 0) return { ok: true }
-      return { ok: false, reason: `claude CLI exited with code ${res.code}` }
+      if (res.code !== 0) return { ok: false, reason: `claude CLI exited with code ${res.code}` }
+
+      // A successful --version only proves that the binary exists. Claude can
+      // still fail every Goal immediately when its OAuth session has expired.
+      // Surface that state before the user starts long-running work.
+      const auth = await runCli('claude', ['auth', 'status', '--json'], { timeoutMs: 15_000 })
+      try {
+        const status = JSON.parse(auth.stdout || auth.stderr) as { loggedIn?: boolean }
+        if (status.loggedIn === false) {
+          return { ok: false, reason: 'Claude login expired. Run `claude auth login` in Terminal.' }
+        }
+      } catch {
+        // Older Claude CLIs may not support the JSON auth command. The binary
+        // check remains a useful compatibility fallback for those versions.
+      }
+      return { ok: true }
     } catch {
       return { ok: false, reason: 'claude CLI not found on PATH' }
     }
