@@ -42,6 +42,7 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     // 2) Choose the next objective.
     const chosen = await chooseObjective(loop, ctx)
     logEvent(loopId, 'planned', `Objective (${chosen.source}): ${chosen.objective.slice(0, 160)}`, chosen.objective, run.id)
+    logEvent(loopId, 'execution_started', `Executing cycle #${run.runIndex}`, chosen.objective, run.id)
 
     // Installed coding CLIs edit the project directly. Their protocol events are
     // normalized into the same durable Goal timeline used by the local executor.

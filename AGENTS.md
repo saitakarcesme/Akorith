@@ -6,8 +6,8 @@ agents **without any API keys**: the center planning chat talks to the user's ow
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
 provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 27 (Local Executor Loop:
-Ollama/local models can execute structured, validated workspace patch attempts).
+with electron-vite, in strict numbered phases — currently through Phase 57 (durable Goal Cycle:
+understand, plan, execute, analyze, and replan until evidence satisfies the complete Goal).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -26,7 +26,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 24 Loop Completion ·
 25 Test Lab Rebuild ·
 26 Settings Center ·
-**27 Local Executor Loop** — all done.
+**27 Local Executor Loop** · 28–56 product, UI, update, agent, and concurrent-loop phases
+(see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -1510,6 +1511,34 @@ valid patch acceptance, failed-validation no-commit rollback, no-op no-commit, a
 commits. This is also the minimal Test Lab connection for the next phase: Loop sessions now have
 separate planner/executor/critic model slots, so Test Lab benchmark winners can later be recommended
 as the executor model without changing the core loop schema.
+
+### Phase 57: Durable Goal Cycle + Chat Isolation
+
+Loop is task-agnostic rather than commit-driven. At start, `goal-cycle.ts` converts the request into
+a bounded Goal contract: task kind, deliverables, acceptance criteria, constraints, and the first
+objective. Each durable cycle then follows **Understand -> Plan -> Execute -> Analyze -> Replan**.
+`goal.ts` marks a Goal complete only when the analysis returns concrete evidence, no remaining work,
+and sufficient confidence; a single commit, command, or partial artifact can never complete the
+whole Goal. Remaining work updates the open backlog objective and routes the next cycle back to Plan.
+Three stalled cycles or an explicit blocker transitions to `needs_review`. The existing per-loop
+AbortController map keeps multiple Goals concurrent, independently pausable, and resumable.
+
+The renderer replaces the dense fleet/event board with a restrained five-state flow diagram,
+compact concurrent Goal tabs, a definition-of-done panel, and four bounded evidence checkpoints.
+The selected folder remains the durable boundary for code, research inputs, PDFs/DOCX/Markdown,
+generated artifacts, and local Git checkpoints; push remains off.
+
+General Chat and Workspace rendering are explicitly separate. Only Workspace assistant turns
+receive `WorkspaceActivity`, duration, and Step UI. Active requests are keyed by session id and
+their message buffers are cached per session, so a Stop control cannot leak into another chat or
+project; returning to the actual running session restores its control. The Step chip is fixed over
+the composer and exposes all six Workspace steps on hover/focus. Running labels animate alongside
+their icons, while explanatory paragraphs remain stable, readable text. Fenced code uses the final
+theme-aware code surface.
+
+Verify with `npm run verify:goal-cycle`, `npm run verify:project-loop`, `npm run typecheck`, and
+`npm run build`. Keep Goal-completion analysis evidence-based, never infer completion from activity,
+and never merge per-session request state back into one global busy flag.
 
 ## Conventions
 

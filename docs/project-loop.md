@@ -1,7 +1,7 @@
-# Loop — autonomous local project builder
+# Loop — durable local Goal cycle
 
-> **Build with Loop.** Give Akorith a project idea, a local repo, or a GitHub URL, and local
-> models grow it over time with safe, validated commits.
+> Give Akorith one complete outcome. It understands the Goal, plans one verifiable action,
+> executes locally, analyzes evidence, and replans until the whole outcome is complete.
 
 ## Modes
 
@@ -19,16 +19,18 @@ commit/push controls, validation commands, and a compact summary of what will ru
 scrolls inside the modal on smaller windows, Escape closes it when safe, and successful
 creation selects the new loop detail view.
 
-## How one cycle works (`runOneCycle`)
+## How the Goal cycle works (`runGoalToCompletion`)
 
-1. **Inspect** the project (read-only, bounded file tree + key files).
-2. **Plan** the next objective — an open backlog item, else the idea, else the local model.
-3. **Patch** — the local model returns a structured `workspace_patch` (files + validation commands).
-4. **Validate + apply** via the existing local-executor: paths are contained to the project root,
-   commands run only from an allowlist, the change is scored, and non-commit-worthy attempts are
-   rolled back.
-5. **Commit** the meaningful change locally (never pushes).
-6. **Record** a run-ledger row, an event-log trail, and a commit-ledger row; advance the backlog.
+1. **Understand** the whole outcome as deliverables, acceptance criteria, constraints, and a first
+   objective.
+2. **Plan** one bounded, inspectable action using the current workspace and prior evidence.
+3. **Execute** with the selected installed CLI or the guarded local structured executor.
+4. **Analyze** the entire Goal contract against files, commands, artifacts, and validation results.
+5. When evidence is incomplete, **Replan** the largest remaining gap and return to Plan. When every
+   criterion is satisfied, emit `goal_completed` and stop.
+
+A commit, successful command, or partial artifact is never sufficient by itself. Three consecutive
+cycles without material progress pause for review instead of looping forever.
 
 ## Local-first
 
@@ -56,5 +58,6 @@ tables are left readable.
 
 ## Verify
 
+`npm run verify:goal-cycle` (Goal parsing + evidence completion gates),
 `npm run verify:project-loop` (real git in a temp repo + read-only inspection; no Ollama needed)
 and `npm run verify:local-runtime` (JSON + safety primitives).

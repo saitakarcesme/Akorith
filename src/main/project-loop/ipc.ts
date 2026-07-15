@@ -86,7 +86,13 @@ export function registerProjectLoopIpc(): void {
   ipcMain.handle('projectLoop:editGoal', (_e, id: string, goal: string) => {
     if (typeof goal !== 'string' || !goal.trim() || goal.length > 20_000) throw new Error('invalid goal')
     const clean = goal.trim()
-    const loop = updateLoop(id, { idea: clean, title: clean.replace(/\s+/g, ' ').slice(0, 80) })
+    const loop = updateLoop(id, {
+      idea: clean,
+      title: clean.replace(/\s+/g, ' ').slice(0, 80),
+      roadmapSummary: undefined,
+      memorySummary: undefined,
+      error: undefined
+    })
     const current = listBacklog(id).find((item) => item.status === 'open' || item.status === 'in_progress')
     if (current) updateBacklogItem(current.id, clean.replace(/\s+/g, ' ').slice(0, 160), clean)
     else addBacklogItem({ loopId: id, title: clean.replace(/\s+/g, ' ').slice(0, 160), detail: clean })

@@ -15,6 +15,7 @@ import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
 import WorkspaceActivity, { workspaceActivityStep } from './WorkspaceActivity'
+import WorkspaceStepDock from './WorkspaceStepDock'
 
 interface ChatMessage {
   id: string
@@ -141,7 +142,7 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [attachedImages, setAttachedImages] = useState<ComposerImage[]>([])
-  const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
+  const [activeRequests, setActiveRequests] = useState<Record<string, string>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null)
@@ -157,8 +158,21 @@ export default function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const activeSessionRef = useRef<string | null>(null)
+  const messagesRef = useRef<ChatMessage[]>([])
+  const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({})
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
+
+  const setSessionMessages = (sessionId: string, updater: (messages: ChatMessage[]) => ChatMessage[]): void => {
+    const base = sessionMessagesRef.current[sessionId] ?? (activeSessionRef.current === sessionId ? messagesRef.current : [])
+    const next = updater(base)
+    sessionMessagesRef.current[sessionId] = next
+    if (activeSessionRef.current === sessionId) {
+      messagesRef.current = next
+      setMessages(next)
+    }
+  }
 
   const loadProviders = useCallback(async (): Promise<void> => {
     try {
@@ -208,20 +222,31 @@ export default function ChatPanel({
 
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
-    if (historySel.sessionId && (pendingSessions?.has(historySel.sessionId) || (busyRequestId && historySel.sessionId === activeSessionId))) return
+    if (activeSessionRef.current) sessionMessagesRef.current[activeSessionRef.current] = messagesRef.current
     nearBottomRef.current = true
     setConfirmingClear(false)
     if (!historySel.sessionId) {
       setMessages([])
+      messagesRef.current = []
       setActiveSessionId(null)
+      activeSessionRef.current = null
       onActiveSession(null)
       setContextInfo(null)
       if (historySel.providerId) setProviderId(historySel.providerId)
       return
     }
+    if (pendingSessions?.has(historySel.sessionId) || activeRequests[historySel.sessionId]) {
+      const cached = sessionMessagesRef.current[historySel.sessionId] ?? []
+      setMessages(cached)
+      messagesRef.current = cached
+      setActiveSessionId(historySel.sessionId)
+      activeSessionRef.current = historySel.sessionId
+      onActiveSession(historySel.sessionId)
+      return
+    }
     void window.api.history.messages(historySel.sessionId).then((data) => {
       if (!data) return
-      setMessages(data.messages.map((message) => ({
+      const loaded: ChatMessage[] = data.messages.map((message) => ({
         id: message.id,
         role: message.role,
         text: message.role === 'assistant' && message.providerId === 'opencode'
@@ -229,13 +254,17 @@ export default function ChatPanel({
           : message.content,
         status: 'done',
         meta: message.role === 'assistant' ? { provider: message.providerId, model: message.model ?? 'default' } : undefined
-      })))
+      }))
+      sessionMessagesRef.current[data.session.id] = loaded
+      messagesRef.current = loaded
+      setMessages(loaded)
       setActiveSessionId(data.session.id)
+      activeSessionRef.current = data.session.id
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
       void refreshContext(data.session.id)
     })
-  }, [historySel?.nonce, mode])
+  }, [historySel?.nonce, mode, activeRequests])
 
   const selected = providers?.find((provider) => provider.id === providerId)
 
@@ -270,6 +299,7 @@ export default function ChatPanel({
     if (activeSessionId) return activeSessionId
     const session = await window.api.history.create(providerId, prompt.replace(/\s+/g, ' ').slice(0, 64), hasProject ? activeProject!.id : null)
     setActiveSessionId(session.id)
+    activeSessionRef.current = session.id
     onActiveSession(session.id)
     onHistoryChange()
     return session.id
@@ -277,7 +307,8 @@ export default function ChatPanel({
 
   const sendPrompt = async (): Promise<void> => {
     const prompt = draft.trim()
-    if (!prompt || !selected?.available.ok || busyRequestId || (isWorkspace && !hasProject)) return
+    const currentRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
+    if (!prompt || !selected?.available.ok || currentRequestId || (isWorkspace && !hasProject)) return
     const requestId = newId()
     const assistantId = newId()
     const images = attachedImages.map(({ previewUrl: _previewUrl, ...image }) => image)
@@ -285,22 +316,25 @@ export default function ChatPanel({
     setDraft('')
     setAttachedImages([])
     setSuggestion(null)
-    setBusyRequestId(requestId)
+    setActiveRequests((current) => ({ ...current, [sessionId]: requestId }))
     onPendingChange?.(sessionId, true)
-    setMessages((current) => [
+    const startedAt = Date.now()
+    setSessionMessages(sessionId, (current) => [
       ...current,
       { id: newId(), role: 'user', text: prompt, status: 'done', images },
-      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: [], startedAt: Date.now() }
+      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: isWorkspace ? [] : undefined, startedAt: isWorkspace ? startedAt : undefined }
     ])
 
     const offToken = window.api.chat.onToken(requestId, (token) => {
-      setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, text: message.text + token } : message))
+      setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId ? { ...message, text: message.text + token } : message))
     })
-    const offActivity = window.api.chat.onActivity(requestId, (activity) => {
-      setMessages((current) => current.map((message) => message.id === assistantId
-        ? { ...message, activities: [...(message.activities ?? []), activity].slice(-30) }
-        : message))
-    })
+    const offActivity = isWorkspace
+      ? window.api.chat.onActivity(requestId, (activity) => {
+          setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
+            ? { ...message, activities: [...(message.activities ?? []), activity].slice(-30) }
+            : message))
+        })
+      : () => {}
 
     try {
       const response = await window.api.chat.send({
@@ -313,7 +347,7 @@ export default function ChatPanel({
         workspaceContext: hasProject ? { projectName: activeProject!.name, projectPath: activeProject!.path! } : undefined,
         images
       })
-      setMessages((current) => current.map((message) => message.id === assistantId
+      setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
         ? response.ok
           ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: providerId, model: response.result.model, usage: response.result.usage } }
           : { ...message, text: response.error, status: 'error', endedAt: Date.now() }
@@ -323,19 +357,25 @@ export default function ChatPanel({
         void refreshContext(sessionId)
       }
     } catch (err) {
-      setMessages((current) => current.map((message) => message.id === assistantId
+      setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
         ? { ...message, text: err instanceof Error ? err.message : String(err), status: 'error', endedAt: Date.now() }
         : message))
     } finally {
       offToken()
       offActivity()
-      setBusyRequestId(null)
+      setActiveRequests((current) => {
+        if (current[sessionId] !== requestId) return current
+        const next = { ...current }
+        delete next[sessionId]
+        return next
+      })
       onPendingChange?.(sessionId, false)
     }
   }
 
   const cancel = (): void => {
-    if (busyRequestId) window.api.chat.cancel(busyRequestId)
+    const requestId = activeSessionId ? activeRequests[activeSessionId] : undefined
+    if (requestId) window.api.chat.cancel(requestId)
   }
 
   const clearContext = async (): Promise<void> => {
@@ -346,6 +386,8 @@ export default function ChatPanel({
     }
     await window.api.history.clearMessages(activeSessionId)
     setMessages([])
+    messagesRef.current = []
+    sessionMessagesRef.current[activeSessionId] = []
     setConfirmingClear(false)
     void refreshContext(activeSessionId)
     onHistoryChange()
@@ -384,6 +426,7 @@ export default function ChatPanel({
   const latestWorkspaceStep = latestWorkspaceRun
     ? workspaceActivityStep(latestWorkspaceRun.activities ?? [], latestWorkspaceRun.status === 'streaming', latestWorkspaceRun.status === 'error')
     : null
+  const busyRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
   const canSend = Boolean(draft.trim() && selected?.available.ok && !busyRequestId && (!isWorkspace || hasProject))
   const contextCount = contextInfo?.totalMessages ?? 0
   const memoryLabel = contextCount > 0 ? `Memory: ${contextCount} messages` : hasProject ? 'Project memory on' : 'Session memory on'
@@ -445,9 +488,9 @@ export default function ChatPanel({
                 return (
                 <article key={message.id} className={`chat-msg ${message.role} ${message.status}`}>
                   {message.images?.length ? <div className="chat-image-strip">{message.images.map((image, index) => <img key={index} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} />)}</div> : null}
-                  {message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} endedAt={message.endedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
+                  {isWorkspace && message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} endedAt={message.endedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
                   {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant' ? (
-                    <div className="chat-msg-text">{splitFences(message.text).map((segment, index) => segment.type === 'code' ? <div className="chat-code" key={index}><div className="chat-code-header"><span>{segment.lang ?? 'code'}</span>{copyButton(segment.content, `${message.id}-${index}`)}</div><pre>{segment.content}</pre></div> : renderProse(segment.content, `${message.id}-${index}`))}</div>
+                    <div className="chat-msg-text">{splitFences(message.text).map((segment, index) => segment.type === 'code' ? <div className="chat-code" key={index}><div className="chat-code-header"><span className="chat-code-language"><i />{segment.lang ?? 'code'}</span>{copyButton(segment.content, `${message.id}-${index}`)}</div><pre>{segment.content}</pre></div> : renderProse(segment.content, `${message.id}-${index}`))}</div>
                   ) : <div className="chat-msg-text">{message.text}</div>}
                   {message.role === 'assistant' && showAssistantText && message.text && <div className="chat-msg-meta"><span>{message.meta ? `${message.meta.provider} · ${formatModelLabel(message.meta.model, message.meta.provider)}${message.meta.usage && usageLine(message.meta.usage) ? ` · ${usageLine(message.meta.usage)}` : ''}` : message.status === 'error' ? 'Task stopped' : ''}</span>{copyButton(message.text, `${message.id}-all`)}</div>}
                 </article>
@@ -457,9 +500,7 @@ export default function ChatPanel({
           </div>
           <div className="composer-dock">
             {latestWorkspaceStep !== null && (
-              <div className={`workspace-step-dock ${latestWorkspaceRun?.status === 'streaming' ? 'is-active' : ''}`} aria-label={`Workspace step ${latestWorkspaceStep} of 6`}>
-                <span className="workspace-step"><i />Step {latestWorkspaceStep} / 6</span>
-              </div>
+              <WorkspaceStepDock step={latestWorkspaceStep} active={latestWorkspaceRun?.status === 'streaming'} />
             )}
             {composer}
           </div>

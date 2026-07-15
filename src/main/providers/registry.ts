@@ -112,7 +112,7 @@ export async function sendMetaPrompt(
   return provider.send(prompt, { model, signal }, () => {})
 }
 
-/** Headless project execution for Goal. Uses the selected installed CLI in the trusted cwd. */
+/** Headless Goal execution. Uses the selected installed CLI in the trusted workspace. */
 export async function sendWorkspacePrompt(
   providerId: string,
   model: string | undefined,
@@ -125,7 +125,7 @@ export async function sendWorkspacePrompt(
   if (model !== undefined && !VALID_MODEL.test(model)) throw new Error('invalid model')
   const provider = buildProviders().get(providerId)
   if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
-  const instruction = `You are executing an Akorith Goal. Work directly in the current project. Inspect files, make the requested changes, run relevant checks, and finish with a concise summary. Do not create a git commit or push; Akorith commits after verification. Never reveal secrets or only describe a solution.\n\nGoal:\n${prompt}`
+  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\nCycle objective:\n${prompt}`
   return provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
 }
 

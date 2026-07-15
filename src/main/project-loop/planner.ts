@@ -4,9 +4,9 @@ import { memoryContextBlock } from './memory'
 import { renderProjectContext, type ProjectContext } from './context'
 import type { ProjectLoop } from './types'
 
-// Phase 48: the planner chooses the next objective for a run. It prefers an open
-// backlog item; otherwise it asks the local model for one small, useful next
-// objective grounded in the project context + loop memory.
+// The planner chooses one bounded objective for the current Goal cycle. A Goal
+// may produce code, research, documents, reports, media manifests, or another
+// inspectable artifact; the selected workspace remains the safety boundary.
 
 export interface ChosenObjective {
   objective: string
@@ -43,7 +43,7 @@ export async function chooseObjective(loop: ProjectLoop, ctx: ProjectContext): P
 
   // 3) Ask the local model for one small next objective.
   const memory = memoryContextBlock(loop.id)
-  const prompt = `You are planning the next small improvement for a software project Akorith is growing with local models.
+  const prompt = `You are planning the next verifiable action for an Akorith Goal running with local models. The Goal may involve software, research, a PDF/DOCX/Markdown deliverable, analysis, automation, or creative artifacts.
 
 Project title: ${loop.title}
 Mode: ${loop.mode}
@@ -51,7 +51,7 @@ ${loop.idea ? `Original idea: ${loop.idea}\n` : ''}${memory ? `Project memory:\n
 Project context:
 ${renderProjectContext(ctx)}
 
-Choose ONE small, concrete, useful next objective for the next commit. Keep it achievable in a single patch.`
+Choose ONE small, concrete, useful next objective. Keep it achievable in one cycle, grounded in the current files, and phrased so its result can be inspected or validated. Do not claim the whole Goal is complete here.`
 
   const res = await sendStructured<ModelObjective>(prompt, {
     model: loop.localModel,

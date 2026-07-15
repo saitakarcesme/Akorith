@@ -30,24 +30,24 @@ function activityExplanation(item: ChatActivity): string {
   }
   if (item.kind === 'command') {
     return item.status === 'complete'
-      ? 'The project-scoped command finished and its result was folded into the next decision.'
-      : 'Runs this command inside the selected project to inspect or validate the requested changes.'
+      ? 'The command finished inside the selected project. Akorith keeps the result as evidence and uses it to decide whether another inspection, edit, or validation step is still necessary.'
+      : 'This command is running only inside the selected project to inspect its current state or validate the requested result before any conclusion is reported.'
   }
   if (item.kind === 'file') {
     return item.status === 'complete'
-      ? 'The relevant project file was inspected or updated and is ready for the next step.'
-      : 'Reads or updates this file inside the selected project while preserving the surrounding code.'
+      ? 'The relevant project file was inspected or updated. Its surrounding structure remains part of the context carried into the next project decision.'
+      : 'Akorith is reading or updating this file inside the project boundary while preserving the surrounding code and the intent of the request.'
   }
   if (item.kind === 'reasoning' || item.kind === 'plan') {
-    return 'Connects the request to the current repository state and chooses the smallest useful next change.'
+    return 'The selected model is connecting the request to the current repository state, resolving dependencies between changes, and choosing the smallest useful action that can be checked afterward.'
   }
   if (/preparing|starting/i.test(item.label)) {
-    return 'Loads the selected folder, project context and CLI model before any project change is attempted.'
+    return 'Akorith is loading the selected folder, its bounded project context, conversation memory, and the chosen local CLI before any project change is attempted.'
   }
   if (/finished|complete/i.test(item.label) || item.status === 'complete') {
-    return 'Marks this unit of work as complete and carries its result into the final response.'
+    return 'This unit of work has finished. Its files, command results, and model explanation are now carried into the final response and the continuing project memory.'
   }
-  return 'Keeps the project task moving while Akorith watches the selected model and records meaningful progress here.'
+  return 'Akorith is keeping the project task moving while translating the selected model’s raw CLI activity into a concise, durable explanation of what is happening and why it matters.'
 }
 
 export function workspaceActivityStep(activities: ChatActivity[], active: boolean, failed = false): number {

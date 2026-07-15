@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ProjectLoop,
   ProjectLoopCommit,
@@ -10,7 +10,7 @@ import type {
 } from '../../../preload/index.d'
 import { FolderOpenIcon, LoopIcon, PlusIcon, SendIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
-import LoopPipeline from './LoopPipeline'
+import LoopPipeline, { type LoopCyclePhase } from './LoopPipeline'
 import ModelPicker from './ModelPicker'
 
 interface ProjectLoopPageProps {
@@ -24,6 +24,12 @@ interface LoopTarget {
   isRepo: boolean
 }
 
+interface GoalContract {
+  summary?: string
+  deliverables?: string[]
+  acceptanceCriteria?: string[]
+}
+
 function projectName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 }
@@ -31,7 +37,7 @@ function projectName(path: string): string {
 function statusLabel(status: ProjectLoopStatus, running: boolean): string {
   if (running) return 'Running'
   if (status === 'needs_review') return 'Needs review'
-  if (status === 'completed') return 'Completed'
+  if (status === 'completed') return 'Goal reached'
   if (status === 'paused') return 'Paused'
   if (status === 'error') return 'Blocked'
   return 'Ready'
@@ -46,35 +52,45 @@ function elapsedLabel(ms: number): string {
   return `${seconds}s`
 }
 
-function loopStep(events: ProjectLoopEvent[], status: ProjectLoopStatus): number {
-  if (status === 'completed') return 6
-  const kinds = new Set(events.map((event) => event.kind))
-  if (kinds.has('committed') || kinds.has('run_succeeded')) return 6
-  if (kinds.has('validation_run') || kinds.has('patch_applied')) return 5
-  if (kinds.has('patch_validated')) return 4
-  if (kinds.has('patch_proposed')) return 3
-  if (kinds.has('planned')) return 2
-  return 1
+function phaseFor(events: ProjectLoopEvent[], status: ProjectLoopStatus): LoopCyclePhase {
+  if (status === 'completed') return 'analyze'
+  const latest = [...events].reverse().find((event) => [
+    'goal_understood', 'inspected', 'planned', 'run_started', 'execution_started', 'patch_proposed', 'patch_validated',
+    'patch_applied', 'validation_run', 'committed', 'run_succeeded', 'analysis_started', 'analyzed', 'replanned'
+  ].includes(event.kind))
+  if (!latest || latest.kind === 'goal_understood') return 'understand'
+  if (latest.kind === 'inspected' || latest.kind === 'planned' || latest.kind === 'run_started') return 'plan'
+  if (latest.kind === 'analysis_started' || latest.kind === 'analyzed') return 'analyze'
+  if (latest.kind === 'replanned') return 'replan'
+  return 'execute'
 }
 
-function estimatedLoopStep(loop: ProjectLoop, running: boolean): number {
-  if (loop.status === 'completed' || loop.commitCount > 0) return 6
-  if (loop.status === 'needs_review' || loop.status === 'error') return 4
-  if (running) return 3
-  if (loop.runCount > 0) return 2
-  return 1
+function phaseCopy(phase: LoopCyclePhase, running: boolean): { title: string; body: string } {
+  if (phase === 'understand') return { title: 'Understanding the whole Goal', body: 'Akorith is turning the request into concrete deliverables, boundaries, and evidence that can prove the complete outcome is ready.' }
+  if (phase === 'plan') return { title: 'Planning the next bounded action', body: 'The selected model is choosing one inspectable step from the current workspace instead of attempting an unreviewable all-at-once result.' }
+  if (phase === 'execute') return { title: running ? 'Executing the current plan' : 'Execution checkpointed', body: 'Work stays inside the selected folder. Files, commands, generated artifacts, and local Git checkpoints become evidence for the next review.' }
+  if (phase === 'analyze') return { title: 'Analyzing completion evidence', body: 'The latest result is being compared with every acceptance criterion. A partial artifact or a successful command alone cannot finish the Goal.' }
+  return { title: 'Replanning from the remaining gap', body: 'The analysis selected the most important unmet criterion and routes the next cycle back through Plan without losing prior progress.' }
 }
 
-function eventExplanation(event: ProjectLoopEvent): string {
-  if (event.detail) return event.detail
-  if (event.kind === 'planned') return 'The loop translated the outcome into a concrete project change.'
-  if (event.kind === 'patch_proposed') return 'A candidate patch was prepared inside the selected repository boundary.'
-  if (event.kind === 'patch_validated') return 'The proposed edits passed the safety and structure review.'
-  if (event.kind === 'patch_applied') return 'The approved project changes were written to the working tree.'
-  if (event.kind === 'validation_run') return 'Project checks were run before keeping a local checkpoint.'
-  if (event.kind === 'committed') return 'A local Git checkpoint preserves this verified unit of work; nothing was pushed.'
-  if (event.kind === 'run_failed' || event.kind === 'error') return 'The loop stopped here and is waiting for a model change, a clearer goal, or manual review.'
-  return 'This signal advances the long-running outcome while keeping the work local and observable.'
+function parseContract(raw?: string): GoalContract | null {
+  if (!raw?.startsWith('{')) return null
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>
+    return {
+      summary: typeof value.summary === 'string' ? value.summary : undefined,
+      deliverables: Array.isArray(value.deliverables) ? value.deliverables.filter((item): item is string => typeof item === 'string').slice(0, 4) : undefined,
+      acceptanceCriteria: Array.isArray(value.acceptanceCriteria) ? value.acceptanceCriteria.filter((item): item is string => typeof item === 'string').slice(0, 4) : undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+function usefulEvents(events: ProjectLoopEvent[]): ProjectLoopEvent[] {
+  return [...events].reverse().filter((event) => [
+    'goal_understood', 'planned', 'execution_started', 'committed', 'analyzed', 'replanned', 'goal_completed', 'error', 'run_failed', 'note'
+  ].includes(event.kind)).slice(0, 4)
 }
 
 export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPageProps): JSX.Element {
@@ -101,10 +117,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   }, [])
 
   const refreshFleet = useCallback(async (): Promise<void> => {
-    const [stored, activeIds] = await Promise.all([
-      window.api.projectLoop.list(),
-      window.api.projectLoop.runningIds()
-    ])
+    const [stored, activeIds] = await Promise.all([window.api.projectLoop.list(), window.api.projectLoop.runningIds()])
     const visible = stored.filter((loop) => loop.status !== 'archived')
     setLoops(visible)
     setRunningIds(new Set(activeIds))
@@ -128,8 +141,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
 
   useEffect(() => {
     if (!active) return
-    void Promise.all([loadProviders(), refreshFleet()])
-      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+    void Promise.all([loadProviders(), refreshFleet()]).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
   }, [active, loadProviders, refreshFleet])
 
   useEffect(() => {
@@ -152,19 +164,17 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const selectedProvider = providers?.find((provider) => provider.id === providerId)
   const selectedLoop = loops.find((loop) => loop.id === selectedLoopId) ?? null
   const selectedRunning = Boolean(selectedLoop && runningIds.has(selectedLoop.id))
-  const selectedLoopProviderId = selectedLoop?.localModelProvider
-  const selectedLoopModel = selectedLoop?.localModel
 
   useEffect(() => {
     setModel((current) => selectedProvider?.models.includes(current) ? current : selectedProvider?.models[0] ?? '')
   }, [selectedProvider])
 
   useEffect(() => {
-    if (!selectedLoopProviderId || !providers?.length) return
-    const nextProvider = providers.find((provider) => provider.id === selectedLoopProviderId) ?? providers[0]
+    if (!selectedLoop?.localModelProvider || !providers?.length) return
+    const nextProvider = providers.find((provider) => provider.id === selectedLoop.localModelProvider) ?? providers[0]
     setProviderId(nextProvider.id)
-    setModel(nextProvider.models.includes(selectedLoopModel ?? '') ? selectedLoopModel ?? 'default' : nextProvider.models[0] ?? '')
-  }, [providers, selectedLoopModel, selectedLoopProviderId])
+    setModel(nextProvider.models.includes(selectedLoop.localModel ?? '') ? selectedLoop.localModel ?? 'default' : nextProvider.models[0] ?? '')
+  }, [providers, selectedLoop?.localModel, selectedLoop?.localModelProvider])
 
   const startNewLoop = (): void => {
     setCreating(true)
@@ -177,24 +187,13 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     setError(null)
   }
 
-  const selectLoop = (id: string): void => {
-    setCreating(false)
-    setTarget(null)
-    setDraft('')
-    setError(null)
-    setSelectedLoopId(id)
-  }
-
   const chooseTarget = async (kind: 'folder' | 'repo' | 'current'): Promise<void> => {
     setError(null)
     try {
       const selectedPath = kind === 'current' ? activeProject?.path ?? null : await window.api.projectLoop.pickFolder()
       if (!selectedPath) return
       const inspected = await window.api.projectLoop.inspectTarget(selectedPath)
-      if (kind === 'repo' && !inspected.isRepo) {
-        setError('Choose a folder that already contains a Git repository.')
-        return
-      }
+      if (kind === 'repo' && !inspected.isRepo) throw new Error('Choose a folder that already contains a Git repository.')
       setTarget(inspected)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -208,15 +207,11 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     void window.api.projectLoop.runGoal(id)
       .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => {
-        setRunningIds((current) => {
-          const next = new Set(current)
-          next.delete(id)
-          return next
-        })
+        setRunningIds((current) => { const next = new Set(current); next.delete(id); return next })
         void refreshFleet()
-        if (selectedLoopId === id) void refreshDetails(id)
+        void refreshDetails(id)
       })
-  }, [refreshDetails, refreshFleet, selectedLoopId])
+  }, [refreshDetails, refreshFleet])
 
   const submit = async (): Promise<void> => {
     const prompt = draft.trim()
@@ -226,14 +221,8 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     try {
       if (selectedLoop && !creating) {
         if (selectedRunning) return
-        await window.api.projectLoop.update(selectedLoop.id, {
-          localModelProvider: providerId,
-          localModel: model || 'default'
-        })
+        await window.api.projectLoop.update(selectedLoop.id, { localModelProvider: providerId, localModel: model || 'default' })
         await window.api.projectLoop.editGoal(selectedLoop.id, prompt)
-        setLoops((current) => current.map((loop) => loop.id === selectedLoop.id
-          ? { ...loop, idea: prompt, title: prompt.replace(/\s+/g, ' ').slice(0, 80), status: 'active' }
-          : loop))
         runLoop(selectedLoop.id)
         return
       }
@@ -264,13 +253,9 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
 
   const pauseLoop = async (id: string): Promise<void> => {
     await window.api.projectLoop.pauseGoal(id)
-    setRunningIds((current) => {
-      const next = new Set(current)
-      next.delete(id)
-      return next
-    })
+    setRunningIds((current) => { const next = new Set(current); next.delete(id); return next })
     void refreshFleet()
-    if (selectedLoopId === id) void refreshDetails(id)
+    void refreshDetails(id)
   }
 
   const archiveSelected = async (): Promise<void> => {
@@ -281,20 +266,18 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     setLoops(remaining)
     setSelectedLoopId(remaining[0]?.id ?? null)
     setCreating(remaining.length === 0)
-    setError(null)
   }
 
-  const activeCount = loops.filter((loop) => runningIds.has(loop.id)).length
-  const reviewCount = loops.filter((loop) => loop.status === 'needs_review' || loop.status === 'error').length
-  const completedCount = loops.filter((loop) => loop.status === 'completed').length
-  const selectedStep = selectedLoop ? loopStep(events, selectedLoop.status) : 1
+  const phase = selectedLoop ? phaseFor(events, selectedLoop.status) : 'understand'
+  const currentCopy = phaseCopy(phase, selectedRunning)
+  const contract = parseContract(selectedLoop?.roadmapSummary)
   const lastRun = runs[0]
+  const recentEvents = usefulEvents(events)
+  const iteration = Math.max(1, lastRun?.runIndex ?? selectedLoop?.runCount ?? 1)
   const selectedElapsed = selectedLoop
     ? elapsedLabel(Math.max(0, (selectedRunning ? Date.now() : lastRun?.endedAt ?? selectedLoop.updatedAt) - (lastRun?.startedAt ?? selectedLoop.createdAt)))
     : '0s'
-  const composerTarget = selectedLoop
-    ? { path: selectedLoop.localPath, name: projectName(selectedLoop.localPath), isRepo: selectedLoop.mode !== 'project_builder' }
-    : target
+  const composerTarget = selectedLoop ? { path: selectedLoop.localPath, name: projectName(selectedLoop.localPath), isRepo: selectedLoop.mode !== 'project_builder' } : target
   const canSend = Boolean(composerTarget && draft.trim() && selectedProvider?.available.ok && !selectedRunning)
 
   const composer = composerTarget ? (
@@ -305,20 +288,13 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }}
-          placeholder={selectedLoop ? `Give ${composerTarget.name} another outcome…` : `Describe the first outcome for ${composerTarget.name}…`}
+          placeholder={selectedLoop ? 'Refine this Goal or give it a new outcome…' : 'Describe one complete Goal…'}
           rows={2}
           spellCheck={false}
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
-            <ModelPicker
-              providers={providers}
-              providerId={providerId}
-              model={model}
-              disabled={selectedRunning}
-              onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }}
-              onRefresh={() => void loadProviders()}
-            />
+            <ModelPicker providers={providers} providerId={providerId} model={model} disabled={selectedRunning} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} />
             <span className="composer-chip loop-target-chip"><FolderOpenIcon size={13} />{composerTarget.name}</span>
           </div>
           {selectedRunning && selectedLoop
@@ -326,121 +302,77 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
             : <ComposerSendButton disabled={!canSend} onClick={() => void submit()}><SendIcon size={16} /></ComposerSendButton>}
         </div>
       </div>
-      <div className="composer-info">loop {composerTarget.name} · {selectedProvider?.label ?? 'model'} · concurrent local worker · push off</div>
+      <div className="composer-info">Goal · {composerTarget.name} · local checkpointing · push off</div>
     </div>
   ) : null
 
   return (
-    <main className="loop-page">
-      <header className="loop-board-header">
-        <div>
-          <span className="loop-eyebrow">AUTONOMOUS PROJECT LOOPS</span>
-          <h1>Loop control</h1>
-          <p>Run several durable outcomes at once. Each loop owns one folder, one model and an independent local history.</p>
-        </div>
-        <div className="loop-board-actions">
-          <div className="loop-board-metrics" aria-label="Loop summary">
-            <span><strong>{activeCount}</strong> running</span>
-            <span><strong>{reviewCount}</strong> review</span>
-            <span><strong>{completedCount}</strong> done</span>
-          </div>
-          <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={15} />New loop</button>
-        </div>
+    <main className="loop-page loop-page-v2">
+      <header className="loop-v2-header">
+        <span className="loop-eyebrow">CONCURRENT GOALS</span>
+        <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={15} />New loop</button>
       </header>
 
-      <div className="loop-board">
-        <aside className="loop-fleet" aria-label="Project loops">
-          <div className="loop-fleet-title"><span>LOOP FLEET</span><em>{loops.length}</em></div>
-          <div className="loop-card-list">
-            {loops.map((loop) => {
-              const isRunning = runningIds.has(loop.id)
-              const isSelected = loop.id === selectedLoopId && !creating
-              const cardStep = loop.id === selectedLoopId ? selectedStep : estimatedLoopStep(loop, isRunning)
-              return (
-                <button type="button" className={`loop-card ${isSelected ? 'is-selected' : ''}`} onClick={() => selectLoop(loop.id)} key={loop.id}>
-                  <span className="loop-card-top"><span className={`loop-status is-${isRunning ? 'running' : loop.status}`}><i />{statusLabel(loop.status, isRunning)}</span><em>{projectName(loop.localPath)}</em></span>
-                  <strong>{loop.title}</strong>
-                  <LoopPipeline step={cardStep} status={loop.status} compact />
-                  <span className="loop-card-foot"><span>{loop.commitCount} commits</span><span>{loop.runCount} runs</span><span>{loop.localModel ?? 'default'}</span></span>
-                </button>
-              )
-            })}
-            {loops.length === 0 && <div className="loop-fleet-empty">No loops yet. Start one from a local folder or repository.</div>}
+      {loops.length > 0 && (
+        <nav className="loop-switcher" aria-label="Concurrent Goals">
+          {loops.map((loop) => {
+            const running = runningIds.has(loop.id)
+            return <button type="button" className={loop.id === selectedLoopId && !creating ? 'is-selected' : ''} onClick={() => { setCreating(false); setSelectedLoopId(loop.id); setError(null) }} key={loop.id}><i className={`is-${running ? 'running' : loop.status}`} /><span>{loop.title}</span><em>{statusLabel(loop.status, running)}</em></button>
+          })}
+        </nav>
+      )}
+
+      <section className="loop-v2-surface">
+        {creating ? (
+          <div className="loop-v2-create">
+            <div className="loop-v2-create-copy">
+              <span className="loop-eyebrow">NEW GOAL</span>
+              <h2>{target ? 'What should Akorith finish?' : 'Where should this Goal work?'}</h2>
+              <p>{target ? 'One clear outcome is enough. Akorith will understand it, plan one step, execute, analyze the evidence, and repeat until the complete Goal is reached.' : 'The folder is the durable boundary for source material, generated artifacts, project files, and local checkpoints.'}</p>
+            </div>
+            {!target ? <div className="loop-target-actions">
+              {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseTarget('current')}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
+              <button type="button" className={`ws-hero-btn ${activeProject?.path ? '' : 'is-primary'}`} onClick={() => void chooseTarget('folder')}><FolderOpenIcon size={16} />Choose folder</button>
+              <button type="button" className="ws-hero-btn" onClick={() => void chooseTarget('repo')}><LoopIcon size={16} />Choose repository</button>
+            </div> : <div className="loop-v2-create-composer">{composer}</div>}
+            {error && <div className="loop-inline-error">{error}</div>}
           </div>
-        </aside>
+        ) : selectedLoop ? (
+          <div className="loop-v2-detail">
+            <div className="loop-v2-goal-head">
+              <div><span className={`loop-status is-${selectedRunning ? 'running' : selectedLoop.status}`}><i />{statusLabel(selectedLoop.status, selectedRunning)}</span><h2>{contract?.summary ?? selectedLoop.title}</h2><p>{projectName(selectedLoop.localPath)} · cycle {iteration} · {selectedLoop.localModel ?? 'default'}</p></div>
+              <div className="loop-v2-time"><span>{selectedRunning ? 'Working for' : 'Worked for'}</span><strong>{selectedElapsed}</strong>{!selectedRunning && <button type="button" onClick={() => void archiveSelected()}>Archive</button>}</div>
+            </div>
 
-        <section className="loop-focus">
-          {creating ? (
-            !target ? (
-              <div className="loop-target-picker">
-                <span className="loop-eyebrow">NEW INDEPENDENT LOOP</span>
-                <h2>Choose its project boundary</h2>
-                <p>This loop can run beside every other loop without sharing its model, status or local history.</p>
-                <div className="loop-target-actions">
-                  {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseTarget('current')}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
-                  <button type="button" className={`ws-hero-btn ${activeProject?.path ? '' : 'is-primary'}`} onClick={() => void chooseTarget('folder')}><FolderOpenIcon size={16} />Choose folder</button>
-                  <button type="button" className="ws-hero-btn" onClick={() => void chooseTarget('repo')}><LoopIcon size={16} />Choose repository</button>
-                </div>
-                {error && <div className="loop-inline-error">{error}</div>}
-              </div>
-            ) : (
-              <div className="loop-create-ready">
-                <span className="loop-eyebrow">{target.isRepo ? 'GIT REPOSITORY' : 'LOCAL FOLDER'} · {target.name}</span>
-                <h2>What outcome should this loop own?</h2>
-                <p>Start it below, then create another loop immediately. Both can keep working at the same time.</p>
-                {error && <div className="loop-inline-error">{error}</div>}
-                <div className="loop-focus-composer">{composer}</div>
-              </div>
-            )
-          ) : selectedLoop ? (
-            <>
-              <div className="loop-focus-head">
-                <div>
-                  <span className={`loop-status is-${selectedRunning ? 'running' : selectedLoop.status}`}><i />{statusLabel(selectedLoop.status, selectedRunning)}</span>
-                  <h2>{selectedLoop.title}</h2>
-                  <p>{projectName(selectedLoop.localPath)} · {selectedLoop.localModelProvider} · {selectedLoop.localModel ?? 'default'}</p>
-                </div>
-                <div className="loop-focus-controls">
-                  <span>{selectedRunning ? 'Working for' : 'Worked for'} <strong>{selectedElapsed}</strong></span>
-                  {selectedRunning && <button type="button" onClick={() => void pauseLoop(selectedLoop.id)}>Pause</button>}
-                  {!selectedRunning && <button type="button" onClick={() => void archiveSelected()}>Archive</button>}
-                </div>
-              </div>
+            <div className="loop-v2-diagram">
+              <div className="loop-panel-heading"><div><span>GOAL CYCLE</span><strong>Evidence, not activity, decides completion</strong></div><em>Cycle {iteration}</em></div>
+              <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
+            </div>
 
-              <div className="loop-map-panel">
-                <div className="loop-panel-heading"><div><span>EXECUTION MAP</span><strong>Independent six-stage cycle</strong></div><em>Step {selectedStep} / 6</em></div>
-                <LoopPipeline step={selectedStep} status={selectedLoop.status} />
-              </div>
+            <div className={`loop-v2-current ${selectedRunning ? 'is-running' : ''}`} aria-live="polite">
+              <span className="loop-v2-current-orb" />
+              <div><span>CURRENT PHASE</span><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div>
+            </div>
 
-              <div className="loop-signal-panel">
-                <div className="loop-panel-heading"><div><span>LIVE SIGNALS</span><strong>What this loop is doing</strong></div><em>{events.length} events</em></div>
-                <div className="loop-signal-list" aria-live="polite">
-                  {events.slice(-8).reverse().map((event) => (
-                    <article className={`loop-signal is-${event.kind}`} key={event.id}>
-                      <span className="loop-signal-node" />
-                      <div><strong>{event.message}</strong><p>{eventExplanation(event)}</p></div>
-                      <time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
-                    </article>
-                  ))}
-                  {events.length === 0 && <div className="loop-signal-empty">Waiting for the first durable loop signal.</div>}
-                </div>
+            <div className="loop-v2-evidence">
+              <div className="loop-v2-events">
+                <div className="loop-panel-heading"><div><span>CHECKPOINTS</span><strong>Latest meaningful evidence</strong></div><em>{events.length} signals</em></div>
+                {recentEvents.length > 0 ? recentEvents.map((event) => <article key={event.id} className={`is-${event.kind}`}><i /><div><strong>{event.message}</strong>{event.detail && <p>{event.detail.slice(0, 360)}</p>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>) : <p className="loop-v2-empty">The first checkpoint appears after the Goal is understood.</p>}
               </div>
+              <aside className="loop-v2-contract">
+                <span>DEFINITION OF DONE</span>
+                <strong>{contract?.deliverables?.length ? `${contract.deliverables.length} deliverables` : 'Understanding the Goal…'}</strong>
+                <ul>{(contract?.acceptanceCriteria ?? ['Concrete output in the selected folder', 'Relevant validation without a known blocker']).map((item) => <li key={item}>{item}</li>)}</ul>
+                <small>{commits.length} local checkpoints · {selectedLoop.runCount} cycles</small>
+              </aside>
+            </div>
 
-              {!selectedRunning && (lastRun?.summary || selectedLoop.error) && (
-                <div className={`loop-outcome ${selectedLoop.status === 'error' || selectedLoop.status === 'needs_review' ? 'is-error' : ''}`}>
-                  <span>OUTCOME</span>
-                  <strong>{lastRun?.summary || selectedLoop.error}</strong>
-                  <p>{commits.length} local commit{commits.length === 1 ? '' : 's'} · {lastRun?.filesChanged ?? 0} changed files · push off</p>
-                </div>
-              )}
-              {error && <div className="loop-inline-error">{error}</div>}
-              <div className="loop-focus-composer">{composer}</div>
-            </>
-          ) : (
-            <div className="loop-target-picker"><h2>Select a loop or start a new one</h2></div>
-          )}
-        </section>
-      </div>
+            {!selectedRunning && (selectedLoop.status === 'completed' || selectedLoop.error) && <div className={`loop-outcome ${selectedLoop.error ? 'is-error' : ''}`}><span>{selectedLoop.status === 'completed' ? 'GOAL REACHED' : 'REVIEW NEEDED'}</span><strong>{lastRun?.summary ?? selectedLoop.error}</strong><p>{lastRun?.filesChanged ?? 0} changed files · {commits.length} local checkpoints · push off</p></div>}
+            {error && <div className="loop-inline-error">{error}</div>}
+            <div className="loop-focus-composer">{composer}</div>
+          </div>
+        ) : <div className="loop-v2-create"><h2>Start a new Loop</h2></div>}
+      </section>
     </main>
   )
 }

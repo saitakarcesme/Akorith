@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 27:
-Local Executor Loop**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 57:
+Durable Goal Cycle + Chat Isolation**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -345,6 +345,9 @@ Local Executor Loop**.
       workspace-patch executor instead of a Claude/Codex PTY. Local attempts are parsed,
       path-validated, applied with rollback, validated by allowlisted commands, scored, and only
       then committed as the next phase. Attempts, validated changes, and commits are separate.
+- [x] **Phase 57** - Durable Goal Cycle + Chat Isolation. Goal completion is evidence-based across
+      Understand/Plan/Execute/Analyze/Replan; Loop UI is a quiet concurrent diagram; General Chat
+      and Workspace activity are separate; active request/Stop state is scoped by session.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -585,6 +588,24 @@ an attempt in `macro_turns`/`loop_runs`, rolls back failed or low-value attempts
 successful meaningful validated changes via path-scoped `commitPhase()`, never pushes
 automatically, and pauses after repeated local failures. The Loop UI now shows executor mode,
 local model, attempts, validated changes, commits, last validation, and last commit separately.
+
+## Phase 57 - Durable Goal Cycle + Chat Isolation
+
+- Loop owns a task-agnostic Goal contract and repeats **Understand -> Plan -> Execute -> Analyze ->
+  Replan** until every acceptance criterion has concrete evidence. One commit is progress, not
+  completion. Blockers and three stalled cycles enter `needs_review`.
+- Multiple Goals remain concurrent through the existing per-loop AbortControllers and separate
+  SQLite runs/events/backlogs. The renderer shows compact Goal tabs, a low-color flow diagram,
+  current phase, definition of done, and four recent evidence checkpoints.
+- The selected folder is the only work boundary and can contain code, research sources, PDFs,
+  DOCX/Markdown, or other generated artifacts. Local commits checkpoint work; automatic push stays
+  disabled.
+- General Chat never renders Workspace activity. Request/Stop state and in-flight message buffers
+  are session-scoped, so switching chats/projects cannot carry a Stop icon into the wrong view.
+- Workspace running labels animate with their icons; stable explanatory paragraphs are longer and
+  readable. The fixed Step chip reveals all six steps on hover/focus. Code blocks are theme-aware.
+- Verification: `npm run verify:goal-cycle`, `npm run verify:project-loop`, `npm run typecheck`,
+  `npm run build`, plus Electron CDP checks for General Chat separation and Stop-state switching.
 
 ## Rule: keep the docs current
 
