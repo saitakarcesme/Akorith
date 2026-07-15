@@ -14,7 +14,7 @@ import { formatModelLabel } from '../modelLabels'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
-import WorkspaceActivity from './WorkspaceActivity'
+import WorkspaceActivity, { workspaceActivityStep } from './WorkspaceActivity'
 
 interface ChatMessage {
   id: string
@@ -25,6 +25,7 @@ interface ChatMessage {
   meta?: { provider: string; model: string; usage?: ChatUsage }
   activities?: ChatActivity[]
   startedAt?: number
+  endedAt?: number
 }
 
 interface ComposerImage extends ChatImageAttachment {
@@ -314,8 +315,8 @@ export default function ChatPanel({
       })
       setMessages((current) => current.map((message) => message.id === assistantId
         ? response.ok
-          ? { ...message, text: response.result.text, status: 'done', meta: { provider: providerId, model: response.result.model, usage: response.result.usage } }
-          : { ...message, text: response.error, status: 'error' }
+          ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: providerId, model: response.result.model, usage: response.result.usage } }
+          : { ...message, text: response.error, status: 'error', endedAt: Date.now() }
         : message))
       if (response.ok) {
         onHistoryChange()
@@ -323,7 +324,7 @@ export default function ChatPanel({
       }
     } catch (err) {
       setMessages((current) => current.map((message) => message.id === assistantId
-        ? { ...message, text: err instanceof Error ? err.message : String(err), status: 'error' }
+        ? { ...message, text: err instanceof Error ? err.message : String(err), status: 'error', endedAt: Date.now() }
         : message))
     } finally {
       offToken()
@@ -377,6 +378,12 @@ export default function ChatPanel({
   )
 
   const hasConversation = messages.length > 0
+  const latestWorkspaceRun = isWorkspace
+    ? [...messages].reverse().find((message) => message.role === 'assistant' && message.startedAt)
+    : undefined
+  const latestWorkspaceStep = latestWorkspaceRun
+    ? workspaceActivityStep(latestWorkspaceRun.activities ?? [], latestWorkspaceRun.status === 'streaming', latestWorkspaceRun.status === 'error')
+    : null
   const canSend = Boolean(draft.trim() && selected?.available.ok && !busyRequestId && (!isWorkspace || hasProject))
   const contextCount = contextInfo?.totalMessages ?? 0
   const memoryLabel = contextCount > 0 ? `Memory: ${contextCount} messages` : hasProject ? 'Project memory on' : 'Session memory on'
@@ -438,7 +445,7 @@ export default function ChatPanel({
                 return (
                 <article key={message.id} className={`chat-msg ${message.role} ${message.status}`}>
                   {message.images?.length ? <div className="chat-image-strip">{message.images.map((image, index) => <img key={index} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} />)}</div> : null}
-                  {message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
+                  {message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} endedAt={message.endedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
                   {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant' ? (
                     <div className="chat-msg-text">{splitFences(message.text).map((segment, index) => segment.type === 'code' ? <div className="chat-code" key={index}><div className="chat-code-header"><span>{segment.lang ?? 'code'}</span>{copyButton(segment.content, `${message.id}-${index}`)}</div><pre>{segment.content}</pre></div> : renderProse(segment.content, `${message.id}-${index}`))}</div>
                   ) : <div className="chat-msg-text">{message.text}</div>}
@@ -448,7 +455,14 @@ export default function ChatPanel({
               })}
             </div>
           </div>
-          <div className="composer-dock">{composer}</div>
+          <div className="composer-dock">
+            {latestWorkspaceStep !== null && (
+              <div className={`workspace-step-dock ${latestWorkspaceRun?.status === 'streaming' ? 'is-active' : ''}`} aria-label={`Workspace step ${latestWorkspaceStep} of 6`}>
+                <span className="workspace-step"><i />Step {latestWorkspaceStep} / 6</span>
+              </div>
+            )}
+            {composer}
+          </div>
         </>
       )}
       {toast && <div className="bridge-toast ok">{toast}</div>}

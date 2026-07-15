@@ -29,6 +29,7 @@ const activeGoals = new Map<string, AbortController>()
 
 export function registerProjectLoopIpc(): void {
   ipcMain.handle('projectLoop:list', () => listLoops())
+  ipcMain.handle('projectLoop:runningIds', () => [...activeGoals.keys()])
   ipcMain.handle('projectLoop:get', (_e, id: string) => getLoop(id))
 
   ipcMain.handle('projectLoop:create', (_e, input: CreateLoopInput) => {

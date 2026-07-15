@@ -373,6 +373,7 @@ const localRuntime = Object.freeze({
 // Phase 48: project-focused Loop — autonomous local project builder.
 const projectLoop = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:list'),
+  runningIds: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:runningIds'),
   get: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:get', id),
   create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('projectLoop:create', input),
   update: (id: string, patch: unknown): Promise<unknown> => ipcRenderer.invoke('projectLoop:update', id, patch),
