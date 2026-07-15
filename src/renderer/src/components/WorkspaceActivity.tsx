@@ -4,15 +4,17 @@ import type { ChatActivity } from '../../../preload/index.d'
 interface WorkspaceActivityProps {
   activities: ChatActivity[]
   startedAt: number
+  endedAt?: number
   active: boolean
   failed?: boolean
-  step?: number
 }
 
 function elapsedLabel(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
+  if (hours > 0) return `${hours}h ${minutes % 60}m`
   return minutes > 0 ? `${minutes}m ${rest}s` : `${rest}s`
 }
 
@@ -20,6 +22,41 @@ function activityLabel(item: ChatActivity): string {
   if (item.label === 'Starting the selected model') return 'Preparing the workspace'
   if (item.label === 'Workspace task complete') return 'Finished the requested changes'
   return item.label
+}
+
+function activityExplanation(item: ChatActivity): string {
+  if (item.status === 'error' || item.kind === 'warning') {
+    return 'This step could not finish. Review the message, adjust the request or model if needed, then retry from the same project context.'
+  }
+  if (item.kind === 'command') {
+    return item.status === 'complete'
+      ? 'The project-scoped command finished and its result was folded into the next decision.'
+      : 'Runs this command inside the selected project to inspect or validate the requested changes.'
+  }
+  if (item.kind === 'file') {
+    return item.status === 'complete'
+      ? 'The relevant project file was inspected or updated and is ready for the next step.'
+      : 'Reads or updates this file inside the selected project while preserving the surrounding code.'
+  }
+  if (item.kind === 'reasoning' || item.kind === 'plan') {
+    return 'Connects the request to the current repository state and chooses the smallest useful next change.'
+  }
+  if (/preparing|starting/i.test(item.label)) {
+    return 'Loads the selected folder, project context and CLI model before any project change is attempted.'
+  }
+  if (/finished|complete/i.test(item.label) || item.status === 'complete') {
+    return 'Marks this unit of work as complete and carries its result into the final response.'
+  }
+  return 'Keeps the project task moving while Akorith watches the selected model and records meaningful progress here.'
+}
+
+export function workspaceActivityStep(activities: ChatActivity[], active: boolean, failed = false): number {
+  const completed = activities.filter((item) => item.status === 'complete').length
+  return active
+    ? Math.min(6, Math.max(1, completed + 1))
+    : failed
+      ? Math.min(6, Math.max(1, completed))
+      : 6
 }
 
 function activityGlyph(kind: ChatActivity['kind']): JSX.Element {
@@ -41,9 +78,9 @@ function activityGlyph(kind: ChatActivity['kind']): JSX.Element {
 export default function WorkspaceActivity({
   activities,
   startedAt,
+  endedAt,
   active,
-  failed = false,
-  step
+  failed = false
 }: WorkspaceActivityProps): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
@@ -62,13 +99,16 @@ export default function WorkspaceActivity({
     }
     return compact.slice(-9)
   }, [activities])
-  const completed = activities.filter((item) => item.status === 'complete').length
-  const currentStep = step ?? (active ? Math.min(6, Math.max(1, completed + 1)) : failed ? Math.min(6, Math.max(1, completed)) : 6)
+  const recordedEnd = useMemo(
+    () => activities.reduce((latest, item) => Math.max(latest, item.timestamp), startedAt),
+    [activities, startedAt]
+  )
+  const elapsedUntil = active ? now : endedAt ?? recordedEnd
   const statusText = active
-    ? `Working for ${elapsedLabel(now - startedAt)}`
+    ? `Working for ${elapsedLabel(elapsedUntil - startedAt)}`
     : failed
-      ? `Stopped after ${elapsedLabel(now - startedAt)}`
-      : `Worked for ${elapsedLabel(now - startedAt)}`
+      ? `Stopped after ${elapsedLabel(elapsedUntil - startedAt)}`
+      : `Worked for ${elapsedLabel(elapsedUntil - startedAt)}`
 
   return (
     <section className={`workspace-activity ${active ? 'is-active' : failed ? 'is-failed' : 'is-complete'}`} aria-live="polite">
@@ -78,18 +118,18 @@ export default function WorkspaceActivity({
         {visible.map((item) => (
           <div className={`workspace-activity-row is-${item.kind} is-${item.status ?? 'running'}`} key={`${item.timestamp}-${item.kind}-${item.label}`}>
             <span className="workspace-activity-icon">{activityGlyph(item.kind)}</span>
-            <span className="workspace-activity-copy">{activityLabel(item)}</span>
+            <span className="workspace-activity-copy">
+              <strong>{activityLabel(item)}</strong>
+              <p>{activityExplanation(item)}</p>
+            </span>
           </div>
         ))}
         {visible.length === 0 && active && (
           <div className="workspace-activity-row is-status is-running">
             <span className="workspace-activity-icon">{activityGlyph('status')}</span>
-            <span className="workspace-activity-copy">Akorithing…</span>
+            <span className="workspace-activity-copy"><strong>Akorithing…</strong><p>Preparing the first project-scoped action and waiting for a meaningful event from the selected model.</p></span>
           </div>
         )}
-      </div>
-      <div className="workspace-step-wrap">
-        <span className="workspace-step"><i />Step {currentStep} / 6</span>
       </div>
     </section>
   )

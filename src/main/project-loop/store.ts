@@ -142,6 +142,7 @@ const UPDATABLE: Record<string, string> = {
   dailyCommitTarget: 'daily_commit_target',
   minCommitsPerRun: 'min_commits_per_run',
   maxCommitsPerRun: 'max_commits_per_run',
+  localModelProvider: 'local_model_provider',
   localModel: 'local_model',
   pushEnabled: 'push_enabled',
   error: 'error',

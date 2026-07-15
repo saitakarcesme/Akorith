@@ -1780,6 +1780,7 @@ export interface CompanionApi {
 
 export interface ProjectLoopApi {
   list(): Promise<ProjectLoop[]>
+  runningIds(): Promise<string[]>
   get(id: string): Promise<ProjectLoop | null>
   create(input: CreateProjectLoopInput): Promise<ProjectLoop>
   update(id: string, patch: Partial<ProjectLoop>): Promise<ProjectLoop | null>
