@@ -1,10 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatImageAttachment, ChatUsage, ContextInfo, PermissionDetection, PermissionOption, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  ChatActivity,
+  ChatImageAttachment,
+  ChatUsage,
+  ContextInfo,
+  ProjectRow,
+  ProviderInfo,
+  RouterSuggestion
+} from '../../../preload/index.d'
+import { normalizeStoredOpenCodeMessage } from '../../../shared/opencode-output'
 import type { ChatMode, HistorySelection } from '../App'
 import { formatModelLabel } from '../modelLabels'
 import { FolderIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
+import WorkspaceActivity from './WorkspaceActivity'
 
 interface ChatMessage {
   id: string
@@ -13,76 +23,24 @@ interface ChatMessage {
   status: 'streaming' | 'done' | 'error'
   images?: ChatImageAttachment[]
   meta?: { provider: string; model: string; usage?: ChatUsage }
-  /** Phase 13.2: a terminal-output summary card (source = agent label). */
-  summary?: { source: string; needsAttention: boolean }
+  activities?: ChatActivity[]
+  startedAt?: number
 }
 
 interface ComposerImage extends ChatImageAttachment {
   previewUrl: string
 }
 
-// Olympus = Codex (t2), Gaia = OpenCode (t3), Atlantis = Claude (t1).
-const TERMINALS = [
-  { id: 't2', label: 'Olympus' },
-  { id: 't3', label: 'Gaia' },
-  { id: 't1', label: 'Atlantis' }
-] as const
-const AGENT_ROLE: Record<string, string> = { t2: 'Codex', t3: 'OpenCode', t1: 'Claude' }
-// Bounded auto-summary watcher: first look after this long, then poll until the
-// terminal output stabilizes or the max wait elapses (agents keep streaming).
-const AUTO_SUMMARY_FIRST_DELAY_MS = 3500
-const AUTO_SUMMARY_POLL_MS = 2000
-const AUTO_SUMMARY_MAX_WAIT_MS = 45_000
-// Background permission poll cadence while a project workspace is open.
-const PERMISSION_POLL_MS = 4000
-
-function isLocalAutoStarting(provider?: ProviderInfo): boolean {
-  return Boolean(
-    provider?.id === 'local' &&
-      !provider.available.ok &&
-      /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? '')
-  )
-}
-
-function hasLocalAutoStarting(providers: ProviderInfo[] | null): boolean {
-  return providers?.some(isLocalAutoStarting) ?? false
-}
-
 interface ChatPanelProps {
   mode: ChatMode
-  /** Sidebar instruction: load a session or start a fresh thread. */
   historySel: HistorySelection | null
   activeProject: ProjectRow | null
-  drawerOpen: boolean
-  onToggleDrawer: () => void
-  /** Open/Create routed back through the app/sidebar single project flow. */
   onOpenProject: () => void
   onCreateProject: () => void
-  /** Notify the app that sessions changed (titles, ordering, creation). */
   onHistoryChange: () => void
   onActiveSession: (sessionId: string | null) => void
-  /** Phase 38.9: App-owned "request in flight" set (durable across navigation). */
   pendingSessions?: Set<string>
   onPendingChange?: (sessionId: string, pending: boolean) => void
-}
-
-const AGENT_LABELS: Record<'t1' | 't2' | 't3', string> = { t1: 'Claude', t2: 'Codex', t3: 'OpenCode' }
-
-function newId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-function usageLine(usage: ChatUsage): string {
-  const parts: string[] = []
-  if (usage.promptTokens !== undefined || usage.completionTokens !== undefined) {
-    parts.push(`${usage.promptTokens ?? '?'}→${usage.completionTokens ?? '?'} tok`)
-  }
-  if (usage.costUsd !== undefined) {
-    parts.push(`$${usage.costUsd.toFixed(4)}`)
-  }
-  return parts.join(' · ')
 }
 
 interface Segment {
@@ -91,7 +49,20 @@ interface Segment {
   lang?: string
 }
 
-/** Split a message into prose and fenced-code segments. */
+function newId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function storageString(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
 function splitFences(text: string): Segment[] {
   const segments: Segment[] = []
   const fence = /```([^\n`]*)\n([\s\S]*?)```/g
@@ -106,28 +77,6 @@ function splitFences(text: string): Segment[] {
   return segments
 }
 
-interface SelectionPopover {
-  x: number
-  y: number
-  text: string
-}
-
-function storageBoolean(key: string, fallback: boolean): boolean {
-  try {
-    return localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true'
-  } catch {
-    return fallback
-  }
-}
-
-function storageString(key: string, fallback: string): string {
-  try {
-    return localStorage.getItem(key) ?? fallback
-  } catch {
-    return fallback
-  }
-}
-
 function renderInlineMarkdown(text: string, keyPrefix: string): JSX.Element[] {
   const nodes: JSX.Element[] = []
   const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
@@ -137,82 +86,47 @@ function renderInlineMarkdown(text: string, keyPrefix: string): JSX.Element[] {
   while ((match = pattern.exec(text))) {
     if (match.index > last) nodes.push(<span key={`${keyPrefix}-t-${index++}`}>{text.slice(last, match.index)}</span>)
     const token = match[0]
-    if (token.startsWith('**')) {
-      nodes.push(<strong key={`${keyPrefix}-b-${index++}`}>{token.slice(2, -2)}</strong>)
-    } else {
-      nodes.push(<code key={`${keyPrefix}-c-${index++}`}>{token.slice(1, -1)}</code>)
-    }
+    nodes.push(token.startsWith('**')
+      ? <strong key={`${keyPrefix}-b-${index++}`}>{token.slice(2, -2)}</strong>
+      : <code key={`${keyPrefix}-c-${index++}`}>{token.slice(1, -1)}</code>)
     last = match.index + token.length
   }
-  if (last < text.length) nodes.push(<span key={`${keyPrefix}-t-${index++}`}>{text.slice(last)}</span>)
+  if (last < text.length) nodes.push(<span key={`${keyPrefix}-t-${index}`}>{text.slice(last)}</span>)
   return nodes
 }
 
 function renderProse(text: string, keyPrefix: string): JSX.Element {
-  const blocks: JSX.Element[] = []
-  let paragraph: string[] = []
-  let list: { type: 'ol' | 'ul'; items: string[] } | null = null
+  const blocks = text.replace(/\r\n/g, '\n').split(/\n{2,}/).filter((block) => block.trim())
+  return (
+    <div className="chat-prose" key={keyPrefix}>
+      {blocks.map((block, index) => {
+        const lines = block.split('\n')
+        if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
+          return <ul key={index}>{lines.map((line, lineIndex) => <li key={lineIndex}>{renderInlineMarkdown(line.trim().replace(/^[-*]\s+/, ''), `${keyPrefix}-${index}-${lineIndex}`)}</li>)}</ul>
+        }
+        return <p key={index}>{renderInlineMarkdown(lines.join(' '), `${keyPrefix}-${index}`)}</p>
+      })}
+    </div>
+  )
+}
 
-  const flushParagraph = (): void => {
-    if (paragraph.length === 0) return
-    const value = paragraph.join(' ').trim()
-    if (value) {
-      blocks.push(<p key={`${keyPrefix}-p-${blocks.length}`}>{renderInlineMarkdown(value, `${keyPrefix}-p-${blocks.length}`)}</p>)
-    }
-    paragraph = []
+function usageLine(usage: ChatUsage): string {
+  const parts: string[] = []
+  if (usage.promptTokens !== undefined || usage.completionTokens !== undefined) {
+    parts.push(`${usage.promptTokens ?? '?'}→${usage.completionTokens ?? '?'} tok`)
   }
+  if (usage.costUsd !== undefined) parts.push(`$${usage.costUsd.toFixed(4)}`)
+  return parts.join(' · ')
+}
 
-  const flushList = (): void => {
-    if (!list) return
-    const Tag = list.type
-    const items = list.items
-    blocks.push(
-      <Tag key={`${keyPrefix}-${list.type}-${blocks.length}`}>
-        {items.map((item, index) => (
-          <li key={`${keyPrefix}-${list!.type}-${blocks.length}-${index}`}>
-            {renderInlineMarkdown(item, `${keyPrefix}-${list!.type}-${blocks.length}-${index}`)}
-          </li>
-        ))}
-      </Tag>
-    )
-    list = null
-  }
-
-  for (const rawLine of text.replace(/\r\n/g, '\n').split('\n')) {
-    const line = rawLine.trim()
-    if (!line) {
-      flushParagraph()
-      flushList()
-      continue
-    }
-
-    const ordered = line.match(/^\d+[.)]\s+(.+)$/)
-    const unordered = line.match(/^[-*]\s+(.+)$/)
-    if (ordered || unordered) {
-      flushParagraph()
-      const type = ordered ? 'ol' : 'ul'
-      if (!list || list.type !== type) flushList()
-      if (!list) list = { type, items: [] }
-      list.items.push((ordered?.[1] ?? unordered?.[1] ?? '').trim())
-      continue
-    }
-
-    flushList()
-    paragraph.push(line)
-  }
-
-  flushParagraph()
-  flushList()
-
-  return <div className="chat-prose" key={keyPrefix}>{blocks.length ? blocks : renderInlineMarkdown(text, keyPrefix)}</div>
+function isLocalAutoStarting(provider?: ProviderInfo): boolean {
+  return Boolean(provider?.id === 'local' && !provider.available.ok && /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? ''))
 }
 
 export default function ChatPanel({
   mode,
   historySel,
   activeProject,
-  drawerOpen,
-  onToggleDrawer,
   onOpenProject,
   onCreateProject,
   onHistoryChange,
@@ -220,146 +134,48 @@ export default function ChatPanel({
   pendingSessions,
   onPendingChange
 }: ChatPanelProps): JSX.Element {
-  // Everything below is driven by the registry — never a hardcoded backend list.
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
-  const [providerId, setProviderId] = useState<string>('')
-  const [model, setModel] = useState<string>('')
+  const [providerId, setProviderId] = useState('')
+  const [model, setModel] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [attachedImages, setAttachedImages] = useState<ComposerImage[]>([])
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  // Phase 14.2: live memory/context stats for the indicator near the composer.
   const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null)
-  const [confirmingClear, setConfirmingClear] = useState(false)
-  const [displayName] = useState(() => storageString('akorith.displayName', 'Ibrahim').trim() || 'Ibrahim')
-  const scrollRef = useRef<HTMLDivElement>(null)
-  // Phase 14.1: only auto-scroll to the newest message when the user is already
-  // near the bottom — never yank them away while they read older history.
-  const nearBottomRef = useRef(true)
-
-  // ---- bridge state: one current target + the persisted auto-Enter setting ----
-  const [bridgeTarget, setBridgeTarget] = useState<string>('t1')
-  const [autoEnter, setAutoEnter] = useState<boolean | null>(null) // null until loaded
-  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
-  const [sentKey, setSentKey] = useState<string | null>(null)
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [selection, setSelection] = useState<SelectionPopover | null>(null)
-  const selectionRef = useRef<SelectionPopover | null>(null)
-
-  // ---- Phase 6: suggest-only router + opt-in repo context ----
+  const [digestEnabled, setDigestEnabled] = useState(false)
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
   const [suggesting, setSuggesting] = useState(false)
-  // Phase 39.7: secondary composer actions live in a "More" popover.
   const [moreOpen, setMoreOpen] = useState(false)
-  useEffect(() => {
-    if (!moreOpen) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setMoreOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [moreOpen])
-  const [digestEnabled, setDigestEnabled] = useState(false)
-  const [summarizingAgent, setSummarizingAgent] = useState(false)
-  // Phase 14.1: a detected terminal permission/confirmation prompt, surfaced as
-  // an actionable card so the user never has to open the Activity drawer.
-  const [pendingPermission, setPendingPermission] = useState<{ detection: PermissionDetection; terminalId: string } | null>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [confirmingClear, setConfirmingClear] = useState(false)
+  const [displayName] = useState(() => storageString('akorith.displayName', 'Ibrahim').trim() || 'Ibrahim')
+  const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const nearBottomRef = useRef(true)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  const sentTimer = useRef<ReturnType<typeof setTimeout>>()
-  const autoSummaryTimer = useRef<ReturnType<typeof setTimeout>>()
-  // Monotonic token so a newer send/auto-summary watcher cancels an older one.
-  const summaryWatch = useRef(0)
-  // Once answered/dismissed, don't immediately re-surface the same prompt.
-  const dismissedPermSig = useRef<string | null>(null)
-  // Dedup: skip re-summarizing unchanged terminal output (no summary spam).
-  const lastSummarySig = useRef<string | null>(null)
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
 
   const loadProviders = useCallback(async (): Promise<void> => {
-    setLoadError(null)
     try {
       const list = await window.api.chat.listProviders()
       setProviders(list)
-      // Keep the current selection when still valid; else pick the first available.
       setProviderId((current) => {
-        const currentProvider = list.find((p) => p.id === current)
-        if (currentProvider?.available.ok || isLocalAutoStarting(currentProvider)) return current
-        return list.find((p) => p.available.ok)?.id ?? ''
+        const existing = list.find((provider) => provider.id === current)
+        if (existing?.available.ok || isLocalAutoStarting(existing)) return current
+        return list.find((provider) => provider.available.ok)?.id ?? ''
       })
+      setLoadError(null)
     } catch (err) {
       setProviders([])
       setLoadError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
-  // Phase 33.15: which Ollama endpoint is currently active (for model-picker
-  // source labels: "Local" vs "Remote: <profile>"). Seeded from the last known
-  // value so the label is correct before auto-connect resolves.
-  const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(() => {
-    try {
-      const raw = localStorage.getItem('akorith.ollamaActive')
-      return raw ? (JSON.parse(raw) as { label: string; baseUrl: string }) : null
-    } catch {
-      return null
-    }
-  })
-
-  useEffect(() => {
-    void loadProviders()
-    void window.api.bridge.getSettings().then((s) => setAutoEnter(s.autoEnter))
-    void window.api.digest.getSettings().then((s) => setDigestEnabled(s.enabled))
-    return () => {
-      clearTimeout(toastTimer.current)
-      clearTimeout(sentTimer.current)
-      clearTimeout(autoSummaryTimer.current)
-    }
-  }, [loadProviders])
-
-  // Phase 33.14: once on launch, try local → last → remote Ollama endpoints by
-  // priority and pick the first healthy one. If it switched the active endpoint,
-  // reload providers so the model picker shows the now-reachable models.
-  useEffect(() => {
-    let cancelled = false
-    void window.api.ollama
-      .autoConnect()
-      .then((res) => {
-        if (cancelled || !res.ok) return
-        const active = { label: res.active.label, baseUrl: res.active.baseUrl }
-        setOllamaActive(active)
-        try {
-          localStorage.setItem('akorith.ollamaActive', JSON.stringify(active))
-        } catch {
-          /* ignore */
-        }
-        if (res.switched) void loadProviders()
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [loadProviders])
-
-  const modelSource = useCallback(
-    (pid: string): string | undefined => {
-      if (pid === 'local' || pid.toLowerCase().includes('ollama')) return ollamaActive?.label ?? 'Local'
-      return undefined
-    },
-    [ollamaActive]
-  )
-
-  useEffect(() => {
-    if (!hasLocalAutoStarting(providers)) return
-    const timer = window.setTimeout(() => void loadProviders(), 3000)
-    return () => window.clearTimeout(timer)
-  }, [providers, loadProviders])
-
-  // Read-only memory stats for the composer indicator (no model call). Each
-  // session is independent, so this only ever reflects the active session.
-  const refreshContextInfo = useCallback(async (sessionId: string | null): Promise<void> => {
+  const refreshContext = useCallback(async (sessionId: string | null): Promise<void> => {
     if (!sessionId) {
       setContextInfo(null)
       return
@@ -371,24 +187,30 @@ export default function ChatPanel({
     }
   }, [])
 
-  // Sidebar instructions: load a stored session, or start a fresh thread.
+  useEffect(() => {
+    void loadProviders()
+    void window.api.digest.getSettings().then((settings) => setDigestEnabled(settings.enabled))
+    void window.api.ollama.autoConnect().then((result) => {
+      if (result.ok) {
+        setOllamaActive({ label: result.active.label, baseUrl: result.active.baseUrl })
+        if (result.switched) void loadProviders()
+      }
+    }).catch(() => {})
+  }, [loadProviders])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') setMoreOpen(false) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [moreOpen])
+
   useEffect(() => {
     if (!historySel || historySel.mode !== mode) return
-    // Phase 38.9: don't reload (and wipe the in-flight assistant message + its
-    // thinking indicator) when re-selecting a session that still has a request in
-    // flight. Pending state is App-owned, so this holds across any navigation —
-    // not just while this component's local busyRequestId is set.
-    if (
-      historySel.sessionId &&
-      (pendingSessions?.has(historySel.sessionId) || (busyRequestId && historySel.sessionId === activeSessionId))
-    ) {
-      return
-    }
-    // A fresh session/thread always opens scrolled to the bottom.
+    if (historySel.sessionId && (pendingSessions?.has(historySel.sessionId) || (busyRequestId && historySel.sessionId === activeSessionId))) return
     nearBottomRef.current = true
     setConfirmingClear(false)
-    if (historySel.sessionId === null) {
-      // New Chat / fresh thread: no old memory, truly empty session.
+    if (!historySel.sessionId) {
       setMessages([])
       setActiveSessionId(null)
       onActiveSession(null)
@@ -396,469 +218,118 @@ export default function ChatPanel({
       if (historySel.providerId) setProviderId(historySel.providerId)
       return
     }
-    void (async () => {
-      const data = await window.api.history.messages(historySel.sessionId!)
+    void window.api.history.messages(historySel.sessionId).then((data) => {
       if (!data) return
-      setMessages(
-        data.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          text: m.content,
-          status: 'done' as const,
-          meta:
-            m.role === 'assistant'
-              ? { provider: m.providerId, model: m.model ?? 'default' }
-              : undefined
-        }))
-      )
+      setMessages(data.messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        text: message.role === 'assistant' && message.providerId === 'opencode'
+          ? normalizeStoredOpenCodeMessage(message.content)
+          : message.content,
+        status: 'done',
+        meta: message.role === 'assistant' ? { provider: message.providerId, model: message.model ?? 'default' } : undefined
+      })))
       setActiveSessionId(data.session.id)
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
-      // Restore the REAL memory state, not just the UI transcript.
-      void refreshContextInfo(data.session.id)
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      void refreshContext(data.session.id)
+    })
   }, [historySel?.nonce, mode])
 
-  const selected = providers?.find((p) => p.id === providerId)
+  const selected = providers?.find((provider) => provider.id === providerId)
 
-  // Default the model whenever the selected provider (or its model list) changes.
   useEffect(() => {
-    setModel((current) =>
-      selected && selected.models.includes(current) ? current : (selected?.models[0] ?? '')
-    )
+    setModel((current) => selected?.models.includes(current) ? current : selected?.models[0] ?? '')
   }, [selected])
 
   useEffect(() => {
-    const el = scrollRef.current
-    if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
+    const element = scrollRef.current
+    if (element && nearBottomRef.current) element.scrollTop = element.scrollHeight
   }, [messages])
 
-  useEffect(() => {
-    selectionRef.current = selection
-  }, [selection])
-
-  // Track whether the user is parked near the bottom of the conversation.
-  const handleMessagesScroll = (): void => {
-    const el = scrollRef.current
-    if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-    if (selectionRef.current) setSelection(null)
+  const showToast = (message: string): void => {
+    setToast(message)
+    window.setTimeout(() => setToast((current) => current === message ? null : current), 1800)
   }
-
-  const showToast = (kind: 'ok' | 'error', text: string): void => {
-    setToast({ kind, text })
-    clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 2500)
-  }
-
-  // The single renderer-side entry to the bridge. All three send modes (code
-  // block, whole message, selection) call this; main funnels it into
-  // PtyManager.write(). The Phase 9 macro-loop uses the same main-side path.
-  const sendToTerminal = async (text: string, sourceKey: string): Promise<void> => {
-    if (autoEnter === null) return // settings not loaded yet
-    const label = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
-    let baselineChars: number | null = null
-    try {
-      baselineChars = (await window.api.pty.snapshot(bridgeTarget, 8000)).chars
-    } catch {
-      baselineChars = null
-    }
-    const res = await window.api.bridge.send({ text, targetTerminalId: bridgeTarget, autoEnter })
-    if (res.ok) {
-      setSentKey(sourceKey)
-      clearTimeout(sentTimer.current)
-      sentTimer.current = setTimeout(() => setSentKey(null), 1500)
-      showToast('ok', `Sent to ${label}${autoEnter ? ' (running)' : ''}`)
-      // Phase 13.2: after a bounded delay, read what the agent did and summarize
-      // it back into chat (once, deduped). Manual button also available.
-      scheduleAutoSummary(bridgeTarget, text, baselineChars)
-    } else {
-      showToast('error', res.error)
-    }
-  }
-
-  /** Render an ExecutorSummary into a compact, readable chat card body. */
-  const formatAgentSummary = (
-    summary: import('../../../preload/index.d').ExecutorSummary,
-    detection: import('../../../preload/index.d').PermissionDetection
-  ): string => {
-    const lines: string[] = [summary.currentStatus]
-    if (summary.changedFiles.length) lines.push(`Files changed: ${summary.changedFiles.slice(0, 8).join(', ')}`)
-    if (summary.commandsRun.length) lines.push(`Commands: ${summary.commandsRun.slice(0, 6).join(' · ')}`)
-    if (summary.testsRun) lines.push(`Tests: ${summary.testsRun}`)
-    if (summary.failures.length) lines.push(`Failures: ${summary.failures.slice(0, 3).join(' | ')}`)
-    lines.push(`Recommended next step: ${summary.likelyNextStep}`)
-    if (detection.detected) lines.push(`⚠ A permission prompt is waiting — ${detection.rationale} Open the activity drawer to review.`)
-    lines.push('How would you like to continue?')
-    return lines.join('\n')
-  }
-
-  /**
-   * Summarize a target terminal's recent output into a chat-visible assistant
-   * card. Meta call → never writes a usage_event. `auto` runs silently after a
-   * send; the manual button surfaces the "no meaningful output" state.
-   */
-  const runAgentSummary = async (terminalId: string, opts: { auto: boolean; lastPrompt?: string }): Promise<void> => {
-    if (!selected?.available.ok) {
-      if (!opts.auto) showToast('error', 'Select an available provider to summarize agent output.')
-      return
-    }
-    setSummarizingAgent(true)
-    try {
-      const res = await window.api.agent.summarize({
-        terminalId,
-        providerId: selected.id,
-        model: model || undefined,
-        goal: hasProject && activeProject ? `Work in ${activeProject.name}` : undefined,
-        lastPrompt: opts.lastPrompt,
-        // Phase 14.2: fold the summary into THIS session's memory so later
-        // follow-ups in the same chat can reference what the agent did.
-        sessionId: activeSessionId ?? undefined
-      })
-      const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
-      const source = `${label} / ${AGENT_ROLE[terminalId] ?? 'Agent'}`
-      if (res.ok) {
-        if (opts.auto && res.signature === lastSummarySig.current) return // unchanged → no spam
-        lastSummarySig.current = res.signature
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: newId(),
-            role: 'assistant',
-            status: 'done',
-            text: formatAgentSummary(res.summary, res.detection),
-            summary: { source, needsAttention: res.summary.needsUserAttention || res.detection.detected }
-          }
-        ])
-        if (res.persisted) void refreshContextInfo(activeSessionId) // summary now in session memory
-      } else if (!opts.auto) {
-        showToast('error', `${source}: ${res.error}`)
-      }
-    } finally {
-      setSummarizingAgent(false)
-    }
-  }
-
-  const permSig = (terminalId: string, d: PermissionDetection): string =>
-    `${terminalId}:${d.question ?? ''}:${d.matchedText ?? ''}`
-
-  /** Read-only check for a pending permission prompt; surfaces the card if new. */
-  const checkPermission = useCallback(
-    async (terminalId: string): Promise<boolean> => {
-      try {
-        const res = await window.api.agent.detectPermission(terminalId)
-        if (!res.ok || !res.detection.detected) {
-          // The prompt is gone — clear any stale card for this terminal.
-          setPendingPermission((cur) => (cur && cur.terminalId === terminalId ? null : cur))
-          return false
-        }
-        const sig = permSig(terminalId, res.detection)
-        if (sig === dismissedPermSig.current) return false
-        setPendingPermission({ detection: res.detection, terminalId })
-        return true
-      } catch {
-        return false
-      }
-    },
-    []
-  )
-
-  /**
-   * Phase 14.1: after sending to an agent, watch the target terminal until its
-   * output stabilizes (or a permission prompt appears, or a bounded deadline),
-   * then summarize once. More reliable than a single fixed delay — Claude/Codex
-   * often keep streaming for a while after the prompt is accepted.
-   */
-  const scheduleAutoSummary = (terminalId: string, lastPrompt: string, baselineChars: number | null = null): void => {
-    clearTimeout(autoSummaryTimer.current)
-    const token = ++summaryWatch.current
-    const deadline = Date.now() + AUTO_SUMMARY_MAX_WAIT_MS
-    let lastLen = -1
-    let stable = 0
-    let sawNewOutput = baselineChars === null
-    const tick = async (): Promise<void> => {
-      if (token !== summaryWatch.current) return // superseded by a newer send
-      // Surface a permission prompt as soon as we see one (and keep watching).
-      const hasPrompt = await checkPermission(terminalId)
-      let len = lastLen
-      try {
-        const snap = await window.api.pty.snapshot(terminalId, 8000)
-        len = snap.chars
-      } catch {
-        /* keep previous length */
-      }
-      if (baselineChars !== null && len > baselineChars + 4) sawNewOutput = true
-      if (len === lastLen) stable += 1
-      else {
-        stable = 0
-        lastLen = len
-      }
-      const timedOut = Date.now() > deadline
-      if (!sawNewOutput && timedOut && !hasPrompt) {
-        const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
-        showToast('error', `${label} did not produce new output after send; check the prompt or press Enter in Activity.`)
-        return
-      }
-      const settled = sawNewOutput && (stable >= 2 || timedOut)
-      if (settled && !hasPrompt) {
-        if (token === summaryWatch.current) void runAgentSummary(terminalId, { auto: true, lastPrompt })
-        return
-      }
-      autoSummaryTimer.current = setTimeout(() => void tick(), AUTO_SUMMARY_POLL_MS)
-    }
-    autoSummaryTimer.current = setTimeout(() => void tick(), AUTO_SUMMARY_FIRST_DELAY_MS)
-  }
-
-  /** Answer a detected permission prompt via the single bridge write path. */
-  const answerPermission = async (option: PermissionOption): Promise<void> => {
-    const pending = pendingPermission
-    if (!pending) return
-    dismissedPermSig.current = permSig(pending.terminalId, pending.detection)
-    setPendingPermission(null)
-    const label = TERMINALS.find((t) => t.id === pending.terminalId)?.label ?? pending.terminalId
-    // Permanent "always allow" is surfaced but never sent automatically; here the
-    // user explicitly chose it, which is allowed, but we still gate on the click.
-    const res = await window.api.bridge.send({ text: option.value, targetTerminalId: pending.terminalId, autoEnter: true })
-    if (res.ok) {
-      showToast('ok', `Answered ${label}: ${option.label}`)
-      // Let the agent react, then summarize the result back into chat.
-      scheduleAutoSummary(pending.terminalId, `Answered permission prompt: ${option.label}`)
-    } else {
-      showToast('error', res.error)
-    }
-  }
-
-  const dismissPermission = (): void => {
-    if (pendingPermission) dismissedPermSig.current = permSig(pendingPermission.terminalId, pendingPermission.detection)
-    setPendingPermission(null)
-  }
-
-  // Background permission poll: while a project workspace is open, watch the
-  // current target terminal for a confirmation prompt so the user can answer it
-  // from chat. Read-only (agent:detectPermission) — never writes anything.
-  useEffect(() => {
-    if (!hasProject) {
-      setPendingPermission(null)
-      return
-    }
-    let cancelled = false
-    const id = setInterval(() => {
-      if (!cancelled) void checkPermission(bridgeTarget)
-    }, PERMISSION_POLL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [hasProject, bridgeTarget, checkPermission])
-
-  // Switching project clears any stale permission card and lets prompts re-show.
-  useEffect(() => {
-    setPendingPermission(null)
-    dismissedPermSig.current = null
-  }, [activeProject?.id])
-
-  const toggleAutoEnter = async (): Promise<void> => {
-    const next = !(autoEnter ?? false)
-    const settings = await window.api.bridge.setAutoEnter(next)
-    setAutoEnter(settings.autoEnter)
-  }
-
-  const toggleDigest = async (): Promise<void> => {
-    const settings = await window.api.digest.setEnabled(!digestEnabled)
-    setDigestEnabled(settings.enabled)
-  }
-
-  // On-demand only (never per keystroke). The classifier runs locally in main;
-  // accepting just switches the visible selectors — nothing is sent or changed
-  // automatically.
-  const suggestTask = async (): Promise<void> => {
-    const prompt = draft.trim()
-    if (!prompt || suggesting) return
-    setSuggesting(true)
-    setSuggestion(null)
-    try {
-      const res = await window.api.router.suggest(prompt)
-      if (res.ok) setSuggestion(res.suggestion)
-      else showToast('error', res.error)
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : String(err))
-    } finally {
-      setSuggesting(false)
-    }
-  }
-
-  const acceptSuggestion = (): void => {
-    if (!suggestion) return
-    // Switch the user's own selectors to the suggestion for this send. The send
-    // still goes through the normal chat:send path with these values.
-    if (suggestion.providerId !== providerId && (activeSessionId || messages.length > 0)) {
-      setMessages([])
-      setActiveSessionId(null)
-      onActiveSession(null)
-      setContextInfo(null)
-    }
-    setProviderId(suggestion.providerId)
-    setModel(suggestion.model ?? '')
-    setSuggestion(null)
-  }
-
-  // Phase 33.8: single entry point for the composer model picker. Changing the
-  // provider mid-conversation starts a fresh thread (a session belongs to one
-  // provider), mirroring the old top-bar select behaviour; a model-only change
-  // keeps the current thread.
-  const selectModel = (nextProviderId: string, nextModel: string): void => {
-    if (nextProviderId !== providerId && (activeSessionId || messages.length > 0)) {
-      setMessages([])
-      setActiveSessionId(null)
-      onActiveSession(null)
-      setContextInfo(null)
-    }
-    setProviderId(nextProviderId)
-    setModel(nextModel)
-  }
-
-  const handleSelectionMouseUp = (): void => {
-    // Defer so the browser settles the selection first.
-    setTimeout(() => {
-      const sel = window.getSelection()
-      const container = scrollRef.current
-      if (!sel || sel.isCollapsed || !container || !container.contains(sel.anchorNode)) {
-        setSelection(null)
-        return
-      }
-      const text = sel.toString().trim()
-      if (!text) {
-        setSelection(null)
-        return
-      }
-      const rect = sel.getRangeAt(0).getBoundingClientRect()
-      setSelection({ x: rect.left + rect.width / 2, y: rect.top, text })
-    }, 0)
-  }
-
-  const patchMessage = (id: string, patch: Partial<ChatMessage> | ((m: ChatMessage) => ChatMessage)): void => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? (typeof patch === 'function' ? patch(m) : { ...m, ...patch }) : m))
-    )
-  }
-
-  const readImageFile = (file: File): Promise<ComposerImage> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onerror = () => reject(new Error(`Could not read ${file.name}`))
-      reader.onload = () => {
-        const value = typeof reader.result === 'string' ? reader.result : ''
-        const comma = value.indexOf(',')
-        if (comma < 0) {
-          reject(new Error(`Could not read ${file.name}`))
-          return
-        }
-        resolve({
-          name: file.name,
-          mimeType: file.type,
-          dataBase64: value.slice(comma + 1),
-          previewUrl: value
-        })
-      }
-      reader.readAsDataURL(file)
-    })
 
   const addImageFiles = async (files: FileList | null): Promise<void> => {
-    if (!files?.length) return
-    const accepted = [...files].filter((file) => /^image\/(png|jpeg|webp|gif)$/.test(file.type) && file.size <= 6_000_000)
-    if (accepted.length === 0) {
-      showToast('error', 'Attach PNG, JPEG, WebP, or GIF images under 6 MB')
-      return
-    }
-    try {
-      const next = await Promise.all(accepted.slice(0, 4).map(readImageFile))
-      setAttachedImages((current) => [...current, ...next].slice(0, 4))
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : String(err))
-    } finally {
-      if (imageInputRef.current) imageInputRef.current.value = ''
-    }
+    if (!files) return
+    const accepted = [...files].filter((file) => ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)).slice(0, 4 - attachedImages.length)
+    const next = await Promise.all(accepted.map(async (file): Promise<ComposerImage> => {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      let binary = ''
+      for (const byte of bytes) binary += String.fromCharCode(byte)
+      return { name: file.name, mimeType: file.type, dataBase64: btoa(binary), previewUrl: URL.createObjectURL(file) }
+    }))
+    setAttachedImages((current) => [...current, ...next])
+    if (imageInputRef.current) imageInputRef.current.value = ''
+  }
+
+  const ensureSession = async (prompt: string): Promise<string> => {
+    if (activeSessionId) return activeSessionId
+    const session = await window.api.history.create(providerId, prompt.replace(/\s+/g, ' ').slice(0, 64), hasProject ? activeProject!.id : null)
+    setActiveSessionId(session.id)
+    onActiveSession(session.id)
+    onHistoryChange()
+    return session.id
   }
 
   const sendPrompt = async (): Promise<void> => {
-    const prompt = draft.trim() || (attachedImages.length ? 'Please analyze the attached image.' : '')
-    const images = attachedImages.map(({ previewUrl: _previewUrl, ...image }) => image)
-    if ((!prompt && images.length === 0) || busyRequestId || !selected?.available.ok) return
-
-    // A session belongs to one provider: create it on the first message.
-    let sessionId = activeSessionId
-    if (!sessionId) {
-      try {
-        const session = await window.api.history.create(selected.id, prompt.slice(0, 80), hasProject ? activeProject?.id ?? null : null)
-        sessionId = session.id
-        setActiveSessionId(session.id)
-        onActiveSession(session.id)
-        onHistoryChange()
-      } catch {
-        sessionId = null // persistence trouble must not block the chat
-      }
-    }
-
+    const prompt = draft.trim()
+    if (!prompt || !selected?.available.ok || busyRequestId || (isWorkspace && !hasProject)) return
     const requestId = newId()
     const assistantId = newId()
+    const images = attachedImages.map(({ previewUrl: _previewUrl, ...image }) => image)
+    const sessionId = await ensureSession(prompt)
     setDraft('')
     setAttachedImages([])
+    setSuggestion(null)
     setBusyRequestId(requestId)
-    // Phase 38.9: mark this session pending at App level so the thinking state
-    // survives navigation. Cleared in finally (success/error/cancel).
-    if (sessionId) onPendingChange?.(sessionId, true)
-    setMessages((prev) => [
-      ...prev,
+    onPendingChange?.(sessionId, true)
+    setMessages((current) => [
+      ...current,
       { id: newId(), role: 'user', text: prompt, status: 'done', images },
-      {
-        id: assistantId,
-        role: 'assistant',
-        text: '',
-        status: 'streaming',
-        meta: { provider: selected.label, model: model || 'default' }
-      }
+      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: [], startedAt: Date.now() }
     ])
 
     const offToken = window.api.chat.onToken(requestId, (token) => {
-      patchMessage(assistantId, (m) => ({ ...m, text: m.text + token }))
+      setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, text: message.text + token } : message))
     })
+    const offActivity = window.api.chat.onActivity(requestId, (activity) => {
+      setMessages((current) => current.map((message) => message.id === assistantId
+        ? { ...message, activities: [...(message.activities ?? []), activity].slice(-30) }
+        : message))
+    })
+
     try {
       const response = await window.api.chat.send({
         requestId,
-        providerId: selected.id,
+        providerId,
         model: model || undefined,
         prompt,
-        sessionId: sessionId ?? undefined,
-        includeDigest: hasProject,
-        workspaceContext: hasProject && activeProject?.path
-          ? { projectName: activeProject.name, projectPath: activeProject.path }
-          : undefined,
+        sessionId,
+        includeDigest: hasProject && digestEnabled,
+        workspaceContext: hasProject ? { projectName: activeProject!.name, projectPath: activeProject!.path! } : undefined,
         images
       })
+      setMessages((current) => current.map((message) => message.id === assistantId
+        ? response.ok
+          ? { ...message, text: response.result.text, status: 'done', meta: { provider: providerId, model: response.result.model, usage: response.result.usage } }
+          : { ...message, text: response.error, status: 'error' }
+        : message))
       if (response.ok) {
-        patchMessage(assistantId, {
-          text: response.result.text,
-          status: 'done',
-          meta: { provider: selected.label, model: response.result.model, usage: response.result.usage }
-        })
-      } else {
-        patchMessage(assistantId, (m) => ({
-          ...m,
-          status: 'error',
-          text: m.text || `Error: ${response.error}`
-        }))
+        onHistoryChange()
+        void refreshContext(sessionId)
       }
     } catch (err) {
-      patchMessage(assistantId, {
-        status: 'error',
-        text: `Error: ${err instanceof Error ? err.message : String(err)}`
-      })
+      setMessages((current) => current.map((message) => message.id === assistantId
+        ? { ...message, text: err instanceof Error ? err.message : String(err), status: 'error' }
+        : message))
     } finally {
       offToken()
+      offActivity()
       setBusyRequestId(null)
-      if (sessionId) onPendingChange?.(sessionId, false)
-      onHistoryChange() // updated_at moved this session up the sidebar
-      void refreshContextInfo(sessionId) // memory indicator now includes this turn
+      onPendingChange?.(sessionId, false)
     }
   }
 
@@ -866,500 +337,117 @@ export default function ChatPanel({
     if (busyRequestId) window.api.chat.cancel(busyRequestId)
   }
 
-  // Reset context for the ACTIVE session only (clears its messages + summary).
-  // Two-click confirm so it isn't destructive by accident; never touches other chats.
   const clearContext = async (): Promise<void> => {
-    if (!activeSessionId || busyRequestId) return
+    if (!activeSessionId) return
     if (!confirmingClear) {
       setConfirmingClear(true)
-      setTimeout(() => setConfirmingClear(false), 3000)
       return
     }
+    await window.api.history.clearMessages(activeSessionId)
+    setMessages([])
     setConfirmingClear(false)
+    void refreshContext(activeSessionId)
+    onHistoryChange()
+  }
+
+  const suggestTask = async (): Promise<void> => {
+    if (!draft.trim()) return
+    setSuggesting(true)
     try {
-      await window.api.history.clearMessages(activeSessionId)
-      setMessages([])
-      lastSummarySig.current = null
-      await refreshContextInfo(activeSessionId)
-      onHistoryChange()
-      showToast('ok', 'Context reset for this chat')
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : String(err))
+      const response = await window.api.router.suggest(draft.trim())
+      if (response.ok) setSuggestion(response.suggestion)
+      else showToast(response.error)
+    } finally {
+      setSuggesting(false)
     }
   }
 
-  const canSend = (Boolean(draft.trim()) || attachedImages.length > 0) && !busyRequestId && Boolean(selected?.available.ok)
-
-  const bridgeLabel = TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? bridgeTarget
-  const lastUsage = useMemo(
-    () => [...messages].reverse().find((m) => m.role === 'assistant' && m.meta?.usage)?.meta?.usage,
-    [messages]
-  )
-  const composerInfo = [
-    isWorkspace ? `workspace ${activeProject?.name ?? 'no project'}` : 'general chat',
-    selected?.label ?? 'No provider',
-    formatModelLabel(model || 'default', providerId),
-    lastUsage ? usageLine(lastUsage) : null,
-    hasProject ? `repo context ${digestEnabled ? 'on' : 'off'}` : null,
-    hasProject ? `target ${bridgeLabel}` : null
-  ].filter((item): item is string => Boolean(item))
-
-  const bridgeButton = (text: string, key: string, title: string): JSX.Element => (
-    <button
-      type="button"
-      className={`bridge-button ${sentKey === key ? 'is-sent' : ''}`}
-      title={title}
-      onClick={() => void sendToTerminal(text, key)}
-    >
-      {sentKey === key ? 'Sent' : `Send to ${bridgeLabel}`}
-    </button>
-  )
+  const acceptSuggestion = (): void => {
+    if (!suggestion?.available) return
+    setProviderId(suggestion.providerId)
+    if (suggestion.model) setModel(suggestion.model)
+    setSuggestion(null)
+  }
 
   const copyButton = (text: string, key: string): JSX.Element => (
-    <button
-      type="button"
-      className={`copy-button ${copiedKey === key ? 'is-copied' : ''}`}
-      title="Copy this block"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text)
-          setCopiedKey(key)
-          setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1600)
-          showToast('ok', 'Copied')
-        } catch (err) {
-          showToast('error', err instanceof Error ? err.message : 'Copy failed')
-        }
-      }}
-    >
-      {copiedKey === key ? 'Copied' : 'Copy'}
-    </button>
+    <button type="button" className="chat-copy" onClick={() => void navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key)
+      showToast('Copied')
+    })}>{copiedKey === key ? 'Copied' : 'Copy'}</button>
   )
 
   const hasConversation = messages.length > 0
-
-  // Phase 14.2 memory indicator + reset control, shown near the composer so it is
-  // obvious the model receives this session's prior turns (a trust surface).
-  const ctxCount = contextInfo?.totalMessages ?? 0
-  const memoryLabel = ((): string => {
-    if (ctxCount > 0) {
-      const bits = [`Memory: ${ctxCount} msg${ctxCount === 1 ? '' : 's'}`]
-      if (contextInfo?.hasSummary) bits.push(`summarized ${contextInfo.summarizedCount}`)
-      if (hasProject && digestEnabled) bits.push('Repo on')
-      return bits.join(' · ')
-    }
-    return hasProject ? 'Session memory on' : 'New chat — memory on'
-  })()
-  const memoryTooltip =
-    contextInfo && contextInfo.totalMessages > 0
-      ? `This chat remembers its previous messages. ${contextInfo.includedVerbatim} recent message(s) are sent in full` +
-        (contextInfo.hasSummary ? `, and ${contextInfo.summarizedCount} older message(s) are compressed into a summary` : '') +
-        ` (~${contextInfo.approxTokens} tokens of context).`
-      : 'The model will see this session’s previous messages as you continue the conversation.'
-  const memoryBar = (
-    <div className="context-bar">
-      <span className="context-chip" title={memoryTooltip}>
-        <span className="context-dot" />
-        {memoryLabel}
-      </span>
-      {activeSessionId && hasConversation && (
-        <button
-          type="button"
-          className={`context-clear ${confirmingClear ? 'is-confirm' : ''}`}
-          onClick={() => void clearContext()}
-          disabled={Boolean(busyRequestId)}
-          title="Clear this chat's memory (only this session). Click again to confirm."
-        >
-          {confirmingClear ? 'Reset context?' : 'Reset context'}
-        </button>
-      )}
-    </div>
-  )
-
-  // The composer is the central work control, reused in the empty-state hero and
-  // (when a conversation exists) docked at the bottom. The autonomous loop now
-  // lives in its own top-level Loop section (LoopsPage), not above the composer.
-  const permissionCard = pendingPermission && (() => {
-    const { detection, terminalId } = pendingPermission
-    const label = TERMINALS.find((t) => t.id === terminalId)?.label ?? terminalId
-    const role = AGENT_ROLE[terminalId] ?? 'Agent'
-    const options: PermissionOption[] =
-      detection.options && detection.options.length > 0
-        ? detection.options
-        : detection.suggestedAction !== ''
-          ? [{ value: detection.suggestedAction, label: 'Yes once', tone: 'affirm' }]
-          : detection.requiresUserReview
-            ? []
-            : [{ value: 'y', label: 'Yes once', tone: 'affirm' }, { value: 'n', label: 'No', tone: 'deny' }]
-    return (
-      <div className={`permission-card risk-${detection.riskLevel}`}>
-        <div className="permission-head">
-          <span className="permission-source">
-            {label} / {role}
-          </span>
-          <span className="permission-tag">waiting for your answer</span>
-          {detection.riskLevel !== 'low' && <span className="permission-risk">{detection.riskLevel} risk</span>}
-        </div>
-        <div className="permission-question">{detection.question || detection.matchedText || 'The agent is asking for confirmation in the terminal.'}</div>
-        <div className="permission-actions">
-          {options.map((opt, i) => (
-            <button
-              key={`${opt.value}-${i}`}
-              type="button"
-              className={`permission-btn tone-${opt.tone} ${opt.permanent ? 'is-permanent' : ''}`}
-              title={opt.permanent ? 'Permanent “always allow” — sent only because you chose it explicitly.' : `Send “${opt.label}” to ${label}`}
-              onClick={() => void answerPermission(opt)}
-            >
-              {opt.label}
-            </button>
-          ))}
-          <button type="button" className="permission-btn tone-neutral" onClick={onToggleDrawer}>
-            Open Activity
-          </button>
-          <button type="button" className="permission-dismiss" onClick={dismissPermission} title="Hide — answer later in the terminal">
-            Dismiss
-          </button>
-        </div>
-        {detection.requiresUserReview && (
-          <div className="permission-note">Akorith will not auto-answer this — review the choices above.</div>
-        )}
-      </div>
-    )
-  })()
+  const canSend = Boolean(draft.trim() && selected?.available.ok && !busyRequestId && (!isWorkspace || hasProject))
+  const contextCount = contextInfo?.totalMessages ?? 0
+  const memoryLabel = contextCount > 0 ? `Memory: ${contextCount} messages` : hasProject ? 'Project memory on' : 'Session memory on'
 
   const composer = (
     <div className="composer">
-      {permissionCard}
       {suggestion && (
         <div className="router-suggestion">
-          <div className="router-suggestion-head">
-            <span className={`tier-badge tier-${suggestion.tier}`}>
-              {suggestion.rank} · {suggestion.tier}
-            </span>
-            {suggestion.classifiedBy === 'heuristic' && <span className="tier-heuristic">heuristic</span>}
-            <span className="router-target">
-              → {suggestion.providerLabel}
-              {suggestion.model ? ` · ${suggestion.model}` : ''}
-            </span>
-            {!suggestion.available && <span className="router-unavailable">unavailable</span>}
-          </div>
+          <div className="router-suggestion-head"><span className={`tier-badge tier-${suggestion.tier}`}>{suggestion.rank} · {suggestion.tier}</span><span className="router-target">→ {suggestion.providerLabel}{suggestion.model ? ` · ${suggestion.model}` : ''}</span></div>
           <div className="router-reason">{suggestion.reason}</div>
-          {suggestion.warning && <div className="router-warning">⚠ {suggestion.warning}</div>}
-          <div className="router-actions">
-            <button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>
-              Accept
-            </button>
-            <button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>
-              Ignore
-            </button>
-          </div>
+          <div className="router-actions"><button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>Use model</button><button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>Dismiss</button></div>
         </div>
       )}
       <div className="composer-box">
-        {attachedImages.length > 0 && (
-          <div className="composer-images">
-            {attachedImages.map((image, index) => (
-              <div className="composer-image" key={`${image.name}-${index}`}>
-                <img src={image.previewUrl} alt={image.name} title={image.name} />
-                <button
-                  type="button"
-                  title={`Remove ${image.name}`}
-                  onClick={() => setAttachedImages((current) => current.filter((_, i) => i !== index))}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        {attachedImages.length > 0 && <div className="composer-images">{attachedImages.map((image, index) => <div className="composer-image" key={`${image.name}-${index}`}><img src={image.previewUrl} alt={image.name} /><button type="button" onClick={() => setAttachedImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div>}
         <textarea
           className="composer-input"
-          placeholder={
-            !selected?.available.ok
-              ? 'Select an available provider to start…'
-              : hasProject
-                ? `Describe a task for ${activeProject!.name}…  (Enter to send · Shift+Enter for newline)`
-                : isWorkspace
-                  ? 'Open a project to start the workspace…'
-                  : 'Ask a model directly…  (Enter to send · Shift+Enter for newline)'
-          }
+          placeholder={!selected?.available.ok ? 'Select an available model…' : hasProject ? `Describe a task for ${activeProject!.name}…` : isWorkspace ? 'Open a project to start…' : 'Ask a model directly…'}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void sendPrompt()
-            }
-          }}
+          onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendPrompt() } }}
           rows={2}
           spellCheck={false}
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
-            <ModelPicker
-              providers={providers}
-              providerId={providerId}
-              model={model}
-              onSelect={selectModel}
-              onRefresh={() => void loadProviders()}
-              modelSource={modelSource}
-            />
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              className="composer-file-input"
-              onChange={(event) => void addImageFiles(event.target.files)}
-            />
-            {/* Primary: target agent selector stays visible in a workspace. */}
-            {hasProject && (
-              <div className="route-seg" role="group" aria-label="Target agent">
-                {TERMINALS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={bridgeTarget === t.id ? 'is-active' : ''}
-                    onClick={() => setBridgeTarget(t.id)}
-                    title={`Bridge sends go to ${t.label} (${AGENT_ROLE[t.id] ?? 'Agent'})`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Phase 39.7: secondary actions grouped into a compact "More" popover. */}
+            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
+            <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple className="composer-file-input" onChange={(event) => void addImageFiles(event.target.files)} />
             <div className="composer-more">
-              <button
-                type="button"
-                className={`composer-chip ${moreOpen ? 'is-active' : ''}`}
-                aria-haspopup="menu"
-                aria-expanded={moreOpen}
-                title="More composer tools"
-                onClick={() => setMoreOpen((v) => !v)}
-              >
-                <SparkIcon size={13} />
-                More
-              </button>
-              {moreOpen && (
-                <>
-                  <div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} />
-                  <div className="composer-more-pop" role="menu">
-                    <button
-                      type="button"
-                      className="composer-more-item"
-                      disabled={busyRequestId !== null || attachedImages.length >= 4}
-                      onClick={() => {
-                        setMoreOpen(false)
-                        imageInputRef.current?.click()
-                      }}
-                    >
-                      <PlusIcon size={13} />
-                      <span>Attach image</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="composer-more-item"
-                      disabled={!draft.trim() || suggesting}
-                      onClick={() => {
-                        setMoreOpen(false)
-                        void suggestTask()
-                      }}
-                    >
-                      <SparkIcon size={13} />
-                      <span>{suggesting ? 'Classifying…' : 'Suggest model'}</span>
-                    </button>
-                    {hasProject && (
-                      <>
-                        <div className="composer-more-sep" />
-                        <label className="composer-more-toggle" title="Prepend a bounded git digest of the repo to what the provider sees.">
-                          <span>Repo context</span>
-                          <input type="checkbox" checked={digestEnabled} onChange={() => void toggleDigest()} />
-                        </label>
-                        <label className="composer-more-toggle" title="ON: sent text runs immediately. OFF: waits at the prompt for Enter.">
-                          <span>Auto-Enter</span>
-                          <input type="checkbox" checked={autoEnter ?? false} disabled={autoEnter === null} onChange={() => void toggleAutoEnter()} />
-                        </label>
-                        <div className="composer-more-sep" />
-                        <button
-                          type="button"
-                          className="composer-more-item"
-                          disabled={summarizingAgent}
-                          onClick={() => {
-                            setMoreOpen(false)
-                            void runAgentSummary(bridgeTarget, { auto: false })
-                          }}
-                        >
-                          <span>{summarizingAgent ? 'Reading…' : `Summarize ${TERMINALS.find((t) => t.id === bridgeTarget)?.label ?? 'agent'} output`}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="composer-more-item"
-                          onClick={() => {
-                            setMoreOpen(false)
-                            onToggleDrawer()
-                          }}
-                        >
-                          <span>{drawerOpen ? 'Hide agents' : 'Show agents'}</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
+              <button type="button" className={`composer-chip ${moreOpen ? 'is-active' : ''}`} onClick={() => setMoreOpen((open) => !open)}><SparkIcon size={13} />More</button>
+              {moreOpen && <><div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} /><div className="composer-more-pop" role="menu">
+                <button type="button" className="composer-more-item" onClick={() => { setMoreOpen(false); imageInputRef.current?.click() }}><PlusIcon size={13} /><span>Attach image</span></button>
+                <button type="button" className="composer-more-item" disabled={!draft.trim() || suggesting} onClick={() => { setMoreOpen(false); void suggestTask() }}><SparkIcon size={13} /><span>{suggesting ? 'Classifying…' : 'Suggest model'}</span></button>
+                {hasProject && <><div className="composer-more-sep" /><label className="composer-more-toggle"><span>Repository context</span><input type="checkbox" checked={digestEnabled} onChange={() => { const next = !digestEnabled; setDigestEnabled(next); void window.api.digest.setEnabled(next) }} /></label></>}
+              </div></>}
             </div>
           </div>
-          {busyRequestId ? (
-            <ComposerSendButton stop onClick={cancel}>
-              <StopIcon size={16} />
-            </ComposerSendButton>
-          ) : (
-            <ComposerSendButton disabled={!canSend} onClick={() => void sendPrompt()}>
-              <SendIcon size={16} />
-            </ComposerSendButton>
-          )}
+          {busyRequestId ? <ComposerSendButton stop onClick={cancel}><StopIcon size={16} /></ComposerSendButton> : <ComposerSendButton disabled={!canSend} onClick={() => void sendPrompt()}><SendIcon size={16} /></ComposerSendButton>}
         </div>
       </div>
-      {memoryBar}
-      <div className="composer-info">{composerInfo.join(' · ')}</div>
+      <div className="context-bar"><span className="context-chip"><span className="context-dot" />{memoryLabel}</span>{activeSessionId && hasConversation && <button type="button" className={`context-clear ${confirmingClear ? 'is-confirm' : ''}`} onClick={() => void clearContext()}>{confirmingClear ? 'Reset context?' : 'Reset context'}</button>}</div>
+      <div className="composer-info">{hasProject ? `workspace ${activeProject!.name} · ${selected?.label ?? 'model'} · direct project editing` : `${selected?.label ?? 'model'} · ${model || 'default'}`}</div>
     </div>
   )
 
   return (
     <main className="chat-panel">
       {isWorkspace && !hasProject ? (
-        <div className="ws-hero">
-          <div className="ws-hero-inner">
-            <h1 className="ws-hero-title">What should we work on?</h1>
-            <p className="ws-hero-sub">Open or create a project from the sidebar to start Codex, OpenCode, and Claude.</p>
-            <div className="ws-hero-actions">
-              <button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}>
-                <FolderIcon size={16} />
-                Open Project
-              </button>
-              <button type="button" className="ws-hero-btn" onClick={onCreateProject}>
-                <PlusIcon size={16} />
-                Create Project
-              </button>
-            </div>
-            {activeProject && !activeProject.path && (
-              <div className="ws-hero-note">Selected “{activeProject.name}” has no folder yet — open one to start agents.</div>
-            )}
-          </div>
-        </div>
+        <div className="ws-hero"><div className="ws-hero-inner"><h1 className="ws-hero-title">What should we work on?</h1><p className="ws-hero-sub">Open a project, choose one model, and develop it from this chat.</p><div className="ws-hero-actions"><button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}><FolderIcon size={16} />Open Project</button><button type="button" className="ws-hero-btn" onClick={onCreateProject}><PlusIcon size={16} />Create Project</button></div></div></div>
       ) : !hasConversation ? (
-        <div className="ws-hero">
-          <div className="ws-hero-inner is-wide">
-            <h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : `Welcome back, ${displayName}`}</h1>
-            <p className="ws-hero-sub">
-              {hasProject ? 'Type a task — Akorith plans it and drives Codex, OpenCode, and Claude for you.' : 'Pick a model and start a fresh conversation.'}
-            </p>
-            {composer}
-            {selected && !selected.available.ok && (
-              <div className="chat-notice">
-                {selected.label} unavailable{selected.available.reason ? `: ${selected.available.reason}` : ''}
-              </div>
-            )}
-            {loadError && <div className="chat-notice">Failed to load providers: {loadError}</div>}
-          </div>
-        </div>
+        <div className="ws-hero"><div className="ws-hero-inner is-wide"><h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : `Welcome back, ${displayName}`}</h1><p className="ws-hero-sub">{hasProject ? 'Choose a model and describe the outcome. Akorith works directly in the project and reports each step here.' : 'Pick a model and start a fresh conversation.'}</p>{composer}{selected && !selected.available.ok && <div className="chat-notice">{selected.label} unavailable: {selected.available.reason}</div>}{loadError && <div className="chat-notice">{loadError}</div>}</div></div>
       ) : (
         <>
-          <div className="chat-messages" ref={scrollRef} onMouseUp={handleSelectionMouseUp} onScroll={handleMessagesScroll}>
+          <div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}>
             <div className="chat-messages-col">
-              {messages.map((m) => (
-                <div key={m.id} className={`chat-msg ${m.role} ${m.status} ${m.summary ? 'is-summary' : ''}`}>
-                  {m.summary && (
-                    <div className={`agent-summary-head ${m.summary.needsAttention ? 'needs-attention' : ''}`}>
-                      <SparkIcon size={13} />
-                      <span>{m.summary.source}</span>
-                      <em>agent output summary</em>
-                    </div>
-                  )}
-                  {m.images && m.images.length > 0 && (
-                    <div className="chat-image-strip">
-                      {m.images.map((image, index) => (
-                        <img
-                          key={`${m.id}-image-${index}`}
-                          src={`data:${image.mimeType};base64,${image.dataBase64}`}
-                          alt={image.name}
-                          title={image.name}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {m.role === 'assistant' && m.status !== 'streaming' ? (
-                    <div className="chat-msg-text">
-                      {splitFences(m.text).map((seg, i) =>
-                        seg.type === 'code' ? (
-                          <div className="chat-code" key={i}>
-                            <div className="chat-code-header">
-                              <span>{seg.lang ?? 'code'}</span>
-                              <span className="chat-code-actions">
-                                {copyButton(seg.content, `${m.id}-copy-${i}`)}
-                                {hasProject && m.status === 'done' &&
-                                  bridgeButton(seg.content, `${m.id}-block-${i}`, 'Send this code block to the target terminal')}
-                              </span>
-                            </div>
-                            <pre>{seg.content}</pre>
-                          </div>
-                        ) : renderProse(seg.content, `${m.id}-text-${i}`)
-                      )}
-                    </div>
-                  ) : m.status === 'streaming' && !m.text ? (
-                    // Akorith-branded progress indicator until the
-                    // first tokens arrive (persists while the request is pending).
-                    <div className="chat-thinking" role="status" aria-live="polite">
-                      <span className="chat-thinking-dots">
-                        <span />
-                        <span />
-                        <span />
-                      </span>
-                      <span className="chat-thinking-label">Akorithing…</span>
-                    </div>
-                  ) : (
-                    <div className="chat-msg-text">{m.text}</div>
-                  )}
-                  {m.role === 'assistant' && Boolean(m.text.trim()) && !m.summary && (
-                    <div className="chat-msg-meta">
-                      {m.status === 'done' && m.meta && (
-                        <span>
-                          {m.meta.provider} · {formatModelLabel(m.meta.model, m.meta.provider)}
-                          {m.meta.usage && usageLine(m.meta.usage) ? ` · ${usageLine(m.meta.usage)}` : ''}
-                          {m.meta.usage?.estimated && <span className="chat-estimated">≈ estimated</span>}
-                        </span>
-                      )}
-                      <span className="chat-msg-actions">
-                        {copyButton(m.text, `${m.id}-copy-all`)}
-                        {hasProject && m.status === 'done' && bridgeButton(m.text, `${m.id}-all`, 'Send the whole message to the target terminal')}
-                      </span>
-                    </div>
-                  )}
-                </div>
+              {messages.map((message) => (
+                <article key={message.id} className={`chat-msg ${message.role} ${message.status}`}>
+                  {message.images?.length ? <div className="chat-image-strip">{message.images.map((image, index) => <img key={index} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} />)}</div> : null}
+                  {message.role === 'assistant' && message.startedAt && <WorkspaceActivity activities={message.activities ?? []} startedAt={message.startedAt} active={message.status === 'streaming'} failed={message.status === 'error'} />}
+                  {message.role === 'assistant' && message.status === 'streaming' && !message.text ? null : message.role === 'assistant' ? (
+                    <div className="chat-msg-text">{splitFences(message.text).map((segment, index) => segment.type === 'code' ? <div className="chat-code" key={index}><div className="chat-code-header"><span>{segment.lang ?? 'code'}</span>{copyButton(segment.content, `${message.id}-${index}`)}</div><pre>{segment.content}</pre></div> : renderProse(segment.content, `${message.id}-${index}`))}</div>
+                  ) : <div className="chat-msg-text">{message.text}</div>}
+                  {message.role === 'assistant' && message.status !== 'streaming' && message.text && <div className="chat-msg-meta"><span>{message.meta ? `${message.meta.provider} · ${formatModelLabel(message.meta.model, message.meta.provider)}${message.meta.usage && usageLine(message.meta.usage) ? ` · ${usageLine(message.meta.usage)}` : ''}` : message.status === 'error' ? 'Task stopped' : ''}</span>{copyButton(message.text, `${message.id}-all`)}</div>}
+                </article>
               ))}
             </div>
           </div>
-
-          {selection && (
-            <button
-              type="button"
-              className="selection-popover"
-              style={{ left: selection.x, top: selection.y - 34 }}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                void sendToTerminal(selection.text, 'selection')
-                setSelection(null)
-                window.getSelection()?.removeAllRanges()
-              }}
-            >
-              Send selection →
-            </button>
-          )}
-
           <div className="composer-dock">{composer}</div>
         </>
       )}
-
-      {toast && <div className={`bridge-toast ${toast.kind}`}>{toast.text}</div>}
+      {toast && <div className="bridge-toast ok">{toast}</div>}
     </main>
   )
 }

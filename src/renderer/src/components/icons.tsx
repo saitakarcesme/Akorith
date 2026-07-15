@@ -214,6 +214,22 @@ export function StopIcon(props: IconProps): JSX.Element {
   )
 }
 
+export function PlayIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M8 5l11 7-11 7V5Z" fill="currentColor" stroke="none" />
+    </IconShell>
+  )
+}
+
+export function PauseIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M8 5v14M16 5v14" strokeWidth="2.4" />
+    </IconShell>
+  )
+}
+
 // Phase 43: Companions (personality-driven companion agents) — orbit/heart mark.
 export function CompanionsIcon(props: IconProps): JSX.Element {
   return (
@@ -236,4 +252,3 @@ export function AgentsIcon(props: IconProps): JSX.Element {
     </IconShell>
   )
 }
-

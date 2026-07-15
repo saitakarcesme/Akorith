@@ -839,7 +839,6 @@ export default function Sidebar({
                     })
                   )}
                 </div>
-                {view === 'workspace' && activeProject?.path && <div className="project-agent-hint">Olympus, Gaia, and Atlantis start in this folder.</div>}
               </>
           </section>
 
@@ -976,7 +975,7 @@ export default function Sidebar({
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Create project" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Create project</div>
             <p className="modal-subtitle">
-              Akorith creates the folder, then starts Olympus as Codex and Atlantis as Claude inside it.
+              Akorith creates the folder and opens a project-scoped chat. The model you select works directly in this folder.
             </p>
             <label className="modal-field">
               <span>Project name</span>

@@ -67,26 +67,44 @@ export async function profilePhotoFromFile(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Choose an image file.')
   if (file.size > 10 * 1024 * 1024) throw new Error('Profile photos must be smaller than 10 MB.')
 
-  const objectUrl = URL.createObjectURL(file)
+  let source: ImageBitmap | HTMLImageElement
   try {
-    const image = new Image()
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve()
-      image.onerror = () => reject(new Error('The selected image could not be read.'))
-      image.src = objectUrl
+    source = await createImageBitmap(file)
+  } catch {
+    // The renderer CSP intentionally disallows blob: image URLs. A data URL is
+    // the safe fallback for formats Chromium can decode but createImageBitmap
+    // rejects on a particular platform.
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('The selected image could not be read.'))
+      reader.onerror = () => reject(new Error('The selected image could not be read.'))
+      reader.readAsDataURL(file)
     })
+    source = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('The selected image could not be read. Choose a PNG, JPEG, or WebP image.'))
+      image.src = dataUrl
+    })
+  }
 
-    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight)
-    const sourceX = Math.max(0, (image.naturalWidth - sourceSize) / 2)
-    const sourceY = Math.max(0, (image.naturalHeight - sourceSize) / 2)
+  try {
+    const sourceWidth = source instanceof ImageBitmap ? source.width : source.naturalWidth
+    const sourceHeight = source instanceof ImageBitmap ? source.height : source.naturalHeight
+    if (!sourceWidth || !sourceHeight) throw new Error('The selected image has no readable dimensions.')
+    const sourceSize = Math.min(sourceWidth, sourceHeight)
+    const sourceX = Math.max(0, (sourceWidth - sourceSize) / 2)
+    const sourceY = Math.max(0, (sourceHeight - sourceSize) / 2)
     const canvas = document.createElement('canvas')
     canvas.width = 384
     canvas.height = 384
     const context = canvas.getContext('2d')
     if (!context) throw new Error('The profile photo could not be prepared.')
-    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvas.width, canvas.height)
+    context.drawImage(source, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvas.width, canvas.height)
     return canvas.toDataURL('image/webp', 0.88)
   } finally {
-    URL.revokeObjectURL(objectUrl)
+    if (source instanceof ImageBitmap) source.close()
   }
 }

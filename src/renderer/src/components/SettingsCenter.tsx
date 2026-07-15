@@ -764,7 +764,7 @@ export default function SettingsCenter({
                   <strong>Profile photo</strong>
                   <div className="settings-profile-photo-actions">
                     <label className="settings-photo-button">
-                      <input type="file" accept="image/*" onChange={(event) => void handleProfilePhoto(event)} />
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleProfilePhoto(event)} />
                       {profilePhotoBusy ? 'Preparing…' : profilePhoto ? 'Change photo' : 'Choose photo'}
                     </label>
                     {profilePhoto && (

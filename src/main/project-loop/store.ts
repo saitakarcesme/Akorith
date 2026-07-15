@@ -133,6 +133,7 @@ export function listLoopsByStatus(status: ProjectLoopStatus): ProjectLoop[] {
 
 const UPDATABLE: Record<string, string> = {
   title: 'title',
+  idea: 'idea',
   status: 'status',
   autonomy: 'autonomy',
   safety: 'safety',

@@ -26,6 +26,7 @@ import {
 } from '../conversation'
 import type {
   Provider,
+  ProviderActivity,
   ProviderAvailability,
   ProviderConfigEntry,
   ProviderInfo,
@@ -38,6 +39,9 @@ import { OpenCodeProvider } from './opencode'
 import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
+import { normalizeStoredOpenCodeMessage } from '../../shared/opencode-output'
+import { buildLocalExecutorPrompt, executeLocalExecutorAttempt } from '../local-executor'
+import { inspectProject, renderProjectContext } from '../project-loop/context'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -108,6 +112,23 @@ export async function sendMetaPrompt(
   return provider.send(prompt, { model, signal }, () => {})
 }
 
+/** Headless project execution for Goal. Uses the selected installed CLI in the trusted cwd. */
+export async function sendWorkspacePrompt(
+  providerId: string,
+  model: string | undefined,
+  prompt: string,
+  workingDirectory: string,
+  signal?: AbortSignal,
+  onActivity?: (activity: ProviderActivity) => void
+): Promise<SendResult> {
+  if (!VALID_ID.test(providerId)) throw new Error('invalid provider id')
+  if (model !== undefined && !VALID_MODEL.test(model)) throw new Error('invalid model')
+  const provider = buildProviders().get(providerId)
+  if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
+  const instruction = `You are executing an Akorith Goal. Work directly in the current project. Inspect files, make the requested changes, run relevant checks, and finish with a concise summary. Do not create a git commit or push; Akorith commits after verification. Never reveal secrets or only describe a solution.\n\nGoal:\n${prompt}`
+  return provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
+}
+
 /** The available-provider snapshot, also consumed by the Phase 6 router. */
 export async function describeProviders(): Promise<ProviderInfo[]> {
   const providers = buildProviders()
@@ -149,6 +170,79 @@ interface ChatSendArgs {
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
 
 const activeRequests = new Map<string, AbortController>()
+
+function cleanActivity(activity: ProviderActivity): ProviderActivity {
+  const clean = (value: string | undefined, max: number): string | undefined => {
+    if (!value) return undefined
+    const text = value.replace(/\s+/g, ' ').trim()
+    return text ? text.slice(0, max) : undefined
+  }
+  return {
+    kind: activity.kind,
+    label: clean(activity.label, 180) ?? 'Working',
+    detail: clean(activity.detail, 500),
+    status: activity.status ?? 'running'
+  }
+}
+
+async function sendWorkspaceLocal(
+  provider: Provider,
+  goal: string,
+  model: string | undefined,
+  workspaceDir: string,
+  signal: AbortSignal,
+  emit: (activity: ProviderActivity) => void,
+  onToken: (token: string) => void
+): Promise<SendResult> {
+  emit({ kind: 'status', label: 'Inspecting the project', status: 'running' })
+  const context = inspectProject(workspaceDir)
+  emit({ kind: 'status', label: `Project context ready (${context.fileTree.length} entries)`, status: 'complete' })
+  emit({ kind: 'reasoning', label: 'Planning a safe workspace patch', status: 'running' })
+  const prompt = buildLocalExecutorPrompt({
+    goal,
+    workspaceContext: renderProjectContext(context),
+    previousAttempts: '',
+    validationCommands: ''
+  })
+  const generated = await provider.send(prompt, { model, signal }, () => {})
+  emit({ kind: 'reasoning', label: 'Workspace patch planned', status: 'complete' })
+  emit({ kind: 'file', label: 'Applying scoped file changes', status: 'running' })
+  const attempt = await executeLocalExecutorAttempt({
+    workspaceDir,
+    rawOutput: generated.text,
+    goal,
+    signal,
+    revertOnNoCommit: false
+  })
+  if (!attempt.action) {
+    throw new Error(attempt.errors[0] ?? 'The local model did not produce a safe workspace patch.')
+  }
+  for (const file of attempt.changedFiles) {
+    emit({ kind: 'file', label: file, detail: 'Changed', status: 'complete' })
+  }
+  for (const command of attempt.commandResults) {
+    emit({
+      kind: 'command',
+      label: command.cmd,
+      detail: command.passed ? 'Passed' : command.error ?? 'Failed',
+      status: command.passed ? 'complete' : 'error'
+    })
+  }
+  const validation = attempt.commandResults.length
+    ? `${attempt.commandResults.filter((item) => item.passed).length}/${attempt.commandResults.length} checks passed`
+    : 'No validation command was available'
+  const files = attempt.changedFiles.length
+    ? `\n\nChanged files:\n${attempt.changedFiles.map((file) => `- ${file}`).join('\n')}`
+    : ''
+  const text = `${attempt.action.summary}\n\n${validation}.${files}`.trim()
+  onToken(text)
+  return {
+    text,
+    usage: generated.usage,
+    model: generated.model,
+    raw: { score: attempt.score, errors: attempt.errors }
+  }
+}
 
 interface ProviderObservation {
   sessionId: string
@@ -238,8 +332,14 @@ function failProviderObservation(observation: ProviderObservation | null, err: u
 }
 
 /** Convert stored rows to the pure conversation shape. */
-function toConv(messages: { role: 'user' | 'assistant'; content: string }[]): ConvMessage[] {
-  return messages.map((m) => ({ role: m.role, content: m.content }))
+function toConv(messages: { role: 'user' | 'assistant'; content: string; providerId: string }[]): ConvMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content:
+      message.role === 'assistant' && message.providerId === 'opencode'
+        ? normalizeStoredOpenCodeMessage(message.content)
+        : message.content
+  }))
 }
 
 /**
@@ -329,7 +429,10 @@ export function registerChatIpc(): void {
     // usage_event can never be skipped by a UI path. DB trouble must not block
     // the chat itself.
     const sessionId = args.sessionId && sessionExists(args.sessionId) ? args.sessionId : undefined
-    const workspaceContext = args.includeDigest === true && sessionId ? getSessionProjectContext(sessionId) : null
+    // Project scope is independent from the optional repository digest. It is
+    // derived from the persisted session (never trusted from renderer input),
+    // and also becomes the CLI working directory below.
+    const workspaceContext = sessionId ? getSessionProjectContext(sessionId) : null
 
     // Phase 14.2 conversation memory: load the session's PRIOR messages BEFORE
     // persisting the new one, so the provider actually receives the conversation
@@ -386,21 +489,57 @@ export function registerChatIpc(): void {
         digest,
         workspace: workspaceContext
       })
-      const promptForProvider = built.prompt
+      const workspaceInstruction = workspaceContext
+        ? `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n`
+        : ''
+      const promptForProvider = `${workspaceInstruction}${built.prompt}`
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
       let result: SendResult
+      const emitActivity = (activity: ProviderActivity): void => {
+        if (!sender.isDestroyed()) {
+          sender.send('chat:activity', {
+            requestId: args.requestId,
+            ...cleanActivity(activity),
+            timestamp: Date.now()
+          })
+        }
+      }
       try {
-        result = await provider.send(
-          promptForProvider,
-          { model: args.model, signal: controller.signal, images: args.images },
-          (token) => {
+        emitActivity({ kind: 'status', label: 'Starting the selected model', status: 'running' })
+        const onToken = (token: string): void => {
             if (!sender.isDestroyed()) {
               sender.send('chat:token', { requestId: args.requestId, token })
             }
           }
-        )
+        result = workspaceContext?.projectPath && args.providerId === 'local'
+          ? await sendWorkspaceLocal(
+              provider,
+              args.prompt,
+              args.model,
+              workspaceContext.projectPath,
+              controller.signal,
+              emitActivity,
+              onToken
+            )
+          : await provider.send(
+              promptForProvider,
+              {
+                model: args.model,
+                signal: controller.signal,
+                workingDirectory: workspaceContext?.projectPath,
+                images: args.images,
+                onActivity: emitActivity
+              },
+              onToken
+            )
+        emitActivity({ kind: 'status', label: 'Workspace task complete', status: 'complete' })
         completeProviderObservation(observation, result)
       } catch (err) {
+        emitActivity({
+          kind: 'warning',
+          label: err instanceof Error ? err.message : 'Workspace task failed',
+          status: 'error'
+        })
         failProviderObservation(observation, err)
         throw err
       }

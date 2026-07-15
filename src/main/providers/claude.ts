@@ -39,6 +39,7 @@ export class ClaudeProvider implements Provider {
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
     const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
+    if (opts.workingDirectory) args.push('--permission-mode', 'acceptEdits')
     if (opts.model && opts.model !== 'default') {
       args.push('--model', opts.model)
     }
@@ -52,7 +53,7 @@ export class ClaudeProvider implements Provider {
       stdin: prompt,
       signal: opts.signal,
       timeoutMs: 300_000,
-      cwd: homedir(),
+      cwd: opts.workingDirectory ?? homedir(),
       onStdoutLine: (line) => {
         let event: ClaudeStreamLine
         try {
@@ -62,14 +63,30 @@ export class ClaudeProvider implements Provider {
         }
         if (event.type === 'system' && typeof event.model === 'string') {
           initModel = event.model
+          opts.onActivity?.({ kind: 'status', label: 'Claude session started', status: 'complete' })
         } else if (event.type === 'stream_event') {
           const delta = event.event?.delta
           if (event.event?.type === 'content_block_delta' && delta?.type === 'text_delta' && delta.text) {
             streamedText += delta.text
             onToken(delta.text)
+          } else if (event.event?.type === 'content_block_start') {
+            const block = event.event.content_block
+            if (block?.type === 'tool_use') {
+              const name = block.name ?? 'tool'
+              const input = block.input ?? {}
+              const file = typeof input.file_path === 'string' ? input.file_path : typeof input.path === 'string' ? input.path : ''
+              const command = typeof input.command === 'string' ? input.command : ''
+              opts.onActivity?.({
+                kind: command ? 'command' : file ? 'file' : 'tool',
+                label: command || file || `Using ${name}`,
+                detail: command || file ? name : undefined,
+                status: 'running'
+              })
+            }
           }
         } else if (event.type === 'result') {
           resultEvent = event
+          opts.onActivity?.({ kind: 'status', label: 'Claude finished the workspace task', status: event.is_error ? 'error' : 'complete' })
         }
       }
     })
@@ -114,6 +131,11 @@ interface ClaudeStreamLine {
   event?: {
     type?: string
     delta?: { type?: string; text?: string }
+    content_block?: {
+      type?: string
+      name?: string
+      input?: Record<string, unknown>
+    }
   }
   [key: string]: unknown
 }

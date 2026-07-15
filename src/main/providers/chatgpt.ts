@@ -57,7 +57,8 @@ export class ChatGPTProvider implements Provider {
     // `--output-last-message` gives the clean final answer in a file, free of
     // codex's session/progress log noise on stdout.
     const outFile = join(tmpdir(), `loopex-codex-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`)
-    const args = ['exec', '--skip-git-repo-check', '--output-last-message', outFile]
+    const args = ['exec', '--json', '--skip-git-repo-check', '--output-last-message', outFile]
+    if (opts.workingDirectory) args.push('--sandbox', 'workspace-write')
     if (opts.model && opts.model !== 'default') {
       args.push('-m', opts.model)
     }
@@ -67,7 +68,39 @@ export class ChatGPTProvider implements Provider {
         stdin: prompt,
         signal: opts.signal,
         timeoutMs: 600_000,
-        cwd: homedir()
+        cwd: opts.workingDirectory ?? homedir(),
+        onStdoutLine: (line) => {
+          let event: Record<string, unknown>
+          try {
+            event = JSON.parse(line) as Record<string, unknown>
+          } catch {
+            return
+          }
+          const type = typeof event.type === 'string' ? event.type : ''
+          const item = event.item && typeof event.item === 'object' ? event.item as Record<string, unknown> : null
+          const itemType = typeof item?.type === 'string' ? item.type : ''
+          const status = type.endsWith('.completed') ? 'complete' : 'running'
+          if (type === 'thread.started') {
+            opts.onActivity?.({ kind: 'status', label: 'Codex session started', status: 'complete' })
+          } else if (type === 'turn.started') {
+            opts.onActivity?.({ kind: 'status', label: 'Inspecting the workspace', status: 'running' })
+          } else if (itemType === 'command_execution') {
+            const command = typeof item?.command === 'string' ? item.command : 'Running a command'
+            opts.onActivity?.({ kind: 'command', label: command, status })
+          } else if (itemType === 'file_change') {
+            const changes = Array.isArray(item?.changes) ? item.changes as Record<string, unknown>[] : []
+            const paths = changes.map((change) => String(change.path ?? '')).filter(Boolean)
+            opts.onActivity?.({ kind: 'file', label: paths.length ? paths.join(', ') : 'Updating project files', status })
+          } else if (itemType === 'reasoning') {
+            const text = typeof item?.text === 'string' ? item.text : 'Reasoning through the task'
+            opts.onActivity?.({ kind: 'reasoning', label: text, status })
+          } else if (itemType === 'plan') {
+            const text = typeof item?.text === 'string' ? item.text : 'Updating the plan'
+            opts.onActivity?.({ kind: 'plan', label: text, status })
+          } else if (type === 'turn.completed') {
+            opts.onActivity?.({ kind: 'status', label: 'Preparing the final result', status: 'complete' })
+          }
+        }
       })
 
       let text = ''

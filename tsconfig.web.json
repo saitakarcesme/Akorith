@@ -13,5 +13,5 @@
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true
   },
-  "include": ["src/renderer/src/**/*", "src/preload/*.d.ts"]
+  "include": ["src/renderer/src/**/*", "src/preload/*.d.ts", "src/shared/**/*"]
 }

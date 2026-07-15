@@ -3,6 +3,7 @@
 
 import { homedir } from 'os'
 import { runCli, estimateTokens } from './util'
+import { parseOpenCodeJson } from '../../shared/opencode-output'
 import type {
   Provider,
   ProviderAvailability,
@@ -15,26 +16,6 @@ const DEFAULT_MODELS = ['default']
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
-}
-
-function parseJsonText(stdout: string): string {
-  const chunks: string[] = []
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('{')) continue
-    try {
-      const event = JSON.parse(trimmed) as Record<string, unknown>
-      const message = event.message
-      if (typeof message === 'string') chunks.push(message)
-      const text = event.text ?? event.content ?? event.result
-      if (typeof text === 'string') chunks.push(text)
-      const part = event.part as Record<string, unknown> | undefined
-      if (part && typeof part.text === 'string') chunks.push(part.text)
-    } catch {
-      // Some versions emit formatted lines even in json mode; fall back below.
-    }
-  }
-  return chunks.join('').trim()
 }
 
 export class OpenCodeProvider implements Provider {
@@ -84,7 +65,41 @@ export class OpenCodeProvider implements Provider {
     const res = await runCli('opencode', args, {
       signal: opts.signal,
       timeoutMs: 600_000,
-      cwd: homedir()
+      cwd: opts.workingDirectory ?? homedir(),
+      onStdoutLine: (line) => {
+        let event: Record<string, unknown>
+        try {
+          event = JSON.parse(line) as Record<string, unknown>
+        } catch {
+          return
+        }
+        const type = typeof event.type === 'string' ? event.type : ''
+        const part = event.part && typeof event.part === 'object' ? event.part as Record<string, unknown> : null
+        const partType = typeof part?.type === 'string' ? part.type : ''
+        if (type === 'step_start' || partType === 'step-start') {
+          opts.onActivity?.({ kind: 'status', label: 'OpenCode started a workspace step', status: 'running' })
+          return
+        }
+        if (type === 'step_finish' || partType === 'step-finish') {
+          opts.onActivity?.({ kind: 'status', label: 'Workspace step finished', status: 'complete' })
+          return
+        }
+        if (type === 'tool_use' || partType === 'tool') {
+          const tool = String(part?.tool ?? event.tool ?? 'tool')
+          const input = part?.input && typeof part.input === 'object' ? part.input as Record<string, unknown> : {}
+          const state = part?.state && typeof part.state === 'object' ? part.state as Record<string, unknown> : {}
+          const file = typeof input.filePath === 'string' ? input.filePath : typeof input.path === 'string' ? input.path : ''
+          const command = typeof input.command === 'string' ? input.command : ''
+          const rawStatus = String(state.status ?? '')
+          const status = rawStatus === 'error' ? 'error' : rawStatus === 'completed' ? 'complete' : 'running'
+          opts.onActivity?.({
+            kind: command ? 'command' : file ? 'file' : 'tool',
+            label: command || file || `Using ${tool}`,
+            detail: tool,
+            status
+          })
+        }
+      }
     })
 
     if (res.code !== 0) {
@@ -92,9 +107,15 @@ export class OpenCodeProvider implements Provider {
       throw new Error(`opencode CLI failed: ${detail}`)
     }
 
-    const text = parseJsonText(res.stdout) || stripAnsi(res.stdout).trim()
+    const parsed = parseOpenCodeJson(res.stdout)
+    const plainText = parsed.eventCount === 0 ? stripAnsi(res.stdout).trim() : ''
+    const text = parsed.text || plainText
     if (!text) {
-      throw new Error('opencode CLI produced no output')
+      const toolError = parsed.toolErrors.at(-1)
+      if (toolError) {
+        throw new Error(`OpenCode could not complete the workspace action: ${toolError}`)
+      }
+      throw new Error('OpenCode completed without a text response. Check its workspace permissions and try again.')
     }
     onToken(text)
 

@@ -1,14 +1,12 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
-import AgentDrawer from './components/AgentDrawer'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
 import Dashboard from './components/Dashboard'
 import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import ProjectLoopPage from './components/ProjectLoopPage'
-import { ChevronIcon, PanelsIcon, SparkIcon } from './components/icons'
-import type { AgentStatusInfo } from './components/TerminalPane'
+import { ChevronIcon, PanelsIcon } from './components/icons'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
@@ -22,8 +20,6 @@ export interface HistorySelection {
   mode: ChatMode
   nonce: number
 }
-
-export type AgentStatusMap = Partial<Record<'t1' | 't2' | 't3', AgentStatusInfo>>
 
 function initialChromeSidebarWidth(): number {
   try {
@@ -44,10 +40,7 @@ function AppChrome({
   onForward,
   showWorkbench,
   workbenchOpen,
-  onToggleWorkbench,
-  showActivity,
-  drawerOpen,
-  onToggleDrawer
+  onToggleWorkbench
 }: {
   title: string
   scope?: string
@@ -58,9 +51,6 @@ function AppChrome({
   showWorkbench: boolean
   workbenchOpen: boolean
   onToggleWorkbench: () => void
-  showActivity: boolean
-  drawerOpen: boolean
-  onToggleDrawer: () => void
 }): JSX.Element {
   const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
 
@@ -117,20 +107,9 @@ function AppChrome({
             type="button"
             className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
             onClick={onToggleWorkbench}
-            title="Toggle the bottom workbench (changes, runtime, missions)"
+            title="Show project changes"
           >
-            Workbench
-          </button>
-        )}
-        {showActivity && (
-          <button
-            type="button"
-            className={`activity-button ${drawerOpen ? 'is-active' : ''}`}
-            onClick={onToggleDrawer}
-            title="Show agent terminals"
-          >
-            <SparkIcon size={14} />
-            Activity
+            Changes
           </button>
         )}
       </div>
@@ -174,11 +153,8 @@ export default function App(): JSX.Element {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeProject, setActiveProject] = useState<ProjectRow | null>(null)
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
-  // Phase 13.1: terminals are hidden by default behind an activity drawer.
-  const [drawerOpen, setDrawerOpen] = useState(false)
   // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
-  const [, setAgentStatus] = useState<AgentStatusMap>({})
   const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)
   const [navBackStack, setNavBackStack] = useState<AppView[]>([])
   const [navForwardStack, setNavForwardStack] = useState<AppView[]>([])
@@ -250,7 +226,6 @@ export default function App(): JSX.Element {
     async (project: ProjectRow | null): Promise<void> => {
       setActiveProject(project)
       setView('workspace')
-      setAgentStatus({})
       if (!project?.id) {
         selectHistory(null, 'workspace')
         setActiveSessionId(null)
@@ -304,7 +279,6 @@ export default function App(): JSX.Element {
     (project: ProjectRow): void => {
       setActiveProject(project)
       setView('workspace')
-      setAgentStatus({})
       selectHistory(null, 'workspace')
       setActiveSessionId(null)
     },
@@ -318,7 +292,6 @@ export default function App(): JSX.Element {
       const restoredProject = snapshot.restore.projectId ? projectById.get(snapshot.restore.projectId) ?? null : null
       const restoredSession = snapshot.restore.sessionId ? sessionById.get(snapshot.restore.sessionId) ?? null : null
 
-      setAgentStatus({})
       if (snapshot.restore.view === 'general') {
         setActiveProject(null)
         setView('general')
@@ -370,8 +343,8 @@ export default function App(): JSX.Element {
       })
   }, [applyStartupSnapshot, startupRetry])
 
-  // Persist the active project id; reset agent status when the project changes
-  // (the drawer remounts its terminals for the new cwd).
+  // Persist the active project id. Workspace CLI calls receive the trusted path
+  // directly and no longer depend on hidden terminal sessions.
   useEffect(() => {
     if (!startupHydrated) return
     try {
@@ -380,11 +353,6 @@ export default function App(): JSX.Element {
     } catch {
       /* ignore */
     }
-    setAgentStatus({})
-    // Phase 13.3: point the bridge's logical targets (t1/t2) at this project's
-    // live sessions, matching the per-project keys used in AgentDrawer.
-    const projectKey = activeProject?.id ? activeProject.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40) : ''
-    window.api.pty.setActiveProject(projectKey)
   }, [activeProject?.id, startupHydrated])
 
   useEffect(() => {
@@ -446,10 +414,6 @@ export default function App(): JSX.Element {
     [selectHistory]
   )
 
-  const handleAgentStatus = useCallback((id: 't1' | 't2' | 't3', info: AgentStatusInfo) => {
-    setAgentStatus((prev) => ({ ...prev, [id]: info }))
-  }, [])
-
   // Centralized "Open Project" used by both the sidebar and the center empty
   // state. Same validated main-process dialog; selecting it starts the agents.
   const openProject = useCallback(async () => {
@@ -483,7 +447,6 @@ export default function App(): JSX.Element {
           : 'Workspace'
         : undefined
   const showChromeWorkbench = view === 'general' || view === 'workspace'
-  const showChromeActivity = view === 'workspace' && Boolean(activeProject?.path)
 
   return (
     <div
@@ -501,9 +464,6 @@ export default function App(): JSX.Element {
         showWorkbench={showChromeWorkbench}
         workbenchOpen={workbenchOpen}
         onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
-        showActivity={showChromeActivity}
-        drawerOpen={drawerOpen}
-        onToggleDrawer={() => setDrawerOpen((v) => !v)}
       />
       <div className="app-main">
       <Sidebar
@@ -529,15 +489,13 @@ export default function App(): JSX.Element {
         onProjectsChange={bumpProjects}
         onChromeWidthChange={setChromeSidebarWidth}
       />
-      {/* Chat-first workspace. Terminals are not part of this column anymore —
-          they live in the AgentDrawer overlay (kept mounted to stay alive). */}
+      {/* Chat-first workspace. CLIs run headlessly and stream normalized progress
+          into the conversation; no terminal or Agent Activity surface is mounted. */}
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
         <ChatPanel
           mode={view === 'general' ? 'general' : 'workspace'}
           historySel={historySel}
           activeProject={view === 'general' ? null : activeProject}
-          drawerOpen={drawerOpen}
-          onToggleDrawer={() => setDrawerOpen((v) => !v)}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}
@@ -550,14 +508,6 @@ export default function App(): JSX.Element {
           open={workbenchOpen}
           onClose={() => setWorkbenchOpen(false)}
         />
-        {view === 'workspace' && (
-          <AgentDrawer
-            activeProject={activeProject}
-            open={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            onAgentStatus={handleAgentStatus}
-          />
-        )}
       </div>
       {/* The test page stays mounted while hidden so a streaming run is never
           interrupted by navigating to the Workspace or Dashboard. */}
@@ -566,7 +516,7 @@ export default function App(): JSX.Element {
       </div>
       {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-        <ProjectLoopPage active={view === 'loops'} />
+        <ProjectLoopPage active={view === 'loops'} activeProject={activeProject} />
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}

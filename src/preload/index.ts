@@ -61,6 +61,15 @@ interface ChatTokenPayload {
   token: string
 }
 
+interface ChatActivityPayload {
+  requestId: string
+  kind: 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
+  label: string
+  detail?: string
+  status?: 'running' | 'complete' | 'error'
+  timestamp: number
+}
+
 const chat = Object.freeze({
   listProviders: (): Promise<unknown> => ipcRenderer.invoke('chat:providers'),
 
@@ -72,6 +81,7 @@ const chat = Object.freeze({
     sessionId?: string
     includeDigest?: boolean
     workspaceContext?: { projectName: string; projectPath: string }
+    images?: { name: string; mimeType: string; dataBase64: string }[]
   }): Promise<unknown> => ipcRenderer.invoke('chat:send', args),
 
   cancel: (requestId: string): void => {
@@ -87,6 +97,17 @@ const chat = Object.freeze({
     }
     ipcRenderer.on('chat:token', handler)
     return () => ipcRenderer.removeListener('chat:token', handler)
+  },
+
+  onActivity: (requestId: string, listener: (activity: Omit<ChatActivityPayload, 'requestId'>) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: ChatActivityPayload): void => {
+      if (payload.requestId === requestId) {
+        const { requestId: _requestId, ...activity } = payload
+        listener(activity)
+      }
+    }
+    ipcRenderer.on('chat:activity', handler)
+    return () => ipcRenderer.removeListener('chat:activity', handler)
   }
 })
 
@@ -359,6 +380,9 @@ const projectLoop = Object.freeze({
   archive: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:archive', id),
   remove: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:delete', id),
   runOnce: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:runOnce', id),
+  runGoal: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:runGoal', id),
+  pauseGoal: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:pauseGoal', id),
+  editGoal: (id: string, goal: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:editGoal', id, goal),
   listRuns: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listRuns', id),
   listEvents: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listEvents', id),
   listCommits: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listCommits', id),

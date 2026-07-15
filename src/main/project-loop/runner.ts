@@ -9,6 +9,7 @@ import { chooseObjective } from './planner'
 import { inspectProject, renderProjectContext } from './context'
 import { ensureRepo, commitAll } from './git'
 import type { ProjectLoopRun } from './types'
+import { sendWorkspacePrompt } from '../providers/registry'
 
 // Phase 48: the Loop runner — one safe cycle. It NEVER pushes (push is a separate
 // explicit action), never escapes the project root (the local-executor validates
@@ -41,6 +42,64 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     // 2) Choose the next objective.
     const chosen = await chooseObjective(loop, ctx)
     logEvent(loopId, 'planned', `Objective (${chosen.source}): ${chosen.objective.slice(0, 160)}`, chosen.objective, run.id)
+
+    // Installed coding CLIs edit the project directly. Their protocol events are
+    // normalized into the same durable Goal timeline used by the local executor.
+    if (loop.localModelProvider !== 'local') {
+      await ensureRepo(loop.localPath)
+      let commandsRun = 0
+      const result = await sendWorkspacePrompt(
+        loop.localModelProvider,
+        loop.localModel,
+        chosen.objective,
+        loop.localPath,
+        signal,
+        (activity) => {
+          const kind = activity.kind === 'command'
+            ? 'validation_run'
+            : activity.kind === 'file'
+              ? 'patch_applied'
+              : activity.kind === 'reasoning' || activity.kind === 'plan'
+                ? 'planned'
+                : 'note'
+          if (activity.kind === 'command') commandsRun += 1
+          logEvent(loopId, kind, activity.label, activity.detail, run.id)
+        }
+      )
+      const summary = result.text.trim().split('\n').find(Boolean)?.slice(0, 240) || 'Workspace goal completed'
+      const commit = await commitAll(loop.localPath, summary)
+      if (!commit.ok || !commit.sha) {
+        const noChange = commit.error === 'no changes to commit'
+        const finished = finishRun(run.id, {
+          status: noChange ? 'no_change' : 'failed',
+          objective: chosen.objective,
+          summary,
+          error: noChange ? undefined : commit.error,
+          filesChanged: 0,
+          commandsRun,
+          testsRun: commandsRun
+        })
+        recordLoopRunResult(loopId, 0)
+        logEvent(loopId, noChange ? 'run_succeeded' : 'run_failed', noChange ? 'CLI completed without file changes' : 'Commit failed', commit.error, run.id)
+        return { ok: noChange, run: finished, committed: false, summary, error: noChange ? undefined : commit.error }
+      }
+      recordCommit({ loopId, runId: run.id, sha: commit.sha, message: summary, filesChanged: commit.filesChanged, validationSummary: `${commandsRun} command event(s)` })
+      if (chosen.backlogItemId) setBacklogStatus(chosen.backlogItemId, 'done')
+      const finished = finishRun(run.id, {
+        status: 'success',
+        objective: chosen.objective,
+        summary,
+        filesChanged: commit.filesChanged,
+        commandsRun,
+        testsRun: commandsRun,
+        commitsCreated: 1,
+        validationResult: `${commandsRun} command event(s)`
+      })
+      recordLoopRunResult(loopId, 1)
+      logEvent(loopId, 'committed', `Committed ${commit.sha.slice(0, 8)}: ${summary}`, undefined, run.id)
+      logEvent(loopId, 'run_succeeded', `Run #${run.runIndex} completed the Goal`, undefined, run.id)
+      return { ok: true, run: finished, committed: true, sha: commit.sha, summary }
+    }
 
     // 3) Ask the local model for a structured patch.
     await ensureRepo(loop.localPath)

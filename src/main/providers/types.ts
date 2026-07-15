@@ -4,6 +4,17 @@
 
 export type ProviderKind = 'chat' | 'executor'
 
+export type ProviderActivityKind = 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
+export type ProviderActivityStatus = 'running' | 'complete' | 'error'
+
+/** A provider-neutral progress event. Raw CLI protocol envelopes never cross IPC. */
+export interface ProviderActivity {
+  kind: ProviderActivityKind
+  label: string
+  detail?: string
+  status?: ProviderActivityStatus
+}
+
 export interface ProviderAvailability {
   ok: boolean
   reason?: string
@@ -28,6 +39,10 @@ export interface SendResult {
 export interface SendOptions {
   model?: string
   signal?: AbortSignal
+  /** Trusted project directory for workspace-scoped CLI providers. */
+  workingDirectory?: string
+  /** Normalized, user-facing activity emitted while a CLI works. */
+  onActivity?: (activity: ProviderActivity) => void
   images?: {
     name: string
     mimeType: string

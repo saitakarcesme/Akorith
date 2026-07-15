@@ -50,6 +50,14 @@ export function setBacklogStatus(id: string, status: BacklogItemStatus): void {
   getDb().prepare('UPDATE project_loop_backlog_items SET status = ?, updated_at = ? WHERE id = ?').run(status, Date.now(), id)
 }
 
+export function updateBacklogItem(id: string, title: string, detail?: string): ProjectLoopBacklogItem | null {
+  getDb()
+    .prepare('UPDATE project_loop_backlog_items SET title = ?, detail = ?, updated_at = ? WHERE id = ?')
+    .run(title.slice(0, 200), detail?.slice(0, 20_000) ?? null, Date.now(), id)
+  const row = getDb().prepare('SELECT * FROM project_loop_backlog_items WHERE id = ?').get(id) as Row | undefined
+  return row ? rowToItem(row) : null
+}
+
 /** Next open item by priority — the planner's default objective source. */
 export function nextOpenBacklogItem(loopId: string): ProjectLoopBacklogItem | null {
   const row = getDb()

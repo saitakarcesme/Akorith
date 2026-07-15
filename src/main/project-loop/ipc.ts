@@ -11,13 +11,16 @@ import {
   type CreateLoopInput
 } from './store'
 import { listRuns } from './runs'
-import { listEvents } from './events'
+import { listEvents, logEvent } from './events'
 import { listCommits } from './commits'
-import { addBacklogItem, listBacklog, setBacklogStatus } from './backlog'
+import { addBacklogItem, listBacklog, setBacklogStatus, updateBacklogItem } from './backlog'
 import { addLoopMemory, listLoopMemories } from './memory'
 import { runOneCycle } from './runner'
 import { kickProjectLoopAutoScheduler } from './scheduler'
 import type { BacklogItemStatus, ProjectLoopStatus } from './types'
+import { runGoalToCompletion } from './goal'
+
+const activeGoals = new Map<string, AbortController>()
 
 // Phase 48: typed IPC surface for the project Loop. The renderer never touches
 // the filesystem/DB directly — everything goes through these validated handlers.
@@ -55,11 +58,38 @@ export function registerProjectLoopIpc(): void {
   })
   ipcMain.handle('projectLoop:archive', (_e, id: string) => archiveLoop(id))
   ipcMain.handle('projectLoop:delete', (_e, id: string) => {
+    activeGoals.get(id)?.abort()
     deleteLoop(id)
     return true
   })
 
   ipcMain.handle('projectLoop:runOnce', async (_e, id: string) => runOneCycle(id))
+  ipcMain.handle('projectLoop:runGoal', async (_e, id: string) => {
+    if (activeGoals.has(id)) throw new Error('goal is already running')
+    const controller = new AbortController()
+    activeGoals.set(id, controller)
+    try {
+      return await runGoalToCompletion(id, controller.signal)
+    } finally {
+      activeGoals.delete(id)
+    }
+  })
+  ipcMain.handle('projectLoop:pauseGoal', (_e, id: string) => {
+    activeGoals.get(id)?.abort()
+    setLoopStatus(id, 'paused')
+    logEvent(id, 'paused', 'Goal pause requested')
+    return true
+  })
+  ipcMain.handle('projectLoop:editGoal', (_e, id: string, goal: string) => {
+    if (typeof goal !== 'string' || !goal.trim() || goal.length > 20_000) throw new Error('invalid goal')
+    const clean = goal.trim()
+    const loop = updateLoop(id, { idea: clean, title: clean.replace(/\s+/g, ' ').slice(0, 80) })
+    const current = listBacklog(id).find((item) => item.status === 'open' || item.status === 'in_progress')
+    if (current) updateBacklogItem(current.id, clean.replace(/\s+/g, ' ').slice(0, 160), clean)
+    else addBacklogItem({ loopId: id, title: clean.replace(/\s+/g, ' ').slice(0, 160), detail: clean })
+    logEvent(id, 'note', 'Goal updated by the user', clean.slice(0, 500))
+    return loop
+  })
 
   ipcMain.handle('projectLoop:listRuns', (_e, id: string) => listRuns(id))
   ipcMain.handle('projectLoop:listEvents', (_e, id: string) => listEvents(id))

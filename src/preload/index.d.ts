@@ -74,6 +74,14 @@ export interface ChatSendResult {
   raw?: unknown
 }
 
+export interface ChatActivity {
+  kind: 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
+  label: string
+  detail?: string
+  status?: 'running' | 'complete' | 'error'
+  timestamp: number
+}
+
 export type ChatSendResponse = { ok: true; result: ChatSendResult } | { ok: false; error: string }
 
 export interface ChatImageAttachment {
@@ -115,6 +123,8 @@ export interface ChatApi {
   cancel(requestId: string): void
   /** Subscribe to streamed tokens for a request. Returns an unsubscribe fn. */
   onToken(requestId: string, listener: (token: string) => void): () => void
+  /** Subscribe to normalized CLI progress. Raw JSON/protocol events are never exposed. */
+  onActivity(requestId: string, listener: (activity: ChatActivity) => void): () => void
   /** Phase 14.2: read-only memory/context stats for a session (no model call). */
   contextInfo(sessionId: string): Promise<ContextInfo>
 }
@@ -1528,6 +1538,14 @@ export interface RunCycleResult {
   error?: string
 }
 
+export interface GoalRunResult {
+  ok: boolean
+  status: 'completed' | 'paused' | 'needs_review' | 'error'
+  attempts: number
+  lastRun?: RunCycleResult
+  error?: string
+}
+
 export interface CreateProjectLoopInput {
   title: string
   mode: ProjectLoopMode
@@ -1543,6 +1561,7 @@ export interface CreateProjectLoopInput {
   dailyCommitTarget?: number
   minCommitsPerRun?: number
   maxCommitsPerRun?: number
+  localModelProvider?: string
   localModel?: string
   pushEnabled?: boolean
 }
@@ -1768,6 +1787,9 @@ export interface ProjectLoopApi {
   archive(id: string): Promise<ProjectLoop | null>
   remove(id: string): Promise<boolean>
   runOnce(id: string): Promise<RunCycleResult>
+  runGoal(id: string): Promise<GoalRunResult>
+  pauseGoal(id: string): Promise<boolean>
+  editGoal(id: string, goal: string): Promise<ProjectLoop | null>
   listRuns(id: string): Promise<ProjectLoopRun[]>
   listEvents(id: string): Promise<ProjectLoopEvent[]>
   listCommits(id: string): Promise<ProjectLoopCommit[]>
