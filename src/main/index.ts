@@ -153,6 +153,12 @@ function applyApplicationMenu(): void {
 }
 
 function resolveAppIcon(): string | undefined {
+  // macOS reads the application icon from the signed/bundled Info.plist. Passing
+  // an .icns path as BrowserWindow.icon makes Electron's nativeImage loader try
+  // to decode it as a window image and emits a false "Failed to load image"
+  // warning even though Finder/Dock use the bundle icon correctly.
+  if (process.platform === 'darwin') return undefined
+
   const base = app.getAppPath()
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
   const portableFile = process.env.PORTABLE_EXECUTABLE_FILE
@@ -166,9 +172,7 @@ function resolveAppIcon(): string | undefined {
   const candidates =
     process.platform === 'win32'
       ? winCandidates
-      : process.platform === 'darwin'
-        ? [join(process.resourcesPath, 'icon.icns'), join(base, 'build', 'icon.icns')]
-        : [join(process.resourcesPath, 'icon.png'), join(base, 'build', 'icon.png')]
+      : [join(process.resourcesPath, 'icon.png'), join(base, 'build', 'icon.png')]
   for (const iconPath of candidates) {
     if (!iconPath) continue
     if (existsSync(iconPath)) return iconPath
