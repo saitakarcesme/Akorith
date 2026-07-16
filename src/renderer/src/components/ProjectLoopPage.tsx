@@ -22,6 +22,9 @@ interface LoopTarget {
   path: string
   name: string
   isRepo: boolean
+  repoUrl?: string
+  githubOwner?: string
+  githubName?: string
 }
 
 interface GoalContract {
@@ -32,6 +35,18 @@ interface GoalContract {
 
 function projectName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
+}
+
+function loopProjectFolderName(prompt: string): string {
+  const slug = prompt
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'akorith-loop-project'
+  const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14)
+  return `${slug}-${stamp}`
 }
 
 function statusLabel(status: ProjectLoopStatus, running: boolean): string {
@@ -88,9 +103,9 @@ function parseContract(raw?: string): GoalContract | null {
 }
 
 function usefulEvents(events: ProjectLoopEvent[]): ProjectLoopEvent[] {
-  return [...events].reverse().filter((event) => [
-    'goal_understood', 'planned', 'execution_started', 'committed', 'analyzed', 'replanned', 'goal_completed', 'error', 'run_failed', 'note'
-  ].includes(event.kind)).slice(0, 4)
+  return events.filter((event) => [
+    'goal_understood', 'planned', 'execution_started', 'committed', 'pushed', 'analyzed', 'replanned', 'goal_completed', 'error', 'run_failed', 'note'
+  ].includes(event.kind)).slice(-10)
 }
 
 export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPageProps): JSX.Element {
@@ -99,6 +114,9 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const [runningIds, setRunningIds] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
   const [target, setTarget] = useState<LoopTarget | null>(null)
+  const [repositoryUrl, setRepositoryUrl] = useState('')
+  const [repositoryFormOpen, setRepositoryFormOpen] = useState(false)
+  const [cloningRepository, setCloningRepository] = useState(false)
   const [draft, setDraft] = useState('')
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [providerId, setProviderId] = useState('')
@@ -180,6 +198,8 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     setCreating(true)
     setSelectedLoopId(null)
     setTarget(null)
+    setRepositoryUrl('')
+    setRepositoryFormOpen(false)
     setDraft('')
     setEvents([])
     setRuns([])
@@ -187,16 +207,29 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     setError(null)
   }
 
-  const chooseTarget = async (kind: 'folder' | 'repo' | 'current'): Promise<void> => {
+  const chooseCurrentTarget = async (): Promise<void> => {
     setError(null)
     try {
-      const selectedPath = kind === 'current' ? activeProject?.path ?? null : await window.api.projectLoop.pickFolder()
+      const selectedPath = activeProject?.path ?? null
       if (!selectedPath) return
       const inspected = await window.api.projectLoop.inspectTarget(selectedPath)
-      if (kind === 'repo' && !inspected.isRepo) throw new Error('Choose a folder that already contains a Git repository.')
       setTarget(inspected)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }
+
+  const cloneRepository = async (): Promise<void> => {
+    setError(null)
+    setCloningRepository(true)
+    try {
+      const cloned = await window.api.projectLoop.cloneRepository(repositoryUrl)
+      setTarget(cloned)
+      setRepositoryFormOpen(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setCloningRepository(false)
     }
   }
 
@@ -227,19 +260,27 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
         return
       }
       if (!target) return
+      const centralLoopRepository = target.githubOwner?.toLowerCase() === 'saitakarcesme' && target.githubName?.toLowerCase() === 'akorithloop'
+      const workspaceFolder = centralLoopRepository ? loopProjectFolderName(prompt) : null
+      const scopedPrompt = workspaceFolder
+        ? `Work only inside the new \`${workspaceFolder}/\` folder in this repository. Do not modify other project folders.\n\nGoal: ${prompt}`
+        : prompt
       const created = await window.api.projectLoop.create({
         title: prompt.replace(/\s+/g, ' ').slice(0, 80),
-        mode: target.isRepo ? 'repo_grower' : 'project_builder',
+        mode: target.repoUrl ? 'github_loop' : target.isRepo ? 'repo_grower' : 'project_builder',
         localPath: target.path,
-        idea: prompt,
+        repoUrl: target.repoUrl,
+        githubOwner: target.githubOwner,
+        githubName: target.githubName,
+        idea: scopedPrompt,
         autonomy: 'assisted',
         safety: 'standard',
         scheduleKind: 'manual',
         localModelProvider: providerId,
         localModel: model || 'default',
-        pushEnabled: false
+        pushEnabled: Boolean(target.repoUrl)
       })
-      await window.api.projectLoop.addBacklog(created.id, prompt.replace(/\s+/g, ' ').slice(0, 160), prompt)
+      await window.api.projectLoop.addBacklog(created.id, prompt.replace(/\s+/g, ' ').slice(0, 160), scopedPrompt)
       setLoops((current) => [created, ...current])
       setSelectedLoopId(created.id)
       setCreating(false)
@@ -277,7 +318,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const selectedElapsed = selectedLoop
     ? elapsedLabel(Math.max(0, (selectedRunning ? Date.now() : lastRun?.endedAt ?? selectedLoop.updatedAt) - (lastRun?.startedAt ?? selectedLoop.createdAt)))
     : '0s'
-  const composerTarget = selectedLoop ? { path: selectedLoop.localPath, name: projectName(selectedLoop.localPath), isRepo: selectedLoop.mode !== 'project_builder' } : target
+  const composerTarget = selectedLoop ? { path: selectedLoop.localPath, name: selectedLoop.githubName ?? projectName(selectedLoop.localPath), isRepo: selectedLoop.mode !== 'project_builder' } : target
   const canSend = Boolean(composerTarget && draft.trim() && selectedProvider?.available.ok && !selectedRunning)
 
   const composer = composerTarget ? (
@@ -302,7 +343,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
             : <ComposerSendButton disabled={!canSend} onClick={() => void submit()}><SendIcon size={16} /></ComposerSendButton>}
         </div>
       </div>
-      <div className="composer-info">Goal · {composerTarget.name} · local checkpointing · push off</div>
+      <div className="composer-info">Goal · {composerTarget.name} · local checkpointing · {selectedLoop?.pushEnabled || target?.repoUrl ? 'GitHub sync on' : 'local only'}</div>
     </div>
   ) : null
 
@@ -328,44 +369,39 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
             <div className="loop-v2-create-copy">
               <span className="loop-eyebrow">NEW GOAL</span>
               <h2>{target ? 'What should Akorith finish?' : 'Where should this Goal work?'}</h2>
-              <p>{target ? 'Describe the finished result. Akorith will keep cycling until the evidence matches it.' : 'Choose the folder where this Loop may read, create, and validate files.'}</p>
+              <p>{target ? 'Describe the finished result. Akorith will keep cycling until the evidence matches it.' : 'Use the current project or clone a GitHub repository. GitHub Loops checkpoint and push verified progress automatically.'}</p>
             </div>
             {!target ? <div className="loop-target-actions">
-              {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseTarget('current')}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
-              <button type="button" className={`ws-hero-btn ${activeProject?.path ? '' : 'is-primary'}`} onClick={() => void chooseTarget('folder')}><FolderOpenIcon size={16} />Choose folder</button>
-              <button type="button" className="ws-hero-btn" onClick={() => void chooseTarget('repo')}><LoopIcon size={16} />Choose repository</button>
+              {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseCurrentTarget()}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
+              <button type="button" className={`ws-hero-btn ${activeProject?.path ? '' : 'is-primary'}`} onClick={() => setRepositoryFormOpen(true)}><LoopIcon size={16} />Clone GitHub repository</button>
+              {repositoryFormOpen && <form className="loop-repository-form" onSubmit={(event) => { event.preventDefault(); void cloneRepository() }}>
+                <label htmlFor="loop-repository-url">GitHub repository URL</label>
+                <div><input id="loop-repository-url" value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" autoFocus spellCheck={false} /><button type="submit" disabled={cloningRepository || !repositoryUrl.trim()}>{cloningRepository ? 'Cloning…' : 'Clone'}</button></div>
+                <small>The repository is cloned into Akorith's managed Loop workspace. Commits are pushed only to the verified origin.</small>
+              </form>}
             </div> : <div className="loop-v2-create-composer">{composer}</div>}
             {error && <div className="loop-inline-error">{error}</div>}
           </div>
         ) : selectedLoop ? (
           <div className="loop-v2-detail">
             <div className="loop-v2-goal-head">
-              <div><span className={`loop-status is-${selectedRunning ? 'running' : selectedLoop.status}`}><i />{statusLabel(selectedLoop.status, selectedRunning)}</span><h2>{contract?.summary ?? selectedLoop.title}</h2><p>{projectName(selectedLoop.localPath)} · cycle {iteration} · {selectedLoop.localModel ?? 'default'}</p></div>
+              <div><span className={`loop-status is-${selectedRunning ? 'running' : selectedLoop.status}`}><i />{statusLabel(selectedLoop.status, selectedRunning)}</span><h2>{contract?.summary ?? selectedLoop.title}</h2><p>{selectedLoop.githubName ?? projectName(selectedLoop.localPath)} · cycle {iteration} · {selectedLoop.localModel ?? 'default'}</p></div>
               <div className="loop-v2-time"><span>{selectedRunning ? 'Working for' : 'Worked for'}</span><strong>{selectedElapsed}</strong>{!selectedRunning && <button type="button" className="loop-archive-button" title="Archive Loop" aria-label="Archive Loop" onClick={() => void archiveSelected()}><ArchiveIcon size={15} /></button>}</div>
             </div>
 
-            <div className="loop-v2-diagram">
+            <div className="loop-v2-steps">
               <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
-              <div className={`loop-v2-current ${selectedRunning ? 'is-running' : ''}`} aria-live="polite">
-                <span className="loop-v2-current-orb" />
-                <div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div>
+            </div>
+
+            <div className="loop-chat-thread" aria-live="polite">
+              <div className="loop-user-message">{selectedLoop.title}</div>
+              <div className={`loop-assistant-message ${selectedRunning ? 'is-running' : ''}`}>
+                <div className="loop-assistant-state"><span className="loop-v2-current-orb" /><div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div></div>
+                {recentEvents.length > 0 && <div className="loop-chat-events">{recentEvents.map((event) => <article key={event.id} className={`is-${event.kind}`}><i /><div><strong>{event.message}</strong>{event.detail && <p>{event.detail.slice(0, 420)}</p>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>)}</div>}
               </div>
             </div>
 
-            <details className="loop-v2-evidence" open={selectedLoop.status === 'needs_review' || selectedLoop.status === 'error'}>
-              <summary>Progress &amp; definition of done <span>{events.length} signals · {commits.length} checkpoints</span></summary>
-              <div className="loop-v2-events">
-                <div className="loop-panel-heading"><div><strong>Latest progress</strong></div></div>
-                {recentEvents.length > 0 ? recentEvents.map((event) => <article key={event.id} className={`is-${event.kind}`}><i /><div><strong>{event.message}</strong>{event.detail && <p>{event.detail.slice(0, 360)}</p>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>) : <p className="loop-v2-empty">The first checkpoint appears after the Goal is understood.</p>}
-              </div>
-              <aside className="loop-v2-contract">
-                <strong>Definition of done</strong>
-                <ul>{(contract?.acceptanceCriteria ?? ['Concrete output in the selected folder', 'Relevant validation without a known blocker']).map((item) => <li key={item}>{item}</li>)}</ul>
-                <small>{commits.length} local checkpoints · {selectedLoop.runCount} cycles</small>
-              </aside>
-            </details>
-
-            {!selectedRunning && (selectedLoop.status === 'completed' || selectedLoop.error) && <div className={`loop-outcome ${selectedLoop.error ? 'is-error' : ''}`}><span>{selectedLoop.status === 'completed' ? 'GOAL REACHED' : 'REVIEW NEEDED'}</span><strong>{lastRun?.summary ?? selectedLoop.error}</strong><p>{lastRun?.filesChanged ?? 0} changed files · {commits.length} local checkpoints · push off</p></div>}
+            {!selectedRunning && (selectedLoop.status === 'completed' || selectedLoop.error) && <div className={`loop-outcome ${selectedLoop.error ? 'is-error' : ''}`}><span>{selectedLoop.status === 'completed' ? 'GOAL REACHED' : 'REVIEW NEEDED'}</span><strong>{lastRun?.summary ?? selectedLoop.error}</strong><p>{lastRun?.filesChanged ?? 0} changed files · {commits.length} checkpoints · {selectedLoop.pushEnabled ? 'synced to GitHub' : 'local'}</p></div>}
             {error && <div className="loop-inline-error">{error}</div>}
             <div className="loop-focus-composer">{composer}</div>
           </div>

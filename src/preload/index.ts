@@ -409,6 +409,7 @@ const projectLoop = Object.freeze({
     ipcRenderer.invoke('projectLoop:setBacklogStatus', itemId, status),
   listMemories: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listMemories', id),
   addMemory: (id: string, content: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:addMemory', id, content),
+  cloneRepository: (url: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:cloneRepository', url),
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('projectLoop:pickFolder'),
   inspectTarget: (path: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:inspectTarget', path)
 })

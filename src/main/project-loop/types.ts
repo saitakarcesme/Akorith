@@ -84,6 +84,8 @@ export type ProjectLoopEventKind =
   | 'patch_applied'
   | 'validation_run'
   | 'committed'
+  | 'synced'
+  | 'pushed'
   | 'analysis_started'
   | 'analyzed'
   | 'replanned'

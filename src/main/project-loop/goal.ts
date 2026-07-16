@@ -95,7 +95,8 @@ function queueNextObjective(loopId: string, review: GoalProgressReview, runId?: 
 /**
  * Run a durable Goal until the complete contract is satisfied, paused, or needs
  * review. Each cycle checkpoints Understand -> Plan -> Execute -> Analyze ->
- * Replan. It never pushes and it never treats a single commit as completion.
+ * Replan. GitHub-linked Loops may push verified checkpoints, and a single
+ * commit is never treated as completion by itself.
  */
 export async function runGoalToCompletion(loopId: string, signal: AbortSignal, maxAttempts = 12): Promise<GoalRunResult> {
   const loop = getLoop(loopId)

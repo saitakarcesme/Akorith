@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ensureRepo, isRepo, hasChanges, commitAll, currentSha } from '../src/main/project-loop/git.ts'
 import { inspectProject, renderProjectContext } from '../src/main/project-loop/context.ts'
+import { parseGitHubRepositoryUrl } from '../src/main/project-loop/github-url.ts'
 
 let gitOk = true
 try {
@@ -62,6 +63,22 @@ async function main(): Promise<void> {
   await check('renderProjectContext: non-empty', () => {
     const text = renderProjectContext(inspectProject(root))
     assert.ok(text.includes('src/index.ts'))
+  })
+
+  await check('GitHub URL: canonical https and SSH forms', () => {
+    assert.deepEqual(parseGitHubRepositoryUrl('https://github.com/saitakarcesme/AkorithLoop.git'), {
+      owner: 'saitakarcesme', name: 'AkorithLoop', slug: 'saitakarcesme/AkorithLoop', url: 'https://github.com/saitakarcesme/AkorithLoop'
+    })
+    assert.equal(parseGitHubRepositoryUrl('git@github.com:saitakarcesme/AkorithLoop.git').slug, 'saitakarcesme/AkorithLoop')
+  })
+
+  await check('GitHub URL: rejects files, credentials, hosts, and traversal', () => {
+    for (const value of [
+      'https://github.com/saitakarcesme/AkorithLoop/tree/main',
+      'https://token@github.com/saitakarcesme/AkorithLoop',
+      'https://gitlab.com/saitakarcesme/AkorithLoop',
+      'https://github.com/../AkorithLoop'
+    ]) assert.throws(() => parseGitHubRepositoryUrl(value))
   })
 
   if (gitOk) {

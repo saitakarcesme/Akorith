@@ -2,9 +2,10 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { checkGitCommand } from '../safety'
+import { parseGitHubRepositoryUrl } from './github-url'
 
-// Phase 48: minimal git operations for a project loop, all bounded + safe. Push
-// is intentionally NOT here — it goes through a separately-gated path.
+// Project Loop git operations are bounded to the selected repository. Push is
+// allowed only after the stored GitHub URL matches origin exactly; never force.
 
 const GIT_TIMEOUT = 30_000
 
@@ -48,6 +49,56 @@ export interface LoopCommitResult {
   sha?: string
   filesChanged: number
   error?: string
+}
+
+export interface LoopRemoteResult {
+  ok: boolean
+  branch?: string
+  error?: string
+}
+
+async function verifiedOrigin(cwd: string, expectedRepositoryUrl: string): Promise<LoopRemoteResult> {
+  let expected
+  try {
+    expected = parseGitHubRepositoryUrl(expectedRepositoryUrl)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+  const remote = await git(cwd, ['remote', 'get-url', 'origin'])
+  if (!remote.ok || !remote.stdout) return { ok: false, error: remote.stderr || 'The repository has no origin remote.' }
+  let actual
+  try {
+    actual = parseGitHubRepositoryUrl(remote.stdout)
+  } catch {
+    return { ok: false, error: 'The origin remote is not a supported GitHub repository.' }
+  }
+  if (actual.owner.toLowerCase() !== expected.owner.toLowerCase() || actual.name.toLowerCase() !== expected.name.toLowerCase()) {
+    return { ok: false, error: `Push blocked: origin is ${actual.slug}, but this Loop is linked to ${expected.slug}.` }
+  }
+  const branch = await git(cwd, ['branch', '--show-current'])
+  if (!branch.ok || !branch.stdout) return { ok: false, error: 'Push blocked: the repository is in detached HEAD state.' }
+  return { ok: true, branch: branch.stdout }
+}
+
+/** Fast-forward/rebase a clean linked clone before a new autonomous cycle. */
+export async function syncFromOrigin(cwd: string, expectedRepositoryUrl: string): Promise<LoopRemoteResult> {
+  const verified = await verifiedOrigin(cwd, expectedRepositoryUrl)
+  if (!verified.ok || !verified.branch) return verified
+  if (await hasChanges(cwd)) return { ok: false, error: 'GitHub sync stopped because the Loop workspace has uncommitted changes.' }
+  const pull = await git(cwd, ['pull', '--rebase', 'origin', verified.branch])
+  return pull.ok ? verified : { ok: false, error: pull.stderr || 'Could not synchronize the GitHub repository.' }
+}
+
+/** Push HEAD to the verified current branch. Rebase and retry once on concurrent updates. */
+export async function pushToOrigin(cwd: string, expectedRepositoryUrl: string): Promise<LoopRemoteResult> {
+  const verified = await verifiedOrigin(cwd, expectedRepositoryUrl)
+  if (!verified.ok || !verified.branch) return verified
+  const push = await git(cwd, ['push', 'origin', `HEAD:${verified.branch}`])
+  if (push.ok) return verified
+  const pull = await git(cwd, ['pull', '--rebase', 'origin', verified.branch])
+  if (!pull.ok) return { ok: false, error: pull.stderr || push.stderr || 'GitHub rejected the push and Akorith could not rebase.' }
+  const retry = await git(cwd, ['push', 'origin', `HEAD:${verified.branch}`])
+  return retry.ok ? verified : { ok: false, error: retry.stderr || 'GitHub rejected the push.' }
 }
 
 /** Stage everything and commit with a message. Never runs forbidden git ops. */

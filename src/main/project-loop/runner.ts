@@ -7,18 +7,18 @@ import { recordCommit } from './commits'
 import { setBacklogStatus } from './backlog'
 import { chooseObjective } from './planner'
 import { inspectProject, renderProjectContext } from './context'
-import { ensureRepo, commitAll } from './git'
+import { ensureRepo, commitAll, pushToOrigin, syncFromOrigin } from './git'
 import type { ProjectLoopRun } from './types'
 import { sendWorkspacePrompt } from '../providers/registry'
 
-// Phase 48: the Loop runner — one safe cycle. It NEVER pushes (push is a separate
-// explicit action), never escapes the project root (the local-executor validates
-// every path against workspaceDir), and rolls back non-commit-worthy attempts.
+// One safe Loop cycle. Linked GitHub clones synchronize and push only when the
+// loop was created with explicit GitHub sync and origin still matches exactly.
 
 export interface RunCycleResult {
   ok: boolean
   run: ProjectLoopRun | null
   committed: boolean
+  pushed?: boolean
   sha?: string
   summary: string
   error?: string
@@ -35,6 +35,13 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
   logEvent(loopId, 'run_started', `Run #${run.runIndex} started`, undefined, run.id)
 
   try {
+    if (loop.pushEnabled) {
+      if (!loop.repoUrl) throw new Error('GitHub sync is enabled, but this Loop has no repository URL.')
+      const synchronized = await syncFromOrigin(loop.localPath, loop.repoUrl)
+      if (!synchronized.ok) throw new Error(synchronized.error || 'GitHub sync failed.')
+      logEvent(loopId, 'synced', `Synchronized origin/${synchronized.branch}`, undefined, run.id)
+    }
+
     // 1) Inspect the project (read-only).
     const ctx = inspectProject(loop.localPath)
     logEvent(loopId, 'inspected', `Inspected project (${ctx.fileTree.length} entries)`, undefined, run.id)
@@ -85,6 +92,24 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
         return { ok: noChange, run: finished, committed: false, summary, error: noChange ? undefined : commit.error }
       }
       recordCommit({ loopId, runId: run.id, sha: commit.sha, message: summary, filesChanged: commit.filesChanged, validationSummary: `${commandsRun} command event(s)` })
+      logEvent(loopId, 'committed', `Committed ${commit.sha.slice(0, 8)}: ${summary}`, undefined, run.id)
+      let pushed = false
+      if (loop.pushEnabled && loop.repoUrl) {
+        const remote = await pushToOrigin(loop.localPath, loop.repoUrl)
+        if (!remote.ok) {
+          recordLoopRunResult(loopId, 1)
+          logEvent(loopId, 'run_failed', 'Committed locally, but GitHub push failed', remote.error, run.id)
+          const failed = finishRun(run.id, {
+            status: 'failed', objective: chosen.objective, summary, error: remote.error,
+            filesChanged: commit.filesChanged, commandsRun, testsRun: commandsRun, commitsCreated: 1
+          })
+          setLoopStatus(loopId, 'needs_review')
+          updateLoop(loopId, { error: remote.error })
+          return { ok: false, run: failed, committed: true, pushed: false, sha: commit.sha, summary, error: remote.error }
+        }
+        pushed = true
+        logEvent(loopId, 'pushed', `Pushed ${commit.sha.slice(0, 8)} to origin/${remote.branch}`, undefined, run.id)
+      }
       if (chosen.backlogItemId) setBacklogStatus(chosen.backlogItemId, 'done')
       const finished = finishRun(run.id, {
         status: 'success',
@@ -97,9 +122,8 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
         validationResult: `${commandsRun} command event(s)`
       })
       recordLoopRunResult(loopId, 1)
-      logEvent(loopId, 'committed', `Committed ${commit.sha.slice(0, 8)}: ${summary}`, undefined, run.id)
       logEvent(loopId, 'run_succeeded', `Run #${run.runIndex} completed the Goal`, undefined, run.id)
-      return { ok: true, run: finished, committed: true, sha: commit.sha, summary }
+      return { ok: true, run: finished, committed: true, pushed, sha: commit.sha, summary }
     }
 
     // 3) Ask the local model for a structured patch.
@@ -194,6 +218,23 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
       validationSummary: attempt.score.verdict
     })
     logEvent(loopId, 'committed', `Committed ${commit.sha.slice(0, 8)}: ${attempt.action.summary}`, undefined, run.id)
+    let pushed = false
+    if (loop.pushEnabled && loop.repoUrl) {
+      const remote = await pushToOrigin(loop.localPath, loop.repoUrl)
+      if (!remote.ok) {
+        recordLoopRunResult(loopId, 1)
+        logEvent(loopId, 'run_failed', 'Committed locally, but GitHub push failed', remote.error, run.id)
+        const failed = finishRun(run.id, {
+          status: 'failed', objective: chosen.objective, summary: attempt.action.summary, error: remote.error,
+          filesChanged: commit.filesChanged, commandsRun, testsRun, commitsCreated: 1
+        })
+        setLoopStatus(loopId, 'needs_review')
+        updateLoop(loopId, { error: remote.error })
+        return { ok: false, run: failed, committed: true, pushed: false, sha: commit.sha, summary: attempt.action.summary, error: remote.error }
+      }
+      pushed = true
+      logEvent(loopId, 'pushed', `Pushed ${commit.sha.slice(0, 8)} to origin/${remote.branch}`, undefined, run.id)
+    }
 
     if (chosen.backlogItemId) setBacklogStatus(chosen.backlogItemId, 'done')
 
@@ -212,7 +253,7 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     if (loop.status === 'error') setLoopStatus(loopId, 'active')
     logEvent(loopId, 'run_succeeded', `Run #${run.runIndex} committed a change`, undefined, run.id)
 
-    return { ok: true, run: finished, committed: true, sha: commit.sha, summary: attempt.action.summary }
+    return { ok: true, run: finished, committed: true, pushed, sha: commit.sha, summary: attempt.action.summary }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     logEvent(loopId, 'error', 'Run errored', message, run.id)

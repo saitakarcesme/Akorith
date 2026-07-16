@@ -1573,6 +1573,7 @@ export interface RunCycleResult {
   ok: boolean
   run: ProjectLoopRun | null
   committed: boolean
+  pushed?: boolean
   sha?: string
   summary: string
   error?: string
@@ -1839,6 +1840,7 @@ export interface ProjectLoopApi {
   setBacklogStatus(itemId: string, status: string): Promise<boolean>
   listMemories(id: string): Promise<ProjectLoopMemory[]>
   addMemory(id: string, content: string): Promise<ProjectLoopMemory>
+  cloneRepository(url: string): Promise<{ path: string; name: string; isRepo: true; repoUrl: string; githubOwner: string; githubName: string }>
   pickFolder(): Promise<string | null>
   inspectTarget(path: string): Promise<{ path: string; name: string; isRepo: boolean }>
 }

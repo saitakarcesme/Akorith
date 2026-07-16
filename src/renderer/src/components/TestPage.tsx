@@ -1331,17 +1331,6 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   const benchmarkChallenges = Array.from(
     new Map(benchmarks.map((entry) => [entry.challengeId, { id: entry.challengeId, label: entry.challengeLabel }])).values()
   ).slice(0, 6)
-  const benchmarkMatrix = benchmarkPerformance.slice(0, 7).map((performance) => ({
-    ...performance,
-    scores: benchmarkChallenges.map((challenge) => {
-      const entry = benchmarks.find(
-        (candidate) =>
-          benchmarkModelKey(candidate.providerId ?? 'unknown', candidate.model) === performance.key &&
-          candidate.challengeId === challenge.id
-      )
-      return entry?.score ?? null
-    })
-  }))
   const scoredBenchmarks = benchmarks.filter((entry) => entry.score != null)
   const libraryAverageScore = scoredBenchmarks.length
     ? Math.round(scoredBenchmarks.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / scoredBenchmarks.length)
@@ -1351,6 +1340,27 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     if (!fastest || fastest.durationMs == null || entry.durationMs < fastest.durationMs) return entry
     return fastest
   }, null)
+  const benchmarkTableRows = selectedBenchmarkOptions.map((option) => {
+    const live = results.find((item) =>
+      (item.providerId ?? item.run?.providerId) === option.providerId &&
+      (item.model || item.run?.model || 'default') === (option.model || 'default')
+    )
+    const saved = benchmarks.find((entry) =>
+      entry.providerId === option.providerId &&
+      entry.model === option.model &&
+      entry.challengeId === testTypeId
+    )
+    const performance = benchmarkPerformance.find((item) => item.key === option.key)
+    const liveScore = live?.run ? ranking.get(live.run.id)?.score ?? null : null
+    const score = liveScore ?? saved?.score ?? null
+    return {
+      option,
+      score,
+      tokens: live?.run?.tokens ?? saved?.tokens ?? null,
+      average: performance?.averageScore ?? score,
+      pending: Boolean(live?.pending)
+    }
+  })
 
   return (
     <div className={`test-page ${sandboxOpen ? '' : 'sandbox-collapsed'}`}>
@@ -1367,122 +1377,67 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
           </button>
           <span className="bench-local-pill">CLI + local providers</span>
         </div>
-        <header className="benchmark-header">
+        <header className="benchmark-header benchmark-table-header">
           <div>
             <h2>Benchmark</h2>
-            <p>Run the same challenge across models and compare objective performance.</p>
+            <p>Run one challenge across models and compare objective performance.</p>
           </div>
-          <div className="benchmark-header-meta" aria-label="Benchmark summary">
-            <span><strong>{selectedBenchmarkOptions.length}</strong> models</span>
-            <span><strong>{benchmarks.length}</strong> saved</span>
-          </div>
-        </header>
-
-        <section className="benchmark-launch" aria-label="Benchmark setup">
-          <details className="benchmark-picker">
-            <summary>
-              <span>
-                <small>Models</small>
-                <span className="benchmark-picker-preview">
-                  {selectedBenchmarkOptions.length ? (
-                    <>
-                      {selectedBenchmarkOptions.slice(0, 3).map((option) => <i key={option.key}>{option.model || 'default'}</i>)}
-                      {selectedBenchmarkOptions.length > 3 && <i>+{selectedBenchmarkOptions.length - 3}</i>}
-                    </>
-                  ) : (
-                    <strong>No models selected</strong>
-                  )}
-                </span>
-              </span>
-              <em>{selectedBenchmarkOptions.length} selected</em>
-            </summary>
-            {benchmarkProviderGroups.length > 0 ? (
-              <div className="benchmark-picker-body">
-                <div className="benchmark-picker-toolbar">
-                  <div>
-                    <strong>Build your lineup</strong>
-                    <span>Mix local and cloud models in the same benchmark.</span>
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      className="test-table-btn"
-                      onClick={() => {
-                        const next = availableBenchmarkOptions.map((option) => option.key)
-                        setSelectedModels(next)
-                        const first = availableBenchmarkOptions[0]
-                        if (first) {
-                          setProviderId(first.providerId)
-                          setModel(first.model)
-                        }
-                      }}
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      className="test-table-btn"
-                      onClick={() => {
-                        const next = availableBenchmarkOptions.slice(0, 2)
-                        setSelectedModels(next.map((option) => option.key))
-                        const first = next[0]
-                        if (first) {
-                          setProviderId(first.providerId)
-                          setModel(first.model)
-                        }
-                      }}
-                    >
-                      Pick two
-                    </button>
-                  </div>
-                </div>
-                <div className="benchmark-provider-grid">
-                  {benchmarkProviderGroups.map((group) => (
-                    <section key={group.provider.id} className={`benchmark-provider-lane ${group.available ? '' : 'is-offline'}`}>
-                      <header>
-                        <strong>{group.provider.id === 'chatgpt' ? 'Codex/GPT' : group.provider.label}</strong>
-                        <span>{group.available ? `${group.options.length} model${group.options.length === 1 ? '' : 's'}` : group.provider.available.reason ?? 'offline'}</span>
-                      </header>
-                      <div className="benchmark-model-pills">
-                        {group.options.map((option) => {
-                          const checked = selectedModels.includes(option.key)
-                          return (
-                            <label
-                              key={option.key}
-                              className={`benchmark-model-pill ${checked ? 'is-selected' : ''} ${option.available ? '' : 'is-disabled'}`}
-                              title={option.available ? benchmarkOptionLabel(option) : option.reason ?? 'Provider unavailable'}
-                            >
-                              <input type="checkbox" checked={checked} disabled={!option.available} onChange={() => toggleModel(option)} />
-                              <span className="benchmark-model-check" aria-hidden="true" />
-                              <span>{option.model}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="test-notice">Waiting for benchmark providers. Start Ollama, sign in to Codex/Claude/OpenCode, or enable providers in Settings.</div>
-            )}
-          </details>
-
-          <label className="benchmark-challenge-select">
-            <span>
-              <small>Challenge</small>
-              <strong>{testType.scoreHint ?? 'Objective metrics'}</strong>
-            </span>
+          <label className="benchmark-table-challenge">
+            <span>Challenge</span>
             <select value={testTypeId} onChange={(event) => void applyTestType(event.target.value)}>
               {challengeSections.map((section) => (
                 <optgroup key={section.category} label={section.label}>
-                  {section.items.map((challenge) => (
-                    <option key={challenge.id} value={challenge.id}>{challenge.label}</option>
-                  ))}
+                  {section.items.map((challenge) => <option key={challenge.id} value={challenge.id}>{challenge.label}</option>)}
                 </optgroup>
               ))}
             </select>
           </label>
+        </header>
+
+        <section className="benchmark-comparison" aria-label="Benchmark setup">
+          <div className="benchmark-lineup">
+            <div className="benchmark-selected-models">
+              {selectedBenchmarkOptions.map((option) => (
+                <button type="button" key={option.key} className="benchmark-lineup-pill is-selected" title={`Remove ${benchmarkOptionLabel(option)}`} onClick={() => toggleModel(option)}>
+                  <i />{benchmarkOptionLabel(option)}
+                </button>
+              ))}
+              <details className="benchmark-add-models">
+                <summary>+ Models</summary>
+                <div className="benchmark-add-models-menu">
+                  {benchmarkProviderGroups.map((group) => (
+                    <section key={group.provider.id}>
+                      <strong>{group.provider.id === 'chatgpt' ? 'Codex/GPT' : group.provider.label}</strong>
+                      {group.options.map((option) => (
+                        <label key={option.key} className={`${selectedModels.includes(option.key) ? 'is-selected' : ''} ${option.available ? '' : 'is-disabled'}`}>
+                          <input type="checkbox" checked={selectedModels.includes(option.key)} disabled={!option.available} onChange={() => toggleModel(option)} />
+                          <span>{option.model || 'default'}</span>
+                        </label>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+              </details>
+            </div>
+            <p>{testType.scoreHint ?? testType.blurb}</p>
+          </div>
+
+          <div className="benchmark-comparison-table-wrap">
+            <table className="benchmark-comparison-table">
+              <thead><tr><th>Model</th><th>{testType.label}</th><th>Tokens</th><th>Avg</th></tr></thead>
+              <tbody>
+                {benchmarkTableRows.map(({ option, score, tokens, average, pending }) => (
+                  <tr key={option.key} className={pending ? 'is-running' : ''}>
+                    <th>{benchmarkOptionLabel(option)}</th>
+                    <td className={benchmarkScoreBand(score)}>{pending ? '…' : score ?? '—'}</td>
+                    <td>{tokens ?? '—'}</td>
+                    <td><strong>{average ?? '—'}</strong></td>
+                  </tr>
+                ))}
+                {benchmarkTableRows.length === 0 && <tr><td colSpan={4} className="benchmark-table-empty">Choose at least one model.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         {needsRepo && <details className="benchmark-repo-source" open>
@@ -1774,66 +1729,13 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                 <div><span>Challenges</span><strong>{benchmarkChallenges.length}</strong></div>
               </div>
 
-              <div className="benchmark-atlas">
-                <section className="benchmark-matrix-panel" aria-labelledby="benchmark-matrix-title">
-                  <div className="benchmark-panel-title">
-                    <div>
-                      <strong id="benchmark-matrix-title">Performance matrix</strong>
-                      <span>Models × saved challenges</span>
-                    </div>
-                  </div>
-                  <div className="benchmark-matrix-scroll">
-                    <table className="benchmark-matrix">
-                      <thead>
-                        <tr>
-                          <th>Model</th>
-                          {benchmarkChallenges.map((challenge) => <th key={challenge.id} title={challenge.label}>{challenge.label}</th>)}
-                          <th>Avg</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {benchmarkMatrix.map((item) => (
-                          <tr key={item.key}>
-                            <th title={item.label}>{item.label}</th>
-                            {item.scores.map((score, index) => (
-                              <td key={benchmarkChallenges[index].id}>
-                                <span
-                                  className={`benchmark-score-cell ${benchmarkScoreBand(score)}`}
-                                  title={`${benchmarkChallenges[index].label}: ${score ?? 'no result'}`}
-                                >
-                                  {score ?? '—'}
-                                </span>
-                              </td>
-                            ))}
-                            <td><strong>{item.averageScore}</strong></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <aside className="benchmark-latest-feed" aria-labelledby="benchmark-latest-title">
-                  <div className="benchmark-panel-title">
-                    <div>
-                      <strong id="benchmark-latest-title">Latest runs</strong>
-                      <span>Most recent snapshots</span>
-                    </div>
-                  </div>
-                  <div>
-                    {benchmarks.slice(0, 6).map((entry) => {
-                      const providerName = providerDisplayName(entry.providerId ?? 'unknown', providers)
-                      const modelName = `${providerName} · ${entry.model}`
-                      return (
-                        <article key={entry.id} className="benchmark-feed-row">
-                          <span className={`benchmark-feed-score ${benchmarkScoreBand(entry.score)}`}>{entry.score ?? '—'}</span>
-                          <div><strong title={modelName}>{modelName}</strong><span>{entry.challengeLabel}</span></div>
-                          <small>{entry.durationMs == null ? '—' : `${(entry.durationMs / 1000).toFixed(1)}s`}</small>
-                        </article>
-                      )
-                    })}
-                  </div>
-                </aside>
+              <div className="benchmark-library-table-wrap">
+                <table className="benchmark-library-table">
+                  <thead><tr><th>Model</th><th>Runs</th><th>Average</th><th>Best</th><th>Avg tokens</th></tr></thead>
+                  <tbody>{benchmarkPerformance.map((item) => (
+                    <tr key={item.key}><th>{item.label}</th><td>{item.runs}</td><td><strong>{item.averageScore}</strong></td><td>{item.bestScore}</td><td>{item.averageTokens ?? '—'}</td></tr>
+                  ))}</tbody>
+                </table>
               </div>
             </>
           )}

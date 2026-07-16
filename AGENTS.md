@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 62
-(aligned profile telemetry, true Loop flow topology, and refined Benchmark hierarchy).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 64
+(table-first Benchmark comparison, quiet Loop progress, and verified GitHub Loop workspaces).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -1666,6 +1666,35 @@ overflow checks, and interactive Workspace/Loop/Benchmark checks before publishi
 Verification: run typecheck/build and all Workspace/Loop/update release scripts; use Electron CDP
 to measure Loop geometry at wide and narrow content widths; then lint/build AkorithWeb and verify
 its primary routes at desktop and 390 px mobile widths with no page-level overflow.
+
+### Phase 64: Table Benchmark + Verified GitHub Loops
+
+Benchmark is table-first. The active challenge selector lives at the upper-right, selected models
+are compact pills, and both the current comparison and saved library are readable row tables. Keep
+the challenge score, token count, and average visually aligned; do not restore the former matrix,
+large model cards, or nested horizontal scrolling.
+
+Loop is deliberately quieter than Workspace. Its durable Goal state is summarized by six connected
+step dots — Understand, Plan, Execute, Analyze, Replan, Complete — above the conversation. The rest
+of the surface remains a chat transcript and bottom composer. Do not restore the SVG flow diagram
+or evidence-card wall; execution state continues to come from the Goal engine, never from the
+renderer.
+
+`Choose repository` accepts a clean GitHub repository URL rather than opening a folder picker. The
+main process clones through the authenticated `gh` CLI into Akorith's managed `loop-workspaces`
+directory. GitHub-enabled Loops may push only when the stored owner/repository exactly matches the
+checked-out `origin`; a detached HEAD, dirty pre-sync tree, or origin mismatch blocks remote work.
+Each cycle pulls with rebase before execution, creates a local Akorith commit, then performs a
+normal non-force push with one pull/rebase retry. A failed push preserves the local commit and moves
+the Loop to `needs_review`.
+
+Goals targeting `saitakarcesme/AkorithLoop` are scoped to a unique, readable project folder so
+unrelated examples cannot be changed. Repository credentials or tokens must never be embedded in
+stored URLs, clone arguments, logs, or renderer state.
+
+Verification: `npm run typecheck`, `npm run build`, `npm run verify:project-loop`, the related
+Workspace/Goal/update scripts, Electron CDP geometry at wide/narrow widths, a real disposable
+clone→commit→push smoke run, and confirmation that no page-level horizontal overflow is introduced.
 
 ## Conventions
 

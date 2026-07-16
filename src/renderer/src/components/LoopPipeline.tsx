@@ -21,46 +21,22 @@ export default function LoopPipeline({ phase, status, iteration = 1 }: LoopPipel
   const completed = status === 'completed'
   const blocked = status === 'error' || status === 'needs_review'
   return (
-    <div className={`loop-cycle ${completed ? 'is-complete' : blocked ? 'is-blocked' : 'is-active'}`} aria-label={`Goal cycle ${iteration}, ${completed ? 'complete' : STAGES[currentIndex].label}`}>
-      <div className="loop-cycle-scroll">
-        <div className="loop-cycle-canvas">
-          <svg className="loop-cycle-connectors" viewBox="0 0 700 205" preserveAspectRatio="none" aria-hidden="true">
-            <defs>
-              <marker id="loop-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
-                <path d="M0 0 8 4 0 8Z" />
-              </marker>
-            </defs>
-            <path d="M132 45H207" />
-            <path d="M312 45H387" />
-            <path d="M440 70V127" />
-            <path className="is-review" d="M388 157H313" />
-            <path className="is-return" d="M260 127V70" />
-            <path className="is-finish" d="M493 157H564" />
-          </svg>
-          <span className="loop-cycle-branch-label is-review">Goal not reached</span>
-          <span className="loop-cycle-branch-label is-return">Replan</span>
-          <span className="loop-cycle-branch-label is-finish">Goal reached</span>
-          <div className="loop-cycle-track" role="list">
+    <div className={`loop-cycle-simple ${completed ? 'is-complete' : blocked ? 'is-blocked' : 'is-active'}`} aria-label={`Goal cycle ${iteration}, ${completed ? 'complete' : STAGES[currentIndex].label}`}>
+      <ol className="loop-step-dots" aria-label={`Cycle ${iteration} steps`}>
         {STAGES.map((stage, index) => {
           const state = completed
-            ? index <= 3 ? 'complete' : 'waiting'
+            ? index <= 3 || (stage.id === 'replan' && iteration > 1) ? 'complete' : 'waiting'
             : index < currentIndex ? 'complete' : index === currentIndex ? blocked ? 'blocked' : 'current' : 'waiting'
           return (
-            <div className={`loop-cycle-stage is-${state}`} role="listitem" key={stage.id}>
-              <span className="loop-cycle-node">{state === 'complete' ? '✓' : index + 1}</span>
-              <strong>{stage.label}</strong>
-            </div>
+            <li className={`is-${state}`} key={stage.id} title={stage.label} aria-label={`${stage.label}: ${state}`}>
+              <span>{state === 'complete' ? '✓' : index + 1}</span>
+              <small>{stage.label}</small>
+            </li>
           )
         })}
-          </div>
-          <div className={`loop-cycle-outcome ${completed ? 'is-reached' : ''}`}>
-            <span>✓</span><strong>Complete</strong>
-          </div>
-        </div>
-      </div>
-      <p className={`loop-cycle-caption ${completed ? 'is-reached' : ''}`}>
-        {completed ? 'Goal reached' : blocked ? 'Waiting for review' : `Cycle ${iteration} · analyze evidence, then finish or return to Plan`}
-      </p>
+        <li className={completed ? 'is-complete' : 'is-waiting'} title="Complete" aria-label={`Complete: ${completed ? 'complete' : 'waiting'}`}><span>✓</span><small>Complete</small></li>
+      </ol>
+      <span className="loop-cycle-count">Cycle {iteration}</span>
     </div>
   )
 }

@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 62:
-Aligned Profile Telemetry + True Loop Topology**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 64:
+Table Benchmark + Verified GitHub Loops**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -705,6 +705,22 @@ local model, attempts, validated changes, commits, last validation, and last com
   separate website must pass lint/build plus desktop/mobile route and interaction verification.
 - Verify the desktop app with typecheck/build and Loop scripts, then verify AkorithWeb at 390 px and
   desktop widths, including Workspace completion receipts and responsive Loop topology.
+
+## Phase 64 - Table Benchmark + Verified GitHub Loops
+
+- Benchmark uses one compact active-comparison table and one saved-library table. The challenge
+  selector stays at the upper-right and selected models remain pills; do not restore the matrix or
+  oversized picker cards.
+- Loop shows six connected state dots above a chat transcript and composer. These dots are a quiet
+  view of the durable Goal state, not an execution source; the old SVG topology is retired.
+- `Choose repository` accepts a clean GitHub URL and clones with authenticated `gh` into managed
+  app data. Never persist credentials or accept GitHub branch/file URLs as repositories.
+- Remote sync is opt-in per Loop and verifies that stored owner/repository equals `origin`. Pull
+  with rebase before each cycle, commit locally, then normal-push with one rebase retry. Never force
+  push; preserve a local commit and enter `needs_review` when push fails.
+- Central `saitakarcesme/AkorithLoop` work is restricted to a unique named folder for each Goal.
+- Verify typecheck/build, Goal/Project Loop/update scripts, wide/narrow Electron CDP layouts, and a
+  real clone→commit→push smoke run without page-level horizontal overflow.
 
 ## Rule: keep the docs current
 

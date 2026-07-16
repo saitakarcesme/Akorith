@@ -21,6 +21,7 @@ import { kickProjectLoopAutoScheduler } from './scheduler'
 import type { BacklogItemStatus, ProjectLoopStatus } from './types'
 import { runGoalToCompletion } from './goal'
 import { isRepo } from './git'
+import { cloneGitHubRepository } from './github'
 
 const activeGoals = new Map<string, AbortController>()
 
@@ -115,6 +116,11 @@ export function registerProjectLoopIpc(): void {
 
   ipcMain.handle('projectLoop:listMemories', (_e, id: string) => listLoopMemories(id))
   ipcMain.handle('projectLoop:addMemory', (_e, id: string, content: string) => addLoopMemory(id, 'note', content))
+
+  ipcMain.handle('projectLoop:cloneRepository', async (_event, input: unknown) => {
+    if (typeof input !== 'string') throw new Error('invalid GitHub repository URL')
+    return cloneGitHubRepository(input)
+  })
 
   // Folder picker for choosing/importing a local project path.
   ipcMain.handle('projectLoop:pickFolder', async () => {
