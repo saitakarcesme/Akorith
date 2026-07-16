@@ -722,6 +722,25 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Verify typecheck/build, Goal/Project Loop/update scripts, wide/narrow Electron CDP layouts, and a
   real clone→commit→push smoke run without page-level horizontal overflow.
 
+## Phase 65 - Narrated Loop Progress + Unified Activity
+
+- Loop's transcript turns durable events into numbered Steps with concise titles and bounded
+  explanatory paragraphs. Parse useful evidence from stored event detail, but never expose raw
+  JSON as user-facing narration. Keep the six phase dots and bottom composer unchanged.
+- A hidden sidebar must not make Loop content span the whole monitor; the header, tabs, surface,
+  and detail transcript stay centered in a calm reading measure.
+- Dashboard is opened from the footer identity and is removed from primary sidebar navigation.
+  The adjacent gear independently opens Settings.
+- Sidebar resize uses direct CSS variable painting inside one animation frame and one React state
+  commit on pointer-up. Do not restore mousemove-driven full-app rerenders.
+- Dashboard stacks local Token activity and public `saitakarcesme` GitHub activity on the same
+  53-week measure. Main-process public GitHub HTML fetches are validated, cached, timeout-bounded,
+  and non-fatal; the renderer has no GitHub credential or unrestricted network access.
+- AkorithWeb's live replica mirrors the footer navigation, narrated Loop steps, and paired activity
+  maps without replacing the site's established visual design.
+- Verify app typecheck/build, GitHub load/fallback, Electron wide/collapsed geometry and sidebar
+  drag, then web lint/build and desktop/mobile interaction plus horizontal-overflow checks.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

@@ -167,6 +167,10 @@ const usage = Object.freeze({
   daily: (days: number): Promise<unknown> => ipcRenderer.invoke('usage:daily', { days })
 })
 
+const githubActivity = Object.freeze({
+  get: (username: string): Promise<unknown> => ipcRenderer.invoke('githubActivity:get', username)
+})
+
 // Suggest-only router: returns a suggestion; never changes anything itself.
 const router = Object.freeze({
   suggest: (prompt: string): Promise<unknown> => ipcRenderer.invoke('router:suggest', { prompt })
@@ -459,6 +463,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)

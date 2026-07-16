@@ -401,6 +401,23 @@ export interface UsageApi {
   daily(days: number): Promise<DailyUsageRow[]>
 }
 
+export interface GitHubContributionDay {
+  date: string
+  count: number
+  level: number
+}
+
+export interface GitHubActivity {
+  username: string
+  days: GitHubContributionDay[]
+  total: number
+  fetchedAt: number
+}
+
+export interface GitHubActivityApi {
+  get(username: string): Promise<GitHubActivity>
+}
+
 // ---- router (Phase 6: suggest-only) ----
 
 export type RouterTier = 'Asker' | 'Albay' | 'General'
@@ -2213,6 +2230,7 @@ export interface PreloadApi {
   history: HistoryApi
   projects: ProjectsApi
   usage: UsageApi
+  githubActivity: GitHubActivityApi
   router: RouterApi
   digest: DigestApi
   test: TestApi

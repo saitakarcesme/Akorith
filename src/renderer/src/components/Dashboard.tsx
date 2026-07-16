@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import type {
   DailyUsageRow,
+  GitHubActivity,
   GpuDevice,
   GpuStatusResult,
   ProjectRow,
@@ -230,6 +231,7 @@ function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: Machi
 export default function Dashboard(_props: DashboardProps): JSX.Element {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
   const [daily, setDaily] = useState<DailyUsageRow[]>([])
+  const [githubActivity, setGitHubActivity] = useState<GitHubActivity | null>(null)
   const [runs, setRuns] = useState<TestRunRow[]>([])
   const [localGpu, setLocalGpu] = useState<GpuStatusResult | null>(null)
   const [remoteTelemetry, setRemoteTelemetry] = useState<TelemetryStatus | null>(null)
@@ -263,12 +265,18 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([window.api.usage.summary(), window.api.usage.daily(370), window.api.test.listRuns(250)])
-      .then(([nextSummary, nextDaily, nextRuns]) => {
+    void Promise.all([
+      window.api.usage.summary(),
+      window.api.usage.daily(370),
+      window.api.test.listRuns(250),
+      window.api.githubActivity.get('saitakarcesme').catch(() => null)
+    ])
+      .then(([nextSummary, nextDaily, nextRuns, nextGitHubActivity]) => {
         if (cancelled) return
         setSummary(nextSummary)
         setDaily(nextDaily)
         setRuns(nextRuns)
+        setGitHubActivity(nextGitHubActivity)
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
@@ -326,6 +334,14 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
     [dailyTotals]
   )
   const peakTokens = useMemo(() => Math.max(0, ...activityDays.map((day) => day.tokens)), [activityDays])
+  const githubByDay = useMemo(
+    () => new Map((githubActivity?.days ?? []).map((day) => [day.date, day])),
+    [githubActivity]
+  )
+  const githubVisibleTotal = useMemo(
+    () => activityDays.reduce((sum, day) => sum + (githubByDay.get(day.key)?.count ?? 0), 0),
+    [activityDays, githubByDay]
+  )
   const streaks = useMemo(() => calculateStreaks(tokensByDay), [tokensByDay])
   const longestTask = useMemo(() => Math.max(0, ...runs.map((run) => run.durationMs ?? 0)), [runs])
   const monthLabels = useMemo(() => {
@@ -365,18 +381,49 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
           <div><strong>{streaks.longest} {streaks.longest === 1 ? 'day' : 'days'}</strong><span>Longest streak</span></div>
         </div>
 
-        <div className="token-activity">
-          <div className="token-activity-head">
-            <h2>Token activity</h2>
-            <span>Daily</span>
+        <div className="activity-stack">
+          <div className="token-activity">
+            <div className="token-activity-head">
+              <h2>Token activity</h2>
+              <span>Daily</span>
+            </div>
+            <div className="heatmap-shell">
+              <div className="heatmap-grid" role="grid" aria-label="Daily token activity">
+                {activityDays.map((day) => {
+                  const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${formatTokens(day.tokens)} tokens · ${day.events} ${day.events === 1 ? 'request' : 'requests'}`
+                  return (
+                    <span
+                      className={`hm-cell hm-l${day.future ? 0 : activityLevel(day.tokens, peakTokens)} ${day.future ? 'is-future' : ''}`}
+                      key={day.key}
+                      role="gridcell"
+                      aria-label={tooltip}
+                      data-tooltip={tooltip}
+                    />
+                  )
+                })}
+              </div>
+              <div className="heatmap-months" aria-hidden="true">
+                {monthLabels.map((month) => (
+                  <span key={`${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="heatmap-shell">
-            <div className="heatmap-grid" role="grid" aria-label="Daily token activity">
+
+          <div className="token-activity github-activity">
+            <div className="token-activity-head">
+              <h2>GitHub activity</h2>
+              <span>@saitakarcesme · {githubVisibleTotal.toLocaleString()}</span>
+            </div>
+            <div className="heatmap-shell">
+              <div className="heatmap-grid" role="grid" aria-label="saitakarcesme GitHub contribution activity">
               {activityDays.map((day) => {
-                const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${formatTokens(day.tokens)} tokens · ${day.events} ${day.events === 1 ? 'request' : 'requests'}`
+                const contribution = githubByDay.get(day.key)
+                const count = contribution?.count ?? 0
+                const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${count} ${count === 1 ? 'contribution' : 'contributions'}`
                 return (
                   <span
-                    className={`hm-cell hm-l${day.future ? 0 : activityLevel(day.tokens, peakTokens)} ${day.future ? 'is-future' : ''}`}
+                    className={`hm-cell github-l${day.future ? 0 : contribution?.level ?? 0} ${day.future ? 'is-future' : ''}`}
                     key={day.key}
                     role="gridcell"
                     aria-label={tooltip}
@@ -387,10 +434,11 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
             </div>
             <div className="heatmap-months" aria-hidden="true">
               {monthLabels.map((month) => (
-                <span key={`${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
+                <span key={`github-${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
               ))}
             </div>
           </div>
+        </div>
         </div>
       </section>
 

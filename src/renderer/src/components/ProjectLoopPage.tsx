@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ProjectLoop,
   ProjectLoopCommit,
@@ -105,7 +105,74 @@ function parseContract(raw?: string): GoalContract | null {
 function usefulEvents(events: ProjectLoopEvent[]): ProjectLoopEvent[] {
   return events.filter((event) => [
     'goal_understood', 'planned', 'execution_started', 'committed', 'pushed', 'analyzed', 'replanned', 'goal_completed', 'error', 'run_failed', 'note'
-  ].includes(event.kind)).slice(-10)
+  ].includes(event.kind)).slice(-12)
+}
+
+interface LoopProgressStep {
+  id: string
+  kind: ProjectLoopEvent['kind']
+  title: string
+  body: string
+  createdAt: number
+}
+
+function readableEvidence(value?: string): string | undefined {
+  const text = value?.trim()
+  if (!text) return undefined
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      const candidates = [parsed.summary, parsed.objective, parsed.reason, parsed.result]
+      const sentence = candidates.find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
+      if (sentence) return sentence.trim()
+      const evidence = Array.isArray(parsed.completedEvidence)
+        ? parsed.completedEvidence.filter((item): item is string => typeof item === 'string').slice(0, 2)
+        : []
+      if (evidence.length) return evidence.join(' ')
+    } catch {
+      return undefined
+    }
+  }
+  return text.replace(/\s+/g, ' ')
+}
+
+function progressStep(event: ProjectLoopEvent, iteration: number): LoopProgressStep {
+  const titles: Partial<Record<ProjectLoopEvent['kind'], string>> = {
+    goal_understood: 'Goal understood',
+    planned: 'Plan prepared',
+    execution_started: `Executing cycle ${iteration}`,
+    committed: 'Checkpoint committed',
+    pushed: 'Checkpoint pushed to GitHub',
+    analyzed: 'Result analyzed',
+    replanned: 'Remaining work replanned',
+    goal_completed: 'Goal reached',
+    error: 'Loop needs attention',
+    run_failed: 'Cycle stopped',
+    note: 'Progress update'
+  }
+  const defaults: Partial<Record<ProjectLoopEvent['kind'], string>> = {
+    goal_understood: 'Akorith converted the request into a concrete outcome and a definition of done.',
+    planned: 'The next verifiable action was selected from the remaining work.',
+    execution_started: 'The selected model started working inside the scoped repository.',
+    committed: 'Verified changes were saved as a local Git checkpoint.',
+    pushed: 'The verified checkpoint was synchronized with the repository origin.',
+    analyzed: 'The latest files, tests, and evidence were checked against the complete Goal.',
+    replanned: 'The next cycle now focuses on the most important unfinished requirement.',
+    goal_completed: 'All required evidence now matches the requested outcome.',
+    error: 'Akorith preserved the completed work and recorded what needs review.',
+    run_failed: 'The cycle ended before verification completed; existing checkpoints remain intact.',
+    note: 'Akorith recorded a meaningful update from the current cycle.'
+  }
+  const detail = readableEvidence(event.detail)
+  const message = readableEvidence(event.message)
+  const body = detail ?? message ?? defaults[event.kind] ?? 'Akorith recorded progress for this Goal.'
+  return {
+    id: event.id,
+    kind: event.kind,
+    title: titles[event.kind] ?? 'Goal progress',
+    body: body.length > 360 ? `${body.slice(0, 357).trimEnd()}…` : body,
+    createdAt: event.createdAt
+  }
 }
 
 export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPageProps): JSX.Element {
@@ -313,8 +380,19 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const currentCopy = phaseCopy(phase, selectedRunning)
   const contract = parseContract(selectedLoop?.roadmapSummary)
   const lastRun = runs[0]
-  const recentEvents = usefulEvents(events)
+  const recentEvents = useMemo(() => usefulEvents(events), [events])
   const iteration = Math.max(1, lastRun?.runIndex ?? selectedLoop?.runCount ?? 1)
+  const progressSteps = useMemo(() => {
+    const seen = new Set<string>()
+    return recentEvents
+      .map((event) => progressStep(event, iteration))
+      .filter((step) => {
+        const signature = `${step.title}\n${step.body}`
+        if (seen.has(signature)) return false
+        seen.add(signature)
+        return true
+      })
+  }, [iteration, recentEvents])
   const selectedElapsed = selectedLoop
     ? elapsedLabel(Math.max(0, (selectedRunning ? Date.now() : lastRun?.endedAt ?? selectedLoop.updatedAt) - (lastRun?.startedAt ?? selectedLoop.createdAt)))
     : '0s'
@@ -397,7 +475,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
               <div className="loop-user-message">{selectedLoop.title}</div>
               <div className={`loop-assistant-message ${selectedRunning ? 'is-running' : ''}`}>
                 <div className="loop-assistant-state"><span className="loop-v2-current-orb" /><div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div></div>
-                {recentEvents.length > 0 && <div className="loop-chat-events">{recentEvents.map((event) => <article key={event.id} className={`is-${event.kind}`}><i /><div><strong>{event.message}</strong>{event.detail && <p>{event.detail.slice(0, 420)}</p>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>)}</div>}
+                {progressSteps.length > 0 && <div className="loop-chat-events">{progressSteps.map((step, index) => <article key={step.id} className={`loop-progress-step is-${step.kind}`}><i /><div><span>Step {index + 1}</span><strong>{step.title}</strong><p>{step.body}</p></div><time>{new Date(step.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>)}</div>}
               </div>
             </div>
 

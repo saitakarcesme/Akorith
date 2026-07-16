@@ -1696,6 +1696,30 @@ Verification: `npm run typecheck`, `npm run build`, `npm run verify:project-loop
 Workspace/Goal/update scripts, Electron CDP geometry at wide/narrow widths, a real disposable
 clone→commit→push smoke run, and confirmation that no page-level horizontal overflow is introduced.
 
+### Phase 65: Narrated Loop Progress + Unified Activity
+
+Loop progress is a compact conversation timeline. Every durable Goal event renders as a numbered
+Step with a human title, a bounded explanatory paragraph, and quiet timestamp metadata; raw Goal
+JSON must never be printed as the paragraph. The six phase dots and bottom composer remain the
+only permanent Loop controls. When the sidebar is hidden, the Loop header, tabs, transcript, and
+composer stay in a centered reading column instead of stretching across the full window.
+
+The sidebar no longer lists Dashboard as a primary navigation row. The footer identity opens the
+Dashboard and the separate gear opens Settings. Resizing paints CSS width variables in one
+`requestAnimationFrame` and commits React state only on pointer-up so dense pages do not rerender
+on every mouse movement.
+
+Dashboard shows two closely stacked, identically aligned 53-week calendars: local Token activity
+and the public `saitakarcesme` GitHub contribution calendar. GitHub data is fetched in the main
+process from GitHub's public contribution page, cached for 15 minutes, exposed through a narrow
+preload method, and rendered with GitHub's green intensity scale. Network failure must leave the
+local Dashboard usable.
+
+AkorithWeb mirrors this information architecture in its interactive replica while keeping the
+public site's existing visual system. Verify desktop typecheck/build and GitHub activity loading,
+Electron wide/collapsed Dashboard and Loop geometry, smooth sidebar drag, then website lint/build
+plus desktop/mobile interaction and overflow checks.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).

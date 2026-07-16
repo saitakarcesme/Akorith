@@ -31,6 +31,7 @@ import { registerLocalRuntimeIpc } from './local-runtime'
 import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
 import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
+import { registerGitHubActivityIpc } from './github-activity'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -419,6 +420,7 @@ app.whenReady().then(() => {
   registerProjectLoopIpc()
   registerCompanionIpc()
   registerActionAgentIpc()
+  registerGitHubActivityIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()

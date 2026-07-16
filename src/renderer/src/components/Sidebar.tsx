@@ -3,7 +3,6 @@ import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../.
 import type { AppTheme, AppView } from '../App'
 import { useProfileIdentity } from '../profileIdentity'
 import {
-  ChartIcon,
   ChevronIcon,
   FlaskIcon,
   FolderIcon,
@@ -55,7 +54,6 @@ interface SidebarProps {
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
   { view: 'loops', label: 'Loop', icon: LoopIcon },
-  { view: 'dashboard', label: 'Dashboard', icon: ChartIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon }
 ]
@@ -182,6 +180,7 @@ export default function Sidebar({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
   const { identity, updateIdentity } = useProfileIdentity()
 
   const loadProviders = useCallback(() => {
@@ -280,10 +279,26 @@ export default function Sidebar({
     event.preventDefault()
     const startX = event.clientX
     const startWidth = sidebarWidth
+    const sidebarElement = sidebarRef.current
+    const appElement = sidebarElement?.closest<HTMLElement>('.app') ?? null
+    let nextWidth = startWidth
+    let frame = 0
+    const paint = (): void => {
+      frame = 0
+      sidebarElement?.style.setProperty('--sidebar-width', `${nextWidth}px`)
+      appElement?.style.setProperty('--chrome-sidebar-width', `${nextWidth}px`)
+    }
     const move = (moveEvent: MouseEvent): void => {
-      setSidebarWidth(clampSidebarWidth(startWidth + (moveEvent.clientX - startX)))
+      nextWidth = clampSidebarWidth(startWidth + (moveEvent.clientX - startX))
+      if (!frame) frame = window.requestAnimationFrame(paint)
     }
     const stop = (): void => {
+      if (frame) window.cancelAnimationFrame(frame)
+      paint()
+      setSidebarWidth(nextWidth)
+      onChromeWidthChange?.(nextWidth)
+      sidebarElement?.removeAttribute('data-resizing')
+      appElement?.removeAttribute('data-sidebar-resizing')
       document.body.style.removeProperty('cursor')
       document.body.style.removeProperty('user-select')
       window.removeEventListener('mousemove', move)
@@ -291,6 +306,8 @@ export default function Sidebar({
     }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
+    sidebarElement?.setAttribute('data-resizing', 'true')
+    appElement?.setAttribute('data-sidebar-resizing', 'true')
     window.addEventListener('mousemove', move)
     window.addEventListener('mouseup', stop)
   }
@@ -536,6 +553,7 @@ export default function Sidebar({
       )}
 
       <aside
+        ref={sidebarRef}
         className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
         style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
         onMouseEnter={revealSidebar}
@@ -933,7 +951,7 @@ export default function Sidebar({
 
       <div className="sidebar-profile">
         <div className="sidebar-profile-row">
-          <button type="button" className="profile-identity-button" onClick={() => setSettingsOpen(true)} title="Profile settings">
+          <button type="button" className="profile-identity-button" onClick={() => { setSettingsOpen(false); onNavigate('dashboard') }} title="Open Dashboard">
             <ProfileAvatar name={identity.displayName} photo={identity.profilePhoto} />
             <strong>{identity.displayName.trim() || 'User'}</strong>
           </button>

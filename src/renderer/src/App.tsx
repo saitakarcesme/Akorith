@@ -458,6 +458,7 @@ export default function App(): JSX.Element {
     <div
       className="app"
       data-theme={theme}
+      data-sidebar-collapsed={chromeSidebarWidth === 0 ? 'true' : 'false'}
       style={{ ['--chrome-sidebar-width' as string]: `${chromeSidebarWidth}px` } as CSSProperties}
     >
       <AppChrome
