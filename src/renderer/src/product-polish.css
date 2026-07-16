@@ -1135,11 +1135,11 @@ textarea:focus-visible,
 .app[data-sidebar-collapsed='true'] .loop-v2-header,
 .app[data-sidebar-collapsed='true'] .loop-switcher,
 .app[data-sidebar-collapsed='true'] .loop-v2-surface {
-  width: min(1180px, 100%);
+  width: min(1080px, 100%);
   margin-right: auto;
   margin-left: auto;
 }
-.app[data-sidebar-collapsed='true'] .loop-v2-detail { width: min(880px, 100%); }
+.app[data-sidebar-collapsed='true'] .loop-v2-detail { width: min(820px, 100%); }
 
 /* Codex-like Goal narration: every durable action has a short step title and a
    readable explanation of what changed, while time remains quiet metadata. */
