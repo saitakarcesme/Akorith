@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 58
-(Codex-parity chat, durable attachments, and isolated streaming tasks).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 62
+(aligned profile telemetry, true Loop flow topology, and refined Benchmark hierarchy).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -1627,6 +1627,27 @@ The diagram is explanatory and read-only, never a source of execution state or n
 Verification: `npm run typecheck`, `npm run build`, `npm run verify:workspace-loop`,
 `npm run verify:goal-cycle`, `npm run verify:project-loop`, Electron CDP at wide and 891 px widths,
 and explicit checks that chat actions have reserved static width with no horizontal overflow.
+
+### Phase 62: Aligned Profile Telemetry + True Loop Topology
+
+The Dashboard identity keeps the stored profile photo and `@local · Akorith` line, while the
+display name uses the local macOS SignPainter handwriting face with Snell Roundhand and Savoye LET
+fallbacks. The five-stat frame, Token activity heading, Daily edge, 53-column grid, and month row
+share the exact 633 px calendar measure. On narrow windows the calendar scrolls inside its own
+shell; the page itself must never gain horizontal overflow.
+
+Loop's five working phases are a real directed flow, not a decorative step list. Six SVG edges
+encode Understand → Plan → Execute → Analyze, Analyze → Replan, Replan → Plan, and Analyze →
+Complete. Review/return edges are dashed and completion is a distinct outcome node. Preserve this
+topology and keep narrow-window scrolling local to the diagram canvas.
+
+Benchmark readability comes from hierarchy rather than uniform scaling: primary descriptions,
+picker values, library insights, matrix labels, and recent-run content receive stronger size and
+contrast while metadata remains quiet. Do not flatten these levels into one font size.
+
+Verification: typecheck/build, Workspace/Goal/Project Loop scripts, update-version verification,
+Electron CDP at wide and 891 px widths, exact Dashboard edge measurements, six Loop paths, local
+font availability, and absence of page-level horizontal overflow.
 
 ## Conventions
 

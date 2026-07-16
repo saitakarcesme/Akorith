@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 58:
-Codex-Parity Chat + Durable Attachments**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 62:
+Aligned Profile Telemetry + True Loop Topology**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -679,6 +679,19 @@ local model, attempts, validated changes, commits, last validation, and last com
   authority from the renderer diagram.
 - Verify typecheck/build, Workspace/Goal/Project Loop scripts, wide and 891 px Electron CDP views,
   icon action geometry, and absence of horizontal overflow.
+
+## Phase 62 - Aligned Profile Telemetry + True Loop Topology
+
+- Keep the profile photo and identity line. The username uses macOS SignPainter with local script
+  fallbacks to evoke the Apple welcome hand without shipping or downloading a font.
+- The stat frame, Token activity heading, Daily edge, 53-column grid, and month row share one exact
+  633 px measure. Responsive overflow belongs to the calendar shell, never the whole page.
+- Loop is a directed diagram with six SVG connector paths, explicit review/return branches, and a
+  separate Complete outcome. The phase state still comes from the durable Goal engine.
+- Benchmark uses deliberate type hierarchy: important content is more legible while technical
+  metadata stays compact. Avoid indiscriminate global font scaling.
+- Verify typecheck/build, Workspace/Goal/Project Loop and update-version scripts, wide/narrow CDP
+  geometry, local font loading, six diagram paths, and no page-level horizontal overflow.
 
 ## Rule: keep the docs current
 

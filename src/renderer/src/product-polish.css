@@ -519,6 +519,134 @@ textarea:focus-visible,
   .workspace-flow-summary li.is-current > span { animation: none; }
 }
 
+/* Phase 62: Dashboard elements share the calendar's true 53-week measure.
+   The display name uses a locally available macOS script face with the same
+   friendly, connected rhythm as Apple's hello greeting. */
+.profile-dashboard { --activity-map-width: 633px; }
+.profile-heading h1 {
+  margin-top: 1px;
+  font-family: 'SignPainter-HouseScript', 'SignPainter', 'Snell Roundhand', 'Savoye LET', cursive;
+  font-size: 56px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: .005em;
+}
+.profile-stats,
+.profile-dashboard .token-activity,
+.profile-dashboard .heatmap-shell,
+.profile-dashboard .token-activity-head {
+  width: min(100%, var(--activity-map-width));
+}
+.profile-stats { margin-inline: auto; }
+.profile-dashboard .token-activity { margin-inline: auto; }
+.profile-dashboard .token-activity-head { margin-inline: 0; }
+.profile-dashboard .heatmap-shell { margin-inline: 0; padding-inline: 0; }
+.profile-dashboard .heatmap-grid,
+.profile-dashboard .heatmap-months { width: var(--activity-map-width); }
+
+/* A real Goal flowchart: two rows, explicit decision branches, a return edge,
+   and a completion exit. It remains low-color and scrolls only on narrow UI. */
+.loop-v2-detail { width: min(940px, 100%); }
+.loop-v2-goal-head h2 { font-size: 19px; line-height: 1.38; }
+.loop-v2-goal-head p { font-size: 10px; }
+.loop-status { font-size: 10.5px; }
+.loop-v2-diagram { padding: 18px 0 14px; }
+.loop-cycle-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; }
+.loop-cycle-canvas { position: relative; min-width: 700px; height: 205px; }
+.loop-cycle-connectors { position: absolute; inset: 0; width: 100%; height: 205px; overflow: visible; color: var(--text-faint); }
+.loop-cycle-connectors path { fill: none; stroke: color-mix(in srgb, var(--text-faint) 70%, var(--border) 30%); stroke-width: 1.35; marker-end: url(#loop-arrow); vector-effect: non-scaling-stroke; }
+.loop-cycle-connectors path.is-review,
+.loop-cycle-connectors path.is-return { stroke: color-mix(in srgb, var(--ak-purple) 38%, var(--text-faint) 62%); stroke-dasharray: 4 4; }
+.loop-cycle-connectors path.is-finish { stroke: color-mix(in srgb, var(--ak-green) 55%, var(--text-faint) 45%); }
+.loop-cycle-connectors marker path { fill: var(--text-faint); stroke: none; marker-end: none; }
+.loop-cycle-track { position: absolute; inset: 0; display: block; }
+.loop-cycle-track::before { display: none; }
+.loop-cycle-stage {
+  position: absolute;
+  width: 106px;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+  text-align: left;
+  transform: translate(-50%, -50%);
+}
+.loop-cycle-stage:nth-child(1) { top: 45px; left: 11.43%; }
+.loop-cycle-stage:nth-child(2) { top: 45px; left: 37.14%; }
+.loop-cycle-stage:nth-child(3) { top: 45px; left: 62.86%; }
+.loop-cycle-stage:nth-child(4) { top: 157px; left: 62.86%; }
+.loop-cycle-stage:nth-child(5) { top: 157px; left: 37.14%; }
+.loop-cycle-node { width: 24px; height: 24px; border-radius: 7px; background: var(--bg-chat); }
+.loop-cycle-stage strong { color: var(--text-dim); font-size: 12px; font-weight: 610; }
+.loop-cycle-stage.is-current { border: 1px solid color-mix(in srgb, var(--ak-purple) 34%, var(--border) 66%); background: color-mix(in srgb, var(--bg-panel) 94%, var(--ak-purple) 6%); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ak-purple) 6%, transparent); }
+.loop-cycle-stage.is-current .loop-cycle-node { border-radius: 7px; }
+.loop-cycle-stage.is-blocked { border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.loop-cycle-outcome {
+  position: absolute;
+  top: 157px;
+  left: 88.57%;
+  width: 106px;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  color: var(--text-faint);
+  border: 1px dashed color-mix(in srgb, var(--ak-green) 34%, var(--border) 66%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
+  transform: translate(-50%, -50%);
+}
+.loop-cycle-outcome span { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; font-size: 10px; }
+.loop-cycle-outcome strong { font-size: 12px; font-weight: 610; }
+.loop-cycle-outcome.is-reached { color: var(--success); border-style: solid; border-color: color-mix(in srgb, var(--success) 44%, var(--border)); }
+.loop-cycle-branch-label { position: absolute; z-index: 2; padding: 1px 5px; color: var(--text-faint); background: var(--bg-chat); font: 9.5px/1.4 var(--font-ui); white-space: nowrap; }
+.loop-cycle-branch-label.is-review { top: 142px; left: 48%; transform: translateX(-50%); }
+.loop-cycle-branch-label.is-return { top: 94px; left: 37.14%; transform: translateX(-50%); }
+.loop-cycle-branch-label.is-finish { top: 142px; left: 76%; transform: translateX(-50%); }
+.loop-cycle-caption { margin-top: 2px; font-size: 10px; }
+.loop-v2-current strong { font-size: 13px; }
+.loop-v2-current p { font-size: 11.5px; line-height: 1.55; }
+.loop-v2-evidence > summary { font-size: 12px; }
+
+/* Benchmark typography uses a clearer hierarchy instead of uniformly tiny
+   mono labels: primary content is readable, metadata stays intentionally quiet. */
+.benchmark-header p { margin-top: 7px; color: color-mix(in srgb, var(--text) 66%, transparent); font-size: 13px; line-height: 1.5; }
+.benchmark-header-meta { font-size: 10.5px; }
+.benchmark-picker small,
+.benchmark-challenge-select small { margin-bottom: 6px; font-size: 10px; }
+.benchmark-picker > summary strong,
+.benchmark-challenge-select strong { color: var(--text-dim); font-size: 12.5px; line-height: 1.45; }
+.benchmark-library-head .test-recent-title { font-size: 12px; font-weight: 650; }
+.benchmark-library-head .test-hint { color: var(--text-dim); font-size: 11.5px; line-height: 1.5; }
+.benchmark-insight-strip span { font-size: 9.5px; }
+.benchmark-insight-strip strong { font-size: 11.5px; }
+.benchmark-panel-title strong { font-size: 12.5px; }
+.benchmark-panel-title span { color: var(--text-dim); font-size: 10.5px; }
+.benchmark-matrix th,
+.benchmark-matrix td { font-size: 10.5px; }
+.benchmark-performance-name,
+.benchmark-feed-row > div strong { font-size: 11.5px; }
+.benchmark-feed-row > div span,
+.benchmark-feed-row > small { font-size: 9.5px; }
+
+@media (max-width: 1060px) {
+  .profile-dashboard { --activity-map-width: 100%; }
+  .profile-dashboard .heatmap-shell { overflow-x: auto; }
+  .profile-dashboard .heatmap-grid,
+  .profile-dashboard .heatmap-months { width: 633px; }
+}
+
+@media (max-width: 760px) {
+  .profile-heading h1 { font-size: 49px; }
+}
+
 /* Completed responses carry a compact, source-of-truth receipt. Workspace
    turns add the Git-derived file and line delta without changing chat prose. */
 .chat-completion-summary {
