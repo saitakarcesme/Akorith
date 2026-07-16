@@ -693,6 +693,19 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Verify typecheck/build, Workspace/Goal/Project Loop and update-version scripts, wide/narrow CDP
   geometry, local font loading, six diagram paths, and no page-level horizontal overflow.
 
+## Phase 63 - Fluid Loop Topology + Current Website
+
+- Loop's 700-unit SVG coordinate system scales into the available content width. Phase and outcome
+  nodes use the same proportional geometry, so connectors remain aligned without a local scrollbar.
+- Narrow containers compact the node chrome and ellipsize labels; neither the diagram nor the page
+  may gain horizontal overflow.
+- AkorithWeb keeps its established design system while presenting the current Workspace, durable
+  concurrent Loops, Dashboard, Benchmark, Plugins, Settings, download, and update capabilities.
+- Retired desktop Agents/Companions surfaces are not exposed as current product navigation. The
+  separate website must pass lint/build plus desktop/mobile route and interaction verification.
+- Verify the desktop app with typecheck/build and Loop scripts, then verify AkorithWeb at 390 px and
+  desktop widths, including Workspace completion receipts and responsive Loop topology.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

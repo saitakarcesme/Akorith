@@ -1649,6 +1649,24 @@ Verification: typecheck/build, Workspace/Goal/Project Loop scripts, update-versi
 Electron CDP at wide and 891 px widths, exact Dashboard edge measurements, six Loop paths, local
 font availability, and absence of page-level horizontal overflow.
 
+### Phase 63: Fluid Loop Topology + Current Website
+
+The Loop topology scales against the available content width instead of forcing a 700 px canvas.
+All five phase nodes, the Complete outcome, six directed connectors, and branch labels retain their
+relative geometry without an internal horizontal scrollbar. Narrow containers reduce node chrome
+and ellipsize labels; the diagram and the surrounding page must not overflow horizontally.
+
+AkorithWeb preserves its existing public visual language while its routes, copy, and interactive
+desktop replica describe the current Workspace, concurrent durable Loops, Dashboard telemetry,
+Benchmark library, Plugins, Settings, native downloads, and update flow. The retired desktop
+Agents/Companions surface is not presented as a current route. Website changes live in the
+separate `saitakarcesme/AkorithWeb` repository and must pass lint, production build, mobile/desktop
+overflow checks, and interactive Workspace/Loop/Benchmark checks before publishing.
+
+Verification: run typecheck/build and all Workspace/Loop/update release scripts; use Electron CDP
+to measure Loop geometry at wide and narrow content widths; then lint/build AkorithWeb and verify
+its primary routes at desktop and 390 px mobile widths with no page-level overflow.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
