@@ -8,12 +8,12 @@ interface LoopPipelineProps {
   iteration?: number
 }
 
-const STAGES: { id: LoopCyclePhase; label: string; hint: string }[] = [
-  { id: 'understand', label: 'Understand', hint: 'Define the whole Goal' },
-  { id: 'plan', label: 'Plan', hint: 'Choose one verifiable action' },
-  { id: 'execute', label: 'Execute', hint: 'Create or change the artifact' },
-  { id: 'analyze', label: 'Analyze', hint: 'Compare evidence with the Goal' },
-  { id: 'replan', label: 'Replan', hint: 'Close the largest remaining gap' }
+const STAGES: { id: LoopCyclePhase; label: string }[] = [
+  { id: 'understand', label: 'Understand' },
+  { id: 'plan', label: 'Plan' },
+  { id: 'execute', label: 'Execute' },
+  { id: 'analyze', label: 'Analyze' },
+  { id: 'replan', label: 'Replan' }
 ]
 
 export default function LoopPipeline({ phase, status, iteration = 1 }: LoopPipelineProps): JSX.Element {
@@ -29,17 +29,15 @@ export default function LoopPipeline({ phase, status, iteration = 1 }: LoopPipel
             : index < currentIndex ? 'complete' : index === currentIndex ? blocked ? 'blocked' : 'current' : 'waiting'
           return (
             <div className={`loop-cycle-stage is-${state}`} role="listitem" key={stage.id}>
-              <span className="loop-cycle-node"><i />{index + 1}</span>
+              <span className="loop-cycle-node">{state === 'complete' ? '✓' : index + 1}</span>
               <strong>{stage.label}</strong>
-              <small>{stage.hint}</small>
             </div>
           )
         })}
       </div>
-      <div className="loop-cycle-branches" aria-hidden="true">
-        <span className="loop-cycle-return"><i />Goal not reached · return to Plan</span>
-        <span className={`loop-cycle-finish ${completed ? 'is-reached' : ''}`}><i />Goal reached</span>
-      </div>
+      <p className={`loop-cycle-caption ${completed ? 'is-reached' : ''}`}>
+        {completed ? 'Goal reached' : blocked ? 'Waiting for review' : `Cycle ${iteration} · analyze evidence, then finish or return to Plan`}
+      </p>
     </div>
   )
 }

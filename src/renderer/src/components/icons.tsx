@@ -246,6 +246,22 @@ export function PinIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><path d="m9 3 6 6M7 8l9-3 3 3-3 9-4-4-5 5-1-1 5-5z" /></IconShell>
 }
 
+export function EditIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M4 20h4l11-11-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></IconShell>
+}
+
+export function TrashIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></IconShell>
+}
+
+export function ArchiveIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M4 5h16v4H4zM6 9v11h12V9M10 13h4" /></IconShell>
+}
+
+export function MoreIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></IconShell>
+}
+
 export function PlanIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" /></IconShell>
 }

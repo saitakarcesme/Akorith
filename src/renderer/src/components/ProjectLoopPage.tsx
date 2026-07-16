@@ -8,7 +8,7 @@ import type {
   ProjectRow,
   ProviderInfo
 } from '../../../preload/index.d'
-import { FolderOpenIcon, LoopIcon, PlusIcon, SendIcon, StopIcon } from './icons'
+import { ArchiveIcon, FolderOpenIcon, LoopIcon, PlusIcon, SendIcon, StopIcon } from './icons'
 import { ComposerSendButton } from './CreationPrimitives'
 import LoopPipeline, { type LoopCyclePhase } from './LoopPipeline'
 import ModelPicker from './ModelPicker'
@@ -66,11 +66,11 @@ function phaseFor(events: ProjectLoopEvent[], status: ProjectLoopStatus): LoopCy
 }
 
 function phaseCopy(phase: LoopCyclePhase, running: boolean): { title: string; body: string } {
-  if (phase === 'understand') return { title: 'Understanding the whole Goal', body: 'Akorith is turning the request into concrete deliverables, boundaries, and evidence that can prove the complete outcome is ready.' }
-  if (phase === 'plan') return { title: 'Planning the next bounded action', body: 'The selected model is choosing one inspectable step from the current workspace instead of attempting an unreviewable all-at-once result.' }
-  if (phase === 'execute') return { title: running ? 'Executing the current plan' : 'Execution checkpointed', body: 'Work stays inside the selected folder. Files, commands, generated artifacts, and local Git checkpoints become evidence for the next review.' }
-  if (phase === 'analyze') return { title: 'Analyzing completion evidence', body: 'The latest result is being compared with every acceptance criterion. A partial artifact or a successful command alone cannot finish the Goal.' }
-  return { title: 'Replanning from the remaining gap', body: 'The analysis selected the most important unmet criterion and routes the next cycle back through Plan without losing prior progress.' }
+  if (phase === 'understand') return { title: 'Understanding the Goal', body: 'Turning the request into a clear outcome and definition of done.' }
+  if (phase === 'plan') return { title: 'Planning the next action', body: 'Choosing one useful step that can be checked afterward.' }
+  if (phase === 'execute') return { title: running ? 'Executing the plan' : 'Execution checkpointed', body: 'Working inside the selected folder and recording concrete evidence.' }
+  if (phase === 'analyze') return { title: 'Checking the result', body: 'Comparing the latest evidence with the complete Goal.' }
+  return { title: 'Closing the remaining gap', body: 'Returning to Plan with the most important unfinished item.' }
 }
 
 function parseContract(raw?: string): GoalContract | null {
@@ -310,7 +310,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
     <main className="loop-page loop-page-v2">
       <header className="loop-v2-header">
         <span className="loop-eyebrow">CONCURRENT GOALS</span>
-        <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={15} />New loop</button>
+        <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={15} />New tab</button>
       </header>
 
       {loops.length > 0 && (
@@ -328,7 +328,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
             <div className="loop-v2-create-copy">
               <span className="loop-eyebrow">NEW GOAL</span>
               <h2>{target ? 'What should Akorith finish?' : 'Where should this Goal work?'}</h2>
-              <p>{target ? 'One clear outcome is enough. Akorith will understand it, plan one step, execute, analyze the evidence, and repeat until the complete Goal is reached.' : 'The folder is the durable boundary for source material, generated artifacts, project files, and local checkpoints.'}</p>
+              <p>{target ? 'Describe the finished result. Akorith will keep cycling until the evidence matches it.' : 'Choose the folder where this Loop may read, create, and validate files.'}</p>
             </div>
             {!target ? <div className="loop-target-actions">
               {activeProject?.path && <button type="button" className="ws-hero-btn is-primary" onClick={() => void chooseTarget('current')}><FolderOpenIcon size={16} />Use {activeProject.name}</button>}
@@ -341,31 +341,29 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
           <div className="loop-v2-detail">
             <div className="loop-v2-goal-head">
               <div><span className={`loop-status is-${selectedRunning ? 'running' : selectedLoop.status}`}><i />{statusLabel(selectedLoop.status, selectedRunning)}</span><h2>{contract?.summary ?? selectedLoop.title}</h2><p>{projectName(selectedLoop.localPath)} · cycle {iteration} · {selectedLoop.localModel ?? 'default'}</p></div>
-              <div className="loop-v2-time"><span>{selectedRunning ? 'Working for' : 'Worked for'}</span><strong>{selectedElapsed}</strong>{!selectedRunning && <button type="button" onClick={() => void archiveSelected()}>Archive</button>}</div>
+              <div className="loop-v2-time"><span>{selectedRunning ? 'Working for' : 'Worked for'}</span><strong>{selectedElapsed}</strong>{!selectedRunning && <button type="button" className="loop-archive-button" title="Archive Loop" aria-label="Archive Loop" onClick={() => void archiveSelected()}><ArchiveIcon size={15} /></button>}</div>
             </div>
 
             <div className="loop-v2-diagram">
-              <div className="loop-panel-heading"><div><span>GOAL CYCLE</span><strong>Evidence, not activity, decides completion</strong></div><em>Cycle {iteration}</em></div>
               <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
+              <div className={`loop-v2-current ${selectedRunning ? 'is-running' : ''}`} aria-live="polite">
+                <span className="loop-v2-current-orb" />
+                <div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div>
+              </div>
             </div>
 
-            <div className={`loop-v2-current ${selectedRunning ? 'is-running' : ''}`} aria-live="polite">
-              <span className="loop-v2-current-orb" />
-              <div><span>CURRENT PHASE</span><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div>
-            </div>
-
-            <div className="loop-v2-evidence">
+            <details className="loop-v2-evidence" open={selectedLoop.status === 'needs_review' || selectedLoop.status === 'error'}>
+              <summary>Progress &amp; definition of done <span>{events.length} signals · {commits.length} checkpoints</span></summary>
               <div className="loop-v2-events">
-                <div className="loop-panel-heading"><div><span>CHECKPOINTS</span><strong>Latest meaningful evidence</strong></div><em>{events.length} signals</em></div>
+                <div className="loop-panel-heading"><div><strong>Latest progress</strong></div></div>
                 {recentEvents.length > 0 ? recentEvents.map((event) => <article key={event.id} className={`is-${event.kind}`}><i /><div><strong>{event.message}</strong>{event.detail && <p>{event.detail.slice(0, 360)}</p>}</div><time>{new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>) : <p className="loop-v2-empty">The first checkpoint appears after the Goal is understood.</p>}
               </div>
               <aside className="loop-v2-contract">
-                <span>DEFINITION OF DONE</span>
-                <strong>{contract?.deliverables?.length ? `${contract.deliverables.length} deliverables` : 'Understanding the Goal…'}</strong>
+                <strong>Definition of done</strong>
                 <ul>{(contract?.acceptanceCriteria ?? ['Concrete output in the selected folder', 'Relevant validation without a known blocker']).map((item) => <li key={item}>{item}</li>)}</ul>
                 <small>{commits.length} local checkpoints · {selectedLoop.runCount} cycles</small>
               </aside>
-            </div>
+            </details>
 
             {!selectedRunning && (selectedLoop.status === 'completed' || selectedLoop.error) && <div className={`loop-outcome ${selectedLoop.error ? 'is-error' : ''}`}><span>{selectedLoop.status === 'completed' ? 'GOAL REACHED' : 'REVIEW NEEDED'}</span><strong>{lastRun?.summary ?? selectedLoop.error}</strong><p>{lastRun?.filesChanged ?? 0} changed files · {commits.length} local checkpoints · push off</p></div>}
             {error && <div className="loop-inline-error">{error}</div>}

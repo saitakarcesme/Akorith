@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChatActivity } from '../../../preload/index.d'
+import WorkspaceFlowSummary from './WorkspaceFlowSummary'
 
 interface WorkspaceActivityProps {
   activities: ChatActivity[]
@@ -114,6 +115,7 @@ export default function WorkspaceActivity({
     <section className={`workspace-activity ${active ? 'is-active' : failed ? 'is-failed' : 'is-complete'}`} aria-live="polite">
       <div className="workspace-duration">{statusText}</div>
       <div className="workspace-activity-rule" />
+      <WorkspaceFlowSummary activities={visible} active={active} failed={failed} />
       <div className="workspace-activity-list">
         {visible.map((item) => (
           <div className={`workspace-activity-row is-${item.kind} is-${item.status ?? 'running'}`} key={`${item.timestamp}-${item.kind}-${item.label}`}>

@@ -666,6 +666,20 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Verify typecheck/build, plugin diagnostics, Dashboard structure and computed geometry, Plugins
   images, release metadata, and the packaged Electron app before shipping.
 
+## Phase 61 - Quiet Loop Surface + Visual Workspace Flow
+
+- Keep concurrent Goal tabs and New tab. The active Loop uses one flat five-phase stepper and one
+  current-phase explanation; progress and definition of done share a disclosure instead of nested
+  permanent cards. The composer remains the stable bottom action surface.
+- Chat titles and their controls never overlap. Project and general chat rows reserve a 64 px
+  icon-action column for pin, rename, and two-click delete; project overflow is also an SVG icon.
+  Every icon-only action needs an accessible label and tooltip.
+- Workspace diagrams are contextual receipts derived from actual activity. Show a flow only after
+  three distinct stages emerge; keep short responses as natural prose and never infer execution
+  authority from the renderer diagram.
+- Verify typecheck/build, Workspace/Goal/Project Loop scripts, wide and 891 px Electron CDP views,
+  icon action geometry, and absence of horizontal overflow.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

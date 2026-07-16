@@ -9,12 +9,15 @@ import {
   FolderIcon,
   FolderOpenIcon,
   LoopIcon,
+  EditIcon,
+  MoreIcon,
   PanelsIcon,
   PluginIcon,
   PlusIcon,
   PinIcon,
   SearchIcon,
-  SettingsIcon
+  SettingsIcon,
+  TrashIcon
 } from './icons'
 import { ProfileAvatar } from './ProfileAvatar'
 import SettingsCenter from './SettingsCenter'
@@ -167,8 +170,6 @@ export default function Sidebar({
   // The menu is rendered fixed-position (anchored to the clicked button's rect)
   // so the Projects list's own `overflow-y: auto` cannot clip it.
   const [projectRowMenu, setProjectRowMenu] = useState<string | null>(null)
-  // Phase 37.4: per-chat overflow menu (Rename / Delete) — replaces inline text.
-  const [chatRowMenu, setChatRowMenu] = useState<string | null>(null)
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameProjectValue, setRenameProjectValue] = useState('')
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
@@ -309,15 +310,6 @@ export default function Sidebar({
     return () => window.removeEventListener('keydown', onKey)
   }, [projectRowMenu])
 
-  useEffect(() => {
-    if (!chatRowMenu) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setChatRowMenu(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [chatRowMenu])
-
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const labelOf = (id: string): string => providers.find((p) => p.id === id)?.label ?? id
 
@@ -344,7 +336,6 @@ export default function Sidebar({
   const generalSessions = sessions.filter((s) => (!s.projectId || !projectById.has(s.projectId)) && matchesSearch(s.title))
 
   const togglePinned = async (session: SessionRow): Promise<void> => {
-    setChatRowMenu(null)
     await window.api.history.pin(session.id, !session.pinned)
     onHistoryChange()
   }
@@ -476,14 +467,7 @@ export default function Sidebar({
 
   const toggleProjectRowMenu = (projectId: string, event: ReactMouseEvent): void => {
     event.stopPropagation()
-    setChatRowMenu(null)
     setProjectRowMenu((current) => (current === projectId ? null : projectId))
-  }
-
-  const toggleChatRowMenu = (chatId: string, event: ReactMouseEvent): void => {
-    event.stopPropagation()
-    setProjectRowMenu(null)
-    setChatRowMenu((current) => (current === chatId ? null : chatId))
   }
 
   const commitProjectRename = async (project: ProjectRow): Promise<void> => {
@@ -762,7 +746,7 @@ export default function Sidebar({
                                 aria-expanded={projectRowMenu === project.id}
                                 onClick={(event) => toggleProjectRowMenu(project.id, event)}
                               >
-                                ⋯
+                                <MoreIcon size={14} />
                               </button>
                             </span>
                             {projectRowMenu === project.id && (
@@ -809,7 +793,7 @@ export default function Sidebar({
                                   </div>
                                 ) : (
                                   <div
-                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chatRowMenu === chat.id ? 'is-menu-open' : ''} ${chat.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(chat.id) ? 'is-running' : ''}`}
+                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chat.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(chat.id) ? 'is-running' : ''}`}
                                     key={chat.id}
                                     role="button"
                                     tabIndex={0}
@@ -824,50 +808,24 @@ export default function Sidebar({
                                   >
                                     <span className="project-chat-title">{chat.title}</span>
                                     <span className="project-chat-time">{pendingSessions?.has(chat.id) ? <><i />Akorithing…</> : chat.pinned ? <PinIcon size={11} /> : relativeShort(chat.updatedAt)}</span>
-                                    {/* Phase 37.4: actions via a small ⋯ menu, not inline text. */}
-                                    <button
-                                      type="button"
-                                      className="project-chat-overflow"
-                                      title="Chat actions"
-                                      aria-haspopup="menu"
-                                      aria-expanded={chatRowMenu === chat.id}
-                                      onClick={(event) => toggleChatRowMenu(chat.id, event)}
-                                    >
-                                      ⋯
-                                    </button>
-                                    {chatRowMenu === chat.id && (
-                                      <div className="project-menu project-row-menu" role="menu" onClick={(event) => event.stopPropagation()}>
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          onClick={() => void togglePinned(chat)}
-                                        >
-                                          <PinIcon size={13} /><span>{chat.pinned ? 'Unpin task' : 'Pin task'}</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          onClick={() => {
-                                            setChatRowMenu(null)
-                                            setRenamingId(chat.id)
-                                            setRenameValue(chat.title)
-                                          }}
-                                        >
-                                          <span>Rename</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          className="is-danger"
-                                          onClick={() => {
-                                            setChatRowMenu(null)
-                                            void deleteSession(chat)
-                                          }}
-                                        >
-                                          <span>Delete chat</span>
-                                        </button>
-                                      </div>
-                                    )}
+                                    <span className="sidebar-item-actions" aria-label="Chat actions">
+                                      <button type="button" title={chat.pinned ? 'Unpin task' : 'Pin task'} aria-label={chat.pinned ? 'Unpin task' : 'Pin task'} onClick={(event) => { event.stopPropagation(); void togglePinned(chat) }}><PinIcon size={12} /></button>
+                                      <button type="button" title="Rename chat" aria-label="Rename chat" onClick={(event) => { event.stopPropagation(); setRenamingId(chat.id); setRenameValue(chat.title) }}><EditIcon size={12} /></button>
+                                      <button
+                                        type="button"
+                                        className={confirmDeleteId === chat.id ? 'is-danger is-confirming' : ''}
+                                        title={confirmDeleteId === chat.id ? 'Click again to delete this chat' : 'Delete chat'}
+                                        aria-label={confirmDeleteId === chat.id ? 'Confirm delete chat' : 'Delete chat'}
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          if (confirmDeleteId === chat.id) void deleteSession(chat)
+                                          else {
+                                            setConfirmDeleteId(chat.id)
+                                            setTimeout(() => setConfirmDeleteId((id) => id === chat.id ? null : id), 2500)
+                                          }
+                                        }}
+                                      ><TrashIcon size={12} /></button>
+                                    </span>
                                   </div>
                                 )
                               )}
@@ -914,7 +872,21 @@ export default function Sidebar({
                 const provider = labelOf(session.providerId)
                 const orphaned = Boolean(session.projectId)
                 const meta = `${orphaned ? 'Removed project' : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
-                return (
+                return renamingId === session.id ? (
+                  <div className="recent-chat" key={session.id}>
+                    <input
+                      className="sidebar-rename-input"
+                      value={renameValue}
+                      autoFocus
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void commitRename(session.id)
+                        if (event.key === 'Escape') setRenamingId(null)
+                      }}
+                      onBlur={() => void commitRename(session.id)}
+                    />
+                  </div>
+                ) : (
                   <div
                     className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''} ${session.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(session.id) ? 'is-running' : ''}`}
                     key={session.id}
@@ -935,31 +907,21 @@ export default function Sidebar({
                     </span>
                     <span className="sidebar-item-actions">
                       <button type="button" title={session.pinned ? 'Unpin task' : 'Pin task'} onClick={(event) => { event.stopPropagation(); void togglePinned(session) }}><PinIcon size={12} /></button>
-                      {confirmDeleteId === session.id ? (
-                        <button
-                          type="button"
-                          className="is-danger"
-                          title="Click again to delete this chat"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void deleteSession(session)
-                          }}
-                        >
-                          Delete?
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          title="Delete chat"
-                          onClick={(event) => {
-                            event.stopPropagation()
+                      <button type="button" title="Rename chat" aria-label="Rename chat" onClick={(event) => { event.stopPropagation(); setRenamingId(session.id); setRenameValue(session.title) }}><EditIcon size={12} /></button>
+                      <button
+                        type="button"
+                        className={confirmDeleteId === session.id ? 'is-danger is-confirming' : ''}
+                        title={confirmDeleteId === session.id ? 'Click again to delete this chat' : 'Delete chat'}
+                        aria-label={confirmDeleteId === session.id ? 'Confirm delete chat' : 'Delete chat'}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (confirmDeleteId === session.id) void deleteSession(session)
+                          else {
                             setConfirmDeleteId(session.id)
-                            setTimeout(() => setConfirmDeleteId((id) => (id === session.id ? null : id)), 2500)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
+                            setTimeout(() => setConfirmDeleteId((id) => id === session.id ? null : id), 2500)
+                          }
+                        }}
+                      ><TrashIcon size={12} /></button>
                     </span>
                   </div>
                 )

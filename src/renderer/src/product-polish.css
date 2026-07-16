@@ -421,6 +421,104 @@ textarea:focus-visible,
   .workspace-activity-row.is-running .workspace-activity-copy strong { animation: none !important; }
 }
 
+/* Phase 61: Loop keeps its tabs, but the working surface is a quiet transcript
+   instead of a board of nested cards. Information expands only when needed. */
+.loop-page.loop-page-v2 { gap: 8px; padding: 18px 24px 20px; }
+.loop-v2-header { min-height: 30px; }
+.loop-new-button { min-height: 30px; padding-inline: 10px; border-radius: var(--radius-control) !important; }
+.loop-switcher { gap: 4px; padding-bottom: 4px; }
+.loop-switcher button { min-width: 132px; max-width: 210px; height: 34px; border-radius: var(--radius-control); }
+.loop-switcher button > em { display: none; }
+.loop-v2-surface { border: 0; border-radius: 0; background: transparent; }
+.loop-v2-create { width: min(680px, 100%); padding-block: 34px 22px; }
+.loop-v2-create-copy h2 { font-size: 25px; }
+.loop-v2-create-copy p { max-width: 510px; font-size: 12.5px; }
+.loop-v2-detail { width: min(880px, 100%); gap: 12px; padding: 22px 6px 0; }
+.loop-v2-goal-head { align-items: center; padding: 0 2px 12px; border-bottom: 1px solid var(--border-soft); }
+.loop-v2-goal-head h2 { max-width: 670px; margin-top: 7px; font-size: 17px; }
+.loop-v2-time { display: flex; align-items: center; gap: 6px; }
+.loop-v2-time .loop-archive-button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-control); }
+.loop-v2-time .loop-archive-button:hover { border-color: var(--border-soft); }
+
+.loop-v2-diagram { padding: 19px 2px 15px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: transparent; }
+.loop-cycle-track { position: relative; display: grid; grid-template-columns: repeat(5, minmax(68px, 1fr)); gap: 0; }
+.loop-cycle-track::before { content: ''; position: absolute; top: 13px; right: 10%; left: 10%; height: 1px; background: var(--border); }
+.loop-cycle-stage { min-height: 46px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; text-align: center; }
+.loop-cycle-stage:not(:last-child)::after { display: none; }
+.loop-cycle-node { position: relative; z-index: 1; width: 27px; height: 27px; flex: 0 0 auto; color: var(--text-faint); border: 1px solid var(--border); border-radius: 50%; background: var(--bg-chat); font: 9px/1 var(--font-mono); }
+.loop-cycle-stage strong { color: var(--text-faint); font-size: 10px; font-weight: 570; }
+.loop-cycle-stage.is-complete .loop-cycle-node { color: var(--bg-chat); border-color: var(--ak-green); background: color-mix(in srgb, var(--ak-green-bright) 82%, white 18%); }
+.loop-cycle-stage.is-complete strong { color: var(--text-dim); }
+.loop-cycle-stage.is-current { border: 0; background: transparent; box-shadow: none; }
+.loop-cycle-stage.is-current .loop-cycle-node { color: var(--text); border-color: color-mix(in srgb, var(--ak-purple) 52%, var(--ak-green) 48%); background: var(--bg-raised); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ak-purple) 8%, transparent); }
+.loop-cycle-stage.is-blocked { border: 0; }
+.loop-cycle-caption { margin: 12px 0 0; color: var(--text-faint); font: 9px/1.5 var(--font-mono); text-align: center; }
+.loop-cycle-caption.is-reached { color: var(--success); }
+.loop-v2-current { grid-template-columns: 10px minmax(0,1fr); gap: 10px; margin-top: 14px; padding: 0 8px; border: 0; border-radius: 0; background: transparent; }
+.loop-v2-current-orb { width: 7px; height: 7px; margin-top: 5px; }
+.loop-v2-current strong { margin: 0; font-size: 12px; }
+.loop-v2-current p { margin-top: 3px; font-size: 10.5px; }
+
+.loop-v2-evidence { display: grid; grid-template-columns: minmax(0,1fr) 230px; gap: 0 22px; border: 0; border-bottom: 1px solid var(--border-soft); background: transparent; }
+.loop-v2-evidence > summary { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-height: 38px; color: var(--text-dim); cursor: pointer; font-size: 11px; list-style: none; }
+.loop-v2-evidence > summary::-webkit-details-marker { display: none; }
+.loop-v2-evidence > summary::before { content: '›'; margin-right: 7px; color: var(--text-faint); font-size: 16px; transition: transform var(--fast); }
+.loop-v2-evidence[open] > summary::before { transform: rotate(90deg); }
+.loop-v2-evidence > summary span { margin-left: auto; color: var(--text-faint); font: 8.5px/1 var(--font-mono); }
+.loop-v2-events, .loop-v2-contract { padding: 13px 2px 16px; border: 0; border-radius: 0; background: transparent; }
+.loop-v2-contract { border-left: 1px solid var(--border-soft); padding-left: 20px; }
+.loop-v2-contract > strong { margin: 0 0 10px; font-size: 11px; }
+.loop-v2-events article p { white-space: normal; }
+.loop-page-v2 .loop-focus-composer { margin: auto -6px 0; padding: 15px 6px 12px; background: linear-gradient(180deg, transparent, var(--bg-chat) 22%, var(--bg-chat)); }
+
+/* Chat row controls always reserve their own space. Icons replace text labels,
+   so a long title can ellipsize without colliding with edit/delete actions. */
+.project-chat .sidebar-item-actions,
+.recent-chat .sidebar-item-actions { position: static; width: 64px; height: 22px; display: inline-flex; flex: 0 0 64px; align-items: center; justify-content: flex-end; gap: 1px; margin-left: auto; opacity: 0; visibility: hidden; pointer-events: none; transform: none; }
+.project-chat:hover .sidebar-item-actions,
+.project-chat:focus-within .sidebar-item-actions,
+.project-chat.is-active .sidebar-item-actions,
+.recent-chat:hover .sidebar-item-actions,
+.recent-chat:focus-within .sidebar-item-actions,
+.recent-chat.is-active .sidebar-item-actions { opacity: 1; visibility: visible; pointer-events: auto; }
+.project-chat .sidebar-item-actions button,
+.recent-chat .sidebar-item-actions button { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; color: var(--sidebar-text-dim); border: 0; border-radius: 5px !important; background: transparent; }
+.project-chat .sidebar-item-actions button:hover,
+.recent-chat .sidebar-item-actions button:hover { color: var(--sidebar-text); background: var(--sidebar-hover); }
+.project-chat .sidebar-item-actions button.is-confirming,
+.recent-chat .sidebar-item-actions button.is-confirming { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.project-chat-time { margin-left: auto; }
+.project-chat:hover .project-chat-time,
+.project-chat:focus-within .project-chat-time,
+.project-chat.is-active .project-chat-time { display: none; }
+.recent-section .recent-chat { padding-right: 6px; }
+.recent-chat-text > span, .project-chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Contextual Workspace diagrams are generated only after three meaningful
+   stages exist, keeping short answers plain and longer work visually scannable. */
+.workspace-flow-summary { margin: 14px 0 3px; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-control); background: color-mix(in srgb, var(--bg-panel) 55%, transparent); }
+.workspace-flow-summary ol { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; }
+.workspace-flow-summary ol::before { content: ''; position: absolute; top: 10px; right: 7%; left: 7%; height: 1px; background: var(--border); }
+.workspace-flow-summary li { position: relative; z-index: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--text-faint); text-align: center; }
+.workspace-flow-summary li > span { width: 21px; height: 21px; display: grid; place-items: center; color: var(--bg-chat); border: 1px solid var(--ak-green); border-radius: 50%; background: color-mix(in srgb, var(--ak-green-bright) 78%, white 22%); font: 8px/1 var(--font-mono); }
+.workspace-flow-summary li strong { max-width: 100%; overflow: hidden; color: var(--text-dim); font-size: 9px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-flow-summary li.is-current > span { color: var(--text); border-color: color-mix(in srgb, var(--ak-purple) 52%, var(--ak-green) 48%); background: var(--bg-raised); animation: akorith-icon-breathe 1.7s ease-in-out infinite; }
+.workspace-flow-summary.is-failed li:last-child > span { color: white; border-color: var(--danger); background: var(--danger); }
+
+@media (max-width: 720px) {
+  .loop-page.loop-page-v2 { padding: 14px 12px; }
+  .loop-v2-detail { padding-inline: 2px; }
+  .loop-cycle-track { grid-template-columns: repeat(5, minmax(48px,1fr)); }
+  .loop-cycle-stage { min-height: 46px; }
+  .loop-v2-evidence { grid-template-columns: 1fr; }
+  .loop-v2-contract { border-top: 1px solid var(--border-soft); border-left: 0; padding-left: 2px; }
+  .loop-page-v2 .loop-focus-composer { margin-inline: -2px; padding-inline: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-flow-summary li.is-current > span { animation: none; }
+}
+
 /* Completed responses carry a compact, source-of-truth receipt. Workspace
    turns add the Git-derived file and line delta without changing chat prose. */
 .chat-completion-summary {

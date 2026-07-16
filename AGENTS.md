@@ -1607,6 +1607,27 @@ Verification: typecheck/build, plugin diagnostics, all-logo mapping, Dashboard D
 checks (avatar present, normal heading, no profile backdrop, compact activity, lower CPU wave
 present), Plugins broken-image checks, release validation, and packaged Electron smoke testing.
 
+### Phase 61: Quiet Loop Surface + Visual Workspace Flow
+
+Loop keeps concurrent Goal tabs and the New tab entry point, but its selected Goal is now a flat,
+transcript-like surface. The five Goal phases share one slim connected stepper; the current phase
+is explained directly below it, and checkpoints plus definition of done live in one disclosure
+instead of four permanent cards. Archive is an icon action and the composer remains the stable
+bottom interaction point. Do not restore nested status, diagram, current-phase, and evidence cards.
+
+Project and general chat rows reserve a fixed action column so long names always ellipsize before
+their controls. Pin, rename, delete, and project overflow controls use semantic SVG icons with
+titles and aria labels; destructive deletion remains a two-click confirmation. Do not put text
+such as `Delete` or `Delete?` back inside compact sidebar rows.
+
+Workspace may add a compact execution-flow diagram derived only from recorded CLI activities.
+Render it only when at least three distinct meaningful stages exist; short answers remain prose.
+The diagram is explanatory and read-only, never a source of execution state or new authority.
+
+Verification: `npm run typecheck`, `npm run build`, `npm run verify:workspace-loop`,
+`npm run verify:goal-cycle`, `npm run verify:project-loop`, Electron CDP at wide and 891 px widths,
+and explicit checks that chat actions have reserved static width with no horizontal overflow.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
