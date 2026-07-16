@@ -1591,6 +1591,22 @@ Verification: run `npm run typecheck`, `npm run build`, `npm run verify:workspac
 then use Electron CDP to verify the 371-cell Dashboard grid alignment, absent avatar, gray CPU
 backdrop, completion receipt, plugin counts/statuses, broken images, and horizontal overflow.
 
+### Phase 60: Restored Profile + Authentic Plugin Identity
+
+Phase 60 supersedes only the Dashboard presentation rules from Phase 59. The profile avatar,
+standard display-name typography, and `@local · Akorith` identity line are restored. Token activity
+returns to the compact 820 px calendar measure and its earlier fixed cell geometry. The lower
+Compute usage history remains the sole CPU wave; do not add a duplicate graph behind the username.
+
+All 15 local CLI additions now have a product-specific upstream identity asset. Use only the
+matching project's official site/repository asset or a traced brand vector; never substitute an
+Akorith monogram, generic GitHub logo, generated initials, or another placeholder. Keep provenance
+in `src/renderer/src/assets/plugin-logos/SOURCES.md` and verify every packaged image decodes.
+
+Verification: typecheck/build, plugin diagnostics, all-logo mapping, Dashboard DOM/computed-style
+checks (avatar present, normal heading, no profile backdrop, compact activity, lower CPU wave
+present), Plugins broken-image checks, release validation, and packaged Electron smoke testing.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).

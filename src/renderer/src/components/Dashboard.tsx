@@ -10,6 +10,7 @@ import type {
   UsageSummary
 } from '../../../preload/index.d'
 import { useProfileIdentity } from '../profileIdentity'
+import { ProfileAvatar } from './ProfileAvatar'
 
 const ACTIVITY_WEEKS = 53
 
@@ -147,31 +148,6 @@ function CpuUsageWave({ values, current }: { values: number[]; current: number }
         <path className="compute-wave-line" d={path} style={{ stroke: `url(#${strokeId})` }} />
       </svg>
     </div>
-  )
-}
-
-function ProfileCpuBackdrop({ values, current }: { values: number[]; current: number }): JSX.Element {
-  const samples = values.length ? values : [current, current]
-  const path = smoothWavePath(samples)
-  const id = useId().replace(/:/g, '')
-  const areaId = `profile-compute-area-${id}`
-
-  return (
-    <svg
-      className="profile-compute-backdrop"
-      viewBox="0 0 640 64"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="currentColor" stopOpacity=".18" />
-          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${path} L 640 64 L 0 64 Z`} style={{ fill: `url(#${areaId})` }} />
-      <path className="profile-compute-backdrop-line" d={path} />
-    </svg>
   )
 }
 
@@ -376,10 +352,9 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
       <section className="profile-overview">
         <header className="profile-heading">
           <span>Profile</span>
-          <div className="profile-name-stage">
-            <ProfileCpuBackdrop values={cpuHistory} current={localGpu?.cpu?.utilizationPercent ?? 0} />
-            <h1>{identity.displayName}</h1>
-          </div>
+          <ProfileAvatar name={identity.displayName} photo={identity.profilePhoto} size="large" />
+          <h1>{identity.displayName}</h1>
+          <div>@local · <strong>Akorith</strong></div>
         </header>
 
         <div className="profile-stats" aria-label="Profile usage summary">

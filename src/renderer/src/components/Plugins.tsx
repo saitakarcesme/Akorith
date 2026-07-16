@@ -4,8 +4,23 @@ import akorithLogo from '../assets/plugin-logos/akorith.png'
 import browserLogo from '../assets/plugin-logos/browser.png'
 import chromaLogo from '../assets/plugin-logos/chroma.ico'
 import githubLogo from '../assets/plugin-logos/github.png'
+import gitLogo from '../assets/plugin-logos/git.svg'
+import gitLfsLogo from '../assets/plugin-logos/git-lfs.ico'
+import graphvizLogo from '../assets/plugin-logos/graphviz.png'
+import imagemagickLogo from '../assets/plugin-logos/imagemagick.png'
+import jqLogo from '../assets/plugin-logos/jq.svg'
+import nodejsLogo from '../assets/plugin-logos/nodejs.svg'
 import ollamaLogo from '../assets/plugin-logos/ollama.png'
 import opencodeLogo from '../assets/plugin-logos/opencode-square.svg'
+import pandocLogo from '../assets/plugin-logos/pandoc.svg'
+import popplerLogo from '../assets/plugin-logos/poppler.png'
+import pythonLogo from '../assets/plugin-logos/python.svg'
+import ripgrepLogo from '../assets/plugin-logos/ripgrep.svg'
+import shellcheckLogo from '../assets/plugin-logos/shellcheck.svg'
+import sqliteLogo from '../assets/plugin-logos/sqlite.gif'
+import tesseractLogo from '../assets/plugin-logos/tesseract.png'
+import ffmpegLogo from '../assets/plugin-logos/ffmpeg.png'
+import ytDlpLogo from '../assets/plugin-logos/yt-dlp.ico'
 
 type PluginTab = 'plugins' | 'apps' | 'mcps'
 
@@ -30,7 +45,22 @@ const PLUGIN_LOGOS: Record<string, string> = {
   'hermes-memory': akorithLogo,
   'testlab-extensions': akorithLogo,
   'mission-runners': akorithLogo,
-  'controller-api': akorithLogo
+  'controller-api': akorithLogo,
+  'git-cli': gitLogo,
+  'ripgrep-tool': ripgrepLogo,
+  'jq-tool': jqLogo,
+  'sqlite-tool': sqliteLogo,
+  'ffmpeg-tool': ffmpegLogo,
+  'pandoc-tool': pandocLogo,
+  'poppler-tool': popplerLogo,
+  'imagemagick-tool': imagemagickLogo,
+  'tesseract-tool': tesseractLogo,
+  'graphviz-tool': graphvizLogo,
+  'python-runtime': pythonLogo,
+  'node-runtime': nodejsLogo,
+  'git-lfs-tool': gitLfsLogo,
+  'shellcheck-tool': shellcheckLogo,
+  'yt-dlp-tool': ytDlpLogo
 }
 
 function conciseDescription(plugin: PluginInfo): string {

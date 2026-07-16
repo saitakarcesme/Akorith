@@ -653,6 +653,19 @@ local model, attempts, validated changes, commits, last validation, and last com
   Electron CDP checks for Dashboard geometry, completion receipts, 24 plugin rows, status counts,
   broken images, and overflow.
 
+## Phase 60 - Restored Profile + Authentic Plugin Identity
+
+- Phase 60 supersedes the Phase 59 Dashboard identity presentation: the stored profile photo is
+  visible again, the username uses the standard product type, and `@local · Akorith` is restored.
+- Token activity uses the previous compact 820 px measure and fixed calendar cells. The lower
+  Compute usage graph remains; there is no second CPU graph behind the username.
+- Each of the 15 local CLI additions maps to its own authentic upstream product asset. Do not use
+  generated initials, the Akorith mark, or a generic repository placeholder for these tools.
+- Logo provenance lives beside the assets in `plugin-logos/SOURCES.md`. Build and live verification
+  must assert all 24 rows have images and no image has failed to decode.
+- Verify typecheck/build, plugin diagnostics, Dashboard structure and computed geometry, Plugins
+  images, release metadata, and the packaged Electron app before shipping.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the
