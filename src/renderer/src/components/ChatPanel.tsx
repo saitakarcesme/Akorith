@@ -199,7 +199,11 @@ export default function ChatPanel({
           : message.content,
         status: 'done',
         attachments: message.attachments,
-        meta: message.role === 'assistant' ? { provider: message.providerId, model: message.model ?? 'default' } : undefined
+        meta: message.role === 'assistant'
+          ? { provider: message.providerId, model: message.model ?? 'default', usage: message.metadata?.usage, changes: message.metadata?.changes }
+          : undefined,
+        startedAt: message.role === 'assistant' ? message.metadata?.startedAt : undefined,
+        endedAt: message.role === 'assistant' ? message.metadata?.endedAt : undefined
       }))
       sessionMessagesRef.current[data.session.id] = loaded
       messagesRef.current = loaded
@@ -309,7 +313,7 @@ export default function ChatPanel({
     setSessionMessages(sessionId, (current) => [
       ...current,
       { id: newId(), role: 'user', text: turn.prompt, status: 'done', attachments: publicAttachments, intent: turn.intent },
-      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: isWorkspace ? [] : undefined, startedAt: isWorkspace ? startedAt : undefined, intent: turn.intent }
+      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: isWorkspace ? [] : undefined, startedAt, intent: turn.intent }
     ])
     const offToken = window.api.chat.onToken(requestId, (token) => {
       tokenBuffersRef.current[requestId] = `${tokenBuffersRef.current[requestId] ?? ''}${token}`
@@ -342,7 +346,7 @@ export default function ChatPanel({
       delete tokenFramesRef.current[requestId]
       setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
         ? response.ok
-          ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: turn.providerId, model: response.result.model, usage: response.result.usage } }
+          ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: turn.providerId, model: response.result.model, usage: response.result.usage, changes: response.result.changes } }
           : { ...message, text: response.error, status: 'error', endedAt: Date.now() }
         : message))
       if (response.ok) { onHistoryChange(); void refreshContext(sessionId) }

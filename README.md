@@ -56,9 +56,11 @@ into the conversation. Raw terminal output and Agent Activity are not part of th
   queued follow-ups, project-file mentions, and diff review.
 - **Loop** — concurrent long-running Goals with an Understand → Plan → Execute → Analyze → Replan
   evidence cycle that stops only when the Goal is reached or needs review.
-- **Dashboard** — profile usage, compact token activity, local CPU/GPU telemetry, and connected
-  computer telemetry.
-- **Plugins** — read-only plugin registry + diagnostics (Browser, Chroma memory, …).
+- **Dashboard** — live CPU-backed profile identity, full-width token activity, local CPU/GPU
+  telemetry, and connected-computer telemetry.
+- **Plugins** — audited local-tool registry and diagnostics. Fifteen optional free CLIs cover
+  search, Git, JSON/data, documents/PDF/OCR, media, diagrams, runtimes, and shell validation;
+  only installed + enabled capabilities enter Workspace/Loop context.
 - **Controller API** — optional loopback-only, token-protected, read-only HTTP+SSE surface
   for companions/CLIs (Settings → API; see `docs/controller-api.md`).
 - **Test Lab** — generate + run tests in a sandbox and export scored PDF reports.

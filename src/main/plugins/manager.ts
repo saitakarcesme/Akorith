@@ -2,12 +2,12 @@ import { ipcMain } from 'electron'
 import { getControllerSettings, getLocalProviderSettings, getPluginSettings, setPluginSettings } from '../config'
 import { setControllerPluginProvider } from '../controller'
 import { BUILTIN_PLUGINS } from './builtin'
-import { checkChrome, checkChroma, checkGitHubCli, checkOllamaCli, checkOpenCode, type RawDiagnostic } from './diagnostics'
+import { checkChrome, checkChroma, checkCommand, checkGitHubCli, checkOllamaCli, checkOpenCode, type RawDiagnostic } from './diagnostics'
 import type { PluginDiagnostic, PluginId, PluginInfo, PluginManifest, PluginStatus } from './types'
 
-// Phase 35: the plugin manager. Combines static manifests with config-only
-// enable/disable state and live, read-only diagnostics. It NEVER loads or executes
-// plugin code.
+// The manager combines static, audited manifests with enable/disable state and
+// bounded diagnostics. It never loads arbitrary plugin code; installed and enabled
+// CLI capabilities are rendered into the trusted Workspace / Goal prompt only.
 
 const diagnosticsCache = new Map<PluginId, PluginDiagnostic>()
 
@@ -71,6 +71,9 @@ async function buildDiagnostic(id: PluginId): Promise<PluginDiagnostic> {
       }
     }
     default:
+      if (manifest.diagnosticCommand) {
+        return fromRaw(id, await checkCommand(manifest.diagnosticCommand.command, manifest.diagnosticCommand.args))
+      }
       // Built-ins with no external dependency (Test Lab) and planned-only plugins.
       return {
         pluginId: id,
@@ -122,6 +125,22 @@ export function getDiagnostics(): PluginDiagnostic[] {
   return [...diagnosticsCache.values()]
 }
 
+/** Prompt-safe capability inventory. Only installed, enabled, audited manifests
+ * are included; no command output, user path, or secret crosses this boundary. */
+export function enabledPluginContext(): string {
+  const ready = listPlugins().filter((plugin) =>
+    plugin.enabled &&
+    plugin.diagnostic?.available === true &&
+    Boolean(plugin.capabilityHint)
+  )
+  if (!ready.length) return ''
+  return [
+    'Enabled local Akorith tools detected on this Mac:',
+    ...ready.map((plugin) => `- ${plugin.name}: ${plugin.capabilityHint}`),
+    'Use these tools only when relevant, inside the selected workspace, and keep all existing safety and approval rules.'
+  ].join('\n')
+}
+
 function setEnabled(id: PluginId, enabled: boolean): PluginInfo[] {
   if (!manifestById(id)) return listPlugins()
   const disabled = new Set(getPluginSettings().disabled)
@@ -134,6 +153,7 @@ function setEnabled(id: PluginId, enabled: boolean): PluginInfo[] {
 export function registerPluginIpc(): void {
   // Expose the live plugin list to the controller API (read-only).
   setControllerPluginProvider(() => listPlugins())
+  void checkAllPlugins().catch((error) => console.error('[plugins] background diagnostics failed:', error))
 
   ipcMain.handle('plugins:list', () => listPlugins())
   ipcMain.handle('plugins:getDiagnostics', () => getDiagnostics())

@@ -42,6 +42,8 @@ import type { AgentId } from '../agents/types'
 import { normalizeStoredOpenCodeMessage } from '../../shared/opencode-output'
 import { buildLocalExecutorPrompt, executeLocalExecutorAttempt } from '../local-executor'
 import { inspectProject, renderProjectContext } from '../project-loop/context'
+import { changedSince, summarizeGitChanges } from '../git-status'
+import { enabledPluginContext } from '../plugins/manager'
 import {
   attachmentPrompt,
   inlineTextAttachmentContext,
@@ -133,7 +135,8 @@ export async function sendWorkspacePrompt(
   if (model !== undefined && !VALID_MODEL.test(model)) throw new Error('invalid model')
   const provider = buildProviders().get(providerId)
   if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
-  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\nCycle objective:\n${prompt}`
+  const tools = enabledPluginContext()
+  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
   return provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
 }
 
@@ -477,6 +480,7 @@ export function registerChatIpc(): void {
 
     const sender = event.sender
     const controller = new AbortController()
+    const requestStartedAt = Date.now()
     activeRequests.set(args.requestId, controller)
     try {
       // Opt-in repo context (Phase 6): a bounded digest the PROVIDER sees — the
@@ -517,12 +521,16 @@ export function registerChatIpc(): void {
         digest,
         workspace: workspaceContext
       })
+      const workspaceTools = workspaceContext ? enabledPluginContext() : ''
       const workspaceInstruction = workspaceContext
         ? args.intent === 'plan'
-          ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.\n\n`
-          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n`
+          ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
+          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
+      const changesBefore = workspaceContext?.projectPath && args.intent !== 'plan'
+        ? await summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
+        : null
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
       let result: SendResult
       const emitActivity = (activity: ProviderActivity): void => {
@@ -568,6 +576,10 @@ export function registerChatIpc(): void {
               },
               onToken
             )
+        if (workspaceContext?.projectPath && args.intent !== 'plan') {
+          const changesAfter = await summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
+          result = { ...result, changes: changedSince(changesBefore, changesAfter) }
+        }
         emitActivity({ kind: 'status', label: 'Workspace task complete', status: 'complete' })
         completeProviderObservation(observation, result)
       } catch (err) {
@@ -581,7 +593,12 @@ export function registerChatIpc(): void {
       }
       if (sessionId) {
         try {
-          addMessage(sessionId, 'assistant', result.text, args.providerId, result.model)
+          addMessage(sessionId, 'assistant', result.text, args.providerId, result.model, [], {
+            startedAt: requestStartedAt,
+            endedAt: Date.now(),
+            usage: result.usage,
+            changes: result.changes
+          })
           recordUsageEvent({
             providerId: args.providerId,
             model: result.model,

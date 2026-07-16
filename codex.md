@@ -632,6 +632,27 @@ local model, attempts, validated changes, commits, last validation, and last com
   Electron CDP navigation/streaming checks, Plan no-write, Queue order, `@` mentions, real Changes,
   search/pin, Markdown/GFM, PDF/image attachments, light/dark themes, and 1100 px responsive pages.
 
+## Phase 59 - Live Profile, Completion Receipts, and Local Tool Plugins
+
+- Dashboard identity is the handwritten display name over a translucent gray copy of live CPU
+  history. Do not restore the profile avatar or colorize this backdrop. The existing lower Compute
+  chart stays intact.
+- The 53-week token grid, month labels, Token activity heading, and Daily label share one full-width
+  content measure. Keep all 371 cells and edge-safe tooltips.
+- Completed replies persist their receipt metadata in the additive `messages.metadata` column.
+  General Chat shows model/token/time; Workspace can additionally show bounded Git-derived file and
+  line deltas captured around the turn.
+- Git completion telemetry is read-only and accepts only a stored, managed project path. It never
+  stages, reverts, commits, pushes, or grants new filesystem authority.
+- Fifteen audited CLI manifests extend Plugins: Git, ripgrep, jq, SQLite, FFmpeg, Pandoc, Poppler,
+  ImageMagick, Tesseract, Graphviz, Python, Node.js, Git LFS, ShellCheck, and yt-dlp. Static version
+  diagnostics are the only automatic process calls; Akorith never auto-installs tools.
+- Only enabled manifests with a successful diagnostic and an audited capability hint enter
+  Workspace/Goal prompts. Missing, planned, unavailable, and disabled plugins remain UI-only.
+- Verification requires typecheck/build, Workspace/OpenCode/update verifiers, release check, and
+  Electron CDP checks for Dashboard geometry, completion receipts, 24 plugin rows, status counts,
+  broken images, and overflow.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

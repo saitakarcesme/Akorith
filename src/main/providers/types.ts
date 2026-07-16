@@ -30,6 +30,19 @@ export interface SendResult {
     estimated: boolean
   }
   model: string
+  /** Files changed by this completed workspace turn, derived from Git snapshots. */
+  changes?: {
+    files: Array<{
+      status: string
+      path: string
+      staged: boolean
+      additions: number
+      deletions: number
+    }>
+    additions: number
+    deletions: number
+    truncated: boolean
+  }
   /** The provider's raw response, kept for debugging. */
   raw?: unknown
   // TODO(phase 5): usage feeds the dashboard.

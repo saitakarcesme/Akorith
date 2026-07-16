@@ -14,7 +14,7 @@ export interface RawDiagnostic {
   details?: string
 }
 
-function runVersion(command: string, args: string[]): Promise<RawDiagnostic> {
+export function checkCommand(command: string, args: string[]): Promise<RawDiagnostic> {
   return new Promise((resolve) => {
     execFile(command, args, { timeout: CHECK_TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
       if (err) {
@@ -34,7 +34,7 @@ function runVersion(command: string, args: string[]): Promise<RawDiagnostic> {
 /** OpenCode (Gaia): version + a SAFE auth presence check. We never read or print
  *  token values — only whether `opencode auth list` reports a configured provider. */
 export async function checkOpenCode(): Promise<RawDiagnostic> {
-  const version = await runVersion('opencode', ['--version'])
+  const version = await checkCommand('opencode', ['--version'])
   if (!version.available) return version
   const signedIn = await new Promise<boolean | null>((resolve) => {
     execFile('opencode', ['auth', 'list'], { timeout: CHECK_TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
@@ -63,11 +63,11 @@ export async function checkOpenCode(): Promise<RawDiagnostic> {
 }
 
 export function checkGitHubCli(): Promise<RawDiagnostic> {
-  return runVersion('gh', ['--version'])
+  return checkCommand('gh', ['--version'])
 }
 
 export function checkOllamaCli(): Promise<RawDiagnostic> {
-  return runVersion('ollama', ['--version'])
+  return checkCommand('ollama', ['--version'])
 }
 
 /** Chroma: detect Python + the chromadb module without importing anything heavy. */
@@ -115,7 +115,7 @@ export async function checkChrome(): Promise<RawDiagnostic> {
   }
   if (plat === 'linux') {
     for (const command of ['google-chrome', 'chromium', 'chromium-browser']) {
-      const probe = await runVersion(command, ['--version'])
+      const probe = await checkCommand(command, ['--version'])
       if (probe.available) return probe
     }
   }

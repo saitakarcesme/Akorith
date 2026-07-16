@@ -16,6 +16,69 @@ function usageLine(message: ChatMessage): string {
   return parts.join(' · ')
 }
 
+function formatElapsed(startedAt?: number, endedAt?: number): string {
+  if (!startedAt || !endedAt || endedAt < startedAt) return ''
+  const seconds = Math.max(1, Math.round((endedAt - startedAt) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remaining = seconds % 60
+  if (minutes < 60) return `${minutes}m ${remaining}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
+}
+
+function changeLabel(status: string): string {
+  if (status.includes('?') || status.includes('A')) return 'New'
+  if (status.includes('D')) return 'Deleted'
+  if (status.includes('R')) return 'Renamed'
+  return 'Modified'
+}
+
+function CompletionSummary({ message }: { message: ChatMessage }): JSX.Element | null {
+  if (message.role !== 'assistant' || message.status !== 'done' || !message.meta) return null
+  const elapsed = formatElapsed(message.startedAt, message.endedAt)
+  const usage = message.meta.usage
+  const totalTokens = usage && (usage.promptTokens !== undefined || usage.completionTokens !== undefined)
+    ? (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0)
+    : undefined
+  const changes = message.meta.changes
+  const visibleFiles = changes?.files.slice(0, 8) ?? []
+  const moreFileCount = Math.max(0, (changes?.files.length ?? 0) - visibleFiles.length)
+
+  return (
+    <section className="chat-completion-summary" aria-label="Completed response summary">
+      <header>
+        <span className="chat-completion-title">
+          <i aria-hidden="true">✓</i>
+          Completed
+        </span>
+        {elapsed && <span>Worked for {elapsed}</span>}
+      </header>
+      <div className="chat-completion-metrics">
+        <span><strong>{formatModelLabel(message.meta.model, message.meta.provider)}</strong><small>{message.meta.provider}</small></span>
+        {totalTokens !== undefined && <span><strong>{totalTokens.toLocaleString()}</strong><small>{usage?.estimated ? 'estimated tokens' : 'tokens'}</small></span>}
+        {changes && <span><strong>{changes.files.length}</strong><small>{changes.files.length === 1 ? 'file changed' : 'files changed'}</small></span>}
+        {changes && <span className="is-addition"><strong>+{changes.additions}</strong><small>lines</small></span>}
+        {changes && <span className="is-deletion"><strong>−{changes.deletions}</strong><small>lines</small></span>}
+      </div>
+      {visibleFiles.length > 0 && (
+        <ul className="chat-completion-files">
+          {visibleFiles.map((file) => (
+            <li key={file.path}>
+              <FileIcon size={14} />
+              <span title={file.path}>{file.path}</span>
+              <small>{changeLabel(file.status)}</small>
+              <code className="is-addition">+{file.additions}</code>
+              <code className="is-deletion">−{file.deletions}</code>
+            </li>
+          ))}
+          {moreFileCount > 0 && <li className="is-more">+{moreFileCount} more files</li>}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWorkspace: boolean }): JSX.Element {
   const [copied, setCopied] = useState(false)
   const activityOwnsError = message.status === 'error' && (message.activities ?? []).some((activity) => activity.status === 'error')
@@ -45,10 +108,11 @@ function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWor
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'
         ? <div className="chat-msg-text"><ChatMarkdown text={message.text} /></div>
         : <div className="chat-msg-text">{message.text}</div>}
+      {message.role === 'assistant' && showAssistantText && message.text && <CompletionSummary message={message} />}
       {message.role === 'assistant' && showAssistantText && message.text && (
         <div className="chat-msg-meta">
-          <span>{message.meta
-            ? `${message.meta.provider} · ${formatModelLabel(message.meta.model, message.meta.provider)}${usageLine(message) ? ` · ${usageLine(message)}` : ''}`
+          <span>{message.status === 'done' && message.meta
+            ? usageLine(message)
             : message.status === 'error' ? 'Task stopped' : ''}</span>
           <button type="button" className="chat-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
         </div>

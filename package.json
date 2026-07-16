@@ -1,7 +1,7 @@
 {
   "name": "akorith",
   "productName": "Akorith",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Akorith — orchestrate AI coding agents (Claude/Codex CLIs, local Ollama) with no API keys",
   "author": "Akorith",
   "main": "./out/main/index.js",
@@ -41,6 +41,7 @@
     "verify:companions": "tsx scripts/verify-companions.ts",
     "verify:agents": "tsx scripts/verify-agents.ts",
     "verify:opencode-output": "tsx scripts/verify-opencode-output.ts",
+    "verify:plugin-tools": "tsx scripts/verify-plugin-tools.ts",
     "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts"
   },
   "build": {

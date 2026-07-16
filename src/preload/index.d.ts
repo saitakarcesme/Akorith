@@ -71,6 +71,18 @@ export interface ChatSendResult {
   text: string
   usage: ChatUsage
   model: string
+  changes?: {
+    files: Array<{
+      status: string
+      path: string
+      staged: boolean
+      additions: number
+      deletions: number
+    }>
+    additions: number
+    deletions: number
+    truncated: boolean
+  }
   raw?: unknown
 }
 
@@ -188,6 +200,12 @@ export interface MessageRow {
   providerId: string
   model: string | null
   attachments: ChatAttachment[]
+  metadata: {
+    startedAt?: number
+    endedAt?: number
+    usage?: ChatUsage
+    changes?: ChatSendResult['changes']
+  } | null
   createdAt: number
 }
 
@@ -2073,6 +2091,9 @@ export interface PluginInfo {
   settingsSchema?: Record<string, unknown>
   safetyNotes: string[]
   docsUrl?: string
+  diagnosticCommand?: { command: string; args: string[] }
+  capabilityHint?: string
+  installHint?: string
   builtIn: boolean
   enabled: boolean
   effectiveStatus: PluginStatus

@@ -50,6 +50,7 @@ export default function Plugins(): JSX.Element {
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null)
   const [tab, setTab] = useState<PluginTab>('plugins')
   const [query, setQuery] = useState('')
+  const [checking, setChecking] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -60,10 +61,13 @@ export default function Plugins(): JSX.Element {
   }, [])
 
   const runChecks = useCallback(async (): Promise<void> => {
+    setChecking(true)
     try {
       setPlugins(await window.api.plugins.checkAll())
     } catch {
       await load()
+    } finally {
+      setChecking(false)
     }
   }, [load])
 
@@ -82,9 +86,15 @@ export default function Plugins(): JSX.Element {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return plugins ?? []
     return (plugins ?? []).filter((plugin) =>
-      [plugin.name, conciseDescription(plugin), KIND_LABEL[plugin.kind]].some((value) => value.toLowerCase().includes(normalized))
+      [plugin.name, conciseDescription(plugin), KIND_LABEL[plugin.kind], plugin.diagnostic?.message ?? '', plugin.installHint ?? '']
+        .some((value) => value.toLowerCase().includes(normalized))
     )
   }, [plugins, query])
+
+  const readyCount = useMemo(
+    () => (plugins ?? []).filter((plugin) => plugin.enabled && plugin.diagnostic?.available).length,
+    [plugins]
+  )
 
   return (
     <main className="plugins-page codex-plugins-page">
@@ -92,8 +102,11 @@ export default function Plugins(): JSX.Element {
         <header className="plugins-header codex-plugins-header">
           <div>
             <h1>Plugins</h1>
-            <p>Manage plugins, apps, and MCP connections</p>
+            <p>{readyCount} local tools ready for Workspace and Loop</p>
           </div>
+          <button type="button" className="plugins-check-button" disabled={checking} onClick={() => void runChecks()}>
+            {checking ? 'Checking…' : 'Check tools'}
+          </button>
         </header>
 
         <div className="plugins-toolbar">
@@ -118,8 +131,21 @@ export default function Plugins(): JSX.Element {
           <div className="plugin-list" aria-live="polite">
             {visible.map((plugin) => {
               const logo = PLUGIN_LOGOS[plugin.id]
+              const ready = plugin.enabled && plugin.diagnostic?.available === true
+              const state = !plugin.enabled
+                ? 'Disabled'
+                : ready
+                  ? 'Ready'
+                  : plugin.effectiveStatus === 'planned'
+                    ? 'Planned'
+                    : plugin.diagnosticCommand
+                      ? 'Not installed'
+                      : 'Unavailable'
+              const diagnostic = ready
+                ? plugin.diagnostic?.message
+                : plugin.installHint ?? plugin.diagnostic?.message
               return (
-              <article className="plugin-row" key={plugin.id}>
+              <article className={`plugin-row ${logo ? 'has-logo' : 'has-no-logo'}`} key={plugin.id}>
                 {logo && (
                   <div className={`plugin-row-logo ${plugin.id === 'remote-ollama-telemetry' ? 'is-light' : ''}`}>
                     <img src={logo} alt="" />
@@ -128,8 +154,10 @@ export default function Plugins(): JSX.Element {
                 <div className="plugin-row-copy">
                   <div className="plugin-row-title">
                     <strong>{plugin.name}</strong>
+                    <span className={`plugin-state is-${ready ? 'ready' : plugin.enabled ? 'missing' : 'disabled'}`}>{state}</span>
                   </div>
                   <p>{conciseDescription(plugin)}</p>
+                  {diagnostic && <small className={ready ? '' : 'is-warn'}>{diagnostic}</small>}
                 </div>
                 <label className="codex-switch" title={plugin.enabled ? `Disable ${plugin.name}` : `Enable ${plugin.name}`}>
                   <input type="checkbox" checked={plugin.enabled} onChange={() => void toggle(plugin)} />

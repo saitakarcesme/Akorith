@@ -71,6 +71,7 @@ export function initDb(): void {
       provider_id TEXT NOT NULL,
       model       TEXT,
       attachments TEXT,
+      metadata    TEXT,
       created_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
@@ -472,6 +473,7 @@ export function initDb(): void {
   ensureColumn('sessions', 'project_id', 'TEXT')
   ensureColumn('sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('messages', 'attachments', 'TEXT')
+  ensureColumn('messages', 'metadata', 'TEXT')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
   // Phase 14.2 conversation memory: a cached summary of older (non-verbatim)
   // turns plus how many messages it covers, so we never re-summarize each send.
@@ -605,7 +607,25 @@ export interface MessageRow {
   providerId: string
   model: string | null
   attachments: StoredMessageAttachment[]
+  metadata: StoredMessageMetadata | null
   createdAt: number
+}
+
+export interface StoredMessageMetadata {
+  startedAt?: number
+  endedAt?: number
+  usage?: {
+    promptTokens?: number
+    completionTokens?: number
+    costUsd?: number
+    estimated: boolean
+  }
+  changes?: {
+    files: Array<{ status: string; path: string; staged: boolean; additions: number; deletions: number }>
+    additions: number
+    deletions: number
+    truncated: boolean
+  }
 }
 
 export interface StoredMessageAttachment {
@@ -633,6 +653,16 @@ function parseStoredAttachments(value: unknown): StoredMessageAttachment[] {
     ))
   } catch {
     return []
+  }
+}
+
+function parseMessageMetadata(value: unknown): StoredMessageMetadata | null {
+  if (typeof value !== 'string' || !value) return null
+  try {
+    const metadata = JSON.parse(value) as StoredMessageMetadata
+    return metadata && typeof metadata === 'object' ? metadata : null
+  } catch {
+    return null
   }
 }
 
@@ -681,13 +711,14 @@ export function addMessage(
   content: string,
   providerId: string,
   model?: string,
-  attachments: StoredMessageAttachment[] = []
+  attachments: StoredMessageAttachment[] = [],
+  metadata?: StoredMessageMetadata
 ): void {
   const now = Date.now()
   const d = must()
   d.prepare(
-    'INSERT INTO messages (id, session_id, role, content, provider_id, model, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, now)
+    'INSERT INTO messages (id, session_id, role, content, provider_id, model, attachments, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, metadata ? JSON.stringify(metadata) : null, now)
   d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId)
 }
 
@@ -708,6 +739,7 @@ export function getSessionMessages(sessionId: string): MessageRow[] {
       providerId: r.provider_id as string,
       model: (r.model as string | null) ?? null,
       attachments: parseStoredAttachments(r.attachments),
+      metadata: parseMessageMetadata(r.metadata),
       createdAt: r.created_at as number
     })
   )
@@ -2261,6 +2293,7 @@ export function registerDbIpc(): void {
         providerId: r.provider_id as string,
         model: (r.model as string | null) ?? null,
         attachments: parseStoredAttachments(r.attachments),
+        metadata: parseMessageMetadata(r.metadata),
         createdAt: r.created_at as number
       })
     )

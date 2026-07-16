@@ -1566,6 +1566,31 @@ Verify with typecheck/build, every repository verification script, production au
 navigation/streaming tests, Plan no-write, Queue ordering, mentions, Changes Stage/Unstage,
 search/pin, Markdown, PDF/image attachments, themes, and responsive page checks.
 
+### Phase 59: Live Profile, Completion Receipts, and Local Tool Plugins
+
+The Dashboard profile avatar is intentionally absent. The display name is the identity mark:
+large, handwritten, and layered over a second read-only rendering of the existing CPU history in
+translucent gray. The lower Compute usage chart remains unchanged. Token activity owns the full
+profile content width; its 53 columns, month labels, heading, and Daily edge share one measure.
+
+Completed General Chat and Workspace responses render a structured receipt. Every receipt can
+persist provider/model, token usage, and elapsed time in `messages.metadata`. Workspace execution
+also snapshots the managed Git worktree before and after the request, then reports only changed
+snapshot entries with bounded file paths and `+`/`-` line totals. This is read-only telemetry: it
+must never stage, revert, commit, push, or inspect a renderer-supplied untrusted directory.
+
+The plugin registry contains 15 additional audited free local CLI manifests: Git, ripgrep, jq,
+SQLite, FFmpeg, Pandoc, Poppler, ImageMagick, Tesseract, Graphviz, Python, Node.js, Git LFS,
+ShellCheck, and yt-dlp. Diagnostics run only static version arguments. Akorith never downloads or
+installs them automatically and never loads arbitrary plugin code. `enabledPluginContext()` exposes
+only installed + enabled capability hints to Workspace and Goal prompts; every existing workspace,
+approval, secret, destructive-action, and no-push rule remains authoritative.
+
+Verification: run `npm run typecheck`, `npm run build`, `npm run verify:workspace-loop`,
+`npm run verify:opencode-output`, `npm run verify:update-version`, and `npm run release:check`;
+then use Electron CDP to verify the 371-cell Dashboard grid alignment, absent avatar, gray CPU
+backdrop, completion receipt, plugin counts/statuses, broken images, and horizontal overflow.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).

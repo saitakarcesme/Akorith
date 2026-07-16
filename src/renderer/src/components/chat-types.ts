@@ -1,4 +1,4 @@
-import type { ChatActivity, ChatAttachment, ChatUsage } from '../../../preload/index.d'
+import type { ChatActivity, ChatAttachment, ChatSendResult, ChatUsage } from '../../../preload/index.d'
 
 export interface ChatMessage {
   id: string
@@ -6,7 +6,7 @@ export interface ChatMessage {
   text: string
   status: 'streaming' | 'done' | 'error'
   attachments?: ChatAttachment[]
-  meta?: { provider: string; model: string; usage?: ChatUsage }
+  meta?: { provider: string; model: string; usage?: ChatUsage; changes?: ChatSendResult['changes'] }
   activities?: ChatActivity[]
   startedAt?: number
   endedAt?: number

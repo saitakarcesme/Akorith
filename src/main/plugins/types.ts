@@ -1,6 +1,6 @@
-// Phase 35: plugin foundation types. This is a REAL registry with permission
-// metadata and honest diagnostics — but NOT an execution runtime. No plugin code
-// is loaded or run in this phase; enable/disable is config-only.
+// Plugin registry types. External tools are never loaded as arbitrary code:
+// diagnostics detect trusted local CLIs and enabled capabilities are advertised
+// to the already-sandboxed Workspace / Goal provider flow.
 
 export type PluginId = string
 
@@ -55,6 +55,12 @@ export interface PluginManifest {
   settingsSchema?: Record<string, unknown>
   safetyNotes: string[]
   docsUrl?: string
+  /** Read-only command used for bounded availability diagnostics. */
+  diagnosticCommand?: { command: string; args: string[] }
+  /** Short prompt hint exposed only when the tool is installed and enabled. */
+  capabilityHint?: string
+  /** Human-readable, opt-in install guidance; Akorith never installs silently. */
+  installHint?: string
   builtIn: boolean
 }
 

@@ -1,5 +1,6 @@
 import { ipcMain, shell } from 'electron'
 import { execFile } from 'child_process'
+import { readFile, stat } from 'fs/promises'
 import { devNull } from 'os'
 import { isAbsolute, resolve, sep } from 'path'
 import { listProjects } from './db'
@@ -12,6 +13,18 @@ export interface GitChangeFile {
   status: string
   path: string
   staged: boolean
+}
+
+export interface GitChangeSummaryFile extends GitChangeFile {
+  additions: number
+  deletions: number
+}
+
+export interface GitChangeSummary {
+  files: GitChangeSummaryFile[]
+  additions: number
+  deletions: number
+  truncated: boolean
 }
 
 export type GitStatusResult =
@@ -64,6 +77,79 @@ function safeFile(root: string, filePath: string): string | null {
   const target = resolve(root, filePath)
   const base = resolve(root)
   return target.startsWith(`${base}${sep}`) ? target : null
+}
+
+async function untrackedLineCount(root: string, filePath: string): Promise<number> {
+  const target = safeFile(root, filePath)
+  if (!target) return 0
+  try {
+    const info = await stat(target)
+    if (!info.isFile() || info.size > 2 * 1024 * 1024) return 0
+    const content = await readFile(target, 'utf8')
+    return content ? content.split(/\r?\n/).length - (content.endsWith('\n') ? 1 : 0) : 0
+  } catch {
+    return 0
+  }
+}
+
+/** A bounded, read-only snapshot used to build the completed Workspace card. */
+export async function summarizeGitChanges(path: string): Promise<GitChangeSummary | null> {
+  if (!isManagedPath(path)) return null
+  const inside = await runGit(path, ['rev-parse', '--is-inside-work-tree'])
+  if (!inside.ok || inside.stdout.trim() !== 'true') return null
+
+  const [statusResult, headNumstat] = await Promise.all([
+    runGit(path, ['status', '--porcelain']),
+    runGit(path, ['diff', 'HEAD', '--numstat', '--no-renames'])
+  ])
+  let numstatOutput = headNumstat.stdout
+  if (!headNumstat.ok) {
+    const [cached, working] = await Promise.all([
+      runGit(path, ['diff', '--cached', '--numstat', '--no-renames']),
+      runGit(path, ['diff', '--numstat', '--no-renames'])
+    ])
+    numstatOutput = `${cached.stdout}${working.stdout}`
+  }
+  const parsed = parsePorcelain(statusResult.stdout)
+  const counts = new Map<string, { additions: number; deletions: number }>()
+  for (const line of numstatOutput.split('\n')) {
+    const [rawAdditions, rawDeletions, ...pathParts] = line.split('\t')
+    const filePath = pathParts.join('\t')
+    if (!filePath) continue
+    const previous = counts.get(filePath) ?? { additions: 0, deletions: 0 }
+    counts.set(filePath, {
+      additions: previous.additions + (Number.isFinite(Number(rawAdditions)) ? Number(rawAdditions) : 0),
+      deletions: previous.deletions + (Number.isFinite(Number(rawDeletions)) ? Number(rawDeletions) : 0)
+    })
+  }
+
+  const files = await Promise.all(parsed.files.map(async (file): Promise<GitChangeSummaryFile> => {
+    const tracked = counts.get(file.path)
+    const additions = tracked?.additions ?? (file.status === '?' ? await untrackedLineCount(path, file.path) : 0)
+    return { ...file, additions, deletions: tracked?.deletions ?? 0 }
+  }))
+  return {
+    files,
+    additions: files.reduce((total, file) => total + file.additions, 0),
+    deletions: files.reduce((total, file) => total + file.deletions, 0),
+    truncated: parsed.truncated
+  }
+}
+
+export function changedSince(
+  before: GitChangeSummary | null,
+  after: GitChangeSummary | null
+): GitChangeSummary | undefined {
+  if (!after) return undefined
+  const baseline = new Map((before?.files ?? []).map((file) => [file.path, `${file.status}:${file.additions}:${file.deletions}`]))
+  const files = after.files.filter((file) => baseline.get(file.path) !== `${file.status}:${file.additions}:${file.deletions}`)
+  if (!files.length) return undefined
+  return {
+    files,
+    additions: files.reduce((total, file) => total + file.additions, 0),
+    deletions: files.reduce((total, file) => total + file.deletions, 0),
+    truncated: after.truncated
+  }
 }
 
 async function gitDiff(path: string, filePath: string): Promise<{ ok: true; diff: string } | { ok: false; error: string }> {
