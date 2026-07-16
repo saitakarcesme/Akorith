@@ -1,6 +1,7 @@
 import { memo, useState, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { CopyIcon } from './icons'
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }): JSX.Element {
   const [copied, setCopied] = useState(false)
@@ -16,7 +17,15 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
     <div className="chat-code">
       <div className="chat-code-header">
         <span className="chat-code-language"><i />{language}</span>
-        <button type="button" className="chat-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+        <button
+          type="button"
+          className={`chat-copy ${copied ? 'is-copied' : ''}`}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          title={copied ? 'Copied' : 'Copy code'}
+          onClick={copy}
+        >
+          <CopyIcon size={15} />
+        </button>
       </div>
       <pre><code className={className}>{content}</code></pre>
     </div>

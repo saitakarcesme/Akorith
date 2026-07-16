@@ -1720,6 +1720,27 @@ public site's existing visual system. Verify desktop typecheck/build and GitHub 
 Electron wide/collapsed Dashboard and Loop geometry, smooth sidebar drag, then website lint/build
 plus desktop/mobile interaction and overflow checks.
 
+### Phase 66: Current Activity + Quiet General Chat
+
+The Dashboard calendars always include the local current day in their final Sunday–Saturday
+column. Future cells may fill the remainder of that week, but the current day must never be cut off
+by start-date alignment. Token and public GitHub maps continue to share the exact same dates.
+
+The profile display name resolves the exact macOS `SignPainter-HouseScript` face through local font
+names, with no bundled or copied Apple asset. Apple's animated Hello artwork is path-based rather
+than a distributable typeface; the app therefore uses the installed system face and preserves
+portable script fallbacks. Keep the enlarged avatar and identity line centered.
+
+General Chat is prose-first: completed assistant replies do not show Workspace receipts, elapsed
+time, model/token metrics, or file deltas. Workspace retains its evidence receipt. Whole-message,
+code-block, endpoint, controller, and path copy actions are icon-only, with stable accessible labels
+and tooltips. Loop detail and its bottom composer share one 700 px reading measure in both expanded
+and collapsed-sidebar states.
+
+Verification: typecheck/build, current-day tooltip inspection, local font resolution, General Chat
+receipt absence, icon-only copy controls, and Electron geometry confirming Loop detail/composer
+width equality without horizontal overflow.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).

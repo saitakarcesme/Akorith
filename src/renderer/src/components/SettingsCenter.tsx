@@ -28,7 +28,7 @@ import ollamaLogo from '../assets/plugin-logos/ollama.png'
 import openaiLogo from '../assets/plugin-logos/openai.svg'
 import opencodeLogo from '../assets/plugin-logos/opencode-square.svg'
 import { profilePhotoFromFile } from '../profileIdentity'
-import { CloseIcon } from './icons'
+import { CloseIcon, CopyIcon } from './icons'
 import MissionCenter from './MissionCenter'
 import { ProfileAvatar } from './ProfileAvatar'
 import UpdatePanel from './UpdatePanel'
@@ -873,8 +873,14 @@ export default function SettingsCenter({
                           <span>{endpoint.label}</span>
                           <em>{endpoint.baseUrl}</em>
                         </button>
-                        <button type="button" className="ollama-copy-btn" onClick={() => void copyOllamaEndpoint(endpoint)}>
-                          Copy
+                        <button
+                          type="button"
+                          className="ollama-copy-btn icon-copy-button"
+                          aria-label={`Copy ${endpoint.label} endpoint`}
+                          title={`Copy ${endpoint.label} endpoint`}
+                          onClick={() => void copyOllamaEndpoint(endpoint)}
+                        >
+                          <CopyIcon size={15} />
                         </button>
                       </div>
                     ))}
@@ -1326,8 +1332,14 @@ export default function SettingsCenter({
                       <span>Base URL</span>
                       <div className="settings-path-row">
                         <code>{ctrlStatus.baseUrl}</code>
-                        <button type="button" onClick={() => void copyText(ctrlStatus.baseUrl, 'base URL')}>
-                          Copy
+                        <button
+                          type="button"
+                          className="icon-copy-button"
+                          aria-label="Copy base URL"
+                          title="Copy base URL"
+                          onClick={() => void copyText(ctrlStatus.baseUrl, 'base URL')}
+                        >
+                          <CopyIcon size={15} />
                         </button>
                       </div>
                     </div>
@@ -1339,8 +1351,14 @@ export default function SettingsCenter({
                           {ctrlToken ? 'Shown' : 'Reveal'}
                         </button>
                         {ctrlToken && (
-                          <button type="button" onClick={() => void copyText(ctrlToken, 'token')}>
-                            Copy
+                          <button
+                            type="button"
+                            className="icon-copy-button"
+                            aria-label="Copy token"
+                            title="Copy token"
+                            onClick={() => void copyText(ctrlToken, 'token')}
+                          >
+                            <CopyIcon size={15} />
                           </button>
                         )}
                       </div>
@@ -1374,9 +1392,12 @@ export default function SettingsCenter({
                     </button>
                     <button
                       type="button"
+                      className="icon-copy-button"
+                      aria-label="Copy example curl"
+                      title="Copy example curl"
                       onClick={() => void copyText(`curl -H "Authorization: Bearer <token>" ${ctrlStatus.baseUrl}/health`, 'example curl')}
                     >
-                      Copy example curl
+                      <CopyIcon size={15} />
                     </button>
                   </div>
 

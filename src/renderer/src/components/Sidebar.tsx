@@ -4,6 +4,7 @@ import type { AppTheme, AppView } from '../App'
 import { useProfileIdentity } from '../profileIdentity'
 import {
   ChevronIcon,
+  CopyIcon,
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -775,8 +776,16 @@ export default function Sidebar({
                                 <button type="button" role="menuitem" disabled={!project.path} onClick={() => void revealProject(project)}>
                                   <span>Reveal in Finder</span>
                                 </button>
-                                <button type="button" role="menuitem" disabled={!project.path} onClick={() => void copyProjectPath(project)}>
-                                  <span>Copy path</span>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="project-menu-copy-button"
+                                  disabled={!project.path}
+                                  aria-label="Copy project path"
+                                  title="Copy project path"
+                                  onClick={() => void copyProjectPath(project)}
+                                >
+                                  <CopyIcon size={15} />
                                 </button>
                                 <button
                                   type="button"

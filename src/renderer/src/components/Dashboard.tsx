@@ -317,9 +317,13 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
   const activityDays = useMemo<ActivityDay[]>(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const start = new Date(today)
-    start.setDate(start.getDate() - (ACTIVITY_WEEKS * 7 - 1))
-    start.setDate(start.getDate() - start.getDay())
+    // Keep complete Sunday–Saturday columns while ensuring that the current
+    // day is always inside the final column. Subtracting first and then
+    // rounding to Sunday used to end the calendar on the previous Saturday.
+    const end = new Date(today)
+    end.setDate(end.getDate() + ((6 - end.getDay() + 7) % 7))
+    const start = new Date(end)
+    start.setDate(end.getDate() - (ACTIVITY_WEEKS * 7 - 1))
     return Array.from({ length: ACTIVITY_WEEKS * 7 }, (_, index) => {
       const date = new Date(start)
       date.setDate(start.getDate() + index)

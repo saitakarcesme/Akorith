@@ -234,6 +234,15 @@ export function PaperclipIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><path d="m9 12 6.4-6.4a3 3 0 1 1 4.2 4.2l-8.1 8.1a5 5 0 0 1-7.1-7.1l8-8" /></IconShell>
 }
 
+export function CopyIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </IconShell>
+  )
+}
+
 export function FileIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><path d="M5 3h9l5 5v13H5z" /><path d="M14 3v5h5" /></IconShell>
 }

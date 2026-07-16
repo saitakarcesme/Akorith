@@ -1,6 +1,6 @@
 import { memo, useState } from 'react'
 import { formatModelLabel } from '../modelLabels'
-import { FileIcon } from './icons'
+import { CopyIcon, FileIcon } from './icons'
 import ChatMarkdown from './ChatMarkdown'
 import WorkspaceActivity from './WorkspaceActivity'
 import type { ChatMessage } from './chat-types'
@@ -108,13 +108,21 @@ function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWor
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'
         ? <div className="chat-msg-text"><ChatMarkdown text={message.text} /></div>
         : <div className="chat-msg-text">{message.text}</div>}
-      {message.role === 'assistant' && showAssistantText && message.text && <CompletionSummary message={message} />}
+      {isWorkspace && message.role === 'assistant' && showAssistantText && message.text && <CompletionSummary message={message} />}
       {message.role === 'assistant' && showAssistantText && message.text && (
         <div className="chat-msg-meta">
-          <span>{message.status === 'done' && message.meta
+          {isWorkspace && <span>{message.status === 'done' && message.meta
             ? usageLine(message)
-            : message.status === 'error' ? 'Task stopped' : ''}</span>
-          <button type="button" className="chat-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+            : message.status === 'error' ? 'Task stopped' : ''}</span>}
+          <button
+            type="button"
+            className={`chat-copy ${copied ? 'is-copied' : ''}`}
+            aria-label={copied ? 'Copied' : 'Copy response'}
+            title={copied ? 'Copied' : 'Copy response'}
+            onClick={copy}
+          >
+            <CopyIcon size={15} />
+          </button>
         </div>
       )}
     </article>

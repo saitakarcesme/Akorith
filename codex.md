@@ -741,6 +741,20 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Verify app typecheck/build, GitHub load/fallback, Electron wide/collapsed geometry and sidebar
   drag, then web lint/build and desktop/mobile interaction plus horizontal-overflow checks.
 
+## Phase 66 - Current Activity + Quiet General Chat
+
+- The 53-week activity window ends on the Saturday containing today, so the current local date is
+  always visible and the remaining cells in that final week are explicitly future cells. Token and
+  GitHub maps reuse the same date array.
+- Resolve the installed macOS `SignPainter-HouseScript` face by exact local names for the Dashboard
+  username. Do not copy Setup Assistant/Hello vector resources or ship an unlicensed font file.
+- General Chat renders assistant prose plus an icon-only copy affordance; completion receipts and
+  diagnostic metrics remain Workspace-only.
+- Every copy action uses the shared copy SVG with `aria-label` and `title`; copied state changes
+  color/accessible text rather than changing button width.
+- Loop detail, transcript, outcome, and composer share a single 700 px reading measure regardless
+  of sidebar visibility. Verify equal geometry and no horizontal overflow.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the
