@@ -40,7 +40,8 @@ function AppChrome({
   onForward,
   showWorkbench,
   workbenchOpen,
-  onToggleWorkbench
+  onToggleWorkbench,
+  pendingCount
 }: {
   title: string
   scope?: string
@@ -51,6 +52,7 @@ function AppChrome({
   showWorkbench: boolean
   workbenchOpen: boolean
   onToggleWorkbench: () => void
+  pendingCount: number
 }): JSX.Element {
   const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
 
@@ -102,6 +104,7 @@ function AppChrome({
         {scope && <span className="app-chrome-scope">{scope}</span>}
       </div>
       <div className="app-chrome-right">
+        {pendingCount > 0 && <span className="app-working-indicator"><i />{pendingCount} working</span>}
         {showWorkbench && (
           <button
             type="button"
@@ -446,7 +449,10 @@ export default function App(): JSX.Element {
           ? 'Project workspace'
           : 'Workspace'
         : undefined
-  const showChromeWorkbench = view === 'general' || view === 'workspace'
+  const showChromeWorkbench = view === 'workspace' && Boolean(activeProject?.path)
+  const activeChatMode: ChatMode = view === 'general' || view === 'workspace'
+    ? view
+    : historySel?.mode ?? (activeProject ? 'workspace' : 'general')
 
   return (
     <div
@@ -464,6 +470,7 @@ export default function App(): JSX.Element {
         showWorkbench={showChromeWorkbench}
         workbenchOpen={workbenchOpen}
         onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
+        pendingCount={pendingSessions.size}
       />
       <div className="app-main">
       <Sidebar
@@ -488,14 +495,15 @@ export default function App(): JSX.Element {
         onHistoryChange={bumpHistory}
         onProjectsChange={bumpProjects}
         onChromeWidthChange={setChromeSidebarWidth}
+        pendingSessions={pendingSessions}
       />
       {/* Chat-first workspace. CLIs run headlessly and stream normalized progress
           into the conversation; no terminal or Agent Activity surface is mounted. */}
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
         <ChatPanel
-          mode={view === 'general' ? 'general' : 'workspace'}
+          mode={activeChatMode}
           historySel={historySel}
-          activeProject={view === 'general' ? null : activeProject}
+          activeProject={activeChatMode === 'general' ? null : activeProject}
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}

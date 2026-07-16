@@ -1,15 +1,17 @@
-import { ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
 import { execFile } from 'child_process'
+import { devNull } from 'os'
+import { isAbsolute, resolve, sep } from 'path'
 import { listProjects } from './db'
 
-// Phase 33.17: a strictly READ-ONLY git surface for the bottom workbench's
-// Changes panel. It never stages, commits, pushes, or mutates the repo — only
-// `status`, `diff --stat`, and `rev-parse` are run, each bounded by a timeout
-// and output cap. The target path must belong to a project Akorith manages.
+// Project-scoped git surface for the Changes panel. It can inspect a bounded
+// diff and explicitly stage/unstage one selected file; it never edits content,
+// commits, pushes, or touches paths outside a project Akorith manages.
 
 export interface GitChangeFile {
   status: string
   path: string
+  staged: boolean
 }
 
 export type GitStatusResult =
@@ -20,6 +22,7 @@ export type GitStatusResult =
 const GIT_TIMEOUT_MS = 4_000
 const MAX_BUFFER = 512 * 1024
 const MAX_FILES = 200
+const MAX_DIFF_CHARS = 220_000
 
 function runGit(cwd: string, args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
@@ -47,10 +50,53 @@ function parsePorcelain(stdout: string): { files: GitChangeFile[]; truncated: bo
     if (files.length >= MAX_FILES) break
     // Porcelain v1: XY<space>path  (path may be "old -> new" for renames)
     const status = line.slice(0, 2).trim() || '?'
-    const path = line.slice(3).trim()
-    if (path) files.push({ status, path })
+    const rawPath = line.slice(3).trim()
+    // Porcelain v1 renders renames as "old -> new". Changes actions operate on
+    // the destination path, never on the presentation string.
+    const path = rawPath.includes(' -> ') ? rawPath.slice(rawPath.lastIndexOf(' -> ') + 4) : rawPath
+    if (path) files.push({ status, path, staged: line[0] !== ' ' && line[0] !== '?' })
   }
   return { files, truncated: lines.length > files.length }
+}
+
+function safeFile(root: string, filePath: string): string | null {
+  if (!filePath || isAbsolute(filePath) || /[\0\r\n]/.test(filePath)) return null
+  const target = resolve(root, filePath)
+  const base = resolve(root)
+  return target.startsWith(`${base}${sep}`) ? target : null
+}
+
+async function gitDiff(path: string, filePath: string): Promise<{ ok: true; diff: string } | { ok: false; error: string }> {
+  if (!isManagedPath(path) || !safeFile(path, filePath)) return { ok: false, error: 'Invalid project file.' }
+  const status = await runGit(path, ['status', '--porcelain', '--', filePath])
+  const code = status.stdout.slice(0, 2)
+  let result
+  if (code === '??') {
+    result = await runGit(path, ['diff', '--no-index', '--no-color', '--unified=3', '--', devNull, filePath])
+  } else {
+    result = await runGit(path, ['diff', 'HEAD', '--no-ext-diff', '--no-color', '--unified=3', '--', filePath])
+    if (!result.stdout && !result.ok) {
+      const [cached, working] = await Promise.all([
+        runGit(path, ['diff', '--cached', '--no-color', '--unified=3', '--', filePath]),
+        runGit(path, ['diff', '--no-color', '--unified=3', '--', filePath])
+      ])
+      result = { ok: cached.ok || working.ok, stdout: `${cached.stdout}${working.stdout}`, stderr: `${cached.stderr}${working.stderr}` }
+    }
+  }
+  const diff = result.stdout.slice(0, MAX_DIFF_CHARS)
+  return diff || result.ok ? { ok: true, diff } : { ok: false, error: result.stderr.trim().slice(-500) || 'Could not read diff.' }
+}
+
+async function setStaged(path: string, filePath: string, staged: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (!isManagedPath(path) || !safeFile(path, filePath)) return { ok: false, error: 'Invalid project file.' }
+  const result = staged
+    ? await runGit(path, ['add', '--', filePath])
+    : await runGit(path, ['restore', '--staged', '--', filePath])
+  if (!result.ok && !staged) {
+    const fallback = await runGit(path, ['reset', 'HEAD', '--', filePath])
+    return fallback.ok ? { ok: true } : { ok: false, error: fallback.stderr.trim().slice(-500) || 'Could not unstage file.' }
+  }
+  return result.ok ? { ok: true } : { ok: false, error: result.stderr.trim().slice(-500) || 'Git operation failed.' }
 }
 
 async function gitStatus(path: string): Promise<GitStatusResult> {
@@ -88,5 +134,23 @@ export function registerGitStatusIpc(): void {
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
+  })
+  ipcMain.handle('git:diff', async (_event, args: unknown) => {
+    const input = args && typeof args === 'object' ? args as { path?: unknown; filePath?: unknown } : {}
+    if (typeof input.path !== 'string' || typeof input.filePath !== 'string') return { ok: false, error: 'Invalid diff request.' }
+    return gitDiff(input.path, input.filePath)
+  })
+  ipcMain.handle('git:setStaged', async (_event, args: unknown) => {
+    const input = args && typeof args === 'object' ? args as { path?: unknown; filePath?: unknown; staged?: unknown } : {}
+    if (typeof input.path !== 'string' || typeof input.filePath !== 'string' || typeof input.staged !== 'boolean') return { ok: false, error: 'Invalid git request.' }
+    return setStaged(input.path, input.filePath, input.staged)
+  })
+  ipcMain.handle('git:revealFile', async (_event, args: unknown) => {
+    const input = args && typeof args === 'object' ? args as { path?: unknown; filePath?: unknown } : {}
+    if (typeof input.path !== 'string' || typeof input.filePath !== 'string') return false
+    const target = isManagedPath(input.path) ? safeFile(input.path, input.filePath) : null
+    if (!target) return false
+    shell.showItemInFolder(target)
+    return true
   })
 }

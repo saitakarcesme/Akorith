@@ -12,6 +12,7 @@ import { basename, isAbsolute, join, resolve, sep } from 'path'
 import { mkdirSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
+import { publicChatAttachments, removeSessionAttachments } from './chat-attachments'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -58,6 +59,7 @@ export function initDb(): void {
       provider_id TEXT NOT NULL,
       title       TEXT NOT NULL,
       project_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      pinned      INTEGER NOT NULL DEFAULT 0,
       created_at  INTEGER NOT NULL,
       updated_at  INTEGER NOT NULL
     );
@@ -68,6 +70,7 @@ export function initDb(): void {
       content     TEXT NOT NULL,
       provider_id TEXT NOT NULL,
       model       TEXT,
+      attachments TEXT,
       created_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
@@ -467,6 +470,8 @@ export function initDb(): void {
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('benchmark_entries', 'artifact_path', 'TEXT')
   ensureColumn('sessions', 'project_id', 'TEXT')
+  ensureColumn('sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('messages', 'attachments', 'TEXT')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, updated_at);')
   // Phase 14.2 conversation memory: a cached summary of older (non-verbatim)
   // turns plus how many messages it covers, so we never re-summarize each send.
@@ -587,6 +592,7 @@ export interface SessionRow {
   providerId: string
   title: string
   projectId: string | null
+  pinned: boolean
   createdAt: number
   updatedAt: number
 }
@@ -598,7 +604,36 @@ export interface MessageRow {
   content: string
   providerId: string
   model: string | null
+  attachments: StoredMessageAttachment[]
   createdAt: number
+}
+
+export interface StoredMessageAttachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  kind: 'image' | 'document' | 'code' | 'file'
+  path: string
+}
+
+function parseStoredAttachments(value: unknown): StoredMessageAttachment[] {
+  if (typeof value !== 'string' || !value) return []
+  try {
+    const rows = JSON.parse(value) as unknown
+    if (!Array.isArray(rows)) return []
+    return rows.filter((row): row is StoredMessageAttachment => Boolean(
+      row && typeof row === 'object' &&
+      typeof (row as StoredMessageAttachment).id === 'string' &&
+      typeof (row as StoredMessageAttachment).name === 'string' &&
+      typeof (row as StoredMessageAttachment).mimeType === 'string' &&
+      typeof (row as StoredMessageAttachment).size === 'number' &&
+      typeof (row as StoredMessageAttachment).path === 'string' &&
+      ['image', 'document', 'code', 'file'].includes((row as StoredMessageAttachment).kind)
+    ))
+  } catch {
+    return []
+  }
 }
 
 const toSession = (r: Record<string, unknown>): SessionRow => ({
@@ -606,6 +641,7 @@ const toSession = (r: Record<string, unknown>): SessionRow => ({
   providerId: r.provider_id as string,
   title: r.title as string,
   projectId: (r.project_id as string | null) ?? null,
+  pinned: Number(r.pinned ?? 0) === 1,
   createdAt: r.created_at as number,
   updatedAt: r.updated_at as number
 })
@@ -623,6 +659,7 @@ export function createSession(providerId: string, title: string, projectId?: str
     providerId,
     title,
     projectId: safeProjectId,
+    pinned: false,
     createdAt: now,
     updatedAt: now
   }
@@ -643,13 +680,14 @@ export function addMessage(
   role: 'user' | 'assistant',
   content: string,
   providerId: string,
-  model?: string
+  model?: string,
+  attachments: StoredMessageAttachment[] = []
 ): void {
   const now = Date.now()
   const d = must()
   d.prepare(
-    'INSERT INTO messages (id, session_id, role, content, provider_id, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, now)
+    'INSERT INTO messages (id, session_id, role, content, provider_id, model, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, now)
   d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId)
 }
 
@@ -669,6 +707,7 @@ export function getSessionMessages(sessionId: string): MessageRow[] {
       content: r.content as string,
       providerId: r.provider_id as string,
       model: (r.model as string | null) ?? null,
+      attachments: parseStoredAttachments(r.attachments),
       createdAt: r.created_at as number
     })
   )
@@ -782,7 +821,7 @@ export function listProjects(): ProjectRow[] {
 /** Phase 35: read-only session list for the controller API (metadata only). */
 export function listSessions(): SessionRow[] {
   if (!ready()) return []
-  return (must().prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]).map(
+  return (must().prepare('SELECT * FROM sessions ORDER BY pinned DESC, updated_at DESC').all() as Record<string, unknown>[]).map(
     toSession
   )
 }
@@ -2209,7 +2248,7 @@ export function registerDbIpc(): void {
       | Record<string, unknown>
       | undefined
     if (!session) return null
-    const messages = (
+    const storedMessages = (
       must()
         .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at, rowid')
         .all(args.sessionId) as Record<string, unknown>[]
@@ -2221,9 +2260,14 @@ export function registerDbIpc(): void {
         content: r.content as string,
         providerId: r.provider_id as string,
         model: (r.model as string | null) ?? null,
+        attachments: parseStoredAttachments(r.attachments),
         createdAt: r.created_at as number
       })
     )
+    const messages = await Promise.all(storedMessages.map(async (message) => ({
+      ...message,
+      attachments: await publicChatAttachments(message.attachments)
+    })))
     return { session: toSession(session), messages }
   })
 
@@ -2253,10 +2297,20 @@ export function registerDbIpc(): void {
     return true
   })
 
+  ipcMain.handle('history:pin', async (_event, args: { sessionId: string; pinned: boolean }) => {
+    await ensureDbReady()
+    if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId) || typeof args.pinned !== 'boolean') {
+      return false
+    }
+    must().prepare('UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ?').run(args.pinned ? 1 : 0, Date.now(), args.sessionId)
+    return true
+  })
+
   ipcMain.handle('history:delete', async (_event, args: { sessionId: string }) => {
     await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     must().prepare('DELETE FROM sessions WHERE id = ?').run(args.sessionId) // messages cascade
+    await removeSessionAttachments(args.sessionId)
     return true
   })
 
@@ -2266,6 +2320,7 @@ export function registerDbIpc(): void {
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     if (!sessionExists(args.sessionId)) return false
     clearSessionMessages(args.sessionId)
+    await removeSessionAttachments(args.sessionId)
     return true
   })
 

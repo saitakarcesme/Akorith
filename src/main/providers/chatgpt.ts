@@ -57,8 +57,14 @@ export class ChatGPTProvider implements Provider {
     // `--output-last-message` gives the clean final answer in a file, free of
     // codex's session/progress log noise on stdout.
     const outFile = join(tmpdir(), `loopex-codex-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`)
-    const args = ['exec', '--json', '--skip-git-repo-check', '--output-last-message', outFile]
-    if (opts.workingDirectory) args.push('--sandbox', 'workspace-write')
+    // Akorith owns conversation memory and tool integrations. Isolate each
+    // headless Codex call from the user's optional MCP startup so a broken or
+    // slow global connector cannot take down ordinary chat/workspace sends.
+    const args = ['exec', '--ignore-user-config', '--ephemeral', '--json', '--skip-git-repo-check', '--output-last-message', outFile]
+    if (opts.workingDirectory) args.push('--sandbox', opts.intent === 'plan' ? 'read-only' : 'workspace-write')
+    for (const attachment of opts.attachments ?? []) {
+      if (attachment.kind === 'image') args.push('--image', attachment.path)
+    }
     if (opts.model && opts.model !== 'default') {
       args.push('-m', opts.model)
     }

@@ -230,6 +230,30 @@ export function PauseIcon(props: IconProps): JSX.Element {
   )
 }
 
+export function PaperclipIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="m9 12 6.4-6.4a3 3 0 1 1 4.2 4.2l-8.1 8.1a5 5 0 0 1-7.1-7.1l8-8" /></IconShell>
+}
+
+export function FileIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M5 3h9l5 5v13H5z" /><path d="M14 3v5h5" /></IconShell>
+}
+
+export function SearchIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></IconShell>
+}
+
+export function PinIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="m9 3 6 6M7 8l9-3 3 3-3 9-4-4-5 5-1-1 5-5z" /></IconShell>
+}
+
+export function PlanIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" /></IconShell>
+}
+
+export function QueueIcon(props: IconProps): JSX.Element {
+  return <IconShell {...props}><path d="M5 6h14M5 12h10M5 18h7" /><path d="m16 15 3 3-3 3" /></IconShell>
+}
+
 // Phase 43: Companions (personality-driven companion agents) — orbit/heart mark.
 export function CompanionsIcon(props: IconProps): JSX.Element {
   return (

@@ -82,6 +82,15 @@ const chat = Object.freeze({
     includeDigest?: boolean
     workspaceContext?: { projectName: string; projectPath: string }
     images?: { name: string; mimeType: string; dataBase64: string }[]
+    attachments?: {
+      id: string
+      name: string
+      mimeType: string
+      size: number
+      kind: 'image' | 'document' | 'code' | 'file'
+      dataBase64: string
+    }[]
+    intent?: 'execute' | 'plan'
   }): Promise<unknown> => ipcRenderer.invoke('chat:send', args),
 
   cancel: (requestId: string): void => {
@@ -128,6 +137,8 @@ const history = Object.freeze({
     ipcRenderer.invoke('history:create', { providerId, title, projectId }),
   rename: (sessionId: string, title: string): Promise<unknown> =>
     ipcRenderer.invoke('history:rename', { sessionId, title }),
+  pin: (sessionId: string, pinned: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('history:pin', { sessionId, pinned }),
   remove: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:delete', { sessionId }),
   /** Phase 14.2: reset context for ONE session (clears its messages + summary). */
   clearMessages: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('history:clearMessages', { sessionId })
@@ -135,6 +146,7 @@ const history = Object.freeze({
 
 const projects = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
+  files: (projectId: string, query?: string): Promise<unknown> => ipcRenderer.invoke('projects:files', { projectId, query }),
   create: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:create', args),
   openFolder: (projectId?: string | null): Promise<unknown> =>
     ipcRenderer.invoke('projects:openFolder', { projectId }),
@@ -301,7 +313,10 @@ const ollama = Object.freeze({
 
 // Phase 33.17: read-only git surface for the bottom workbench Changes panel.
 const git = Object.freeze({
-  status: (path: string): Promise<unknown> => ipcRenderer.invoke('git:status', { path })
+  status: (path: string): Promise<unknown> => ipcRenderer.invoke('git:status', { path }),
+  diff: (path: string, filePath: string): Promise<unknown> => ipcRenderer.invoke('git:diff', { path, filePath }),
+  setStaged: (path: string, filePath: string, staged: boolean): Promise<unknown> => ipcRenderer.invoke('git:setStaged', { path, filePath, staged }),
+  revealFile: (path: string, filePath: string): Promise<unknown> => ipcRenderer.invoke('git:revealFile', { path, filePath })
 })
 
 // Phase 34.6: read-only GPU / local-runtime telemetry (no writes, no polling).

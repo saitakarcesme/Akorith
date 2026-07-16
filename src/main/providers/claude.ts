@@ -2,6 +2,7 @@
 // subscription/login; no API key). Knows nothing about other providers.
 
 import { homedir } from 'os'
+import { dirname } from 'path'
 import { runCli } from './util'
 import type {
   Provider,
@@ -53,7 +54,10 @@ export class ClaudeProvider implements Provider {
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
     const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
-    if (opts.workingDirectory) args.push('--permission-mode', 'acceptEdits')
+    if (opts.workingDirectory) args.push('--permission-mode', opts.intent === 'plan' ? 'plan' : 'acceptEdits')
+    for (const directory of [...new Set((opts.attachments ?? []).map((item) => dirname(item.path)).filter(Boolean))]) {
+      args.push('--add-dir', directory)
+    }
     if (opts.model && opts.model !== 'default') {
       args.push('--model', opts.model)
     }

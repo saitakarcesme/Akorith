@@ -48,6 +48,19 @@ export interface SendOptions {
     mimeType: string
     dataBase64: string
   }[]
+  /** Files copied into Akorith's managed attachment store for this turn. */
+  attachments?: {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    kind: 'image' | 'document' | 'code' | 'file'
+    path: string
+    /** Kept only for image-capable local runtimes. Never persisted in SQLite. */
+    dataBase64?: string
+  }[]
+  /** Read-only planning pass: inspect and propose, but do not edit files. */
+  intent?: 'execute' | 'plan'
 }
 
 export interface Provider {

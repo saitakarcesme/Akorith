@@ -12,15 +12,15 @@ Akorith is a cross-platform Electron desktop app with three first-class, local-f
 - **Agents** — reusable local action shortcuts (organize a folder, repo health report,
   README/changelog, commit messages, …). Create once, run again, behind a permission policy.
 
-All three default to **local models** (Ollama / resolved runtime). Your existing Claude / Codex
-/ OpenCode CLIs remain for chat and Workspace — Akorith stores no API keys and keeps your
-conversations, memories, and project data in local SQLite.
+Your existing Claude, Codex, OpenCode, and optional Ollama installations power the app through
+their local CLIs. Akorith stores no provider API keys. Conversations, attachments, usage,
+projects, and Goal state stay in local SQLite and the app's managed data directory.
 
 ```
 ┌────────────┬─────────────────────────────────────────────┐
-│  Sidebar   │  Workspace: project planning + 3 agents     │
-│ projects   │  Dashboard: usage, agents, GPU, controller  │
-│ chats      │  Plugins · Loops · Test Lab · Settings       │
+│  Sidebar   │  General Chat: focused model conversation   │
+│ projects   │  Workspace: Codex-style direct project work │
+│ tasks      │  Loop · Dashboard · Benchmark · Plugins     │
 └────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -31,39 +31,40 @@ conversations, memories, and project data in local SQLite.
 - **OpenCode** — via the `opencode` CLI (`opencode auth login`).
 - **Local models** — via a local **Ollama** server when one is running (optional).
 
-The center chat talks to whichever of these are installed and logged in. In **Workspace**,
-Akorith hosts three real project terminals in the Activity drawer:
-**Olympus** (Codex), **Gaia** (OpenCode), and **Atlantis** (Claude), each running inside the
-project folder you pick. A fresh **New chat** can also run as a general, project-free
-conversation with any available provider.
+The same composer talks to whichever tools are installed and logged in. **General Chat** is a
+clean, project-free conversation. **Workspace** runs the selected CLI headlessly inside one
+project and streams its meaningful progress, commands, file changes, result, and elapsed time
+into the conversation. Raw terminal output and Agent Activity are not part of the normal UI.
 
 ## Workspace vs Chat
 
-- **New chat** sits at the top of the sidebar (above Workspace). Click it any time to start a
-  fresh general chat with your current provider — no project required.
-- **Workspace** is project-scoped. Selecting a project restores that project's latest workspace
-  chat if one exists, starts or reuses Olympus/Codex, Gaia/OpenCode, and Atlantis/Claude for
-  that project, and enables repo context, macro-loop, bridge, and Activity controls.
-- **Chat** is general model chat. It works without a project, stores conversations separately
-  from project workspaces, and does not show or send project context.
-- **Recent Chats** shows both kinds of conversation and restores the correct mode and context.
-- The **provider/model switcher** is a labeled pill in the top bar of every chat.
+- **New chat** starts a fresh ChatGPT-style conversation with no project context.
+- **Workspace** is project-scoped. Pick a folder, choose one model, then inspect and change the
+  project from the same Codex-style chat. Progress remains attached to the correct task while you
+  navigate elsewhere.
+- **Plan** makes a Workspace turn read-only and returns an ordered implementation plan.
+- Type **`@`** in Workspace to search and insert a project file into the prompt.
+- While a response is running, **Queue** stores a follow-up and runs it in the same task next.
+- **Changes** shows real file-by-file diffs and explicit Stage/Unstage controls.
+- **Search (`Cmd/Ctrl+K`)** and task pinning keep large project/chat histories manageable.
 
 ## Major surfaces
 
-- **Workspace** — sidebar · chat composer · three agent terminals (Olympus/Gaia/Atlantis).
-- **Dashboard** — local usage stats, agent OS snapshot, **Claude/Codex usage-limit cards**,
-  GPU/runtime telemetry, controller + plugin status, and a source-update badge.
-- **Agent Hub** — the Agent OS foundation (adapters, runtime snapshot) in Settings → Agents.
+- **General Chat** — rich Markdown, tables, code blocks, images, and arbitrary local file
+  attachments with durable history.
+- **Workspace** — direct project editing, activity explanations, fixed Step progress, Plan mode,
+  queued follow-ups, project-file mentions, and diff review.
+- **Loop** — concurrent long-running Goals with an Understand → Plan → Execute → Analyze → Replan
+  evidence cycle that stops only when the Goal is reached or needs review.
+- **Dashboard** — profile usage, compact token activity, local CPU/GPU telemetry, and connected
+  computer telemetry.
 - **Plugins** — read-only plugin registry + diagnostics (Browser, Chroma memory, …).
 - **Controller API** — optional loopback-only, token-protected, read-only HTTP+SSE surface
   for companions/CLIs (Settings → API; see `docs/controller-api.md`).
-- **Loops** — the AkorithLoop planner/observer surface with a centered Create project loop modal.
-- **Companions** — local memory chat with immediate user-message rendering and cancellable generation.
-- **Agents** — reusable local action shortcuts with a centered create-agent modal and permission policy.
 - **Test Lab** — generate + run tests in a sandbox and export scored PDF reports.
-- **Bottom workbench** — Changes / Runtime / Missions panel.
-- **Settings → Update** — keep source checkouts current with GitHub `main`, or refresh the installed Windows app from a clean source checkout.
+- **Bottom workbench** — a real Git Changes review surface.
+- **Settings → Update** — update source checkouts safely from GitHub `main`, or download and
+  install the latest packaged release on macOS and Windows.
 
 ## Install
 
@@ -143,13 +144,14 @@ The updater keeps a rollback copy and never resets or discards local source chan
 - **Delete a chat:** hover an entry under **Recent Chats** and click **Delete** (click again to
   confirm). This removes that conversation; deleting the chat you're in opens a clean new chat.
 
-## Sending prompts to the agents (Auto-Enter)
+## Files, plans, and project context
 
-In a Workspace chat, assistant responses can be sent to **Olympus**, **Gaia**, or
-**Atlantis** through Akorith's single bridge path. The target selector sits beside the
-composer, while secondary tools live under **More**: image attach, model suggestion, repo
-context, Auto-Enter, output summary, and Agent Activity. **Auto-Enter ON** pastes and submits
-the prompt immediately; **OFF** pastes it and leaves the cursor so you can review first.
+The composer accepts images, source files, Markdown/text, PDF, DOCX, spreadsheets,
+presentations, archives, and other local files (up to 8 files, 16 MB each, 40 MB total per turn).
+Files are copied into Akorith's managed data directory, persisted with the message, and passed to
+the selected CLI by real local path; image-capable Codex receives images through its native image
+argument. The original attachment is never modified. Workspace also supports `@` project-file
+mentions, a read-only Plan turn, and queued follow-ups while the current turn is running.
 
 ## Conversation memory
 
@@ -164,16 +166,14 @@ the chat still remembers without sending unbounded history. A **Reset context** 
 Memory is strictly per-chat: a new chat starts fresh, separate chats don't see each other's
 history, and each project workspace keeps its own conversation.
 
-## Agent permission prompts & output summaries
+## Workspace progress and task isolation
 
-When Olympus/Codex, Gaia/OpenCode, or Atlantis/Claude pauses on a confirmation in its terminal
-(`proceed?`, `y/n`, a numbered menu, `allow access?`, `press Enter`), Akorith surfaces it as a
-**permission card** right in the chat with answer buttons — you don't have to open the Activity
-drawer. Your answer is sent through the same single bridge path that all chat→terminal text
-uses. Permanent "always allow" options are shown but never auto-selected. After you send work to
-an agent (or answer a prompt), Akorith watches the terminal until it settles and posts a
-**summary** of what the agent did back into the chat; a **Summarize output** button is always
-available too.
+Workspace renders a bounded activity story instead of raw JSON or terminal logs. Each meaningful
+command, file operation, planning event, and completion event has a plain-language explanation.
+The fixed Step chip opens the six-stage project workflow. Every in-flight request, token buffer,
+Stop control, and follow-up queue is keyed by session, so switching to another project or chat
+never carries the wrong running state with it. A small global indicator still shows how many tasks
+are working in the background.
 
 ## Connect your subscriptions
 
@@ -185,8 +185,7 @@ In more detail:
 1. **Claude** — install the `claude` CLI and run it once to log in (uses your Claude
    subscription).
 2. **Codex** — install the `codex` CLI and log in with your ChatGPT account.
-3. **OpenCode (Gaia)** — `npm i -g opencode-ai`, then `opencode auth login` (also runnable
-   inside Akorith's Gaia pane).
+3. **OpenCode** — `npm i -g opencode-ai`, then `opencode auth login`.
 4. **Ollama (optional)** — install [Ollama](https://ollama.com), start it
    (`http://localhost:11434`), and pull at least one model for local/offline use.
 5. **GitHub CLI (optional)** — `gh auth login` for repo operations.
@@ -284,19 +283,19 @@ projects is recorded in `docs/validation/testlab-10-run-validation.md`. For JS/T
 existing runner, Akorith uses a temporary Vitest fallback and writes a sandbox-only config that
 resolves `@/` imports to the repo root.
 
-## Image chat
+## Image and document chat
 
-The chat composer accepts PNG, JPEG, WebP, and GIF attachments. Local/Ollama receives the image
-bytes for multimodal local models, so you can discuss screenshots or photos with a vision-capable
-model. Claude/Codex CLI providers currently receive text-only attachment names because their
-Akorith provider bridge is stdin text.
+The same attachment control accepts images and arbitrary documents. Codex receives PNG, JPEG,
+WebP, and GIF files through its native `--image` path; Claude and OpenCode receive managed file
+directories/paths through their CLI integrations; local text and code files are safely inlined for
+Ollama. Binary files remain available by managed local path. Attachment metadata survives history
+reloads, while image previews are restored from Akorith's private attachment store.
 
 ## Current limitations
 
 - **Auto Mode is cautious, not unlimited autonomous coding** — it pauses for you on anything
   risky and stops on repeated failures or low confidence.
 - **No permanent "always allow"** auto-selection — only one-time approvals.
-- **Terminal-output parsing is heuristic/model-assisted** and may need your review.
 - **No automatic approval of risky permission prompts** — Akorith never auto-answers
   destructive or medium/high-risk prompts.
 - **Ollama is optional** and may be absent; local-model features degrade gracefully.
@@ -305,20 +304,17 @@ Akorith provider bridge is stdin text.
 
 ## Design
 
-Akorith is **chat-first**, in the spirit of a Codex/OpenCode command surface: a black, calm
-workspace with a persistent project/chat sidebar, one large planning composer, and real agent
-terminals running quietly in the background. Pick a project from the sidebar and Akorith starts
-or reuses Codex, OpenCode, and Claude in that folder automatically — you mostly chat, and the
-agents work behind the scenes. The **Agent Activity** drawer can dock as an overlay, bottom panel,
-right-side panel, or focus view. After you send work to an agent, Akorith can read the terminal
-output and **summarize the result back into the chat**, with a manual **Summarize output** action
-available from **More**.
+Akorith is **chat-first**, in the spirit of Codex and ChatGPT: a calm workspace with a persistent
+project/task sidebar, one focused conversation, a bottom composer, and restrained green/purple
+status accents. CLI models run headlessly behind the conversation. Workspace shows meaningful
+activity with explanations; Loop uses a distinct evidence-cycle diagram; Dashboard, Benchmark,
+Plugins, Settings, and Changes share the same typography, spacing, radii, dark theme, and readable
+light theme.
 
 ## Screenshots
 
-Current screenshots live under [`docs/screenshots/`](docs/screenshots/). They are captured from a
-live local Akorith workspace so the Agent Activity drawer shows the real Codex, OpenCode, and
-Claude panes.
+Historical screenshots live under [`docs/screenshots/`](docs/screenshots/). The current product no
+longer exposes the old Agent Activity terminal drawer in the normal Workspace flow.
 
 ### Workspace
 
@@ -327,10 +323,6 @@ Claude panes.
 ### Composer tools
 
 ![Akorith composer More menu](docs/screenshots/composer-more.png)
-
-### Agent Activity
-
-![Akorith Agent Activity drawer with Olympus Codex, Gaia OpenCode, and Atlantis Claude](docs/screenshots/agent-activity.png)
 
 ### Dashboard
 
@@ -350,10 +342,9 @@ Claude panes.
 
 ## Roadmap
 
-- **Now:** local-first orchestration of Claude/Codex/OpenCode/Ollama; in-app source updater;
-  honest usage-limit visibility; one-command setup; macOS app refresh tooling.
-- **Next:** packaged release auto-updater (signed/notarized GitHub Releases), a Gaia
-  (`opencode run`) executor loop, and a download/website page.
+- **Now:** durable ChatGPT-style General Chat, Codex-style project work, concurrent evidence-based
+  Goals, file attachments, task queues/search/pins, real diff review, and in-app updates.
+- **Next:** signed/notarized release artifacts and deeper provider-native tool rendering.
 
 ## More
 

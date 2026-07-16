@@ -12,6 +12,8 @@ import {
   PanelsIcon,
   PluginIcon,
   PlusIcon,
+  PinIcon,
+  SearchIcon,
   SettingsIcon
 } from './icons'
 import { ProfileAvatar } from './ProfileAvatar'
@@ -42,6 +44,7 @@ interface SidebarProps {
   onHistoryChange: () => void
   onProjectsChange: () => void
   onChromeWidthChange?: (width: number) => void
+  pendingSessions?: Set<string>
 }
 
 // Phase 14.1: the separate "Chat" nav item is gone; a "New chat" action sits
@@ -135,7 +138,8 @@ export default function Sidebar({
   onNewProjectChat,
   onHistoryChange,
   onProjectsChange,
-  onChromeWidthChange
+  onChromeWidthChange,
+  pendingSessions
 }: SidebarProps): JSX.Element {
   // Folders come from the registry + DB — never a hardcoded provider list.
   const [providers, setProviders] = useState<ProviderInfo[]>([])
@@ -174,6 +178,9 @@ export default function Sidebar({
   const [projectBusy, setProjectBusy] = useState<'open' | 'create' | null>(null)
   const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const { identity, updateIdentity } = useProfileIdentity()
 
   const loadProviders = useCallback(() => {
@@ -195,6 +202,22 @@ export default function Sidebar({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [settingsOpen])
+
+  useEffect(() => {
+    const onSearch = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+        window.setTimeout(() => searchRef.current?.focus(), 0)
+      }
+      if (event.key === 'Escape' && searchOpen) {
+        setSearchOpen(false)
+        setSearchQuery('')
+      }
+    }
+    window.addEventListener('keydown', onSearch)
+    return () => window.removeEventListener('keydown', onSearch)
+  }, [searchOpen])
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -311,10 +334,20 @@ export default function Sidebar({
     return map
   }, [sessions])
 
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
+  const matchesSearch = (value: string | null | undefined): boolean => !normalizedSearch || Boolean(value?.toLocaleLowerCase().includes(normalizedSearch))
+  const visibleProjects = projects.filter((project) => matchesSearch(project.name) || matchesSearch(project.path) || (sessionsByProject.get(project.id) ?? []).some((session) => matchesSearch(session.title)))
+
   // Phase 33.6: general chats are everything without a (still-existing) project —
   // this also surfaces orphaned workspace chats whose project was removed, so no
   // history silently disappears now that provider folders are gone.
-  const generalSessions = sessions.filter((s) => !s.projectId || !projectById.has(s.projectId))
+  const generalSessions = sessions.filter((s) => (!s.projectId || !projectById.has(s.projectId)) && matchesSearch(s.title))
+
+  const togglePinned = async (session: SessionRow): Promise<void> => {
+    setChatRowMenu(null)
+    await window.api.history.pin(session.id, !session.pinned)
+    onHistoryChange()
+  }
 
   const toggleProjectExpanded = (projectId: string): void => {
     setExpandedProjects((current) => ({ ...current, [projectId]: !(current[projectId] ?? false) }))
@@ -353,14 +386,13 @@ export default function Sidebar({
     setCreateOpen(true)
   }
 
-  // The center workspace empty-state "Create Project" routes through here. Skip
-  // the initial render so the card never appears just because Akorith opened.
-  const firstSignal = useRef(true)
+  // The center workspace empty-state "Create Project" routes through here.
+  // Remember the actual signal value so React Fast Refresh cannot mistake a
+  // component remount for a user click and open this dialog unexpectedly.
+  const previousCreateSignal = useRef(createSignal)
   useEffect(() => {
-    if (firstSignal.current) {
-      firstSignal.current = false
-      return
-    }
+    if (previousCreateSignal.current === createSignal) return
+    previousCreateSignal.current = createSignal
     beginCreateProject()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createSignal])
@@ -545,7 +577,8 @@ export default function Sidebar({
         >
       {/* The top chrome owns sidebar collapse; this nav stays focused on
           destinations and creation. */}
-      <div className="sidebar-brand" aria-label="Akorith">Akorith</div>
+      <div className="sidebar-brand-row"><div className="sidebar-brand" aria-label="Akorith">Akorith</div><button type="button" className="sidebar-search-button" title="Search tasks (⌘K)" onClick={() => { setSearchOpen((open) => !open); window.setTimeout(() => searchRef.current?.focus(), 0) }}><SearchIcon size={15} /></button></div>
+      {searchOpen && <div className="sidebar-search"><SearchIcon size={14} /><input ref={searchRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search projects and tasks" /><kbd>⌘K</kbd></div>}
       <nav className="sidebar-nav" aria-label="Primary">
         <div className="sidebar-newchat-row">
           <button
@@ -646,8 +679,8 @@ export default function Sidebar({
                       </div>
                     </div>
                   ) : (
-                    projects.map((project) => {
-                      const chats = sessionsByProject.get(project.id) ?? []
+                    visibleProjects.map((project) => {
+                      const chats = (sessionsByProject.get(project.id) ?? []).filter((session) => matchesSearch(session.title))
                       const isExpanded = expandedProjects[project.id] ?? false
                       const isActiveProject = view === 'workspace' && activeProject?.id === project.id
                       return (
@@ -776,7 +809,7 @@ export default function Sidebar({
                                   </div>
                                 ) : (
                                   <div
-                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chatRowMenu === chat.id ? 'is-menu-open' : ''}`}
+                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chatRowMenu === chat.id ? 'is-menu-open' : ''} ${chat.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(chat.id) ? 'is-running' : ''}`}
                                     key={chat.id}
                                     role="button"
                                     tabIndex={0}
@@ -790,7 +823,7 @@ export default function Sidebar({
                                     }}
                                   >
                                     <span className="project-chat-title">{chat.title}</span>
-                                    <span className="project-chat-time">{relativeShort(chat.updatedAt)}</span>
+                                    <span className="project-chat-time">{pendingSessions?.has(chat.id) ? <><i />Akorithing…</> : chat.pinned ? <PinIcon size={11} /> : relativeShort(chat.updatedAt)}</span>
                                     {/* Phase 37.4: actions via a small ⋯ menu, not inline text. */}
                                     <button
                                       type="button"
@@ -804,6 +837,13 @@ export default function Sidebar({
                                     </button>
                                     {chatRowMenu === chat.id && (
                                       <div className="project-menu project-row-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          onClick={() => void togglePinned(chat)}
+                                        >
+                                          <PinIcon size={13} /><span>{chat.pinned ? 'Unpin task' : 'Pin task'}</span>
+                                        </button>
                                         <button
                                           type="button"
                                           role="menuitem"
@@ -876,7 +916,7 @@ export default function Sidebar({
                 const meta = `${orphaned ? 'Removed project' : 'General chat'} · ${provider} · ${formatDate(session.updatedAt)}`
                 return (
                   <div
-                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''}`}
+                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''} ${session.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(session.id) ? 'is-running' : ''}`}
                     key={session.id}
                     role="button"
                     tabIndex={0}
@@ -891,8 +931,10 @@ export default function Sidebar({
                   >
                     <span className="recent-chat-text">
                       <span>{session.title}</span>
+                      {pendingSessions?.has(session.id) && <small><i />Akorithing…</small>}
                     </span>
                     <span className="sidebar-item-actions">
+                      <button type="button" title={session.pinned ? 'Unpin task' : 'Pin task'} onClick={(event) => { event.stopPropagation(); void togglePinned(session) }}><PinIcon size={12} /></button>
                       {confirmDeleteId === session.id ? (
                         <button
                           type="button"

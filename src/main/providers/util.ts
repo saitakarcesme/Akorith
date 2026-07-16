@@ -2,6 +2,9 @@
 // only — nothing here may know about a specific provider.
 
 import { spawn } from 'child_process'
+import { accessSync, constants, existsSync } from 'fs'
+import { homedir } from 'os'
+import { delimiter, isAbsolute, join, sep } from 'path'
 
 export interface RunCliOptions {
   stdin?: string
@@ -21,17 +24,54 @@ export interface RunCliResult {
 }
 
 /**
+ * Resolve GUI-launched provider CLIs deterministically. Electron can inherit
+ * Codex/ChatGPT helper directories ahead of the user's shell PATH; spawning a
+ * bare `codex` would then select an older bundled binary even though Terminal
+ * uses the current ~/.local/bin install. Prefer normal user install locations,
+ * then walk PATH, while keeping Windows shim resolution unchanged.
+ */
+export function resolveCliExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (process.platform === 'win32' || isAbsolute(command) || command.includes(sep)) return command
+
+  const home = homedir()
+  const preferredDirectories = [
+    join(home, '.local', 'bin'),
+    join(home, 'bin'),
+    join(home, '.npm-global', 'bin'),
+    join(home, '.bun', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin'
+  ]
+  const pathDirectories = (env.PATH ?? '').split(delimiter).filter(Boolean)
+  const candidates = [...new Set([...preferredDirectories, ...pathDirectories])]
+    .map((directory) => join(directory, command))
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      // Continue to the next candidate when a file exists but is not executable.
+    }
+  }
+  return command
+}
+
+/**
  * Run a CLI on the user's PATH. Windows uses a shell so .cmd shims (npm
  * installs) resolve; macOS/Linux spawn the executable directly so packaged
  * loops cannot strand shell wrappers around git/provider calls.
  */
 export function runCli(command: string, args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const childEnv = options.env ? { ...process.env, ...options.env } : process.env
+    const executable = resolveCliExecutable(command, childEnv)
+    const child = spawn(executable, args, {
       shell: process.platform === 'win32',
       windowsHide: true,
       cwd: options.cwd,
-      env: options.env ? { ...process.env, ...options.env } : process.env
+      env: childEnv
     })
 
     let stdout = ''

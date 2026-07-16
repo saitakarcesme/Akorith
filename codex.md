@@ -11,9 +11,9 @@ Phase 9.1; full package identity cleanup remains Phase 10. It is an Electron + T
 desktop workspace that orchestrates coding agents **without any API keys**. The center planning
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
-right execution area hosts two real PTY terminals; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 57:
-Durable Goal Cycle + Chat Isolation**.
+local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
+history. Built with electron-vite in strict numbered phases; currently through **Phase 58:
+Codex-Parity Chat + Durable Attachments**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -348,6 +348,9 @@ Durable Goal Cycle + Chat Isolation**.
 - [x] **Phase 57** - Durable Goal Cycle + Chat Isolation. Goal completion is evidence-based across
       Understand/Plan/Execute/Analyze/Replan; Loop UI is a quiet concurrent diagram; General Chat
       and Workspace activity are separate; active request/Stop state is scoped by session.
+- [x] **Phase 58** - Codex-Parity Chat + Durable Attachments. General Chat and Workspace render
+      rich Markdown and durable files; Workspace adds Plan, Queue, project-file mentions, real
+      Changes, task search/pins, and per-session streaming/navigation continuity.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -606,6 +609,28 @@ local model, attempts, validated changes, commits, last validation, and last com
   readable. The fixed Step chip reveals all six steps on hover/focus. Code blocks are theme-aware.
 - Verification: `npm run verify:goal-cycle`, `npm run verify:project-loop`, `npm run typecheck`,
   `npm run build`, plus Electron CDP checks for General Chat separation and Stop-state switching.
+
+## Phase 58 - Codex-Parity Chat + Durable Attachments
+
+- General Chat is a clean ChatGPT-style surface; Workspace is the project-scoped Codex-style
+  surface. Raw terminal output stays hidden and the selected CLI runs headlessly.
+- Message attachments are copied to an Akorith-owned userData directory, capped at 8 files,
+  16 MB each, and 40 MB per turn. Metadata persists with history, original files are never
+  modified, and session deletion/reset removes only the managed copy. Raw HTML is not enabled in
+  Markdown rendering.
+- Active requests, streaming buffers, message caches, Stop state, and follow-up queues are keyed by
+  session. Navigation can never transfer a running control or hidden Plan intent to another task.
+- Workspace provides five explicit Codex-parity capabilities: queued follow-ups, bounded `@`
+  project-file search, read-only Plan mode, project-scoped Changes with Stage/Unstage, and task
+  search/pinning. Changes may act on one validated project-relative path; it never reverts,
+  commits, pushes, or edits file content.
+- `resolveCliExecutable()` prioritizes normal user CLI install paths before Electron's bundled
+  runtime path, preventing a stale embedded executable from shadowing the signed-in CLI.
+- `product-polish.css` is imported last and owns the final shared dark/light/responsive product
+  layer. Keep surfaces, controls, code, attachments, and narrow layouts consistent there.
+- Verification includes typecheck/build, all repository verification scripts, production audit,
+  Electron CDP navigation/streaming checks, Plan no-write, Queue order, `@` mentions, real Changes,
+  search/pin, Markdown/GFM, PDF/image attachments, light/dark themes, and 1100 px responsive pages.
 
 ## Rule: keep the docs current
 

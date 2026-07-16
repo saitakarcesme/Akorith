@@ -50,6 +50,30 @@ const WORKSPACE_PERMISSION_CONFIG = JSON.stringify({
   }
 })
 
+const PLAN_PERMISSION_CONFIG = JSON.stringify({
+  permission: {
+    '*': 'deny',
+    read: 'allow',
+    glob: 'allow',
+    grep: 'allow',
+    list: 'allow',
+    lsp: 'allow',
+    question: 'deny',
+    external_directory: 'deny',
+    bash: {
+      '*': 'deny',
+      pwd: 'allow',
+      'ls *': 'allow',
+      'git status*': 'allow',
+      'git diff*': 'allow',
+      'git log*': 'allow',
+      'git show*': 'allow',
+      'git rev-parse*': 'allow',
+      'git ls-files*': 'allow'
+    }
+  }
+})
+
 function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
@@ -103,6 +127,7 @@ export class OpenCodeProvider implements Provider {
     if (opts.model && opts.model !== 'default') {
       args.push('-m', opts.model)
     }
+    for (const attachment of opts.attachments ?? []) args.push('-f', attachment.path)
     const workspacePrompt = opts.workingDirectory
       ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts; never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
@@ -118,7 +143,7 @@ export class OpenCodeProvider implements Provider {
             // child_process.spawn receives a different cwd. OpenCode reads
             // both values, so keep the environment and native cwd aligned.
             PWD: opts.workingDirectory,
-            OPENCODE_CONFIG_CONTENT: WORKSPACE_PERMISSION_CONFIG
+            OPENCODE_CONFIG_CONTENT: opts.intent === 'plan' ? PLAN_PERMISSION_CONFIG : WORKSPACE_PERMISSION_CONFIG
           }
         : undefined,
       onStdoutLine: (line) => {

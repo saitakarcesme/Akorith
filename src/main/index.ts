@@ -15,6 +15,7 @@ import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
+import { registerProjectFilesIpc } from './project-files'
 import { registerGpuStatusIpc } from './gpu-status'
 import { registerRemoteTelemetryIpc } from './remote-telemetry'
 import { registerControllerIpc, startControllerIfEnabled, stopController } from './controller'
@@ -428,6 +429,7 @@ app.whenReady().then(() => {
   registerMacroIpc()
   registerOllamaConnectionIpc()
   registerGitStatusIpc()
+  registerProjectFilesIpc()
   registerGpuStatusIpc()
   registerRemoteTelemetryIpc()
   registerControllerIpc()

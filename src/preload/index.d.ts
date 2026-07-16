@@ -90,6 +90,21 @@ export interface ChatImageAttachment {
   dataBase64: string
 }
 
+export type ChatAttachmentKind = 'image' | 'document' | 'code' | 'file'
+
+export interface ChatAttachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  kind: ChatAttachmentKind
+  dataBase64?: string
+}
+
+export interface ChatAttachmentInput extends ChatAttachment {
+  dataBase64: string
+}
+
 export interface ChatSendRequest {
   requestId: string
   providerId: string
@@ -102,6 +117,8 @@ export interface ChatSendRequest {
   /** Workspace project scope; only project chats pass this. */
   workspaceContext?: { projectName: string; projectPath: string }
   images?: ChatImageAttachment[]
+  attachments?: ChatAttachmentInput[]
+  intent?: 'execute' | 'plan'
 }
 
 /** Phase 14.2: what conversation context a session would send (memory indicator). */
@@ -158,6 +175,7 @@ export interface SessionRow {
   providerId: string
   title: string
   projectId: string | null
+  pinned: boolean
   createdAt: number
   updatedAt: number
 }
@@ -169,6 +187,7 @@ export interface MessageRow {
   content: string
   providerId: string
   model: string | null
+  attachments: ChatAttachment[]
   createdAt: number
 }
 
@@ -177,6 +196,7 @@ export interface HistoryApi {
   messages(sessionId: string): Promise<{ session: SessionRow; messages: MessageRow[] } | null>
   create(providerId: string, title: string, projectId?: string | null): Promise<SessionRow>
   rename(sessionId: string, title: string): Promise<boolean>
+  pin(sessionId: string, pinned: boolean): Promise<boolean>
   remove(sessionId: string): Promise<boolean>
   /** Phase 14.2: reset context for ONE session (clears its messages + summary). */
   clearMessages(sessionId: string): Promise<boolean>
@@ -210,6 +230,8 @@ export interface ProjectUpdateRequest {
 
 export interface ProjectsApi {
   list(): Promise<ProjectRow[]>
+  /** Bounded, project-scoped file index used by the Workspace @ mention picker. */
+  files(projectId: string, query?: string): Promise<string[]>
   create(args: ProjectCreateRequest): Promise<ProjectRow>
   openFolder(projectId?: string | null): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
   createFolder(args: {
@@ -1842,6 +1864,7 @@ export interface OllamaApi {
 export interface GitChangeFile {
   status: string
   path: string
+  staged: boolean
 }
 
 export type GitStatusResult =
@@ -1851,6 +1874,9 @@ export type GitStatusResult =
 
 export interface GitApi {
   status(path: string): Promise<GitStatusResult>
+  diff(path: string, filePath: string): Promise<{ ok: true; diff: string } | { ok: false; error: string }>
+  setStaged(path: string, filePath: string, staged: boolean): Promise<{ ok: boolean; error?: string }>
+  revealFile(path: string, filePath: string): Promise<boolean>
 }
 
 export interface GpuDevice {

@@ -4,10 +4,9 @@ Loopex is the current repository/package name. **Akorith** is the visible produc
 introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
-Activity drawer hosts two real per-project PTY terminals; the left sidebar holds projects,
-provider folders, and session history. Built
-with electron-vite, in strict numbered phases — currently through Phase 57 (durable Goal Cycle:
-understand, plan, execute, analyze, and replan until evidence satisfies the complete Goal).
+selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
+history. Built with electron-vite, in strict numbered phases — currently through Phase 58
+(Codex-parity chat, durable attachments, and isolated streaming tasks).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -1539,6 +1538,33 @@ theme-aware code surface.
 Verify with `npm run verify:goal-cycle`, `npm run verify:project-loop`, `npm run typecheck`, and
 `npm run build`. Keep Goal-completion analysis evidence-based, never infer completion from activity,
 and never merge per-session request state back into one global busy flag.
+
+### Phase 58: Codex-Parity Chat + Durable Attachments
+
+General Chat is project-free and ChatGPT-style. Workspace is project-scoped and Codex-style; CLI
+providers stay headless. Shared `ChatMessageView` and `ChatMarkdown` render safe Markdown/GFM,
+tables, task lists, links, and theme-aware code. Do not enable raw HTML rendering.
+
+Attachments are copied into the app-owned userData attachment directory before dispatch. Enforce
+8 files, 16 MB per file, and 40 MB per turn; persist attachment metadata with the user message and
+delete only Akorith's managed copies during session deletion/reset. Never modify or remove the
+original user file. Codex images use its native image argument; Claude/OpenCode receive validated
+managed paths; bounded local text/code may be inlined for Ollama.
+
+All active request state is per-session: streaming token buffers, cached messages, Stop controls,
+follow-up queues, and request handles. Navigation may show aggregate background work but must never
+move another task's Stop state into the current composer. General Chat must reset hidden Workspace
+Plan intent.
+
+The five parity controls are Queue, bounded project-only `@` file mentions, read-only Plan,
+project-scoped Changes, and task search/pinning. Changes validates a single relative path before
+Stage/Unstage and provides no revert/commit/push/content-write path. CLI resolution must prioritize
+the user's standard install locations over Electron's bundled PATH. The final shared product layer
+is `product-polish.css`, imported last.
+
+Verify with typecheck/build, every repository verification script, production audit, Electron CDP
+navigation/streaming tests, Plan no-write, Queue ordering, mentions, Changes Stage/Unstage,
+search/pin, Markdown, PDF/image attachments, themes, and responsive page checks.
 
 ## Conventions
 

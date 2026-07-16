@@ -42,6 +42,14 @@ import type { AgentId } from '../agents/types'
 import { normalizeStoredOpenCodeMessage } from '../../shared/opencode-output'
 import { buildLocalExecutorPrompt, executeLocalExecutorAttempt } from '../local-executor'
 import { inspectProject, renderProjectContext } from '../project-loop/context'
+import {
+  attachmentPrompt,
+  inlineTextAttachmentContext,
+  storeChatAttachments,
+  validChatAttachments,
+  type IncomingChatAttachment,
+  type StoredChatAttachment
+} from '../chat-attachments'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -165,6 +173,8 @@ interface ChatSendArgs {
   /** Renderer hint for project chats; main derives trusted context from the session's stored project. */
   workspaceContext?: { projectName: string; projectPath: string }
   images?: { name: string; mimeType: string; dataBase64: string }[]
+  attachments?: IncomingChatAttachment[]
+  intent?: 'execute' | 'plan'
 }
 
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
@@ -271,7 +281,9 @@ function startProviderObservation(args: ChatSendArgs, provider: Provider, projec
       metadata: {
         providerId: args.providerId,
         model: args.model ?? null,
-        hasImages: Boolean(args.images?.length),
+        hasImages: Boolean(args.images?.length || args.attachments?.some((item) => item.kind === 'image')),
+        hasAttachments: Boolean(args.attachments?.length),
+        intent: args.intent ?? 'execute',
         includeDigest: args.includeDigest === true,
         persistedChatSession: Boolean(args.sessionId),
         sourceFile: 'src/main/providers/registry.ts'
@@ -332,13 +344,12 @@ function failProviderObservation(observation: ProviderObservation | null, err: u
 }
 
 /** Convert stored rows to the pure conversation shape. */
-function toConv(messages: { role: 'user' | 'assistant'; content: string; providerId: string }[]): ConvMessage[] {
+function toConv(messages: { role: 'user' | 'assistant'; content: string; providerId: string; attachments?: { name: string }[] }[]): ConvMessage[] {
   return messages.map((message) => ({
     role: message.role,
-    content:
-      message.role === 'assistant' && message.providerId === 'opencode'
+    content: `${message.role === 'assistant' && message.providerId === 'opencode'
         ? normalizeStoredOpenCodeMessage(message.content)
-        : message.content
+        : message.content}${message.attachments?.length ? `\n\nAttached files: ${message.attachments.map((item) => item.name).join(', ')}` : ''}`
   }))
 }
 
@@ -416,6 +427,8 @@ export function registerChatIpc(): void {
           typeof args.workspaceContext.projectPath !== 'string' ||
           args.workspaceContext.projectPath.length > 1_000)) ||
       !validImages(args.images)
+      || !validChatAttachments(args.attachments)
+      || (args.intent !== undefined && args.intent !== 'execute' && args.intent !== 'plan')
     ) {
       return { ok: false, error: 'invalid chat:send payload' }
     }
@@ -433,6 +446,15 @@ export function registerChatIpc(): void {
     // derived from the persisted session (never trusted from renderer input),
     // and also becomes the CLI working directory below.
     const workspaceContext = sessionId ? getSessionProjectContext(sessionId) : null
+    let storedAttachments: StoredChatAttachment[] = []
+    if (args.attachments?.length) {
+      if (!sessionId) return { ok: false, error: 'attachments require a persisted chat session' }
+      try {
+        storedAttachments = await storeChatAttachments(sessionId, args.requestId, args.attachments)
+      } catch (err) {
+        return { ok: false, error: `Could not store attachments: ${err instanceof Error ? err.message : String(err)}` }
+      }
+    }
 
     // Phase 14.2 conversation memory: load the session's PRIOR messages BEFORE
     // persisting the new one, so the provider actually receives the conversation
@@ -447,7 +469,7 @@ export function registerChatIpc(): void {
         console.error('[registry] failed to load session context:', err)
       }
       try {
-        addMessage(sessionId, 'user', args.prompt, args.providerId, args.model)
+        addMessage(sessionId, 'user', args.prompt, args.providerId, args.model, storedAttachments)
       } catch (err) {
         console.error('[registry] failed to persist user message:', err)
       }
@@ -480,17 +502,25 @@ export function registerChatIpc(): void {
         summary = await ensureOlderSummary(sessionId, prior, args.providerId, args.model, controller.signal)
       }
 
+      const localAttachmentContext = args.providerId === 'local'
+        ? await inlineTextAttachmentContext(storedAttachments)
+        : ''
+      const localPlanContext = args.providerId === 'local' && args.intent === 'plan' && workspaceContext?.projectPath
+        ? `\n\nProject snapshot:\n${renderProjectContext(inspectProject(workspaceContext.projectPath))}`
+        : ''
       const built = renderProviderPrompt({
         priorMessages: prior,
-        currentPrompt: args.images?.length
-          ? `${args.prompt}\n\nAttached images: ${args.images.map((image) => image.name).join(', ')}`
-          : args.prompt,
+        currentPrompt: `${args.prompt}${attachmentPrompt(storedAttachments)}${args.images?.length
+          ? `\n\nAttached images: ${args.images.map((image) => image.name).join(', ')}`
+          : ''}${localAttachmentContext}${localPlanContext}`,
         summary,
         digest,
         workspace: workspaceContext
       })
       const workspaceInstruction = workspaceContext
-        ? `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n`
+        ? args.intent === 'plan'
+          ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.\n\n`
+          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
@@ -511,7 +541,7 @@ export function registerChatIpc(): void {
               sender.send('chat:token', { requestId: args.requestId, token })
             }
           }
-        result = workspaceContext?.projectPath && args.providerId === 'local'
+        result = workspaceContext?.projectPath && args.providerId === 'local' && args.intent !== 'plan'
           ? await sendWorkspaceLocal(
               provider,
               args.prompt,
@@ -527,7 +557,13 @@ export function registerChatIpc(): void {
                 model: args.model,
                 signal: controller.signal,
                 workingDirectory: workspaceContext?.projectPath,
-                images: args.images,
+                images: args.images ?? storedAttachments.filter((item) => item.kind === 'image' && item.dataBase64).map((item) => ({
+                  name: item.name,
+                  mimeType: item.mimeType,
+                  dataBase64: item.dataBase64!
+                })),
+                attachments: storedAttachments,
+                intent: args.intent ?? 'execute',
                 onActivity: emitActivity
               },
               onToken
