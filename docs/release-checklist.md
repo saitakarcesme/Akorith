@@ -1,98 +1,76 @@
 # Akorith release checklist
 
-Practical steps to cut a build and (optionally) publish it. Tick top-to-bottom.
+Use this checklist for a tagged desktop release. It reflects the current Chat, Workspace, Loop,
+Research, Benchmark, Plugins, Dashboard, and in-app update surfaces.
 
-## 1. Pre-build verification
+## 1. Preflight
 
+- [ ] Bump `package.json` and `package-lock.json` to the intended release version.
 - [ ] `npm run typecheck` passes.
+- [ ] `npm run verify:research` passes every contract, input, network-safety, artifact, and
+      persistence check.
+- [ ] `npm run verify:research-seed` generates the complete provider-class × depth × output matrix
+      in an isolated library.
+- [ ] `npm run verify:research-live:check -- --provider all` reports which logged-in CLIs can run;
+      unavailable providers are documented, not silently substituted.
+- [ ] Workspace, Loop, controller, startup hydration, local runtime/executor, Goal cycle,
+      OpenCode output, plugin tools, update-version, and Windows identity verifiers pass.
 - [ ] `npm run build` passes.
-- [ ] `node --experimental-strip-types scripts/verify-macro-loop.ts` → `verify-macro-loop: ok`.
-- [ ] `node --experimental-strip-types scripts/verify-testlab.ts` → `19 passed, 0 failed`.
-- [ ] Version bumped in `package.json` if this is a release (`version`).
+- [ ] `npm run release:check` reports 0 errors and the intended tag is available.
+- [ ] The working tree contains only intentional release changes; never stage `.env`, tokens,
+      credentials, local databases, or generated `dist/` artifacts.
 
-## 2. Package
+## 2. Functional smoke test
 
-- [ ] macOS unpacked smoke build: `npm run pack:mac` → `dist/mac-arm64/Akorith.app`.
-- [ ] macOS installers (optional): `npm run dist:mac` → `.dmg` + `.zip` in `dist/`.
-- [ ] Windows (on a Windows machine): `npm run dist:win`.
-- [ ] Confirm native modules unpacked: `dist/mac-arm64/Akorith.app/Contents/Resources/app.asar.unpacked/node_modules/{node-pty,better-sqlite3}` exist.
-- [ ] Confirm `node-pty` `darwin-arm64/spawn-helper` is present and executable (`-rwxr-xr-x`).
+- [ ] **General Chat:** send a message, switch chats while it runs, return to the correct response,
+      and verify the icon-only copy action.
+- [ ] **Workspace:** open a real project, run a read-only plan and a small change, inspect the fixed
+      Step popover, Changes diff, elapsed time, and live project preview where supported.
+- [ ] **Loop:** open multiple Goal tabs, confirm the compact stage rail and evidence timeline, then
+      pause/resume or complete one Goal without affecting another.
+- [ ] **Research:** start independent tabs with explicit provider/model, depth, and output format;
+      confirm planning, cited progress, pause/resume, recovery, and completion.
+- [ ] **Research Library:** open a cover, inspect sources/claims, reveal the artifact, and visually
+      check one PDF, DOCX, XLSX, and Markdown report. PDF/DOCX must not clip; XLSX must print one
+      worksheet per fitted page with readable headings.
+- [ ] **Dashboard:** profile navigation, Token activity, GitHub activity, and local compute telemetry
+      render without horizontal overflow.
+- [ ] **Benchmark / Plugins / Settings:** tables, original plugin identities, light theme, provider
+      diagnostics, and Update all remain readable and functional.
+- [ ] No provider API key is requested or stored. Provider calls use existing local CLI logins.
 
-## 3. Launch the packaged app
+## 3. Package and install on macOS
 
-- [ ] `open dist/mac-arm64/Akorith.app` launches without crashing.
-- [ ] App name in the **menu bar** says **Akorith** (not Electron).
-- [ ] **Dock** tooltip / Finder name says **Akorith**.
-- [ ] **Window title** says Akorith; **About Akorith** shows the right name.
-- [ ] **Icon** in Dock/Finder is the Akorith logo.
-- [ ] App data lands in `~/Library/Application Support/Akorith/` (`loopex.db`, `loopex.config.json`).
+- [ ] `npm run pack:mac` creates `dist/mac-arm64/Akorith.app` (and the Intel directory when built).
+- [ ] Native modules exist under `app.asar.unpacked`; the `node-pty` `spawn-helper` is executable.
+- [ ] `npm run refresh:mac` backs up the prior Akorith app, installs the new build at
+      `/Applications/Akorith.app`, and leaves `~/Library/Application Support/Akorith/` untouched.
+- [ ] The packaged app launches; Finder, Dock, menu bar, window title, About panel, and icon all say
+      Akorith rather than Electron.
+- [ ] Settings → Update shows the installed version and can check the stable GitHub release channel.
 
-## 4. Functional smoke test (in the packaged app)
+## 4. Windows artifact
 
-- [ ] Workspace route opens (sidebar | center chat | right terminals).
-- [ ] Dashboard route opens.
-- [ ] Test route opens.
-- [ ] **Open Project** picks a folder and persists it.
-- [ ] **Create Project** modal: name + parent folder → creates and activates the project.
-- [ ] Olympus starts **Codex** and Atlantis starts **Claude** in the project cwd
-      (or falls back to a shell with a clear message if a CLI is missing — see §5).
-- [ ] Macro-loop: enter a goal, get one proposal, approve sends it to a terminal
-      (semi-automatic; nothing auto-runs).
-- [ ] No credentials/API keys requested or stored anywhere.
+- [ ] Build on Windows or through the release workflow; do not rely on macOS cross-building NSIS.
+- [ ] Verify the NSIS installer and portable executable both carry Akorith name, icon, executable
+      metadata, and shortcuts.
+- [ ] Launch once with an available CLI and once with a missing CLI; the latter must show a clear
+      unavailable state without crashing.
 
-## 5. Packaged-app CLI availability (macOS PATH)
+## 5. Publish
 
-GUI apps launched from Finder inherit a minimal `PATH`. Akorith prepends common install
-dirs (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, …) at startup so logged-in
-CLIs resolve.
+- [ ] Push the reviewed `main` commit.
+- [ ] Create and push the annotated `vX.Y.Z` tag.
+- [ ] Wait for every macOS arm64, macOS x64, and Windows matrix job to pass.
+- [ ] Confirm the GitHub Release contains `.dmg`, `.zip`, and Windows `.exe` artifacts with the
+      release version in each filename.
+- [ ] Verify the in-app updater can see the new stable release and validates version, size, SHA,
+      bundle identity, and downloaded artifact before installation.
+- [ ] Keep the unsigned-build limitation visible until real signing/notarization secrets exist;
+      never imitate or bypass signing.
 
-- [ ] With `claude`/`codex` installed in Homebrew or `/usr/local/bin`, terminals start the
-      real CLI (header shows Codex/Claude, not Shell).
-- [ ] With a CLI missing, the pane falls back to a shell and prints a clear Akorith message
-      (no crash); the provider shows as unavailable in chat.
+## 6. Release notes
 
-## 6. Publish (GitHub release)
-
-- [ ] Commit + push `main` is green.
-- [ ] Tag the release (`git tag vX.Y.Z && git push --tags`).
-- [ ] Create a GitHub Release; attach `dist/*.dmg` / `dist/*.zip` (and Windows installer
-      when built). **Do not commit `dist/` artifacts** — they are git-ignored.
-- [ ] Release notes: what's new + the one-line connect prompt from the README.
-- [ ] (Future) code-sign + notarize before wide distribution to avoid Gatekeeper warnings.
-
-## 7. Announcement (X/Twitter) checklist
-
-- [ ] One-sentence pitch: "Akorith orchestrates your logged-in coding agents (Claude/Codex)
-      with no API keys."
-- [ ] Screenshot or short demo clip of the 3-pane Workspace.
-- [ ] Link to the GitHub release / repo.
-- [ ] Call out: no API keys, runs your own CLI subscriptions, local data only.
-- [ ] Note current limitations honestly (semi-automatic, no autopilot).
-
-## 9. Phase 41 packaging & release (installable Akorith)
-
-- [ ] `npm run release:check` → 0 errors (identity, icons, mac/win targets, workflow, git/tag).
-- [ ] **macOS:** `npm run dist:mac` → `dist/Akorith-<version>-mac-<arch>.dmg` + `.zip`;
-      `npm run refresh:mac` backs up old copies and installs `/Applications/Akorith.app`.
-- [ ] **Windows:** build on a Windows host (`npm run dist:win`) or via CI — a macOS host
-      cannot cross-build the NSIS installer.
-- [ ] **CI:** GitHub Actions "release" workflow (`workflow_dispatch` or `git push origin v<version>`)
-      builds unsigned Apple Silicon/Intel macOS and Windows artifacts; version tags
-      publish a stable release used by the in-app macOS updater.
-- [ ] **Identity:** packaged menu bar / Dock / Finder say Akorith; dev menu bar says Akorith
-      via `scripts/fix-dev-app-name.js`.
-- [ ] **Signing:** artifacts are unsigned until certs are configured — never faked.
-      See `docs/packaging.md` and `docs/install.md`.
-
-## 8. Phase 39 tooling (source installs)
-
-- [ ] **Keep checkouts current:** Settings → Update fast-forwards a source install to
-      `origin/main` (see `docs/update-system.md`). Replaces manual `git pull` on Mac + PC.
-- [ ] **Update packaged macOS:** Settings → Update installs the latest stable GitHub
-      Release. For an unreleased local build, use `npm run pack:mac` then
-      `npm run refresh:mac` (old copies are moved aside; user data/config/db untouched).
-- [ ] **One-command bootstrap on a new machine:** `npm run setup` (macOS/Linux) or
-      `pwsh scripts/setup-akorith.ps1` (Windows); `npm run doctor` for a check-only pass.
-      See `docs/setup.md`.
-- [ ] **iCloud trap:** if the repo is under `~/Desktop`/`~/Documents`, relocate
-      `node_modules` out of the synced tree (the setup script prints the fix).
+- [ ] Summarize user-visible changes, migration/recovery behavior, and known limitations.
+- [ ] State which real provider smoke tests were run and which were blocked by missing/expired login.
+- [ ] Link to `docs/install.md`, `docs/update-system.md`, and this checklist.

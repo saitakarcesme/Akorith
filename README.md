@@ -1,26 +1,27 @@
 # Akorith
 
 **Akorith — a local-first Agent OS.**
-**Think with Companions. Act with Agents. Build with Loop.**
+**Chat. Build. Loop. Research.**
 
-Akorith is a cross-platform Electron desktop app with three first-class, local-first pillars:
+Akorith is a cross-platform Electron desktop app with four first-class, local-first surfaces:
 
-- **Loop** — an autonomous local project builder. Give it an idea, a local repo, or a GitHub
-  URL, and **local models** grow it over time with safe, validated commits.
-- **Companions** — long-memory local personalities (**Athena**, **Zeus**). They talk and
-  remember across every conversation. They **never take actions**.
-- **Agents** — reusable local action shortcuts (organize a folder, repo health report,
-  README/changelog, commit messages, …). Create once, run again, behind a permission policy.
+- **General Chat** — a clean, project-free conversation powered by the local CLI you choose.
+- **Workspace** — Codex-style direct project work with plans, progress, diffs, and live preview.
+- **Loop** — concurrent autonomous Goals that plan, execute, verify, replan, commit, and stop only
+  when the requested outcome is reached or needs review.
+- **Research** — unattended investigations that gather and verify web evidence, retain citations,
+  and export a finished Markdown, PDF, DOCX, or XLSX report into a persistent visual library.
 
 Your existing Claude, Codex, OpenCode, and optional Ollama installations power the app through
 their local CLIs. Akorith stores no provider API keys. Conversations, attachments, usage,
-projects, and Goal state stay in local SQLite and the app's managed data directory.
+projects, Goals, Research evidence, and generated deliverables stay in local SQLite and the app's
+managed data directory.
 
 ```
 ┌────────────┬─────────────────────────────────────────────┐
 │  Sidebar   │  General Chat: focused model conversation   │
 │ projects   │  Workspace: Codex-style direct project work │
-│ tasks      │  Loop · Dashboard · Benchmark · Plugins     │
+│ tasks      │  Loop · Research · Benchmark · Plugins      │
 └────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -56,6 +57,9 @@ into the conversation. Raw terminal output and Agent Activity are not part of th
   queued follow-ups, project-file mentions, diff review, and permissioned live project preview.
 - **Loop** — concurrent long-running Goals with an Understand → Plan → Execute → Analyze → Replan
   evidence cycle that stops only when the Goal is reached or needs review.
+- **Research** — concurrent autonomous investigations with explicit provider/model, Quick,
+  Research, Deep, or Continuous depth, verified sources and claims, pause/resume controls, and
+  validated Markdown/PDF/DOCX/XLSX deliverables with A4 cover previews in a durable library.
 - **Dashboard** — profile identity, compact 53-week token activity, local CPU/GPU telemetry,
   and connected-computer telemetry.
 - **Plugins** — audited local-tool registry, original tool identity assets, and diagnostics.
@@ -68,6 +72,20 @@ into the conversation. Raw terminal output and Agent Activity are not part of th
 - **Bottom workbench** — a real Git Changes review surface.
 - **Settings → Update** — update source checkouts safely from GitHub `main`, or download and
   install the latest packaged release on macOS and Windows.
+
+## Autonomous Research
+
+Open **Research**, describe the outcome once, choose a local CLI model, select the depth and output
+format, and start the job. Bounded jobs move through plan → research → verify → synthesize → export;
+Continuous jobs keep cycling until you pause them. Research tabs remain independent, up to three
+jobs can run concurrently, and interrupted work is recovered from durable checkpoints after an app
+restart.
+
+Each completed report keeps its source ledger, claim-to-source citations, validation state,
+checksum, and a generated A4 cover. The Library can open or reveal the real artifact and retains
+Markdown, PDF, DOCX, and XLSX work side by side. Web collection rejects private-network targets,
+bounds redirects and downloads, and treats retrieved pages as untrusted evidence rather than
+instructions.
 
 ## Install
 
@@ -259,7 +277,7 @@ certs are configured (never faked).
   on the logins already held by your `claude` / `codex` CLIs (and your local Ollama).
 - App data is kept **locally** in SQLite (`loopex.db`) and a small JSON config
   (`loopex.config.json`) in your OS user-data directory — chat history, usage stats, project
-  metadata, and settings only.
+  metadata, Research plans/evidence/citations, artifact metadata, and settings.
 - **Terminal commands run locally** in the project folder you select, on your machine.
 - Electron is locked down: context isolation on, sandbox on, Node integration off, a frozen
   preload bridge, a strict CSP, and prompts passed to CLIs over **stdin (never as shell
@@ -319,10 +337,10 @@ reloads, while image previews are restored from Akorith's private attachment sto
 
 Akorith is **chat-first**, in the spirit of Codex and ChatGPT: a calm workspace with a persistent
 project/task sidebar, one focused conversation, a bottom composer, and restrained green/purple
-status accents. CLI models run headlessly behind the conversation. Workspace shows meaningful
-activity with explanations; Loop uses a distinct evidence-cycle diagram; Dashboard, Benchmark,
-Plugins, Settings, and Changes share the same typography, spacing, radii, dark theme, and readable
-light theme.
+status accents. CLI models run headlessly behind the conversation. Workspace explains meaningful
+activity; Loop uses a compact stage rail and evidence timeline; Research combines a focused job
+composer with a book-like library. Dashboard, Benchmark, Plugins, Settings, and Changes share the
+same typography, spacing, radii, dark theme, and readable light theme.
 
 ## Screenshots
 
@@ -356,7 +374,8 @@ longer exposes the old Agent Activity terminal drawer in the normal Workspace fl
 ## Roadmap
 
 - **Now:** durable ChatGPT-style General Chat, Codex-style project work, concurrent evidence-based
-  Goals, file attachments, task queues/search/pins, real diff review, and in-app updates.
+  Goals, autonomous cited Research with four export formats, file attachments, task
+  queues/search/pins, real diff review, and in-app updates.
 - **Next:** signed/notarized release artifacts and deeper provider-native tool rendering.
 
 ## More
