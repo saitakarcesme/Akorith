@@ -183,6 +183,28 @@ export interface ResearchSource {
   verified: boolean
 }
 
+export type ResearchClaimStatus = 'unverified' | 'verified' | 'conflicted' | 'unsupported'
+export type ResearchEvidenceRelation = 'supports' | 'contradicts' | 'context'
+
+export interface ResearchClaimEvidence {
+  sourceId: string
+  evidence?: string
+  relation: ResearchEvidenceRelation
+}
+
+export interface ResearchClaim {
+  id: string
+  jobId: string
+  cycleId?: string
+  sectionId?: string
+  text: string
+  confidenceScore: number
+  status: ResearchClaimStatus
+  evidence: ResearchClaimEvidence[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface ResearchArtifact {
   id: string
   jobId: string
