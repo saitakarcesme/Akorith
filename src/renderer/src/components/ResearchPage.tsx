@@ -28,6 +28,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const [actionPending, setActionPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const actionPendingRef = useRef(false)
+  const detailRequestRef = useRef(0)
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selectedId
 
@@ -43,8 +44,12 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   }, [])
 
   const loadDetail = useCallback(async (id: string): Promise<ResearchJobDetail> => {
+    const request = ++detailRequestRef.current
     const next = await window.api.research.get(id)
-    if (selectedRef.current === id) setDetail(next)
+    if (request === detailRequestRef.current && selectedRef.current === id) {
+      setDetail(next)
+      setJobs((current) => current.map((job) => job.id === next.job.id ? next.job : job))
+    }
     return next
   }, [])
 
@@ -60,16 +65,26 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   useEffect(() => {
     if (!active) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
     setLoading(true)
-    void loadJobs()
-      .then(() => { if (!cancelled) setLoading(false) })
-      .catch((nextError) => {
+    const refresh = async (): Promise<void> => {
+      try {
+        await loadJobs()
+        if (!cancelled) setLoading(false)
+      } catch (nextError) {
         if (!cancelled) {
           setLoading(false)
           setError(errorMessage(nextError))
         }
-      })
-    return () => { cancelled = true }
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void refresh(), 5_000)
+      }
+    }
+    void refresh()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
   }, [active, loadJobs])
 
   useEffect(() => {
@@ -81,10 +96,8 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     let timer: ReturnType<typeof setTimeout> | null = null
     const poll = async (): Promise<void> => {
       try {
-        const next = await window.api.research.get(selectedId)
+        const next = await loadDetail(selectedId)
         if (cancelled) return
-        setDetail(next)
-        setJobs((current) => current.map((job) => job.id === next.job.id ? next.job : job))
         const activeStatus = next.running || !['completed', 'paused', 'archived'].includes(next.job.status)
         timer = setTimeout(() => void poll(), activeStatus ? 1_500 : 6_000)
       } catch (nextError) {
@@ -99,7 +112,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [active, selectedId])
+  }, [active, loadDetail, selectedId])
 
   useEffect(() => {
     if (!active) return
