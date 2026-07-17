@@ -1208,6 +1208,100 @@ textarea:focus-visible,
   padding: 0 !important;
 }
 
+/* Phase 66: Workspace and Loop can run their current web project and expose a
+   loopback-only visual stream. The toolbar stays compact until the user asks to
+   watch or interact, so it does not compete with the conversation. */
+.project-preview {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
+}
+.project-preview-bar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px 7px 12px;
+}
+.project-preview-title { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.project-preview-title > div { min-width: 0; }
+.project-preview-title strong { display: block; color: var(--text); font-size: 11px; font-weight: 630; }
+.project-preview-title span:not(.project-preview-dot) { display: block; max-width: min(560px, 62vw); overflow: hidden; color: var(--text-faint); font: 8.5px/1.45 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.project-preview-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text-faint); }
+.project-preview-dot.is-starting { background: var(--ak-purple); animation: akorith-icon-breathe 1.4s ease-in-out infinite; }
+.project-preview-dot.is-running { background: var(--ak-green-bright); box-shadow: 0 0 10px color-mix(in srgb, var(--ak-green-bright) 45%, transparent); }
+.project-preview-dot.is-error { background: var(--danger); }
+.project-preview-actions { display: flex; align-items: center; gap: 3px; }
+.project-preview-actions button {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.project-preview-actions button:hover,
+.project-preview-actions button.is-active { color: var(--text); border-color: var(--border-soft); background: var(--hover); }
+.project-preview-actions button.is-run { color: var(--bg); background: var(--text); }
+.project-preview-actions button.is-stop { color: var(--danger); }
+.project-preview-actions button:disabled { opacity: .35; cursor: default; }
+.project-preview-stage { padding: 0 8px 9px; border-top: 1px solid var(--border-soft); }
+.project-preview-frame {
+  position: relative;
+  width: 100%;
+  display: block;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #111;
+  cursor: crosshair;
+}
+.project-preview-frame img { width: 100%; height: auto; display: block; }
+.project-preview-cursor {
+  position: absolute;
+  z-index: 2;
+  top: -6px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  background: rgba(90, 211, 157, 0.7);
+  box-shadow: 0 0 0 3px rgba(20, 20, 22, 0.42);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.project-preview-loading { height: 180px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--text-faint); font-size: 10px; }
+.project-preview-loading span { width: 8px; height: 8px; border-radius: 50%; background: var(--ak-green-bright); animation: akorith-icon-breathe 1.4s ease-in-out infinite; }
+.project-preview-type { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 7px; }
+.project-preview-type input { min-width: 0; height: 31px; padding: 0 10px; color: var(--text); border: 1px solid var(--border); border-radius: 8px; background: var(--bg-input); font-size: 10px; }
+.project-preview-type button { min-width: 50px; height: 31px; color: var(--bg); border: 0; border-radius: 8px; background: var(--text); font-size: 9.5px; font-weight: 650; }
+.project-preview-type button:disabled { opacity: .35; }
+.project-preview-stage > p { margin: 7px 2px 0; color: var(--text-faint); font-size: 8.5px; line-height: 1.5; }
+.project-preview-error { padding: 7px 12px 9px; color: var(--danger); border-top: 1px solid color-mix(in srgb, var(--danger) 24%, transparent); font-size: 9px; line-height: 1.45; }
+.composer > .project-preview { margin-bottom: 7px; }
+.loop-v2-detail > .project-preview { margin: 6px 0; }
+
+@media (max-width: 620px) {
+  .project-preview-title span:not(.project-preview-dot) { max-width: 40vw; }
+  .project-preview-loading { height: 130px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-preview-dot.is-starting,
+  .project-preview-loading span { animation: none; }
+}
+
 @media (max-width: 760px) {
   .profile-heading h1 { font-size: 56px; }
   .profile-heading .profile-avatar.is-large { width: 76px; height: 76px; }

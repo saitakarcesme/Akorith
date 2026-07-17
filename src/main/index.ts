@@ -32,6 +32,7 @@ import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopA
 import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
 import { registerGitHubActivityIpc } from './github-activity'
+import { registerProjectPreviewIpc, stopAllProjectPreviews } from './project-preview'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -421,6 +422,7 @@ app.whenReady().then(() => {
   registerCompanionIpc()
   registerActionAgentIpc()
   registerGitHubActivityIpc()
+  registerProjectPreviewIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -465,6 +467,7 @@ app.whenReady().then(() => {
 // No zombie shells: every PTY dies with the app.
 app.on('will-quit', () => {
   stopProjectLoopAutoScheduler()
+  stopAllProjectPreviews()
   ptyManager.killAll()
   closeDb()
   void stopController()

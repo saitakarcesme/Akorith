@@ -53,7 +53,7 @@ into the conversation. Raw terminal output and Agent Activity are not part of th
 - **General Chat** — rich Markdown, tables, code blocks, images, and arbitrary local file
   attachments with durable history.
 - **Workspace** — direct project editing, activity explanations, fixed Step progress, Plan mode,
-  queued follow-ups, project-file mentions, and diff review.
+  queued follow-ups, project-file mentions, diff review, and permissioned live project preview.
 - **Loop** — concurrent long-running Goals with an Understand → Plan → Execute → Analyze → Replan
   evidence cycle that stops only when the Goal is reached or needs review.
 - **Dashboard** — profile identity, compact 53-week token activity, local CPU/GPU telemetry,
@@ -177,6 +177,16 @@ The fixed Step chip opens the six-stage project workflow. Every in-flight reques
 Stop control, and follow-up queue is keyed by session, so switching to another project or chat
 never carries the wrong running state with it. A small global indicator still shows how many tasks
 are working in the background.
+
+## Computer Use for projects
+
+Workspace and Loop include a compact **Computer Use** control for the selected project. Akorith
+inspects the project's declared package scripts and may launch only `dev`, `start`, `serve`, or
+`preview`, on a reserved loopback port. The running app can be opened in the system browser or
+viewed as a live, interactive stream directly above the composer; pointer movement, clicks, and
+focused-field typing are forwarded to an isolated offscreen browser. The stream never navigates
+outside `localhost`, uses no shell command strings, and stops its process group when requested or
+when Akorith exits. Finder reveal remains available for projects that do not expose a web preview.
 
 ## Connect your subscriptions
 

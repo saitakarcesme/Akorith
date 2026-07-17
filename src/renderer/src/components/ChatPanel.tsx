@@ -9,6 +9,7 @@ import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
 import { workspaceActivityStep } from './WorkspaceActivity'
 import WorkspaceStepDock from './WorkspaceStepDock'
+import { ProjectPreviewPanel } from './ProjectPreviewPanel'
 
 interface ChatPanelProps {
   mode: ChatMode
@@ -461,6 +462,7 @@ export default function ChatPanel({
 
   const composer = (
     <div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }}>
+      {hasProject && activeProject?.path && <ProjectPreviewPanel projectPath={activeProject.path} projectName={activeProject.name} />}
       {suggestion && <div className="router-suggestion"><div className="router-suggestion-head"><span className={`tier-badge tier-${suggestion.tier}`}>{suggestion.rank} · {suggestion.tier}</span><span className="router-target">→ {suggestion.providerLabel}{suggestion.model ? ` · ${suggestion.model}` : ''}</span></div><div className="router-reason">{suggestion.reason}</div><div className="router-actions"><button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>Use model</button><button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>Dismiss</button></div></div>}
       {currentQueue.length > 0 && <div className="composer-queue"><QueueIcon size={14} /><span>{currentQueue.length} follow-up{currentQueue.length === 1 ? '' : 's'} queued</span><button type="button" onClick={() => { queuedTurnsRef.current[activeSessionId!] = []; setQueueVersion((version) => version + 1) }}>Clear</button></div>}
       <div className={`composer-box ${intent === 'plan' ? 'is-plan' : ''}`}>

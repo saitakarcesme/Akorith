@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 64:
-Table Benchmark + Verified GitHub Loops**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 68:
+Permissioned Project Computer Use**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -761,6 +761,23 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Preserve the larger profile photo and display-name scale, but keep its weight and tracking aligned
   with Akorith's Avenir-led interface typography.
 - Verify the production build and computed Electron font family after installation.
+
+## Phase 68 - Permissioned Project Computer Use
+
+- Workspace and Loop mount the same compact Computer Use surface for the active project, without
+  changing General Chat. Users may reveal the directory, start an allowlisted declared web script,
+  open the loopback URL, watch a live frame, move/click the pointer, type into a focused field, and
+  stop the process.
+- `src/main/project-preview.ts` owns all trust decisions: canonical project paths, declared-script
+  inspection, loopback port allocation, `shell:false` process spawning, bounded logs, sandboxed
+  offscreen rendering, loopback-only navigation, session-scoped input, and process-group cleanup.
+- Renderer code must not receive a generic shell primitive or unrestricted browser target. Only
+  `dev`, `start`, `serve`, and `preview` scripts are launchable, and external opening is restricted
+  to the session's verified localhost URL.
+- The Browser Computer Use reference was exercised against
+  `~/Desktop/Projects/AkorithComputerUseLab`; the Akorith Electron smoke test then launched that
+  project, streamed it in Workspace, typed into the real page, stopped it, verified its port was
+  closed, and confirmed the same control appears in Loop.
 
 ## Rule: keep the docs current
 

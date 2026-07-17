@@ -418,6 +418,19 @@ const projectLoop = Object.freeze({
   inspectTarget: (path: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:inspectTarget', path)
 })
 
+// Permissioned local project runner + loopback-only visual stream.
+const projectPreview = Object.freeze({
+  inspect: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:inspect', projectPath),
+  start: (projectPath: string, script?: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:start', { projectPath, script }),
+  active: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:active', projectPath),
+  status: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:status', id),
+  capture: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:capture', id),
+  stop: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:stop', id),
+  open: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:open', id),
+  reveal: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:reveal', projectPath),
+  input: (input: unknown): Promise<unknown> => ipcRenderer.invoke('projectPreview:input', input)
+})
+
 // Phase 50: Companions — long-memory local personalities (no actions).
 const companion = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('companion:list'),
@@ -463,6 +476,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, projectPreview, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)

@@ -12,6 +12,7 @@ import { ArchiveIcon, FolderOpenIcon, LoopIcon, PlusIcon, SendIcon, StopIcon } f
 import { ComposerSendButton } from './CreationPrimitives'
 import LoopPipeline, { type LoopCyclePhase } from './LoopPipeline'
 import ModelPicker from './ModelPicker'
+import { ProjectPreviewPanel } from './ProjectPreviewPanel'
 
 interface ProjectLoopPageProps {
   active: boolean
@@ -470,6 +471,8 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
             <div className="loop-v2-steps">
               <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
             </div>
+
+            <ProjectPreviewPanel projectPath={selectedLoop.localPath} projectName={selectedLoop.githubName ?? projectName(selectedLoop.localPath)} />
 
             <div className="loop-chat-thread" aria-live="polite">
               <div className="loop-user-message">{selectedLoop.title}</div>

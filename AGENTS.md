@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 64
-(table-first Benchmark comparison, quiet Loop progress, and verified GitHub Loop workspaces).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 68
+(permissioned project Computer Use in Workspace and Loop).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -1749,6 +1749,24 @@ avatar and display-name scale, while matching the app's Avenir-led weight and tr
 
 Verification: typecheck/build plus Electron inspection confirming the computed profile font begins
 with Avenir Next and the existing centered profile geometry remains intact.
+
+### Phase 68: Permissioned Project Computer Use
+
+Workspace and Loop share `ProjectPreviewPanel`, a compact launcher and live project surface for the
+currently selected project. Main-process `project-preview.ts` canonicalizes the directory, reads
+declared package scripts, and permits only `dev`, `start`, `serve`, or `preview`. Never accept an
+arbitrary command string from renderer state.
+
+Each launch uses a reserved loopback port and `spawn()` with `shell:false`. The hidden offscreen
+BrowserWindow is sandboxed, denies new windows, and blocks every non-loopback navigation. Renderer
+capture/input IPC is session-scoped and supports pointer movement, click, bounded text insertion,
+and bounded key input. Stopping a preview or quitting Akorith terminates the process group and
+destroys the offscreen window.
+
+The reference interaction lab lives outside the repository at
+`~/Desktop/Projects/AkorithComputerUseLab`. Verification includes typecheck/build, Workspace and
+Loop regressions, an Electron launch/stream/type/stop smoke test, and confirmation that the preview
+port closes after Stop.
 
 ## Conventions
 

@@ -1862,6 +1862,47 @@ export interface ProjectLoopApi {
   inspectTarget(path: string): Promise<{ path: string; name: string; isRepo: boolean }>
 }
 
+export interface ProjectPreviewInspection {
+  projectPath: string
+  projectName: string
+  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | null
+  scripts: string[]
+  suggestedScript: string | null
+  runnable: boolean
+  note: string
+}
+
+export interface ProjectPreviewStatus {
+  id: string
+  projectPath: string
+  projectName: string
+  script: string
+  state: 'starting' | 'running' | 'stopped' | 'error'
+  url: string | null
+  startedAt: number
+  logs: string[]
+  error?: string
+}
+
+export interface ProjectPreviewCapture {
+  status: ProjectPreviewStatus
+  dataUrl: string | null
+  width: number
+  height: number
+}
+
+export interface ProjectPreviewApi {
+  inspect(projectPath: string): Promise<ProjectPreviewInspection>
+  start(projectPath: string, script?: string): Promise<ProjectPreviewStatus>
+  active(projectPath: string): Promise<ProjectPreviewStatus | null>
+  status(id: string): Promise<ProjectPreviewStatus>
+  capture(id: string): Promise<ProjectPreviewCapture>
+  stop(id: string): Promise<ProjectPreviewStatus>
+  open(id: string): Promise<boolean>
+  reveal(projectPath: string): Promise<boolean>
+  input(input: { id: string; type: 'move' | 'click'; x: number; y: number } | { id: string; type: 'text'; text: string } | { id: string; type: 'key'; key: string }): Promise<boolean>
+}
+
 export type OllamaAutoConnectResult =
   | { ok: true; active: OllamaActiveEndpoint; models: string[]; modelCount: number; switched: boolean }
   | { ok: false; error: string; lastSuccessfulBaseUrl?: string; triedCount: number }
@@ -2251,6 +2292,7 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
+  projectPreview: ProjectPreviewApi
   companion: CompanionApi
   actionAgent: ActionAgentApi
 }
