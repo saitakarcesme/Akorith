@@ -29,9 +29,11 @@ export interface RetrievedResearchSource {
 }
 
 export async function fetchResearchSource(rawUrl: string, signal?: AbortSignal): Promise<RetrievedResearchSource> {
+  throwIfResearchAborted(signal)
   let url = await assertPublicResearchUrl(rawUrl)
   const requestedUrl = url.toString()
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    throwIfResearchAborted(signal)
     await respectHostInterval(url.hostname, signal)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(new Error('Source request timed out.')), FETCH_TIMEOUT_MS)
@@ -164,6 +166,7 @@ function titleFromUrl(url: URL): string {
 }
 
 async function respectHostInterval(host: string, signal?: AbortSignal): Promise<void> {
+  throwIfResearchAborted(signal)
   const last = lastHostFetch.get(host) ?? 0
   const wait = Math.max(0, HOST_INTERVAL_MS - (Date.now() - last))
   if (wait > 0) {
@@ -182,4 +185,9 @@ async function respectHostInterval(host: string, signal?: AbortSignal): Promise<
     })
   }
   lastHostFetch.set(host, Date.now())
+}
+
+function throwIfResearchAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  throw signal.reason instanceof Error ? signal.reason : new Error('Research cancelled.')
 }
