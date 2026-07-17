@@ -123,11 +123,12 @@ export function archiveManagedResearchJob(id: string): ResearchJob {
 export function deleteManagedResearchJob(id: string): boolean {
   const job = requireResearchJob(id)
   requestResearchCancellation(id)
-  if (!isManagedResearchPath(job.workspaceDir, job.workspaceDir)) {
+  const root = researchRoot()
+  if (!isManagedResearchPath(root, job.workspaceDir)) {
     throw new Error('Research workspace is not managed by Akorith.')
   }
   const deleted = deleteResearchJob(id)
-  if (deleted && job.workspaceDir.startsWith(researchRoot())) {
+  if (deleted) {
     rmSync(job.workspaceDir, { recursive: true, force: true })
   }
   return deleted
