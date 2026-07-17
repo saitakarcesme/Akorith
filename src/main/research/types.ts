@@ -1,4 +1,4 @@
-export const RESEARCH_DEPTHS = ['quick', 'standard', 'deep'] as const
+export const RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'continuous'] as const
 export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number]
 
 export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'md', 'docx', 'xlsx'] as const
@@ -80,6 +80,15 @@ export const RESEARCH_DEPTH_PROFILES: Record<ResearchDepth, ResearchDepthProfile
     cycleIntervalMs: 2 * 60_000,
     maxCycles: 72,
     sourceTarget: 80
+  },
+  continuous: {
+    id: 'continuous',
+    label: 'Continuous research',
+    description: 'Keeps watching for new evidence until you explicitly pause or complete it.',
+    targetDurationMs: 0,
+    cycleIntervalMs: 15 * 60_000,
+    maxCycles: 0,
+    sourceTarget: 0
   }
 }
 
