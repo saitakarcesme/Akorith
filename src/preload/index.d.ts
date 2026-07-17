@@ -1487,6 +1487,208 @@ export interface LocalRuntimeApi {
   status(): Promise<RuntimeStatus>
 }
 
+// Evidence-backed autonomous Research.
+export type ResearchDepth = 'quick' | 'standard' | 'deep' | 'continuous'
+export type ResearchOutputFormat = 'pdf' | 'md' | 'docx' | 'xlsx'
+export type ResearchStatus =
+  | 'draft' | 'planning' | 'researching' | 'verifying' | 'synthesizing'
+  | 'exporting' | 'completed' | 'paused' | 'error' | 'archived'
+export type ResearchPhase = 'understand' | 'plan' | 'research' | 'verify' | 'synthesize' | 'export'
+
+export interface ResearchPlanSection {
+  id: string
+  title: string
+  objective: string
+  queries: string[]
+  status: 'pending' | 'active' | 'complete'
+}
+
+export interface ResearchPlan {
+  title: string
+  thesis: string
+  deliverable: string
+  sections: ResearchPlanSection[]
+  sourceStrategy: string[]
+  verificationCriteria: string[]
+}
+
+export interface ResearchJob {
+  id: string
+  title: string
+  prompt: string
+  status: ResearchStatus
+  phase: ResearchPhase
+  providerId: string
+  model?: string
+  depth: ResearchDepth
+  outputFormat: ResearchOutputFormat
+  targetDurationMs: number
+  maxCycles: number
+  sourceTarget: number
+  cycleCount: number
+  sourceCount: number
+  findingCount: number
+  workspaceDir: string
+  artifactPath?: string
+  coverPath?: string
+  plan?: ResearchPlan
+  summary?: string
+  error?: string
+  createdAt: number
+  updatedAt: number
+  startedAt?: number
+  completedAt?: number
+  nextRunAt?: number
+  heartbeatAt?: number
+  revision: number
+}
+
+export interface ResearchCycle {
+  id: string
+  jobId: string
+  cycleIndex: number
+  phase: ResearchPhase
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  objective: string
+  result?: string
+  sourceCount: number
+  findingCount: number
+  promptTokens?: number
+  completionTokens?: number
+  startedAt: number
+  endedAt?: number
+  error?: string
+}
+
+export interface ResearchEvent {
+  id: string
+  jobId: string
+  cycleId?: string
+  kind: string
+  title: string
+  detail?: string
+  createdAt: number
+}
+
+export interface ResearchSource {
+  id: string
+  jobId: string
+  cycleId?: string
+  url: string
+  title: string
+  publisher?: string
+  publishedAt?: string
+  accessedAt: number
+  excerpt?: string
+  relevance?: string
+  credibilityScore?: number
+  contentHash?: string
+  verified: boolean
+}
+
+export interface ResearchClaimEvidence {
+  sourceId: string
+  evidence?: string
+  relation: 'supports' | 'contradicts' | 'context'
+}
+
+export interface ResearchClaim {
+  id: string
+  jobId: string
+  cycleId?: string
+  sectionId?: string
+  text: string
+  confidenceScore: number
+  status: 'unverified' | 'verified' | 'conflicted' | 'unsupported'
+  evidence: ResearchClaimEvidence[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ResearchArtifact {
+  id: string
+  jobId: string
+  format: ResearchOutputFormat
+  title: string
+  path: string
+  coverPath?: string
+  byteSize: number
+  status: 'ready' | 'invalid'
+  checksum?: string
+  mimeType?: string
+  version: number
+  pageCount?: number
+  validationError?: string
+  createdAt: number
+}
+
+export interface ResearchCheckpoint {
+  id: string
+  jobId: string
+  cycleId?: string
+  idempotencyKey: string
+  phase: ResearchPhase
+  state: {
+    version: 1
+    jobId: string
+    cycleCount: number
+    currentPhase: ResearchPhase
+    completedSections: string[]
+    openQuestions: string[]
+    sourceCount: number
+    findingCount: number
+    readyToSynthesize: boolean
+    updatedAt: number
+  }
+  createdAt: number
+}
+
+export interface ResearchJobDetail {
+  job: ResearchJob
+  cycles: ResearchCycle[]
+  events: ResearchEvent[]
+  sources: ResearchSource[]
+  claims: ResearchClaim[]
+  artifacts: ResearchArtifact[]
+  checkpoint: ResearchCheckpoint | null
+  running: boolean
+}
+
+export interface CreateResearchJobInput {
+  prompt: string
+  title?: string
+  providerId: string
+  model?: string
+  depth: ResearchDepth
+  outputFormat: ResearchOutputFormat
+  autoStart?: boolean
+}
+
+export interface ResearchSchedulerSnapshot {
+  started: boolean
+  owner: string
+  maxConcurrency: number
+  activeJobIds: string[]
+  recoveredLeaseCount: number
+  recoveredCycleCount: number
+}
+
+export interface ResearchApi {
+  list(): Promise<ResearchJob[]>
+  get(id: string): Promise<ResearchJobDetail>
+  create(input: CreateResearchJobInput): Promise<ResearchJob>
+  pause(id: string): Promise<ResearchJob | null>
+  resume(id: string): Promise<ResearchJob | null>
+  archive(id: string): Promise<ResearchJob>
+  remove(id: string): Promise<boolean>
+  export(jobId: string, format: ResearchOutputFormat): Promise<ResearchArtifact>
+  openArtifact(id: string): Promise<boolean>
+  revealArtifact(id: string): Promise<boolean>
+  coverDataUrl(id: string): Promise<string | null>
+  openSource(id: string): Promise<boolean>
+  scheduler(): Promise<ResearchSchedulerSnapshot>
+}
+
 // Phase 48: project-focused Loop.
 export type ProjectLoopMode = 'project_builder' | 'repo_grower' | 'github_loop' | 'maintenance'
 export type ProjectLoopStatus = 'active' | 'paused' | 'needs_review' | 'error' | 'completed' | 'archived'
@@ -2292,6 +2494,7 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
+  research: ResearchApi
   projectPreview: ProjectPreviewApi
   companion: CompanionApi
   actionAgent: ActionAgentApi
