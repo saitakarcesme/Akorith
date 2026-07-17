@@ -438,7 +438,6 @@ export function initDb(): void {
       UNIQUE(job_id, url)
     );
     CREATE INDEX IF NOT EXISTS idx_research_sources_job ON research_sources(job_id, accessed_at);
-    CREATE INDEX IF NOT EXISTS idx_research_sources_hash ON research_sources(job_id, content_hash);
 
     CREATE TABLE IF NOT EXISTS research_artifacts (
       id         TEXT PRIMARY KEY,
@@ -561,6 +560,8 @@ export function initDb(): void {
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('benchmark_entries', 'artifact_path', 'TEXT')
+  ensureColumn('research_sources', 'content_hash', 'TEXT')
+  nextDb.exec('CREATE INDEX IF NOT EXISTS idx_research_sources_hash ON research_sources(job_id, content_hash);')
   ensureColumn('sessions', 'project_id', 'TEXT')
   ensureColumn('sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('messages', 'attachments', 'TEXT')
