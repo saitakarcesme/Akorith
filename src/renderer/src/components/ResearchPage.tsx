@@ -247,17 +247,21 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
         {error && <div className="research-page-alert" role="alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
         {surface === 'library' ? (
           <ResearchLibrary jobs={jobs} covers={covers} onSelect={openJob} />
-        ) : selectedId && detail?.job.id === selectedId ? (
-          <ResearchProgress
-            detail={detail}
-            actionPending={actionPending}
-            onPause={async () => { await runAction(() => window.api.research.pause(selectedId)) }}
-            onResume={async () => { await runAction(() => window.api.research.resume(selectedId)) }}
-            onExport={async (format: ResearchOutputFormat) => { await runAction(() => window.api.research.export(selectedId, format)) }}
-            onOpenArtifact={async (id) => { await runAction(() => window.api.research.openArtifact(id)) }}
-            onRevealArtifact={async (id) => { await runAction(() => window.api.research.revealArtifact(id)) }}
-            onOpenSource={async (id) => { await runAction(() => window.api.research.openSource(id)) }}
-          />
+        ) : selectedId ? (
+          detail?.job.id === selectedId ? (
+            <ResearchProgress
+              detail={detail}
+              actionPending={actionPending}
+              onPause={async () => { await runAction(() => window.api.research.pause(selectedId)) }}
+              onResume={async () => { await runAction(() => window.api.research.resume(selectedId)) }}
+              onExport={async (format: ResearchOutputFormat) => { await runAction(() => window.api.research.export(selectedId, format)) }}
+              onOpenArtifact={async (id) => { await runAction(() => window.api.research.openArtifact(id)) }}
+              onRevealArtifact={async (id) => { await runAction(() => window.api.research.revealArtifact(id)) }}
+              onOpenSource={async (id) => { await runAction(() => window.api.research.openSource(id)) }}
+            />
+          ) : (
+            <div className="research-page-loading" role="status"><i aria-hidden="true" /><span>Loading research…</span></div>
+          )
         ) : loading ? (
           <div className="research-page-loading" role="status"><i aria-hidden="true" /><span>Loading Research…</span></div>
         ) : (
