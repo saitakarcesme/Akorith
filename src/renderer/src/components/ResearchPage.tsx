@@ -27,6 +27,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const [loading, setLoading] = useState(true)
   const [actionPending, setActionPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const actionPendingRef = useRef(false)
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selectedId
 
@@ -119,8 +120,9 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     [jobs]
   )
 
-  async function runAction(action: () => Promise<unknown>): Promise<void> {
-    if (actionPending) return
+  async function runAction(action: () => Promise<unknown>): Promise<boolean> {
+    if (actionPendingRef.current) return false
+    actionPendingRef.current = true
     setActionPending(true)
     setError(null)
     try {
@@ -129,19 +131,27 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       if (selectedRef.current && nextJobs.some((job) => job.id === selectedRef.current)) {
         await loadDetail(selectedRef.current)
       }
+      return true
     } catch (nextError) {
       setError(errorMessage(nextError))
+      return false
     } finally {
+      actionPendingRef.current = false
       setActionPending(false)
     }
   }
 
-  async function createResearch(input: CreateResearchJobInput): Promise<void> {
-    await runAction(async () => {
+  async function createResearch(input: CreateResearchJobInput): Promise<boolean> {
+    let createdId: string | null = null
+    const created = await runAction(async () => {
       const job = await window.api.research.create(input)
+      createdId = job.id
+      selectedRef.current = job.id
       setSelectedId(job.id)
       setSurface('workspace')
     })
+    if (created && createdId) await loadDetail(createdId)
+    return created
   }
 
   function openJob(id: string): void {
@@ -222,12 +232,12 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
           <ResearchProgress
             detail={detail}
             actionPending={actionPending}
-            onPause={() => runAction(() => window.api.research.pause(selectedId))}
-            onResume={() => runAction(() => window.api.research.resume(selectedId))}
-            onExport={(format: ResearchOutputFormat) => runAction(() => window.api.research.export(selectedId, format))}
-            onOpenArtifact={(id) => runAction(() => window.api.research.openArtifact(id))}
-            onRevealArtifact={(id) => runAction(() => window.api.research.revealArtifact(id))}
-            onOpenSource={(id) => runAction(() => window.api.research.openSource(id))}
+            onPause={async () => { await runAction(() => window.api.research.pause(selectedId)) }}
+            onResume={async () => { await runAction(() => window.api.research.resume(selectedId)) }}
+            onExport={async (format: ResearchOutputFormat) => { await runAction(() => window.api.research.export(selectedId, format)) }}
+            onOpenArtifact={async (id) => { await runAction(() => window.api.research.openArtifact(id)) }}
+            onRevealArtifact={async (id) => { await runAction(() => window.api.research.revealArtifact(id)) }}
+            onOpenSource={async (id) => { await runAction(() => window.api.research.openSource(id)) }}
           />
         ) : loading ? (
           <div className="research-page-loading"><i /><span>Loading Research…</span></div>

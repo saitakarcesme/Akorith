@@ -25,7 +25,7 @@ interface ResearchComposerProps {
   providers: ProviderInfo[] | null
   disabled?: boolean
   compact?: boolean
-  onSubmit: (input: CreateResearchJobInput) => Promise<void>
+  onSubmit: (input: CreateResearchJobInput) => Promise<boolean>
 }
 
 export default function ResearchComposer({
@@ -60,7 +60,7 @@ export default function ResearchComposer({
     if (!prompt.trim() || !providerId || disabled || submitting) return
     setSubmitting(true)
     try {
-      await onSubmit({
+      const created = await onSubmit({
         prompt: prompt.trim(),
         providerId,
         model: model || undefined,
@@ -68,7 +68,7 @@ export default function ResearchComposer({
         outputFormat,
         autoStart: true
       })
-      setPrompt('')
+      if (created) setPrompt('')
     } finally {
       setSubmitting(false)
     }
