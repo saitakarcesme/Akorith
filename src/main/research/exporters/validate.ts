@@ -76,7 +76,10 @@ async function validateDocx(bytes: Buffer): Promise<void> {
 
 async function validateXlsx(bytes: Buffer): Promise<void> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(bytes)
+  // ExcelJS models its input as an ArrayBuffer. Copy the filesystem buffer so
+  // a SharedArrayBuffer-backed view can never cross the package boundary.
+  const arrayBuffer = Uint8Array.from(bytes).buffer
+  await workbook.xlsx.load(arrayBuffer)
   for (const required of ['Overview', 'Findings', 'Sources', 'Methodology']) {
     if (!workbook.getWorksheet(required)) throw new Error(`Workbook is missing its ${required} sheet.`)
   }
