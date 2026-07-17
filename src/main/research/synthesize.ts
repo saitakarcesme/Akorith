@@ -9,7 +9,7 @@ import {
   logResearchEvent,
   updateResearchJob
 } from './store'
-import type { ResearchArtifact, ResearchPlan } from './types'
+import { RESEARCH_DEPTH_PROFILES, type ResearchArtifact, type ResearchPlan } from './types'
 import {
   RESEARCH_FINDINGS_FILE,
   RESEARCH_REPORT_FILE,
@@ -82,7 +82,7 @@ export async function synthesizeResearchJob(
       plan: resetPlan,
       status: 'researching',
       phase: 'research',
-      nextRunAt: now + 15 * 60_000,
+      nextRunAt: now + RESEARCH_DEPTH_PROFILES.continuous.cycleIntervalMs,
       error: undefined
     })
     logResearchEvent({
