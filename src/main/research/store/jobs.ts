@@ -34,10 +34,13 @@ export function validateCreateResearchJobInput(input: CreateResearchJobInput): v
   if (!RESEARCH_OUTPUT_FORMATS.includes(input.outputFormat)) throw new Error('invalid research output format')
 }
 
-export function createResearchJob(input: CreateResearchJobInput, workspaceDir: string): ResearchJob {
+export function createResearchJob(
+  input: CreateResearchJobInput,
+  workspaceDir: string,
+  id = randomUUID()
+): ResearchJob {
   validateCreateResearchJobInput(input)
   const now = Date.now()
-  const id = randomUUID()
   const profile = RESEARCH_DEPTH_PROFILES[input.depth]
   const title = (input.title?.trim() || titleFromPrompt(input.prompt)).slice(0, MAX_TITLE_LENGTH)
   const status = input.autoStart === false ? 'draft' : 'planning'
