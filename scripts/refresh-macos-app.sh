@@ -99,7 +99,27 @@ echo "Validated replacement: $STAGING"
 
 # 4) Gracefully quit a running Akorith (only the Akorith app, nothing else).
 osascript -e 'tell application "Akorith" to quit' >/dev/null 2>&1 || true
-sleep 1
+for _ in {1..10}; do
+  if ! pgrep -f '/Akorith.app/Contents/MacOS/Akorith' >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if pgrep -f '/Akorith.app/Contents/MacOS/Akorith' >/dev/null 2>&1; then
+  echo "INSTALL FAILED: the running Akorith process did not quit."
+  echo "The installed app was not moved."
+  exit 1
+fi
+
+# A static codesign check missed a real DYLD Team-ID failure in v0.9.2. Launch the
+# staged app before moving the working installation so that framework loading is
+# exercised under the same hardened-runtime rules users receive.
+if ! bash "$REPO_ROOT/scripts/verify-macos-app.sh" "$STAGING"; then
+  echo "INSTALL FAILED: the replacement could not pass the macOS launch smoke test."
+  echo "The installed app was not moved."
+  exit 1
+fi
 
 # 5) Back up old copies (move, never delete).
 if [ "${#FOUND_COPIES[@]}" -gt 0 ]; then

@@ -830,6 +830,18 @@ local model, attempts, validated changes, commits, last validation, and last com
   typecheck/build, Research/OpenCode/persistence suites, artifact-tool rendering,
   `slides_test.py`, and wide/narrow Electron checks for brand alignment and Research UI geometry.
 
+## Phase 71 - Launch-Safe macOS Releases
+
+- macOS packages use `scripts/sign-macos.cjs`: a real certificate is retained when available and
+  a single ad-hoc identity is used as the CI fallback. Root and inherited entitlements are explicit
+  build resources and must preserve Electron JIT plus disabled library validation.
+- CI extracts the exact publishable ZIP with `npm run verify:macos-artifact`; it then verifies the
+  app/framework signatures and required entitlement and launches the actual executable long enough
+  to catch archive, DYLD, or Team-ID failures before artifact upload.
+- `refresh-macos-app.sh` runs the same launch smoke test against the staged replacement after the
+  current app exits and before the working installation is moved. Never treat a static codesign
+  result as proof that a packaged Electron app can launch.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

@@ -64,6 +64,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
 
+      - name: Verify published macOS ZIP launches
+        if: startsWith(matrix.target, 'mac-')
+        run: npm run verify:macos-artifact
+
       - name: Package Windows
         if: matrix.target == 'windows-x64'
         run: npx electron-builder --win --x64 --publish never

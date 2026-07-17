@@ -12,6 +12,7 @@ const { execSync } = require('child_process')
 const root = join(__dirname, '..')
 const pkg = require(join(root, 'package.json'))
 const build = pkg.build ?? {}
+const mac = build.mac ?? {}
 const win = build.win ?? {}
 const nsis = build.nsis ?? {}
 
@@ -82,6 +83,23 @@ try {
 // 3. Targets
 const macT = JSON.stringify(build.mac?.target ?? [])
 macT.includes('dmg') ? ok('mac dmg target configured') : warn('mac dmg target not configured')
+mac.sign === './scripts/sign-macos.cjs' && existsSync(join(root, 'scripts/sign-macos.cjs'))
+  ? ok('mac custom signer provides a safe ad-hoc CI fallback')
+  : bad(`mac.sign should point to ./scripts/sign-macos.cjs, got "${mac.sign}"`)
+for (const [key, expected] of [
+  ['entitlements', 'build/entitlements.mac.plist'],
+  ['entitlementsInherit', 'build/entitlements.mac.inherit.plist']
+]) {
+  mac[key] === expected && existsSync(join(root, expected))
+    ? ok(`mac.${key} points to ${expected}`)
+    : bad(`mac.${key} should point to ${expected}, got "${mac[key]}"`)
+}
+pkg.scripts?.['verify:macos-app'] && existsSync(join(root, 'scripts/verify-macos-app.sh'))
+  ? ok('packaged macOS launch smoke test is configured')
+  : bad('verify:macos-app script is missing')
+pkg.scripts?.['verify:macos-artifact'] && existsSync(join(root, 'scripts/verify-macos-artifact.sh'))
+  ? ok('published macOS ZIP extraction/launch gate is configured')
+  : bad('verify:macos-artifact script is missing')
 const winT = JSON.stringify(win.target ?? [])
 winT.includes('nsis') ? ok('win nsis target configured') : warn('win nsis target not configured')
 winT.includes('portable') ? ok('win portable target configured') : warn('win portable target not configured')
@@ -138,8 +156,8 @@ try {
   warn('git status unavailable')
 }
 
-// 7. Signing reminder (never fails)
-console.log('  note  builds are UNSIGNED unless signing certs/secrets are configured (Gatekeeper/SmartScreen will warn on other machines).')
+// 8. Signing reminder (never fails)
+console.log('  note  macOS uses a coherent ad-hoc fallback without Developer ID secrets; Gatekeeper will still warn on other machines until notarization is configured.')
 
 console.log('')
 console.log(`== ${errors} error(s), ${warnings} warning(s) ==`)

@@ -1833,6 +1833,20 @@ The deterministic Research fixture matrix is now 4 depths × 2 provider families
 Research persistence/backfill, artifact-tool rendering plus `slides_test.py`, and wide/narrow
 Electron inspection of brand alignment and the updated Research UI.
 
+### Phase 71: Launch-Safe macOS Releases
+
+macOS release packaging must never publish or install an Electron bundle that only passes a static
+signature check. `scripts/sign-macos.cjs` uses a discovered certificate when available and one
+coherent ad-hoc identity otherwise, while explicit root/inherited entitlements preserve JIT and
+disable library validation for Electron's nested framework under hardened runtime.
+
+Every macOS CI package extracts the exact publishable ZIP through
+`scripts/verify-macos-artifact.sh`, then runs `scripts/verify-macos-app.sh`. The verifier checks the
+bundle and Electron Framework signatures, requires the library-validation entitlement, then launches
+the real executable and proves it remains alive. The local refresh flow performs the same launch
+smoke test on its staged replacement after quitting the current process but before moving the working
+installation. A static `codesign --verify` result alone is not a sufficient release gate.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
