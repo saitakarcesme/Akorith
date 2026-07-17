@@ -22,7 +22,8 @@ export async function searchResearchWeb(
   try {
     const results = await searchDuckDuckGo(clean, limit, options.signal)
     if (results.length > 0) return results
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted) throw options.signal.reason ?? error
     // A public search frontend may rate-limit automated requests. The RSS
     // fallback keeps the job moving without pretending results were found.
   }
