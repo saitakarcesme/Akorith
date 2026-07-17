@@ -7,6 +7,7 @@ import {
   clearResearchCancellation,
   createResearchJob,
   deleteResearchJob,
+  getResearchArtifact,
   getResearchJob,
   latestResearchCheckpoint,
   listLatestResearchEvents,
@@ -140,17 +141,15 @@ export async function exportManagedResearchJob(
   return exportResearchJob(id, format)
 }
 
-export async function openResearchArtifact(path: string): Promise<void> {
-  const job = findJobForManagedPath(path)
-  if (!job || !existsSync(path)) throw new Error('Research artifact is unavailable.')
-  const error = await shell.openPath(path)
+export async function openResearchArtifact(id: string): Promise<void> {
+  const { artifact } = requireManagedArtifact(id)
+  const error = await shell.openPath(artifact.path)
   if (error) throw new Error(error)
 }
 
-export function revealResearchArtifact(path: string): void {
-  const job = findJobForManagedPath(path)
-  if (!job || !existsSync(path)) throw new Error('Research artifact is unavailable.')
-  shell.showItemInFolder(path)
+export function revealResearchArtifact(id: string): void {
+  const { artifact } = requireManagedArtifact(id)
+  shell.showItemInFolder(artifact.path)
 }
 
 export function researchCoverDataUrl(id: string): string | null {
@@ -169,8 +168,13 @@ function requireResearchJob(id: string): ResearchJob {
   return job
 }
 
-function findJobForManagedPath(path: string): ResearchJob | null {
-  if (typeof path !== 'string' || path.length > 4_096) return null
-  return listResearchJobs({ includeArchived: true, limit: 1_000 })
-    .find((job) => isManagedResearchPath(job.workspaceDir, path)) ?? null
+function requireManagedArtifact(id: string): { job: ResearchJob; artifact: ResearchArtifact } {
+  if (typeof id !== 'string' || !/^[\w-]{1,64}$/.test(id)) throw new Error('invalid research artifact id')
+  const artifact = getResearchArtifact(id)
+  if (!artifact) throw new Error('Research artifact is unavailable.')
+  const job = requireResearchJob(artifact.jobId)
+  if (!existsSync(artifact.path) || !isManagedResearchPath(job.workspaceDir, artifact.path)) {
+    throw new Error('Research artifact is unavailable.')
+  }
+  return { job, artifact }
 }
