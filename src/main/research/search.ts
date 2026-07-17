@@ -72,6 +72,9 @@ async function searchBingRss(query: string, limit: number, signal?: AbortSignal)
 }
 
 async function fetchSearchDocument(url: URL, signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error ? signal.reason : new Error('Research cancelled.')
+  }
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(new Error('Search timed out.')), SEARCH_TIMEOUT_MS)
   const abort = (): void => controller.abort(signal?.reason)
