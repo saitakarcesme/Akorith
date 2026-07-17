@@ -121,6 +121,7 @@ function renderReport(doc: PdfDoc, document: ResearchDocument): void {
     heading(doc, 'Methodology', 17)
     for (const item of document.methodology) bullet(doc, item)
     if (document.verificationCriteria.length > 0) {
+      ensureSpace(doc, 96)
       doc.moveDown(0.5)
       doc.font('Helvetica-Bold').fontSize(11).fillColor('#202321').text('Verification criteria')
       for (const item of document.verificationCriteria) bullet(doc, item)

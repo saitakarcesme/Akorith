@@ -103,6 +103,15 @@ async function verifyContainer(
   }
   assert.ok(zip.file('xl/workbook.xml'), 'XLSX must contain a workbook manifest')
   assert.ok(zip.file('xl/worksheets/sheet1.xml'), 'XLSX must contain its overview worksheet')
+  for (const sheetNumber of [1, 2, 3, 4]) {
+    const xml = await zip.file(`xl/worksheets/sheet${sheetNumber}.xml`)?.async('text')
+    assert.ok(xml, `XLSX must contain worksheet ${sheetNumber}`)
+    assert.match(xml, /<pageSetup\b[^>]*fitToWidth="1"/, `worksheet ${sheetNumber} must fit to one printed page wide`)
+  }
+  const findingsXml = await zip.file('xl/worksheets/sheet2.xml')!.async('text')
+  const sourcesXml = await zip.file('xl/worksheets/sheet3.xml')!.async('text')
+  assert.match(findingsXml, /<pageSetup\b[^>]*orientation="landscape"/, 'Findings must print in landscape orientation')
+  assert.match(sourcesXml, /<pageSetup\b[^>]*orientation="landscape"/, 'Sources must print in landscape orientation')
 }
 
 function escapeRegExp(value: string): string {

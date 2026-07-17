@@ -15,6 +15,15 @@ const COLORS = {
   red: 'FF9A534D'
 }
 
+const PRINT_MARGINS = {
+  left: 0.28,
+  right: 0.28,
+  top: 0.4,
+  bottom: 0.4,
+  header: 0.15,
+  footer: 0.15
+}
+
 export async function exportResearchXlsx(
   workspaceDir: string,
   research: ResearchDocument,
@@ -44,7 +53,16 @@ export function sanitizeSpreadsheetCell(value: string): string {
 function addOverviewSheet(workbook: ExcelJS.Workbook, research: ResearchDocument): void {
   const sheet = workbook.addWorksheet('Overview', {
     views: [{ showGridLines: false }],
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+    pageSetup: {
+      paperSize: 9,
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: PRINT_MARGINS,
+      printArea: 'A1:E28'
+    }
   })
   sheet.columns = [{ width: 4 }, { width: 22 }, { width: 58 }, { width: 24 }, { width: 4 }]
   sheet.mergeCells('B2:D2')
@@ -91,7 +109,17 @@ function addOverviewSheet(workbook: ExcelJS.Workbook, research: ResearchDocument
 
 function addFindingsSheet(workbook: ExcelJS.Workbook, research: ResearchDocument): void {
   const sheet = workbook.addWorksheet('Findings', {
-    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }]
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }],
+    pageSetup: {
+      paperSize: 9,
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: PRINT_MARGINS,
+      printTitlesRow: '1:1'
+    }
   })
   sheet.columns = [
     { header: 'Section', key: 'section', width: 24 },
@@ -121,6 +149,7 @@ function addFindingsSheet(workbook: ExcelJS.Workbook, research: ResearchDocument
   }
   formatTableSheet(sheet)
   sheet.autoFilter = { from: 'A1', to: 'E1' }
+  sheet.pageSetup.printArea = `A1:E${Math.max(1, sheet.rowCount)}`
   sheet.getColumn('confidence').numFmt = '0%'
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
@@ -131,7 +160,17 @@ function addFindingsSheet(workbook: ExcelJS.Workbook, research: ResearchDocument
 
 function addSourcesSheet(workbook: ExcelJS.Workbook, research: ResearchDocument): void {
   const sheet = workbook.addWorksheet('Sources', {
-    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }]
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }],
+    pageSetup: {
+      paperSize: 9,
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: PRINT_MARGINS,
+      printTitlesRow: '1:1'
+    }
   })
   sheet.columns = [
     { header: '#', key: 'index', width: 7 },
@@ -161,12 +200,24 @@ function addSourcesSheet(workbook: ExcelJS.Workbook, research: ResearchDocument)
   })
   formatTableSheet(sheet)
   sheet.autoFilter = { from: 'A1', to: 'I1' }
+  sheet.pageSetup.printArea = `A1:I${Math.max(1, sheet.rowCount)}`
   sheet.getColumn('accessed').numFmt = 'yyyy-mm-dd'
   sheet.getColumn('credibility').numFmt = '0%'
 }
 
 function addMethodologySheet(workbook: ExcelJS.Workbook, research: ResearchDocument): void {
-  const sheet = workbook.addWorksheet('Methodology', { views: [{ showGridLines: false }] })
+  const sheet = workbook.addWorksheet('Methodology', {
+    views: [{ showGridLines: false }],
+    pageSetup: {
+      paperSize: 9,
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: PRINT_MARGINS
+    }
+  })
   sheet.columns = [{ width: 4 }, { width: 28 }, { width: 82 }, { width: 4 }]
   sectionHeading(sheet, 2, 'Research method')
   const methods = research.methodology.length > 0 ? research.methodology : ['No explicit methodology was recorded.']
@@ -177,6 +228,7 @@ function addMethodologySheet(workbook: ExcelJS.Workbook, research: ResearchDocum
     ? research.verificationCriteria
     : ['Claims without evidence remain visibly unverified.']
   criteria.forEach((item, index) => addMethodRow(sheet, verificationStart + 2 + index, index + 1, item))
+  sheet.pageSetup.printArea = `A1:D${Math.max(1, sheet.rowCount)}`
 }
 
 function formatTableSheet(sheet: ExcelJS.Worksheet): void {
