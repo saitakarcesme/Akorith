@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 68:
-Permissioned Project Computer Use**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 69:
+Autonomous Research**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -351,6 +351,9 @@ Permissioned Project Computer Use**.
 - [x] **Phase 58** - Codex-Parity Chat + Durable Attachments. General Chat and Workspace render
       rich Markdown and durable files; Workspace adds Plan, Queue, project-file mentions, real
       Changes, task search/pins, and per-session streaming/navigation continuity.
+- [x] **Phase 69** - Autonomous Research. A first-class Research sidebar surface runs concurrent,
+      unattended CLI-model investigations across four depth modes, persists evidence/checkpoints,
+      and publishes validated PDF, Markdown, DOCX, or XLSX artifacts with A4 Library covers.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -778,6 +781,30 @@ local model, attempts, validated changes, commits, last validation, and last com
   `~/Desktop/Projects/AkorithComputerUseLab`; the Akorith Electron smoke test then launched that
   project, streamed it in Workspace, typed into the real page, stopped it, verified its port was
   closed, and confirmed the same control appears in Loop.
+
+## Phase 69 - Autonomous Research
+
+- Research is independent from Chat, Workspace, and Loop. Its tabs keep concurrent investigations
+  open; the Research/Library switch exposes active progress and the persistent book-style shelf.
+- The composer takes one autonomous request, an explicit CLI provider/model, Quick (~10 minutes),
+  Research (~1 hour), Deep (10+ hours), or Continuous depth, and PDF/Markdown/DOCX/XLSX output.
+  Continuous jobs run until paused; bounded jobs follow plan -> research -> verify -> synthesize ->
+  export and complete without asking follow-up questions.
+- `src/main/research/` owns the durable state machine. Eight additive SQLite tables retain jobs,
+  cycles, checkpoints, events, sources, claims, evidence links, and versioned artifacts. The
+  scheduler caps concurrency at three, renews leases by heartbeat, recovers interrupted work after
+  restart, and uses per-job cancellation for pause/resume/shutdown.
+- Only public HTTP(S) evidence is fetched. SSRF guards reject credentials, unusual ports, and
+  private/reserved addresses on initial and redirected URLs; acquisition also bounds redirects,
+  time, host rate, bytes, and extracted text. Canonical URL/content deduplication, untrusted-source
+  containment, explicit citations, and unsupported/conflicted claim states prevent invented proof.
+- Renderer IPC accepts managed job/source/artifact IDs rather than filesystem paths. Each export
+  receives a 794 x 1123 A4 cover and must pass format-specific structure, citation/package/sheet,
+  formula-safety, size, and SHA-256 checks before Open/Reveal becomes available.
+- Verification: `npm run typecheck`, `npm run build`, `npm run verify:research`, and
+  `npm run verify:research-live:check`. Run `npm run verify:research-live -- --provider all --continuous`
+  only for an intentional signed-in provider smoke test; add `--persist` only to retain those jobs
+  in the real Library.
 
 ## Rule: keep the docs current
 

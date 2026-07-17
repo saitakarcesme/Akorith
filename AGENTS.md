@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 68
-(permissioned project Computer Use in Workspace and Loop).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 69
+(autonomous, durable Research with validated multi-format deliverables).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -1767,6 +1767,37 @@ The reference interaction lab lives outside the repository at
 `~/Desktop/Projects/AkorithComputerUseLab`. Verification includes typecheck/build, Workspace and
 Loop regressions, an Electron launch/stream/type/stop smoke test, and confirmation that the preview
 port closes after Stop.
+
+### Phase 69: Autonomous Research
+
+Research is a first-class sidebar destination, separate from General Chat, Workspace, and Loop.
+`ResearchPage` keeps concurrent investigations in tabs and switches between the active Research
+workspace and a persistent Library. `ResearchComposer` accepts one unattended research request,
+an explicit CLI provider/model, Quick (~10 minutes), Research (~1 hour), Deep (10+ hours), or
+Continuous depth, and a PDF, Markdown, DOCX, or XLSX deliverable. Continuous work remains scheduled
+until explicitly paused; bounded depths plan, research, verify, synthesize, export, and complete.
+
+The main-process `src/main/research/` engine owns every lifecycle transition. Eight additive SQLite
+tables persist jobs, cycles, checkpoints, events, sources, claims, claim-source links, and versioned
+artifacts. The scheduler runs at most three jobs concurrently, uses two-minute leases with 30-second
+heartbeats, recovers expired leases/interrupted cycles after restart, and scopes pause/resume/cancel
+through per-job `AbortController`s. The renderer receives typed job data and managed IDs only; it
+never chooses a research workspace path or opens an arbitrary filesystem target.
+
+Web acquisition permits public HTTP(S) only. It rejects credential-bearing URLs, non-standard
+ports, local/private/reserved addresses and redirect pivots, and bounds redirects, request time,
+host rate, source size, and extracted text. DuckDuckGo HTML plus Bing RSS discovery feed bounded
+HTML/PDF extraction, canonical URL/content deduplication, source credibility metadata, explicit
+claim-to-source citations, and prompt-injection containment. Source text is evidence, never model
+instructions; inaccessible evidence must remain an explicit gap rather than a fabricated fact.
+
+Every publish creates a deterministic 794 x 1123 A4 portrait cover for the book-style Library and
+a new artifact version. Export validation checks SHA-256/size, Markdown structure and references,
+PDF cover/report pages, DOCX package structure, and XLSX Overview/Findings/Sources/Methodology sheets
+plus formula-injection safety before exposing Open/Reveal actions. Verify with `npm run typecheck`,
+`npm run build`, `npm run verify:research`, and `npm run verify:research-live:check`; an intentional
+provider smoke run uses `npm run verify:research-live -- --provider all --continuous` (add
+`--persist` only when its test records should remain in the real Research Library).
 
 ## Conventions
 
