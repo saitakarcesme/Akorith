@@ -78,6 +78,17 @@ export function LoopIcon(props: IconProps): JSX.Element {
   )
 }
 
+export function ResearchIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
+      <path d="M20 11V5.5A2.5 2.5 0 0 0 17.5 3H13v16h1.5" />
+      <circle cx="18" cy="17" r="3" />
+      <path d="m20.2 19.2 1.8 1.8" />
+    </IconShell>
+  )
+}
+
 export function FolderIcon(props: IconProps): JSX.Element {
   return (
     <IconShell {...props}>

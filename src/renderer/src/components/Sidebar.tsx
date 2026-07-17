@@ -16,6 +16,7 @@ import {
   PlusIcon,
   PinIcon,
   SearchIcon,
+  ResearchIcon,
   SettingsIcon,
   TrashIcon
 } from './icons'
@@ -55,6 +56,7 @@ interface SidebarProps {
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
   { view: 'loops', label: 'Loop', icon: LoopIcon },
+  { view: 'research', label: 'Research', icon: ResearchIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon }
 ]
