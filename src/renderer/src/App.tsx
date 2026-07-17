@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard'
 import Plugins from './components/Plugins'
 import TestPage from './components/TestPage'
 import ProjectLoopPage from './components/ProjectLoopPage'
+import ResearchPage from './components/ResearchPage'
 import { ChevronIcon, PanelsIcon } from './components/icons'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
@@ -440,7 +441,9 @@ export default function App(): JSX.Element {
             ? 'Benchmark'
             : view === 'loops'
               ? 'Loop'
-              : 'Plugins'
+              : view === 'research'
+                ? 'Research'
+                : 'Plugins'
   const chromeScope =
     view === 'general'
       ? 'Model chat'
@@ -526,6 +529,12 @@ export default function App(): JSX.Element {
       {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
       <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
         <ProjectLoopPage active={view === 'loops'} activeProject={activeProject} />
+      </div>
+      {/* Research remains mounted so its open tabs and library selection survive
+          navigation. The durable main-process scheduler keeps working even when
+          this renderer surface is hidden or the window is unfocused. */}
+      <div className="research-page-wrap" style={{ display: view === 'research' ? 'flex' : 'none' }}>
+        <ResearchPage active={view === 'research'} />
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
