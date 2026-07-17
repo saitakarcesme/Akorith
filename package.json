@@ -20,6 +20,7 @@
     "verify:controller": "tsx scripts/verify-controller.ts",
     "verify:startup-hydration": "tsx scripts/verify-startup-hydration.ts",
     "verify:research-contracts": "tsx scripts/research-verify-contracts.ts",
+    "verify:research-artifacts": "tsx scripts/research-verify-artifacts.ts",
     "verify:update-version": "tsx scripts/verify-update-version.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
