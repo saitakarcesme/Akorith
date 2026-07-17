@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
@@ -52,6 +54,7 @@ if (isolatedUserData) {
 
 async function main(): Promise<void> {
   await app.whenReady()
+  const checkoutBefore = checkoutFingerprint(process.cwd())
   try {
     initDb()
     const availability = await describeProviders()
@@ -76,10 +79,16 @@ async function main(): Promise<void> {
     const results: SmokeResult[] = []
     for (const providerId of options.providers) results.push(await runQuickSmoke(providerId))
     if (options.continuous) results.push(await runContinuousSmoke(options.providers[0]))
+    assert.equal(
+      checkoutFingerprint(process.cwd()),
+      checkoutBefore,
+      'Research provider escaped its managed workspace and changed the launch checkout'
+    )
     printResult({
       mode: options.persist ? 'persistent-live' : 'isolated-live',
       userData: app.getPath('userData'),
       retainedInLibrary: options.persist,
+      launchCheckoutUnchanged: true,
       results
     })
   } finally {
@@ -220,6 +229,44 @@ function valueAfter(args: string[], flag: string): string | undefined {
 
 function printResult(value: unknown): void {
   console.log(`RESEARCH_LIVE_SMOKE_RESULT:${JSON.stringify(value)}`)
+}
+
+function checkoutFingerprint(cwd: string): string {
+  const hash = createHash('sha256')
+  hash.update(readdirSync(cwd).sort().join('\0'))
+  try {
+    const status = execFileSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024
+    })
+    const diff = execFileSync('git', ['diff', '--binary', 'HEAD', '--'], {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024
+    })
+    hash.update(status)
+    hash.update(diff)
+    const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024
+    }).split('\0').filter(Boolean)
+    for (const path of untracked) {
+      try {
+        const stats = statSync(join(cwd, path))
+        if (!stats.isFile()) continue
+        hash.update(path)
+        hash.update(readFileSync(join(cwd, path)))
+      } catch {
+        hash.update(`missing:${path}`)
+      }
+    }
+  } catch {
+    // The harness also supports packaged/non-git launches. The top-level entry
+    // list still catches the accidental file creation that this guard targets.
+  }
+  return hash.digest('hex')
 }
 
 void main().catch((error) => {
