@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type {
   CreateResearchJobInput,
   ProviderInfo,
@@ -174,14 +175,23 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     setSelectedId(jobs[index + 1]?.id ?? jobs[index - 1]?.id ?? null)
   }
 
+  function handleSurfaceKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    const nextSurface: ResearchSurface = event.key === 'ArrowLeft' || event.key === 'Home' ? 'workspace' : 'library'
+    event.preventDefault()
+    setSurface(nextSurface)
+    const targetId = nextSurface === 'workspace' ? 'research-workspace-tab' : 'research-library-tab'
+    document.getElementById(targetId)?.focus()
+  }
+
   return (
     <div className="research-page">
       <header className="research-page-toolbar">
         <div className="research-surface-switch" role="tablist" aria-label="Research views">
-          <button id="research-workspace-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'workspace'} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')}>Research</button>
-          <button id="research-library-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'library'} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')}>Library <span>{jobs.length}</span></button>
+          <button id="research-workspace-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'workspace'} tabIndex={surface === 'workspace' ? 0 : -1} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')} onKeyDown={handleSurfaceKeyDown}>Research</button>
+          <button id="research-library-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'library'} tabIndex={surface === 'library' ? 0 : -1} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')} onKeyDown={handleSurfaceKeyDown}>Library <span>{jobs.length}</span></button>
         </div>
-        <div className="research-toolbar-status"><i />{runningCount > 0 ? `${runningCount} running` : 'Ready'}</div>
+        <div className="research-toolbar-status" role="status" aria-live="polite"><i aria-hidden="true" />{runningCount > 0 ? `${runningCount} running` : 'Ready'}</div>
         <button
           type="button"
           className="research-new-tab"
@@ -234,7 +244,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
         role="tabpanel"
         aria-labelledby={surface === 'workspace' ? 'research-workspace-tab' : 'research-library-tab'}
       >
-        {error && <div className="research-page-alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
+        {error && <div className="research-page-alert" role="alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
         {surface === 'library' ? (
           <ResearchLibrary jobs={jobs} covers={covers} onSelect={openJob} />
         ) : selectedId && detail?.job.id === selectedId ? (
@@ -249,7 +259,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
             onOpenSource={async (id) => { await runAction(() => window.api.research.openSource(id)) }}
           />
         ) : loading ? (
-          <div className="research-page-loading"><i /><span>Loading Research…</span></div>
+          <div className="research-page-loading" role="status"><i aria-hidden="true" /><span>Loading Research…</span></div>
         ) : (
           <ResearchComposer providers={providers} disabled={actionPending} onSubmit={createResearch} />
         )}
