@@ -22,6 +22,7 @@
     "verify:research-contracts": "tsx scripts/research-verify-contracts.ts",
     "verify:research-artifacts": "tsx scripts/research-verify-artifacts.ts",
     "verify:research-persistence": "electron scripts/research-persistence-main.cjs",
+    "verify:research": "npm run verify:research-contracts && npm run verify:research-artifacts && npm run verify:research-persistence",
     "verify:update-version": "tsx scripts/verify-update-version.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
