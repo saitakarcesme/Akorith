@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { closeDb, getDb, initDb } from '../src/main/db.ts'
+import { exportResearchJob } from '../src/main/research/exporters/index.ts'
 import {
   acquireResearchLease,
   archiveResearchJob,
@@ -32,7 +33,11 @@ import {
   updateResearchJob
 } from '../src/main/research/store/index.ts'
 import type { ResearchPhase, ResearchStatus, ResearchWorkspaceState } from '../src/main/research/types.ts'
-import { initializeResearchWorkspace } from '../src/main/research/workspace.ts'
+import {
+  RESEARCH_REPORT_FILE,
+  initializeResearchWorkspace,
+  safeResearchPath
+} from '../src/main/research/workspace.ts'
 
 const isolatedUserData = mkdtempSync(join(tmpdir(), 'akorith-research-persistence-'))
 app.setPath('userData', isolatedUserData)
@@ -48,6 +53,7 @@ async function main(): Promise<void> {
     verifyRestartRoundTrip(jobId)
     verifyCrashRecovery(jobId)
     verifyArchiveFiltering()
+    await verifyArtifactVersioning()
     verifyCascadeDeletion()
     console.log('research persistence verifier passed (isolated SQLite lifecycle, recovery, and library round-trip)')
   } finally {
@@ -55,6 +61,38 @@ async function main(): Promise<void> {
     rmSync(isolatedUserData, { recursive: true, force: true })
     app.quit()
   }
+}
+
+async function verifyArtifactVersioning(): Promise<void> {
+  const id = 'research-versioned-artifact-job'
+  const workspaceDir = initializeResearchWorkspace(id)
+  createResearchJob({
+    prompt: 'Publish two independently addressable report revisions.',
+    title: 'Versioned artifact fixture',
+    providerId: 'opencode',
+    model: 'opencode-go/deepseek-v4-flash-free',
+    depth: 'quick',
+    outputFormat: 'md',
+    autoStart: false
+  }, workspaceDir, id)
+  writeFileSync(
+    safeResearchPath(workspaceDir, RESEARCH_REPORT_FILE),
+    '# Versioned artifact fixture\n\n## Executive summary\n\nA stable offline revision.\n\n## Findings\n\nThe first and second publications remain addressable.\n\n## Sources\n\nNo external source was required for this packaging check.\n'
+  )
+
+  const first = await exportResearchJob(id, 'md')
+  const second = await exportResearchJob(id, 'md')
+  const rows = listResearchArtifacts(id).sort((left, right) => left.version - right.version)
+
+  assert.equal(first.version, 1)
+  assert.equal(second.version, 2)
+  assert.notEqual(first.id, second.id, 'each publication must receive a distinct database identity')
+  assert.notEqual(first.path, second.path, 'v2 must never overwrite the v1 deliverable')
+  assert.equal(existsSync(first.path), true, 'v1 must remain on disk after publishing v2')
+  assert.equal(existsSync(second.path), true, 'v2 must be persisted on disk')
+  assert.deepEqual(rows.map((artifact) => artifact.version), [1, 2])
+  assert.deepEqual(rows.map((artifact) => artifact.path), [first.path, second.path])
+  assert.equal(getResearchJob(id)?.artifactPath, second.path, 'library preview must point at the latest publication')
 }
 
 function verifySchema(): void {

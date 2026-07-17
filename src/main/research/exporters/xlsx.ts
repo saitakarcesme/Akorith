@@ -15,8 +15,12 @@ const COLORS = {
   red: 'FF9A534D'
 }
 
-export async function exportResearchXlsx(workspaceDir: string, research: ResearchDocument): Promise<string> {
-  const path = researchArtifactPath(workspaceDir, research.title, 'xlsx')
+export async function exportResearchXlsx(
+  workspaceDir: string,
+  research: ResearchDocument,
+  outputPath?: string
+): Promise<string> {
+  const path = outputPath ?? researchArtifactPath(workspaceDir, research.title, 'xlsx')
   const partial = `${path}.partial`
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Akorith Research'

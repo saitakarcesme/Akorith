@@ -35,8 +35,12 @@ function createPdfDocument(options: Record<string, unknown>): PdfDoc {
   return new PDFDocument(options)
 }
 
-export async function exportResearchPdf(workspaceDir: string, document: ResearchDocument): Promise<string> {
-  const path = researchArtifactPath(workspaceDir, document.title, 'pdf')
+export async function exportResearchPdf(
+  workspaceDir: string,
+  document: ResearchDocument,
+  outputPath?: string
+): Promise<string> {
+  const path = outputPath ?? researchArtifactPath(workspaceDir, document.title, 'pdf')
   const partial = `${path}.partial`
   await new Promise<void>((resolve, reject) => {
     const doc = createPdfDocument({ size: 'A4', margin: 54, info: { Title: document.title, Author: 'Akorith Research' } })

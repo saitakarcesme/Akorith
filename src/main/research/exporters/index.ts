@@ -1,4 +1,4 @@
-import { renameSync, unlinkSync } from 'fs'
+import { unlinkSync } from 'fs'
 import { buildResearchDocument } from '../document'
 import { writeResearchCover } from '../cover'
 import {
@@ -66,11 +66,10 @@ async function exportResearchJobLocked(
   })
   const version = nextResearchArtifactVersion(job.id, format)
   const coverPath = writeResearchCover(job.workspaceDir, document)
-  const generatedPath = await exportByFormat(format, job.workspaceDir, document)
   const path = version === 1
-    ? generatedPath
+    ? researchArtifactPath(job.workspaceDir, document.title, format)
     : researchArtifactPath(job.workspaceDir, `${document.title}-v${version}`, format)
-  if (path !== generatedPath) renameSync(generatedPath, path)
+  await exportByFormat(format, job.workspaceDir, document, path)
   const validation = await validateResearchArtifact(format, path)
   const artifact = recordResearchArtifact({
     jobId: job.id,
@@ -104,12 +103,13 @@ async function exportResearchJobLocked(
 async function exportByFormat(
   format: ResearchOutputFormat,
   workspaceDir: string,
-  document: ReturnType<typeof buildResearchDocument>
+  document: ReturnType<typeof buildResearchDocument>,
+  outputPath: string
 ): Promise<string> {
-  if (format === 'md') return exportResearchMarkdown(workspaceDir, document)
-  if (format === 'pdf') return exportResearchPdf(workspaceDir, document)
-  if (format === 'docx') return exportResearchDocx(workspaceDir, document)
-  return exportResearchXlsx(workspaceDir, document)
+  if (format === 'md') return exportResearchMarkdown(workspaceDir, document, outputPath)
+  if (format === 'pdf') return exportResearchPdf(workspaceDir, document, outputPath)
+  if (format === 'docx') return exportResearchDocx(workspaceDir, document, outputPath)
+  return exportResearchXlsx(workspaceDir, document, outputPath)
 }
 
 export { validateResearchArtifact } from './validate'

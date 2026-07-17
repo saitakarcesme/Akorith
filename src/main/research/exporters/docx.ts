@@ -18,8 +18,12 @@ const PAGE_WIDTH = 11_906
 const PAGE_HEIGHT = 16_838
 const PAGE_MARGIN = 1_134
 
-export async function exportResearchDocx(workspaceDir: string, research: ResearchDocument): Promise<string> {
-  const path = researchArtifactPath(workspaceDir, research.title, 'docx')
+export async function exportResearchDocx(
+  workspaceDir: string,
+  research: ResearchDocument,
+  outputPath?: string
+): Promise<string> {
+  const path = outputPath ?? researchArtifactPath(workspaceDir, research.title, 'docx')
   const partial = `${path}.partial`
   const document = new Document({
     creator: 'Akorith Research',

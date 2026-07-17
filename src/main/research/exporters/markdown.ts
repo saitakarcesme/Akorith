@@ -55,9 +55,10 @@ export function renderResearchMarkdown(document: ResearchDocument): string {
 
 export function exportResearchMarkdown(
   workspaceDir: string,
-  document: ResearchDocument
+  document: ResearchDocument,
+  outputPath?: string
 ): string {
-  const path = researchArtifactPath(workspaceDir, document.title, 'md')
+  const path = outputPath ?? researchArtifactPath(workspaceDir, document.title, 'md')
   const partial = `${path}.partial`
   writeFileSync(partial, renderResearchMarkdown(document), 'utf8')
   renameSync(partial, path)
