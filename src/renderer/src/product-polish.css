@@ -67,7 +67,12 @@ textarea:focus-visible,
   gap: 8px;
   padding: 5px 12px 3px;
 }
-.sidebar-brand-row .sidebar-brand { padding: 0; margin: 0; }
+.sidebar-brand-row .sidebar-brand {
+  margin: 0;
+  padding: 0 0 0 33px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
 .sidebar-search-button {
   width: 29px;
   height: 29px;
@@ -111,6 +116,39 @@ textarea:focus-visible,
 .recent-chat.is-pinned .recent-chat-text > span { font-weight: 600; }
 .project-menu,
 .composer-more-pop { border-radius: var(--radius-panel) !important; }
+
+/* The latest durable Research note is the only live step. A narrow highlight
+   travels through its title so completed log entries remain quiet and easy to
+   scan, matching the active-work treatment used elsewhere in Akorith. */
+.research-event.is-current .research-event-copy > strong {
+  color: transparent;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--text) 78%, transparent) 38%,
+    var(--text) 47%,
+    color-mix(in srgb, var(--text) 74%, var(--ak-green-bright)) 50%,
+    var(--text) 53%,
+    color-mix(in srgb, var(--text) 78%, transparent) 62%
+  );
+  background-position: 120% 0;
+  background-size: 240% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: research-step-shimmer 2.6s ease-in-out infinite;
+}
+
+@keyframes research-step-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .research-event.is-current .research-event-copy > strong {
+    color: var(--text);
+    background: none;
+    animation: none;
+  }
+}
 
 /* Chat layout and content. */
 .chat-messages-col,

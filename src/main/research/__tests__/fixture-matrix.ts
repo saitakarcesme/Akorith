@@ -5,6 +5,7 @@ import type {
   ResearchSource
 } from '../types'
 import type { ResearchDocument } from '../document'
+import { buildResearchVisualEvidence } from '../visual-evidence'
 
 export const DETERMINISTIC_RESEARCH_NOW = Date.UTC(2026, 6, 17, 10, 0, 0)
 
@@ -148,6 +149,7 @@ export function createDeterministicResearchDocument(fixture: ResearchFixtureCase
         claims: [claims[1]]
       }
     ],
-    sources
+    sources,
+    visuals: buildResearchVisualEvidence({ claims, sources, generatedAt: DETERMINISTIC_RESEARCH_NOW })
   }
 }

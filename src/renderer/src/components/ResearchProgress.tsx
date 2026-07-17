@@ -141,16 +141,23 @@ export default function ResearchProgress({
             {detail.running && <span className="research-live-label" role="status"><i aria-hidden="true" />working</span>}
           </div>
           <div className="research-event-list">
-            {recentEvents.map((event, index) => (
-              <div key={event.id} className={`research-event is-${event.kind}`}>
-                <span className="research-event-marker" />
-                <div className="research-event-copy">
-                  <div><span>Step {index + 1}</span><time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time></div>
-                  <strong>{event.title}</strong>
-                  {event.detail && <ChatMarkdown text={event.detail} />}
+            {recentEvents.map((event, index) => {
+              const current = detail.running && index === recentEvents.length - 1
+              return (
+                <div
+                  key={event.id}
+                  aria-current={current ? 'step' : undefined}
+                  className={`research-event is-${event.kind} ${current ? 'is-current' : ''}`}
+                >
+                  <span className="research-event-marker" />
+                  <div className="research-event-copy">
+                    <div><span>Step {index + 1}</span><time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time></div>
+                    <strong>{event.title}</strong>
+                    {event.detail && <ChatMarkdown text={event.detail} />}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}

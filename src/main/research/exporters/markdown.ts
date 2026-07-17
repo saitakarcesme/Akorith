@@ -1,9 +1,17 @@
-import { renameSync, writeFileSync } from 'fs'
+import { mkdirSync, renameSync, writeFileSync } from 'fs'
+import { basename, dirname, extname, join } from 'path'
 import type { ResearchDocument } from '../document'
 import { sourceCitationLabel } from '../document'
+import {
+  renderResearchVisualSvg,
+  researchVisualCitationNumbers
+} from '../visual-evidence'
 import { researchArtifactPath } from '../workspace'
 
-export function renderResearchMarkdown(document: ResearchDocument): string {
+export function renderResearchMarkdown(
+  document: ResearchDocument,
+  visualAssetPrefix?: string
+): string {
   const lines: string[] = [
     `# ${document.title}`,
     '',
@@ -34,6 +42,30 @@ export function renderResearchMarkdown(document: ResearchDocument): string {
     }
   }
 
+  if (document.visuals.length > 0) {
+    lines.push('## Visual evidence', '')
+    document.visuals.forEach((visual, index) => {
+      const citations = researchVisualCitationNumbers(visual.provenance.sourceIds, document.sources)
+      const refs = citations.map((number) => `[${number}](#source-${number})`).join(', ')
+      lines.push(`### Figure ${index + 1}. ${visual.title}`, '')
+      if (visualAssetPrefix) {
+        lines.push(`![${escapeMarkdownAlt(visual.altText)}](${visualAssetPrefix}/${visual.id}.svg)`, '')
+      }
+      lines.push(`*${visual.caption}${refs ? ` Sources: ${refs}.` : ''}*`, '')
+      if (visual.kind === 'evidence-table' && visual.columns && visual.rows) {
+        lines.push(
+          `| ${visual.columns.join(' | ')} |`,
+          `| ${visual.columns.map(() => '---').join(' | ')} |`
+        )
+        for (const row of visual.rows) {
+          lines.push(`| ${row.cells.map(escapeMarkdownTableCell).join(' | ')} |`)
+        }
+        lines.push('')
+      }
+      lines.push(`Provenance: ${visual.provenance.method}; generated ${new Date(visual.provenance.generatedAt).toISOString()}.`, '')
+    })
+  }
+
   if (document.methodology.length > 0 || document.verificationCriteria.length > 0) {
     lines.push('## Methodology', '')
     for (const item of document.methodology) lines.push(`- ${item}`)
@@ -60,7 +92,21 @@ export function exportResearchMarkdown(
 ): string {
   const path = outputPath ?? researchArtifactPath(workspaceDir, document.title, 'md')
   const partial = `${path}.partial`
-  writeFileSync(partial, renderResearchMarkdown(document), 'utf8')
+  const assetDirName = `${basename(path, extname(path))}-assets`
+  const assetDir = join(dirname(path), assetDirName)
+  mkdirSync(assetDir, { recursive: true })
+  for (const visual of document.visuals) {
+    writeFileSync(join(assetDir, `${visual.id}.svg`), renderResearchVisualSvg(visual), 'utf8')
+  }
+  writeFileSync(partial, renderResearchMarkdown(document, `./${assetDirName}`), 'utf8')
   renameSync(partial, path)
   return path
+}
+
+function escapeMarkdownAlt(value: string): string {
+  return value.replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim()
 }

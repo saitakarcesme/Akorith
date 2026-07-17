@@ -8,15 +8,28 @@ import {
   PageNumber,
   Packer,
   Paragraph,
-  TextRun
+  ShadingType,
+  Table,
+  TableBorders,
+  TableCell,
+  TableLayoutType,
+  TableRow,
+  TextRun,
+  VerticalAlignTable,
+  WidthType
 } from 'docx'
 import type { ResearchDocument } from '../document'
 import { sourceCitationLabel } from '../document'
+import {
+  researchVisualCitationNumbers,
+  type ResearchVisualEvidence
+} from '../visual-evidence'
 import { researchArtifactPath } from '../workspace'
 
 const PAGE_WIDTH = 11_906
 const PAGE_HEIGHT = 16_838
 const PAGE_MARGIN = 1_134
+const CONTENT_WIDTH = PAGE_WIDTH - (PAGE_MARGIN * 2)
 
 export async function exportResearchDocx(
   workspaceDir: string,
@@ -95,8 +108,8 @@ function coverPage(research: ResearchDocument): Paragraph[] {
   ]
 }
 
-function reportBody(research: ResearchDocument): Paragraph[] {
-  const children: Paragraph[] = [
+function reportBody(research: ResearchDocument): Array<Paragraph | Table> {
+  const children: Array<Paragraph | Table> = [
     heading(research.title, HeadingLevel.TITLE),
     new Paragraph({
       spacing: { after: 380 },
@@ -132,6 +145,12 @@ function reportBody(research: ResearchDocument): Paragraph[] {
       }
     }
   }
+  if (research.visuals.length > 0) {
+    children.push(heading('Visual evidence', HeadingLevel.HEADING_1))
+    research.visuals.forEach((visual, index) => {
+      children.push(...visualEvidenceBody(research, visual, index))
+    })
+  }
   if (research.methodology.length > 0 || research.verificationCriteria.length > 0) {
     children.push(heading('Methodology', HeadingLevel.HEADING_1))
     for (const item of research.methodology) children.push(bulletParagraph(item))
@@ -149,6 +168,163 @@ function reportBody(research: ResearchDocument): Paragraph[] {
     }))
   })
   return children
+}
+
+function visualEvidenceBody(
+  research: ResearchDocument,
+  visual: ResearchVisualEvidence,
+  index: number
+): Array<Paragraph | Table> {
+  const refs = researchVisualCitationNumbers(visual.provenance.sourceIds, research.sources)
+  const children: Array<Paragraph | Table> = [
+    heading(`Figure ${index + 1}. ${visual.title}`, HeadingLevel.HEADING_2)
+  ]
+  if ((visual.kind === 'quantitative-chart' || visual.kind === 'source-quality-chart') && visual.points) {
+    children.push(chartTable(visual))
+  } else if (visual.kind === 'evidence-table' && visual.columns && visual.rows) {
+    children.push(evidenceTable(visual))
+  } else if (visual.kind === 'web-snapshot' && visual.snapshot) {
+    children.push(snapshotCard(visual))
+  }
+  children.push(new Paragraph({
+    spacing: { before: 90, after: 70 },
+    children: [new TextRun({ text: visual.caption, italics: true, size: 18, color: '68716B' })]
+  }))
+  children.push(new Paragraph({
+    spacing: { after: 220 },
+    children: [new TextRun({
+      text: `Provenance: ${visual.provenance.method}${refs.length > 0 ? ` · sources ${refs.map((ref) => `[${ref}]`).join(', ')}` : ''}`,
+      size: 16,
+      color: '7B827D'
+    })]
+  }))
+  return children
+}
+
+function chartTable(visual: ResearchVisualEvidence): Table {
+  const labelWidth = 2_900
+  const segmentWidth = 510
+  const valueWidth = CONTENT_WIDTH - labelWidth - segmentWidth * 10
+  const max = Math.max(1, ...(visual.points ?? []).map((point) => Math.abs(point.value)))
+  const rows = (visual.points ?? []).map((point) => {
+    const filled = Math.max(1, Math.round((Math.abs(point.value) / max) * 10))
+    return new TableRow({
+      cantSplit: true,
+      children: [
+        tableCell(compact(point.label, 56), labelWidth, { bold: true }),
+        ...Array.from({ length: 10 }, (_, segment) => new TableCell({
+          width: { size: segmentWidth, type: WidthType.DXA },
+          verticalAlign: VerticalAlignTable.CENTER,
+          margins: { top: 80, bottom: 80, left: 8, right: 8, marginUnitType: WidthType.DXA },
+          shading: { type: ShadingType.CLEAR, fill: segment < filled ? '78D6AA' : 'E5E9E6' },
+          borders: TableBorders.NONE,
+          children: [new Paragraph({ children: [new TextRun(' ')] })]
+        })),
+        tableCell(formatVisualValue(point.value, point.unit), valueWidth, { bold: true, align: AlignmentType.RIGHT })
+      ]
+    })
+  })
+  return new Table({
+    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: [labelWidth, ...Array(10).fill(segmentWidth), valueWidth],
+    layout: TableLayoutType.FIXED,
+    borders: TableBorders.NONE,
+    rows
+  })
+}
+
+function evidenceTable(visual: ResearchVisualEvidence): Table {
+  const widths = [3_500, 1_800, 1_450, 1_400, CONTENT_WIDTH - 8_150]
+  const header = new TableRow({
+    tableHeader: true,
+    cantSplit: true,
+    children: (visual.columns ?? []).map((column, index) =>
+      tableCell(column, widths[index], { bold: true, fill: '1B211E', color: 'F3F6F4' })
+    )
+  })
+  const body = (visual.rows ?? []).map((row, rowIndex) => new TableRow({
+    cantSplit: true,
+    children: row.cells.map((cell, index) => tableCell(
+      compact(cell, index === 0 ? 82 : 38),
+      widths[index],
+      { fill: rowIndex % 2 === 0 ? 'F1F4F2' : 'FAFBFA' }
+    ))
+  }))
+  return new Table({
+    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: widths,
+    layout: TableLayoutType.FIXED,
+    borders: {
+      top: { style: 'single', size: 2, color: 'CBD2CD' },
+      bottom: { style: 'single', size: 2, color: 'CBD2CD' },
+      insideHorizontal: { style: 'single', size: 1, color: 'E1E5E2' }
+    },
+    rows: [header, ...body]
+  })
+}
+
+function snapshotCard(visual: ResearchVisualEvidence): Table {
+  const snapshot = visual.snapshot!
+  return new Table({
+    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH],
+    layout: TableLayoutType.FIXED,
+    borders: {
+      top: { style: 'single', size: 4, color: '78D6AA' },
+      bottom: { style: 'single', size: 2, color: 'CBD2CD' },
+      left: { style: 'single', size: 2, color: 'CBD2CD' },
+      right: { style: 'single', size: 2, color: 'CBD2CD' }
+    },
+    rows: [new TableRow({
+      cantSplit: true,
+      children: [new TableCell({
+        width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+        shading: { type: ShadingType.CLEAR, fill: 'F1F4F2' },
+        margins: { top: 180, bottom: 180, left: 220, right: 220, marginUnitType: WidthType.DXA },
+        children: [
+          new Paragraph({ spacing: { after: 70 }, children: [new TextRun({
+            text: 'RETRIEVED TEXT SNAPSHOT · NOT A LIVE WEBPAGE',
+            bold: true,
+            size: 15,
+            color: '4C715F',
+            characterSpacing: 30
+          })] }),
+          new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: snapshot.publisher, bold: true, size: 18, color: '39705B' })] }),
+          new Paragraph({ spacing: { after: 100 }, keepNext: true, children: [new TextRun({ text: snapshot.title, bold: true, size: 25, color: '171B18' })] }),
+          new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: compact(snapshot.excerpt, 1_000), size: 19, color: '343B37' })] }),
+          new Paragraph({ children: [new TextRun({ text: snapshot.url, size: 16, color: '2F6D55', underline: {} })] })
+        ]
+      })]
+    })]
+  })
+}
+
+function tableCell(
+  text: string,
+  width: number,
+  options: { bold?: boolean; fill?: string; color?: string; align?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {}
+): TableCell {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: VerticalAlignTable.CENTER,
+    margins: { top: 110, bottom: 110, left: 100, right: 100, marginUnitType: WidthType.DXA },
+    ...(options.fill ? { shading: { type: ShadingType.CLEAR, fill: options.fill } } : {}),
+    borders: TableBorders.NONE,
+    children: [new Paragraph({
+      alignment: options.align ?? AlignmentType.LEFT,
+      children: [new TextRun({ text, bold: options.bold, size: 17, color: options.color ?? '29302C' })]
+    })]
+  })
+}
+
+function formatVisualValue(value: number, unit: string): string {
+  const numeric = Number.isInteger(value) ? String(value) : value.toFixed(1)
+  return unit === '%' ? `${numeric}%` : `${numeric} ${unit}`
+}
+
+function compact(value: string, max: number): string {
+  const clean = value.replace(/\s+/g, ' ').trim()
+  return clean.length <= max ? clean : `${clean.slice(0, Math.max(1, max - 1)).trimEnd()}…`
 }
 
 function researchStyles(): ConstructorParameters<typeof Document>[0]['styles'] {

@@ -1,6 +1,7 @@
 import { renameSync } from 'fs'
 import ExcelJS from 'exceljs'
 import type { ResearchDocument } from '../document'
+import { researchVisualCitationNumbers } from '../visual-evidence'
 import { researchArtifactPath } from '../workspace'
 
 const COLORS = {
@@ -40,6 +41,7 @@ export async function exportResearchXlsx(
   addFindingsSheet(workbook, research)
   addSourcesSheet(workbook, research)
   addMethodologySheet(workbook, research)
+  addVisualEvidenceSheet(workbook, research)
   await workbook.xlsx.writeFile(partial)
   renameSync(partial, path)
   return path
@@ -231,6 +233,137 @@ function addMethodologySheet(workbook: ExcelJS.Workbook, research: ResearchDocum
   sheet.pageSetup.printArea = `A1:D${Math.max(1, sheet.rowCount)}`
 }
 
+function addVisualEvidenceSheet(workbook: ExcelJS.Workbook, research: ResearchDocument): void {
+  const sheet = workbook.addWorksheet('Visual Evidence', {
+    views: [{ state: 'frozen', ySplit: 3, showGridLines: false }],
+    pageSetup: {
+      paperSize: 9,
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: PRINT_MARGINS,
+      printTitlesRow: '1:3'
+    }
+  })
+  sheet.columns = [
+    { width: 3 }, { width: 31 },
+    ...Array.from({ length: 10 }, () => ({ width: 5 })),
+    { width: 14 }, { width: 18 }, { width: 3 }
+  ]
+  sheet.mergeCells('B1:N1')
+  sheet.getCell('B1').value = 'VISUAL EVIDENCE'
+  sheet.getCell('B1').font = { name: 'Aptos Display', size: 24, bold: true, color: { argb: COLORS.ink } }
+  sheet.getCell('B1').border = { bottom: { style: 'medium', color: { argb: COLORS.mint } } }
+  sheet.getRow(1).height = 38
+  sheet.mergeCells('B2:N2')
+  sheet.getCell('B2').value = 'Every chart, table, and source snapshot below is derived from persisted cited evidence.'
+  sheet.getCell('B2').font = { name: 'Aptos', size: 10, color: { argb: COLORS.muted } }
+  sheet.getRow(2).height = 24
+
+  let row = 4
+  for (const [figureIndex, visual] of research.visuals.entries()) {
+    sheet.mergeCells(row, 2, row, 14)
+    const title = sheet.getCell(row, 2)
+    title.value = `Figure ${figureIndex + 1}. ${sanitizeSpreadsheetCell(visual.title)}`
+    title.font = { name: 'Aptos Display', size: 15, bold: true, color: { argb: COLORS.ink } }
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F3EE' } }
+    title.alignment = { vertical: 'middle' }
+    sheet.getRow(row).height = 28
+    row += 1
+
+    if ((visual.kind === 'quantitative-chart' || visual.kind === 'source-quality-chart') && visual.points) {
+      const max = Math.max(1, ...visual.points.map((point) => Math.abs(point.value)))
+      for (const point of visual.points) {
+        sheet.getCell(row, 2).value = sanitizeSpreadsheetCell(point.label)
+        sheet.getCell(row, 2).alignment = { wrapText: true, vertical: 'middle' }
+        sheet.getCell(row, 2).font = { name: 'Aptos', size: 9, bold: true, color: { argb: COLORS.ink } }
+        const filled = Math.max(1, Math.round((Math.abs(point.value) / max) * 10))
+        for (let segment = 0; segment < 10; segment += 1) {
+          const cell = sheet.getCell(row, 3 + segment)
+          cell.value = segment < filled ? 1 : 0
+          cell.numFmt = ';;;'
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: segment < filled ? COLORS.mint : COLORS.panel }
+          }
+          cell.border = { right: { style: 'hair', color: { argb: COLORS.white } } }
+        }
+        sheet.getCell(row, 13).value = point.value
+        sheet.getCell(row, 13).numFmt = point.unit === '%' ? `0"%"` : '0.0'
+        sheet.getCell(row, 13).alignment = { horizontal: 'right', vertical: 'middle' }
+        sheet.getCell(row, 13).font = { bold: true, color: { argb: COLORS.ink } }
+        const refs = researchVisualCitationNumbers(point.sourceIds, research.sources)
+        sheet.getCell(row, 14).value = refs.map((ref) => `[${ref}]`).join(', ')
+        sheet.getCell(row, 14).font = { color: { argb: COLORS.muted }, size: 9 }
+        sheet.getRow(row).height = 34
+        row += 1
+      }
+    } else if (visual.kind === 'evidence-table' && visual.columns && visual.rows) {
+      const ranges = [[2, 5], [6, 8], [9, 10], [11, 12], [13, 14]] as const
+      visual.columns.forEach((column, index) => {
+        const [start, end] = ranges[index]
+        sheet.mergeCells(row, start, row, end)
+        const cell = sheet.getCell(row, start)
+        cell.value = column
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.ink } }
+        cell.font = { bold: true, color: { argb: COLORS.white }, size: 9 }
+        cell.alignment = { vertical: 'middle' }
+      })
+      sheet.getRow(row).height = 25
+      row += 1
+      visual.rows.forEach((tableRow, tableRowIndex) => {
+        tableRow.cells.forEach((value, index) => {
+          const [start, end] = ranges[index]
+          sheet.mergeCells(row, start, row, end)
+          const cell = sheet.getCell(row, start)
+          cell.value = sanitizeSpreadsheetCell(value)
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tableRowIndex % 2 === 0 ? COLORS.paper : COLORS.white } }
+          cell.font = { color: { argb: COLORS.ink }, size: 9 }
+          cell.alignment = { vertical: 'middle', wrapText: true }
+          cell.border = { bottom: { style: 'hair', color: { argb: COLORS.panel } } }
+        })
+        sheet.getRow(row).height = 34
+        row += 1
+      })
+    } else if (visual.kind === 'web-snapshot' && visual.snapshot) {
+      const snapshot = visual.snapshot
+      sheet.mergeCells(row, 2, row, 14)
+      sheet.getCell(row, 2).value = sanitizeSpreadsheetCell(`${snapshot.publisher} · ${snapshot.title}`)
+      sheet.getCell(row, 2).font = { bold: true, size: 12, color: { argb: COLORS.ink } }
+      sheet.getCell(row, 2).alignment = { wrapText: true, vertical: 'middle' }
+      sheet.getRow(row).height = 32
+      row += 1
+      sheet.mergeCells(row, 2, row, 14)
+      sheet.getCell(row, 2).value = sanitizeSpreadsheetCell(compactSpreadsheetText(snapshot.excerpt, 560))
+      sheet.getCell(row, 2).font = { size: 10, color: { argb: 'FF343B37' } }
+      sheet.getCell(row, 2).alignment = { wrapText: true, vertical: 'top' }
+      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.paper } }
+      sheet.getRow(row).height = 70
+      row += 1
+      sheet.mergeCells(row, 2, row, 14)
+      sheet.getCell(row, 2).value = { text: snapshot.url, hyperlink: snapshot.url, tooltip: snapshot.title }
+      sheet.getCell(row, 2).font = { color: { argb: COLORS.mintDark }, underline: true, size: 9 }
+      sheet.getRow(row).height = 22
+      row += 1
+    }
+
+    sheet.mergeCells(row, 2, row, 14)
+    const references = researchVisualCitationNumbers(visual.provenance.sourceIds, research.sources)
+    sheet.getCell(row, 2).value = sanitizeSpreadsheetCell(
+      `${visual.caption} Provenance: ${visual.provenance.method}${references.length > 0 ? ` · sources ${references.map((ref) => `[${ref}]`).join(', ')}` : ''}`
+    )
+    sheet.getCell(row, 2).font = { italic: true, size: 9, color: { argb: COLORS.muted } }
+    sheet.getCell(row, 2).alignment = { wrapText: true, vertical: 'top' }
+    sheet.getRow(row).height = 38
+    row += 2
+  }
+
+  sheet.pageSetup.printArea = `A1:O${Math.max(3, row)}`
+}
+
 function formatTableSheet(sheet: ExcelJS.Worksheet): void {
   sheet.getRow(1).height = 28
   sheet.getRow(1).eachCell((cell) => {
@@ -269,4 +402,9 @@ function addMethodRow(sheet: ExcelJS.Worksheet, row: number, index: number, text
   sheet.getCell(row, 3).value = sanitizeSpreadsheetCell(text)
   sheet.getCell(row, 3).alignment = { wrapText: true, vertical: 'top' }
   sheet.getRow(row).height = 32
+}
+
+function compactSpreadsheetText(value: string, max: number): string {
+  const clean = value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim()
+  return clean.length <= max ? clean : `${clean.slice(0, Math.max(1, max - 1)).trimEnd()}…`
 }

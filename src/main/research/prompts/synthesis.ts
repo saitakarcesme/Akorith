@@ -41,6 +41,9 @@ Requirements:
 - Follow the planned section order where evidence permits.
 - Cite material factual claims inline with [1], [2], or [1, 3].
 - Only use numbers that exist in the source ledger.
+- Preserve exact quantitative values and units from the verified claim ledger so Akorith can render deterministic charts from cited evidence.
+- Compare values only when their units and methodologies are genuinely compatible; otherwise state the comparability limitation instead of inventing a visual comparison.
+- Do not claim that a retrieved-text snapshot is a screenshot or a live webpage. It is sanitized source text captured by Akorith, with its URL and access date retained.
 - Preserve conflicting evidence instead of averaging it away.
 - Label community commentary as perspective, not fact.
 - Include a Limitations and open questions section.

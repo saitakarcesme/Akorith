@@ -1,4 +1,8 @@
 import type { ResearchClaim, ResearchJob, ResearchPlan, ResearchSource } from './types'
+import {
+  buildResearchVisualEvidence,
+  type ResearchVisualEvidence
+} from './visual-evidence'
 
 export interface ResearchDocumentSection {
   id: string
@@ -20,6 +24,7 @@ export interface ResearchDocument {
   executiveSummary: string
   sections: ResearchDocumentSection[]
   sources: ResearchSource[]
+  visuals: ResearchVisualEvidence[]
 }
 
 export function buildResearchDocument(input: {
@@ -59,11 +64,12 @@ export function buildResearchDocument(input: {
     sections.push({ id: 'findings', title: 'Findings', body: input.reportMarkdown.trim(), claims: input.claims })
   }
 
+  const generatedAt = Date.now()
   return {
     title: input.plan?.title || input.job.title,
     subtitle: input.plan?.thesis || input.job.prompt,
     requestedBy: 'Akorith Research',
-    generatedAt: Date.now(),
+    generatedAt,
     depthLabel: input.job.depth,
     providerLabel: input.job.providerId,
     modelLabel: input.job.model || 'Default model',
@@ -71,7 +77,12 @@ export function buildResearchDocument(input: {
     verificationCriteria: input.plan?.verificationCriteria ?? [],
     executiveSummary: input.job.summary || firstUsefulParagraph(input.reportMarkdown),
     sections,
-    sources: input.sources
+    sources: input.sources,
+    visuals: buildResearchVisualEvidence({
+      claims: input.claims,
+      sources: input.sources,
+      generatedAt
+    })
   }
 }
 
