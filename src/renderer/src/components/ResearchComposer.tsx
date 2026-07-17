@@ -51,10 +51,15 @@ export default function ResearchComposer({
       ?? availableProviders.find((provider) => provider.id === 'opencode')
       ?? availableProviders[0]
     setProviderId(preferred?.id ?? '')
-    setModel(preferred?.models[0] ?? '')
   }, [availableProviders, providerId])
 
   const activeProvider = availableProviders.find((provider) => provider.id === providerId) ?? null
+
+  useEffect(() => {
+    const availableModels = activeProvider?.models ?? []
+    if (model && availableModels.includes(model)) return
+    setModel(availableModels[0] ?? '')
+  }, [activeProvider, model])
 
   async function submit(): Promise<void> {
     if (!prompt.trim() || !providerId || disabled || submitting) return
@@ -132,6 +137,7 @@ export default function ResearchComposer({
                 }}
                 disabled={disabled || submitting || availableProviders.length === 0}
               >
+                {availableProviders.length === 0 && <option value="">No providers available</option>}
                 {availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
               </select>
             </label>

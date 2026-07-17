@@ -142,16 +142,12 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   }
 
   async function createResearch(input: CreateResearchJobInput): Promise<boolean> {
-    let createdId: string | null = null
-    const created = await runAction(async () => {
+    return runAction(async () => {
       const job = await window.api.research.create(input)
-      createdId = job.id
       selectedRef.current = job.id
       setSelectedId(job.id)
       setSurface('workspace')
     })
-    if (created && createdId) await loadDetail(createdId)
-    return created
   }
 
   function openJob(id: string): void {
