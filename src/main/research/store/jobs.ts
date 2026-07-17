@@ -16,7 +16,7 @@ const MAX_TITLE_LENGTH = 160
 
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.trim().split(/\r?\n/).find(Boolean) ?? 'Untitled research'
-  return normalizeResearchTitle(firstLine).slice(0, 80)
+  return normalizeResearchTitle(firstLine).slice(0, 80) || 'Untitled research'
 }
 
 function normalizeResearchTitle(value: string): string {
@@ -135,7 +135,9 @@ export function updateResearchJob(id: string, patch: Partial<ResearchJob>): Rese
     if (!(key in patch)) continue
     let value = (patch as Record<string, unknown>)[key]
     if (key === 'plan') value = value == null ? null : JSON.stringify(value)
-    if (key === 'title' && typeof value === 'string') value = normalizeResearchTitle(value).slice(0, MAX_TITLE_LENGTH)
+    if (key === 'title' && typeof value === 'string') {
+      value = normalizeResearchTitle(value).slice(0, MAX_TITLE_LENGTH) || 'Untitled research'
+    }
     sets.push(`${column} = @${column}`)
     params[column] = value ?? null
   }
