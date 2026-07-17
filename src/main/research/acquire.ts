@@ -36,6 +36,7 @@ export async function acquireResearchSources(input: {
         if (!known.has(result.url)) candidates.push({ ...result, query })
       }
     } catch (error) {
+      if (input.signal?.aborted) throw input.signal.reason ?? error
       logResearchEvent({
         jobId: input.job.id,
         cycleId: input.cycleId,
@@ -78,6 +79,7 @@ export async function acquireResearchSources(input: {
       })
       return source
     } catch (error) {
+      if (input.signal?.aborted) throw input.signal.reason ?? error
       logResearchEvent({
         jobId: input.job.id,
         cycleId: input.cycleId,
