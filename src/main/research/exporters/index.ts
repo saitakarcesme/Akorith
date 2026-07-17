@@ -22,10 +22,28 @@ import { exportResearchPdf } from './pdf'
 import { validateResearchArtifact } from './validate'
 import { exportResearchXlsx } from './xlsx'
 
+const activeExports = new Map<string, Promise<ResearchArtifact>>()
+
 export async function exportResearchJob(
   jobId: string,
   formatOverride?: ResearchOutputFormat,
   options: { trackLifecycle?: boolean } = {}
+): Promise<ResearchArtifact> {
+  const previous = activeExports.get(jobId)
+  const current = (previous ? previous.catch(() => undefined) : Promise.resolve())
+    .then(() => exportResearchJobLocked(jobId, formatOverride, options))
+  activeExports.set(jobId, current)
+  try {
+    return await current
+  } finally {
+    if (activeExports.get(jobId) === current) activeExports.delete(jobId)
+  }
+}
+
+async function exportResearchJobLocked(
+  jobId: string,
+  formatOverride: ResearchOutputFormat | undefined,
+  options: { trackLifecycle?: boolean }
 ): Promise<ResearchArtifact> {
   const job = getResearchJob(jobId)
   if (!job) throw new Error('Research job not found.')
