@@ -361,6 +361,95 @@ export function initDb(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_memories_loop ON project_loop_memories(loop_id, importance);
 
+    -- Research: durable, long-running investigations and their deliverables.
+    CREATE TABLE IF NOT EXISTS research_jobs (
+      id                 TEXT PRIMARY KEY,
+      title              TEXT NOT NULL,
+      prompt             TEXT NOT NULL,
+      status             TEXT NOT NULL DEFAULT 'draft',
+      phase              TEXT NOT NULL DEFAULT 'understand',
+      provider_id        TEXT NOT NULL,
+      model              TEXT,
+      depth              TEXT NOT NULL,
+      output_format      TEXT NOT NULL,
+      target_duration_ms INTEGER NOT NULL,
+      max_cycles         INTEGER NOT NULL,
+      source_target      INTEGER NOT NULL,
+      cycle_count        INTEGER NOT NULL DEFAULT 0,
+      source_count       INTEGER NOT NULL DEFAULT 0,
+      finding_count      INTEGER NOT NULL DEFAULT 0,
+      workspace_dir      TEXT NOT NULL,
+      artifact_path      TEXT,
+      cover_path         TEXT,
+      plan_json          TEXT,
+      summary            TEXT,
+      error              TEXT,
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL,
+      started_at         INTEGER,
+      completed_at       INTEGER,
+      next_run_at        INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_jobs_status ON research_jobs(status, next_run_at, updated_at);
+
+    CREATE TABLE IF NOT EXISTS research_cycles (
+      id                TEXT PRIMARY KEY,
+      job_id            TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      cycle_index       INTEGER NOT NULL,
+      phase             TEXT NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      objective         TEXT NOT NULL,
+      result            TEXT,
+      source_count      INTEGER NOT NULL DEFAULT 0,
+      finding_count     INTEGER NOT NULL DEFAULT 0,
+      prompt_tokens     INTEGER,
+      completion_tokens INTEGER,
+      started_at        INTEGER NOT NULL,
+      ended_at          INTEGER,
+      error             TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_research_cycles_order ON research_cycles(job_id, cycle_index);
+
+    CREATE TABLE IF NOT EXISTS research_events (
+      id         TEXT PRIMARY KEY,
+      job_id     TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      cycle_id   TEXT REFERENCES research_cycles(id) ON DELETE SET NULL,
+      kind       TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      detail     TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_events_job ON research_events(job_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS research_sources (
+      id                TEXT PRIMARY KEY,
+      job_id            TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      cycle_id          TEXT REFERENCES research_cycles(id) ON DELETE SET NULL,
+      url               TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      publisher         TEXT,
+      published_at      TEXT,
+      accessed_at       INTEGER NOT NULL,
+      excerpt           TEXT,
+      relevance         TEXT,
+      credibility_score REAL,
+      verified          INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(job_id, url)
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_sources_job ON research_sources(job_id, accessed_at);
+
+    CREATE TABLE IF NOT EXISTS research_artifacts (
+      id         TEXT PRIMARY KEY,
+      job_id     TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      format     TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      path       TEXT NOT NULL,
+      cover_path TEXT,
+      byte_size  INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_artifacts_job ON research_artifacts(job_id, created_at);
+
     -- Phase 50: Companions — long-memory local personalities (no actions).
     CREATE TABLE IF NOT EXISTS companions (
       id         TEXT PRIMARY KEY,
