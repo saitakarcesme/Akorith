@@ -519,17 +519,15 @@ textarea:focus-visible,
   .workspace-flow-summary li.is-current > span { animation: none; }
 }
 
-/* Phase 62: Dashboard elements share the calendar's true 53-week measure.
-   The display name uses a locally available macOS script face with the same
-   friendly, connected rhythm as Apple's hello greeting. */
+/* Phase 62: Dashboard elements share the calendar's true 53-week measure. */
 .profile-dashboard { --activity-map-width: 633px; }
 .profile-heading h1 {
   margin-top: 1px;
-  font-family: 'SignPainter-HouseScript', 'SignPainter', 'Snell Roundhand', 'Savoye LET', cursive;
+  font-family: var(--font-ui);
   font-size: 56px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.05;
-  letter-spacing: .005em;
+  letter-spacing: -.035em;
 }
 .profile-stats,
 .profile-dashboard .token-activity,
@@ -1159,22 +1157,12 @@ textarea:focus-visible,
   margin-top: 7px;
 }
 
-/* Phase 66: Apple ships the SignPainter HouseScript faces on macOS. Resolve
-   the exact PostScript/full names so Chromium cannot silently pick a generic
-   cursive fallback. Apple's animated Hello itself is vector artwork, so the
-   system face is used without copying or bundling Apple's private assets. */
-@font-face {
-  font-family: 'Akorith Hello';
-  src: local('SignPainter-HouseScriptSemibold'), local('SignPainter-HouseScript Semibold'), local('SignPainter-HouseScript');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
 .profile-heading h1 {
-  font-family: 'Akorith Hello', 'SignPainter-HouseScriptSemibold', 'SignPainter-HouseScript', 'Snell Roundhand', 'Savoye LET', cursive;
+  font-family: var(--font-ui);
   font-size: 64px;
-  line-height: .96;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.035em;
 }
 
 .profile-heading .profile-avatar.is-large {

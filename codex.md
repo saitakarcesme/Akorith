@@ -755,6 +755,13 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Loop detail, transcript, outcome, and composer share a single 700 px reading measure regardless
   of sidebar visibility. Verify equal geometry and no horizontal overflow.
 
+## Phase 67 - Unified Profile Typography
+
+- Dashboard identity uses the shared `--font-ui` stack rather than a dedicated handwriting face.
+- Preserve the larger profile photo and display-name scale, but keep its weight and tracking aligned
+  with Akorith's Avenir-led interface typography.
+- Verify the production build and computed Electron font family after installation.
+
 ## Rule: keep the docs current
 
 At the **end of every phase**, update **both** `AGENTS.md` and this `codex.md` — flip the

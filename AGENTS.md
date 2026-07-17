@@ -1741,6 +1741,15 @@ Verification: typecheck/build, current-day tooltip inspection, local font resolu
 receipt absence, icon-only copy controls, and Electron geometry confirming Loop detail/composer
 width equality without horizontal overflow.
 
+### Phase 67: Unified Profile Typography
+
+The Dashboard display name uses the same `--font-ui` typography token as the rest of Akorith.
+Do not introduce a separate script or platform-only font for profile identity. Keep the enlarged
+avatar and display-name scale, while matching the app's Avenir-led weight and tracking.
+
+Verification: typecheck/build plus Electron inspection confirming the computed profile font begins
+with Avenir Next and the existing centered profile geometry remains intact.
+
 ## Conventions
 
 - Surgical edits; keep the security posture intact (CSP, sandbox, frozen bridge).
