@@ -168,9 +168,14 @@ async function respectHostInterval(host: string, signal?: AbortSignal): Promise<
   const wait = Math.max(0, HOST_INTERVAL_MS - (Date.now() - last))
   if (wait > 0) {
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, wait)
+      const finish = (): void => {
+        signal?.removeEventListener('abort', abort)
+        resolve()
+      }
+      const timer = setTimeout(finish, wait)
       const abort = (): void => {
         clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
         reject(signal?.reason instanceof Error ? signal.reason : new Error('Research cancelled.'))
       }
       signal?.addEventListener('abort', abort, { once: true })
