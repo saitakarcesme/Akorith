@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
-import { statSync } from 'fs'
 import { getDb } from '../../db'
 import type { ResearchArtifact, ResearchOutputFormat } from '../types'
+import type { ArtifactValidationResult } from '../exporters/validate'
 import { rowToResearchArtifact, type DbRow } from './rows'
 
 export function recordResearchArtifact(input: {
@@ -10,15 +10,17 @@ export function recordResearchArtifact(input: {
   title: string
   path: string
   coverPath?: string
+  validation: ArtifactValidationResult
 }): ResearchArtifact {
   const id = randomUUID()
   const createdAt = Date.now()
-  const byteSize = statSync(input.path).size
   getDb().prepare(
     `INSERT INTO research_artifacts (
-      id, job_id, format, title, path, cover_path, byte_size, created_at
+      id, job_id, format, title, path, cover_path, byte_size, status, checksum,
+      mime_type, version, page_count, validation_error, created_at
     ) VALUES (
-      @id, @job_id, @format, @title, @path, @cover_path, @byte_size, @created_at
+      @id, @job_id, @format, @title, @path, @cover_path, @byte_size, @status,
+      @checksum, @mime_type, 1, @page_count, @validation_error, @created_at
     )`
   ).run({
     id,
@@ -27,18 +29,25 @@ export function recordResearchArtifact(input: {
     title: input.title.trim().slice(0, 300),
     path: input.path,
     cover_path: input.coverPath ?? null,
-    byte_size: byteSize,
+    byte_size: input.validation.byteSize,
+    status: input.validation.ok ? 'ready' : 'invalid',
+    checksum: input.validation.checksum,
+    mime_type: input.validation.mimeType,
+    page_count: input.validation.pageCount ?? null,
+    validation_error: input.validation.error ?? null,
     created_at: createdAt
   })
-  getDb().prepare(
-    `UPDATE research_jobs SET artifact_path = @path, cover_path = @cover_path,
-     updated_at = @updated_at WHERE id = @job_id`
-  ).run({
-    job_id: input.jobId,
-    path: input.path,
-    cover_path: input.coverPath ?? null,
-    updated_at: createdAt
-  })
+  if (input.validation.ok) {
+    getDb().prepare(
+      `UPDATE research_jobs SET artifact_path = @path, cover_path = @cover_path,
+       updated_at = @updated_at WHERE id = @job_id`
+    ).run({
+      job_id: input.jobId,
+      path: input.path,
+      cover_path: input.coverPath ?? null,
+      updated_at: createdAt
+    })
+  }
   return getResearchArtifact(id)!
 }
 
