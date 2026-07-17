@@ -33,9 +33,12 @@ import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
 import { registerGitHubActivityIpc } from './github-activity'
 import { registerProjectPreviewIpc, stopAllProjectPreviews } from './project-preview'
+import { registerResearchIpc, shutdownResearchScheduler, startResearchScheduler } from './research'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
+let researchShutdownComplete = false
+let researchShutdownInProgress = false
 const AKORITH_APP_ID = 'com.akorith.app'
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
@@ -407,6 +410,7 @@ async function initializeStartupData(): Promise<void> {
     await ensureDbReady()
     resumeActiveAutoLoopsAtStartup()
     startProjectLoopAutoScheduler()
+    startResearchScheduler()
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
   }
@@ -423,6 +427,7 @@ app.whenReady().then(() => {
   registerActionAgentIpc()
   registerGitHubActivityIpc()
   registerProjectPreviewIpc()
+  registerResearchIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -462,6 +467,22 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// Research may be in the middle of writing a checkpoint or validated artifact.
+// Drain those promises before SQLite closes so an app quit never corrupts a
+// report or leaves a lease looking active until its timeout.
+app.on('before-quit', (event) => {
+  if (researchShutdownComplete) return
+  event.preventDefault()
+  if (researchShutdownInProgress) return
+  researchShutdownInProgress = true
+  void shutdownResearchScheduler()
+    .catch((error) => console.error('[research] Scheduler shutdown failed:', error))
+    .finally(() => {
+      researchShutdownComplete = true
+      app.quit()
+    })
 })
 
 // No zombie shells: every PTY dies with the app.
