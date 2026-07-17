@@ -4,6 +4,12 @@ import { FileIcon } from './icons'
 
 type LibraryFilter = 'all' | 'published' | 'active'
 
+const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric'
+})
+
 interface ResearchLibraryProps {
   jobs: ResearchJob[]
   covers: Record<string, string | null>
@@ -83,5 +89,5 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
 }
 
 function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(timestamp))
+  return DATE_FORMATTER.format(new Date(timestamp))
 }

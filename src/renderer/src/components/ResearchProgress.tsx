@@ -25,6 +25,11 @@ const PHASE_COPY: Record<ResearchPhase, string> = {
   export: 'Packaging and validating the selected deliverable for the Research library.'
 }
 
+const CLOCK_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 interface ResearchProgressProps {
   detail: ResearchJobDetail
   actionPending?: boolean
@@ -200,7 +205,7 @@ function statusLabel(status: ResearchStatus): string {
 }
 
 function formatClock(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp))
+  return CLOCK_FORMATTER.format(new Date(timestamp))
 }
 
 function formatDuration(milliseconds: number): string {
