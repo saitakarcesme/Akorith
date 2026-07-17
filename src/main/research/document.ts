@@ -45,6 +45,7 @@ export function buildResearchDocument(input: {
     })
   }
   for (const section of parsed) {
+    if (isReservedReportSection(section.title)) continue
     const id = normalizeHeading(section.title) || `section-${sections.length + 1}`
     if (sectionIds.has(id) || sections.some((item) => normalizeHeading(item.title) === id)) continue
     sections.push({
@@ -109,6 +110,10 @@ function normalizeHeading(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+function isReservedReportSection(title: string): boolean {
+  return ['executive-summary', 'sources', 'methodology'].includes(normalizeHeading(title))
 }
 
 function firstUsefulParagraph(markdown: string): string {
