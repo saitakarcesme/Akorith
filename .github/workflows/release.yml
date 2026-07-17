@@ -43,8 +43,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Verify autonomous Research contracts and artifacts
+        run: npm run verify:research
+
+      - name: Verify autonomous Research library matrix
+        run: npm run verify:research-seed
+
       - name: Verify update version selection
         run: npm run verify:update-version
+
+      - name: Verify release identity and packaging contract
+        run: npm run release:check
 
       - name: Build app bundles
         run: npm run build

@@ -30,18 +30,30 @@ CANDIDATE_DIRS=(
 
 echo "== Akorith macOS app refresh =="
 
+is_valid_app_bundle() {
+  local app="$1"
+  [ -f "$app/Contents/Info.plist" ] &&
+    [ -x "$app/Contents/MacOS/Akorith" ] &&
+    [ -f "$app/Contents/Resources/app.asar" ]
+}
+
 # 1) Locate the freshly built .app (electron-builder --dir output under dist/).
 BUILT_APP=""
 for d in "$REPO_ROOT"/dist/mac*/Akorith.app "$REPO_ROOT"/dist/Akorith.app; do
-  if [ -d "$d" ]; then BUILT_APP="$d"; break; fi
+  if [ -d "$d" ] && is_valid_app_bundle "$d"; then
+    BUILT_APP="$d"
+    break
+  elif [ -d "$d" ]; then
+    echo "Ignoring incomplete app bundle: $d"
+  fi
 done
 
 if [ -z "$BUILT_APP" ]; then
-  echo "No freshly built Akorith.app found under dist/. Run: npm run pack:mac"
-  BUILT_FOUND=0
+  echo "No complete Akorith.app found under dist/. Run: npm run pack:mac"
+  echo "Refusing to move the installed app without a validated replacement."
+  exit 1
 else
   echo "Built app: $BUILT_APP"
-  BUILT_FOUND=1
 fi
 
 # 2) Audit existing copies.
@@ -61,11 +73,35 @@ if [ "$AUDIT_ONLY" -eq 1 ]; then
   exit 0
 fi
 
-# 3) Gracefully quit a running Akorith (only the Akorith app, nothing else).
+# 3) Copy and validate the replacement before moving any installed copy.
+TARGET_DIR="/Applications"
+if [ ! -w "$TARGET_DIR" ]; then
+  TARGET_DIR="$HOME/Applications"
+  mkdir -p "$TARGET_DIR"
+  echo "/Applications not writable — installing to $TARGET_DIR"
+fi
+TARGET="$TARGET_DIR/Akorith.app"
+STAGING="$TARGET_DIR/.Akorith-install-$STAMP.app"
+
+cleanup_staging() {
+  if [ -n "${STAGING:-}" ] && [ -d "$STAGING" ]; then
+    find "$STAGING" -depth -delete
+  fi
+}
+trap cleanup_staging EXIT
+
+if ! ditto "$BUILT_APP" "$STAGING" 2>/dev/null || ! is_valid_app_bundle "$STAGING"; then
+  echo "INSTALL FAILED: the replacement could not be staged or did not pass bundle validation."
+  echo "No installed Akorith.app was moved."
+  exit 1
+fi
+echo "Validated replacement: $STAGING"
+
+# 4) Gracefully quit a running Akorith (only the Akorith app, nothing else).
 osascript -e 'tell application "Akorith" to quit' >/dev/null 2>&1 || true
 sleep 1
 
-# 4) Back up old copies (move, never delete).
+# 5) Back up old copies (move, never delete).
 if [ "${#FOUND_COPIES[@]}" -gt 0 ]; then
   mkdir -p "$BACKUP_DIR"
   for app in "${FOUND_COPIES[@]}"; do
@@ -80,22 +116,22 @@ if [ "${#FOUND_COPIES[@]}" -gt 0 ]; then
   echo "Backup folder: $BACKUP_DIR"
 fi
 
-# 5) Install the newest build.
-if [ "$BUILT_FOUND" -eq 1 ]; then
-  TARGET_DIR="/Applications"
-  if [ ! -w "$TARGET_DIR" ]; then
-    TARGET_DIR="$HOME/Applications"
-    mkdir -p "$TARGET_DIR"
-    echo "/Applications not writable — installing to $TARGET_DIR"
-  fi
-  TARGET="$TARGET_DIR/Akorith.app"
-  if ditto "$BUILT_APP" "$TARGET" 2>/dev/null; then
-    echo "Installed: $TARGET"
-    VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$TARGET/Contents/Info.plist" 2>/dev/null || echo '?')"
-    echo "Version: $VER"
-  else
-    echo "PERMISSION: could not install to $TARGET (try: sudo ditto \"$BUILT_APP\" \"$TARGET\")"
-  fi
+# 6) Atomically promote the already validated replacement.
+if [ -e "$TARGET" ]; then
+  echo "INSTALL FAILED: $TARGET could not be moved to the backup folder."
+  echo "The validated replacement was not installed."
+  exit 1
+fi
+
+if mv "$STAGING" "$TARGET" 2>/dev/null && is_valid_app_bundle "$TARGET"; then
+  STAGING=""
+  echo "Installed: $TARGET"
+  VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$TARGET/Contents/Info.plist" 2>/dev/null || echo '?')"
+  echo "Version: $VER"
+else
+  echo "INSTALL FAILED: the validated replacement could not be promoted."
+  echo "The previous app remains in: $BACKUP_DIR"
+  exit 1
 fi
 
 echo "== done =="
