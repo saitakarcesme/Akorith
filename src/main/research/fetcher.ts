@@ -37,9 +37,8 @@ export async function fetchResearchSource(rawUrl: string, signal?: AbortSignal):
     const timeout = setTimeout(() => controller.abort(new Error('Source request timed out.')), FETCH_TIMEOUT_MS)
     const abort = (): void => controller.abort(signal?.reason)
     signal?.addEventListener('abort', abort, { once: true })
-    let response: Response
     try {
-      response = await fetch(url, {
+      const response = await fetch(url, {
         method: 'GET',
         redirect: 'manual',
         signal: controller.signal,
@@ -49,36 +48,37 @@ export async function fetchResearchSource(rawUrl: string, signal?: AbortSignal):
           'user-agent': 'AkorithResearch/1.0 (+https://akorith.space)'
         }
       })
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        if (!location) throw new Error(`Source redirected without a location (${response.status}).`)
+        if (redirect === MAX_REDIRECTS) throw new Error('Source exceeded the redirect limit.')
+        await response.body?.cancel()
+        url = await assertPublicResearchUrl(new URL(location, url).toString())
+        continue
+      }
+      if (!response.ok) throw new Error(`Source returned HTTP ${response.status}.`)
+      const length = Number(response.headers.get('content-length') ?? 0)
+      if (length > MAX_SOURCE_BYTES) throw new Error('Source exceeds the 12 MB research limit.')
+      const bytes = await readLimitedBody(response, MAX_SOURCE_BYTES)
+      const mimeType = (response.headers.get('content-type') ?? 'application/octet-stream').split(';')[0].trim().toLowerCase()
+      const extracted = await extractSource(bytes, mimeType, url)
+      return {
+        requestedUrl,
+        canonicalUrl: url.toString(),
+        status: response.status,
+        mimeType,
+        title: extracted.title,
+        publisher: extracted.publisher,
+        publishedAt: extracted.publishedAt,
+        text: extracted.text.slice(0, MAX_EXTRACTED_CHARS),
+        byteSize: bytes.byteLength,
+        pageCount: extracted.pageCount,
+        etag: response.headers.get('etag') ?? undefined,
+        lastModified: response.headers.get('last-modified') ?? undefined
+      }
     } finally {
       clearTimeout(timeout)
       signal?.removeEventListener('abort', abort)
-    }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location) throw new Error(`Source redirected without a location (${response.status}).`)
-      if (redirect === MAX_REDIRECTS) throw new Error('Source exceeded the redirect limit.')
-      url = await assertPublicResearchUrl(new URL(location, url).toString())
-      continue
-    }
-    if (!response.ok) throw new Error(`Source returned HTTP ${response.status}.`)
-    const length = Number(response.headers.get('content-length') ?? 0)
-    if (length > MAX_SOURCE_BYTES) throw new Error('Source exceeds the 12 MB research limit.')
-    const bytes = await readLimitedBody(response, MAX_SOURCE_BYTES)
-    const mimeType = (response.headers.get('content-type') ?? 'application/octet-stream').split(';')[0].trim().toLowerCase()
-    const extracted = await extractSource(bytes, mimeType, url)
-    return {
-      requestedUrl,
-      canonicalUrl: url.toString(),
-      status: response.status,
-      mimeType,
-      title: extracted.title,
-      publisher: extracted.publisher,
-      publishedAt: extracted.publishedAt,
-      text: extracted.text.slice(0, MAX_EXTRACTED_CHARS),
-      byteSize: bytes.byteLength,
-      pageCount: extracted.pageCount,
-      etag: response.headers.get('etag') ?? undefined,
-      lastModified: response.headers.get('last-modified') ?? undefined
     }
   }
   throw new Error('Source fetch failed.')
