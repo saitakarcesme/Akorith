@@ -888,7 +888,8 @@
 }
 .research-tabs > div::-webkit-scrollbar { display: none; }
 .research-tabs button {
-  min-width: 0;
+  flex: 0 0 clamp(150px, 20vw, 230px);
+  min-width: 150px;
   max-width: 230px;
   height: 34px;
   display: flex;

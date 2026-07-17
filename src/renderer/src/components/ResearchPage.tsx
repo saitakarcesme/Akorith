@@ -21,6 +21,7 @@ type ResearchSurface = 'workspace' | 'library'
 export default function ResearchPage({ active }: ResearchPageProps): JSX.Element {
   const [surface, setSurface] = useState<ResearchSurface>('workspace')
   const [jobs, setJobs] = useState<ResearchJob[]>([])
+  const [openTabIds, setOpenTabIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ResearchJobDetail | null>(null)
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
@@ -36,10 +37,18 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const loadJobs = useCallback(async (preserveSelection = true): Promise<ResearchJob[]> => {
     const next = await window.api.research.list()
     setJobs(next)
+    setOpenTabIds((current) => {
+      const available = new Set(next.map((job) => job.id))
+      const retained = current.filter((id) => available.has(id))
+      const active = next
+        .filter((job) => !['completed', 'error', 'archived'].includes(job.status))
+        .map((job) => job.id)
+      return Array.from(new Set([...active, ...retained]))
+    })
     setSelectedId((current) => {
-      if (!preserveSelection) return next[0]?.id ?? null
+      if (!preserveSelection) return null
       if (current === null) return null
-      return next.some((job) => job.id === current) ? current : next[0]?.id ?? null
+      return next.some((job) => job.id === current) ? current : null
     })
     return next
   }, [])
@@ -133,6 +142,10 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     () => jobs.filter((job) => !['completed', 'paused', 'error', 'archived'].includes(job.status)).length,
     [jobs]
   )
+  const openJobs = useMemo(
+    () => openTabIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is ResearchJob => Boolean(job)),
+    [jobs, openTabIds]
+  )
 
   async function runAction(action: () => Promise<unknown>): Promise<boolean> {
     if (actionPendingRef.current) return false
@@ -159,20 +172,25 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     return runAction(async () => {
       const job = await window.api.research.create(input)
       selectedRef.current = job.id
+      setOpenTabIds((current) => [job.id, ...current.filter((id) => id !== job.id)])
       setSelectedId(job.id)
       setSurface('workspace')
     })
   }
 
   function openJob(id: string): void {
+    setOpenTabIds((current) => current.includes(id) ? current : [...current, id])
     setSelectedId(id)
     setSurface('workspace')
   }
 
   function closeTab(id: string): void {
-    if (selectedId !== id) return
-    const index = jobs.findIndex((job) => job.id === id)
-    setSelectedId(jobs[index + 1]?.id ?? jobs[index - 1]?.id ?? null)
+    const index = openTabIds.indexOf(id)
+    const remaining = openTabIds.filter((candidate) => candidate !== id)
+    setOpenTabIds(remaining)
+    if (selectedId === id) {
+      setSelectedId(remaining[index] ?? remaining[index - 1] ?? null)
+    }
   }
 
   function handleSurfaceKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>): void {
@@ -201,10 +219,10 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
         </button>
       </header>
 
-      {surface === 'workspace' && jobs.length > 0 && (
+      {surface === 'workspace' && openJobs.length > 0 && (
         <nav className="research-tabs" aria-label="Open research tabs">
           <div>
-            {jobs.map((job) => (
+            {openJobs.map((job) => (
               <button
                 key={job.id}
                 type="button"
