@@ -439,6 +439,29 @@ export function initDb(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_research_sources_job ON research_sources(job_id, accessed_at);
 
+    CREATE TABLE IF NOT EXISTS research_claims (
+      id               TEXT PRIMARY KEY,
+      job_id           TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      cycle_id         TEXT REFERENCES research_cycles(id) ON DELETE SET NULL,
+      section_id       TEXT,
+      text             TEXT NOT NULL,
+      confidence_score REAL NOT NULL DEFAULT 0,
+      status           TEXT NOT NULL DEFAULT 'unverified',
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_claims_job ON research_claims(job_id, section_id, status);
+
+    CREATE TABLE IF NOT EXISTS research_claim_sources (
+      claim_id      TEXT NOT NULL REFERENCES research_claims(id) ON DELETE CASCADE,
+      source_id     TEXT NOT NULL REFERENCES research_sources(id) ON DELETE CASCADE,
+      evidence      TEXT,
+      relation      TEXT NOT NULL DEFAULT 'supports',
+      created_at    INTEGER NOT NULL,
+      PRIMARY KEY (claim_id, source_id, relation)
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_claim_sources_source ON research_claim_sources(source_id, claim_id);
+
     CREATE TABLE IF NOT EXISTS research_artifacts (
       id         TEXT PRIMARY KEY,
       job_id     TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
