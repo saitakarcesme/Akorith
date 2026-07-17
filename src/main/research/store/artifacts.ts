@@ -10,6 +10,7 @@ export function recordResearchArtifact(input: {
   title: string
   path: string
   coverPath?: string
+  version?: number
   validation: ArtifactValidationResult
 }): ResearchArtifact {
   const id = randomUUID()
@@ -20,7 +21,7 @@ export function recordResearchArtifact(input: {
       mime_type, version, page_count, validation_error, created_at
     ) VALUES (
       @id, @job_id, @format, @title, @path, @cover_path, @byte_size, @status,
-      @checksum, @mime_type, 1, @page_count, @validation_error, @created_at
+      @checksum, @mime_type, @version, @page_count, @validation_error, @created_at
     )`
   ).run({
     id,
@@ -33,6 +34,7 @@ export function recordResearchArtifact(input: {
     status: input.validation.ok ? 'ready' : 'invalid',
     checksum: input.validation.checksum,
     mime_type: input.validation.mimeType,
+    version: Math.max(1, Math.floor(input.version ?? 1)),
     page_count: input.validation.pageCount ?? null,
     validation_error: input.validation.error ?? null,
     created_at: createdAt
@@ -49,6 +51,13 @@ export function recordResearchArtifact(input: {
     })
   }
   return getResearchArtifact(id)!
+}
+
+export function nextResearchArtifactVersion(jobId: string, format: ResearchOutputFormat): number {
+  const row = getDb().prepare(
+    'SELECT COALESCE(MAX(version), 0) + 1 AS version FROM research_artifacts WHERE job_id = ? AND format = ?'
+  ).get(jobId, format) as { version: number }
+  return Math.max(1, Number(row.version) || 1)
 }
 
 export function getResearchArtifact(id: string): ResearchArtifact | null {
