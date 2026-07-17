@@ -1,0 +1,238 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  CreateResearchJobInput,
+  ProviderInfo,
+  ResearchJob,
+  ResearchJobDetail,
+  ResearchOutputFormat
+} from '../../../preload/index.d'
+import { CloseIcon, PlusIcon } from './icons'
+import ResearchComposer from './ResearchComposer'
+import ResearchLibrary from './ResearchLibrary'
+import ResearchProgress from './ResearchProgress'
+
+interface ResearchPageProps {
+  active: boolean
+}
+
+type ResearchSurface = 'workspace' | 'library'
+
+export default function ResearchPage({ active }: ResearchPageProps): JSX.Element {
+  const [surface, setSurface] = useState<ResearchSurface>('workspace')
+  const [jobs, setJobs] = useState<ResearchJob[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<ResearchJobDetail | null>(null)
+  const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
+  const [covers, setCovers] = useState<Record<string, string | null>>({})
+  const [loading, setLoading] = useState(true)
+  const [actionPending, setActionPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const selectedRef = useRef<string | null>(null)
+  selectedRef.current = selectedId
+
+  const loadJobs = useCallback(async (preserveSelection = true): Promise<ResearchJob[]> => {
+    const next = await window.api.research.list()
+    setJobs(next)
+    setSelectedId((current) => {
+      if (!preserveSelection) return next[0]?.id ?? null
+      if (current === null) return null
+      return next.some((job) => job.id === current) ? current : next[0]?.id ?? null
+    })
+    return next
+  }, [])
+
+  const loadDetail = useCallback(async (id: string): Promise<ResearchJobDetail> => {
+    const next = await window.api.research.get(id)
+    if (selectedRef.current === id) setDetail(next)
+    return next
+  }, [])
+
+  useEffect(() => {
+    if (!active || providers) return
+    let cancelled = false
+    void window.api.chat.listProviders()
+      .then((next) => { if (!cancelled) setProviders(next) })
+      .catch((nextError) => { if (!cancelled) setError(errorMessage(nextError)) })
+    return () => { cancelled = true }
+  }, [active, providers])
+
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    setLoading(true)
+    void loadJobs()
+      .then(() => { if (!cancelled) setLoading(false) })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setLoading(false)
+          setError(errorMessage(nextError))
+        }
+      })
+    return () => { cancelled = true }
+  }, [active, loadJobs])
+
+  useEffect(() => {
+    if (!active || !selectedId) {
+      setDetail(null)
+      return
+    }
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const poll = async (): Promise<void> => {
+      try {
+        const next = await window.api.research.get(selectedId)
+        if (cancelled) return
+        setDetail(next)
+        setJobs((current) => current.map((job) => job.id === next.job.id ? next.job : job))
+        const activeStatus = next.running || !['completed', 'paused', 'archived'].includes(next.job.status)
+        timer = setTimeout(() => void poll(), activeStatus ? 1_500 : 6_000)
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(errorMessage(nextError))
+          timer = setTimeout(() => void poll(), 8_000)
+        }
+      }
+    }
+    void poll()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [active, selectedId])
+
+  useEffect(() => {
+    if (!active) return
+    const missing = jobs.filter((job) => job.coverPath && !(job.id in covers))
+    if (missing.length === 0) return
+    let cancelled = false
+    void Promise.all(missing.map(async (job) => [job.id, await window.api.research.coverDataUrl(job.id)] as const))
+      .then((entries) => {
+        if (cancelled) return
+        setCovers((current) => ({ ...current, ...Object.fromEntries(entries) }))
+      })
+      .catch((nextError) => { if (!cancelled) setError(errorMessage(nextError)) })
+    return () => { cancelled = true }
+  }, [active, covers, jobs])
+
+  const runningCount = useMemo(
+    () => jobs.filter((job) => !['completed', 'paused', 'error', 'archived'].includes(job.status)).length,
+    [jobs]
+  )
+
+  async function runAction(action: () => Promise<unknown>): Promise<void> {
+    if (actionPending) return
+    setActionPending(true)
+    setError(null)
+    try {
+      await action()
+      const nextJobs = await loadJobs()
+      if (selectedRef.current && nextJobs.some((job) => job.id === selectedRef.current)) {
+        await loadDetail(selectedRef.current)
+      }
+    } catch (nextError) {
+      setError(errorMessage(nextError))
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  async function createResearch(input: CreateResearchJobInput): Promise<void> {
+    await runAction(async () => {
+      const job = await window.api.research.create(input)
+      setSelectedId(job.id)
+      setSurface('workspace')
+    })
+  }
+
+  function openJob(id: string): void {
+    setSelectedId(id)
+    setSurface('workspace')
+  }
+
+  function closeTab(id: string): void {
+    if (selectedId !== id) return
+    const index = jobs.findIndex((job) => job.id === id)
+    setSelectedId(jobs[index + 1]?.id ?? jobs[index - 1]?.id ?? null)
+  }
+
+  return (
+    <div className="research-page">
+      <header className="research-page-toolbar">
+        <div className="research-surface-switch" role="tablist" aria-label="Research views">
+          <button type="button" role="tab" aria-selected={surface === 'workspace'} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')}>Research</button>
+          <button type="button" role="tab" aria-selected={surface === 'library'} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')}>Library <span>{jobs.length}</span></button>
+        </div>
+        <div className="research-toolbar-status"><i />{runningCount > 0 ? `${runningCount} running` : 'Ready'}</div>
+        <button
+          type="button"
+          className="research-new-tab"
+          onClick={() => { setSelectedId(null); setSurface('workspace') }}
+        >
+          <PlusIcon size={15} /> New research
+        </button>
+      </header>
+
+      {surface === 'workspace' && jobs.length > 0 && (
+        <nav className="research-tabs" aria-label="Open research tabs">
+          <div>
+            {jobs.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                className={selectedId === job.id ? 'is-active' : ''}
+                onClick={() => openJob(job.id)}
+              >
+                <i className={`is-${job.status}`} />
+                <span>{job.plan?.title || job.title}</span>
+                {selectedId === job.id && (
+                  <em
+                    role="button"
+                    tabIndex={0}
+                    title="Close tab"
+                    aria-label="Close tab"
+                    onClick={(event) => { event.stopPropagation(); closeTab(job.id) }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        closeTab(job.id)
+                      }
+                    }}
+                  >
+                    <CloseIcon size={12} />
+                  </em>
+                )}
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
+
+      <main className="research-page-content">
+        {error && <div className="research-page-alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
+        {surface === 'library' ? (
+          <ResearchLibrary jobs={jobs} covers={covers} onSelect={openJob} />
+        ) : selectedId && detail?.job.id === selectedId ? (
+          <ResearchProgress
+            detail={detail}
+            actionPending={actionPending}
+            onPause={() => runAction(() => window.api.research.pause(selectedId))}
+            onResume={() => runAction(() => window.api.research.resume(selectedId))}
+            onExport={(format: ResearchOutputFormat) => runAction(() => window.api.research.export(selectedId, format))}
+            onOpenArtifact={(id) => runAction(() => window.api.research.openArtifact(id))}
+            onRevealArtifact={(id) => runAction(() => window.api.research.revealArtifact(id))}
+            onOpenSource={(id) => runAction(() => window.api.research.openSource(id))}
+          />
+        ) : loading ? (
+          <div className="research-page-loading"><i /><span>Loading Research…</span></div>
+        ) : (
+          <ResearchComposer providers={providers} disabled={actionPending} onSubmit={createResearch} />
+        )}
+      </main>
+    </div>
+  )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
