@@ -56,7 +56,7 @@ export async function synthesizeResearchJob(
   writeFileSync(partial, `${report.trim()}\n`, 'utf8')
   renameSync(partial, reportPath)
   updateResearchJob(job.id, { summary: reportSummary(report) })
-  const artifact = await exportResearchJob(job.id)
+  const artifact = await exportResearchJob(job.id, undefined, { trackLifecycle: true })
   const now = Date.now()
   if (options.final) {
     updateResearchJob(job.id, {

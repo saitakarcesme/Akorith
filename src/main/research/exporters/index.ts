@@ -24,12 +24,15 @@ import { exportResearchXlsx } from './xlsx'
 
 export async function exportResearchJob(
   jobId: string,
-  formatOverride?: ResearchOutputFormat
+  formatOverride?: ResearchOutputFormat,
+  options: { trackLifecycle?: boolean } = {}
 ): Promise<ResearchArtifact> {
   const job = getResearchJob(jobId)
   if (!job) throw new Error('Research job not found.')
   const format = formatOverride ?? job.outputFormat
-  updateResearchJob(job.id, { status: 'exporting', phase: 'export', error: undefined })
+  if (options.trackLifecycle) {
+    updateResearchJob(job.id, { status: 'exporting', phase: 'export', error: undefined })
+  }
   logResearchEvent({ jobId, kind: 'export_started', title: `Creating ${format.toUpperCase()} deliverable` })
 
   const report = readResearchMarkdown(job.workspaceDir, RESEARCH_REPORT_FILE)
@@ -54,7 +57,7 @@ export async function exportResearchJob(
   })
   if (!validation.ok) {
     try { unlinkSync(path) } catch { /* best effort: invalid output remains hidden */ }
-    updateResearchJob(job.id, { status: 'error', error: validation.error })
+    if (options.trackLifecycle) updateResearchJob(job.id, { status: 'error', error: validation.error })
     logResearchEvent({
       jobId,
       kind: 'error',
