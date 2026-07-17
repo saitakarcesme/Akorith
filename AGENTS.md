@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 69
-(autonomous, durable Research with validated multi-format deliverables).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 70
+(Research presentations, unified usage accounting, and aligned sidebar identity).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -26,7 +26,9 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 25 Test Lab Rebuild ·
 26 Settings Center ·
 **27 Local Executor Loop** · 28–56 product, UI, update, agent, and concurrent-loop phases
-(see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** — all done.
+(see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** ·
+**69 Autonomous Research** · **70 Research Presentation + unified usage + sidebar alignment** —
+all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -189,11 +191,16 @@ foreign keys ON). All DB access is main-process; the renderer uses validated IPC
 - `messages(id, session_id FK CASCADE, role user|assistant, content, provider_id,
   model, created_at)`.
 - `usage_events(id, ts, provider_id, model, prompt_tokens, completion_tokens,
-  cost_usd, estimated 0/1, session_id nullable FK)` — **exactly one row per assistant
-  send**, written from the `SendResult.usage` contract inside the `chat:send` handler
-  (the single choke point). Claude/Local write real counts (`estimated=0`); ChatGPT
-  writes approximations (`estimated=1`). Indexed on `ts` and `(provider_id, ts)`.
-  The Phase 6 router will read `usage_events`.
+  cache_read_tokens, cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
+  estimated 0/1, request_count, session_id nullable FK, source_kind nullable,
+  source_id nullable)` — Phase 70 extends the table additively. Normal Chat still writes exactly
+  one row per assistant send from the `SendResult.usage` contract inside the `chat:send` handler.
+  Each Research job writes one visible `research-request` row (`request_count=1`), while its
+  plan/cycle/synthesis model calls write token-only rows (`request_count=0`). `total_tokens` is the
+  canonical total when a provider supplies it; component sums are only a compatibility fallback.
+  The optional source identity is unique when present, so retries and historical backfill are
+  idempotent. Indexed on `ts` and `(provider_id, ts)`. The Phase 6 router and Dashboard read the
+  unified ledger.
 
 Phase-specific persistence also lives here:
 
@@ -219,9 +226,10 @@ new-chat, and a local profile/settings entry. Clicking a session restores its co
 the chat panel. Sidebar nav switches between **Workspace** (default, 3-pane), **Dashboard**, and
 **Test**; the workspace stays mounted
 (`display:none`) while the dashboard is open so the terminal PTYs are never disturbed.
-The dashboard (recharts + a CSS-grid calendar heatmap) reads only `usage_events`:
-activity heatmap, per-day stacked token bars by provider, provider-distribution donut,
-and summary cards. Providers with estimated counts render hatched with an "≈" tag.
+The dashboard (recharts + a CSS-grid calendar heatmap) reads only `usage_events`, including
+Research request/token rows: activity heatmap, per-day stacked token bars by provider,
+provider-distribution donut, and summary cards. Providers with estimated counts render hatched
+with an "≈" tag.
 
 ### Model router — SUGGEST ONLY (Phase 6)
 
@@ -1774,7 +1782,7 @@ Research is a first-class sidebar destination, separate from General Chat, Works
 `ResearchPage` keeps concurrent investigations in tabs and switches between the active Research
 workspace and a persistent Library. `ResearchComposer` accepts one unattended research request,
 an explicit CLI provider/model, Quick (~10 minutes), Research (~1 hour), Deep (10+ hours), or
-Continuous depth, and a PDF, Markdown, DOCX, or XLSX deliverable. Continuous work remains scheduled
+Continuous depth, and a PDF, Markdown, DOCX, XLSX, or PowerPoint deliverable. Continuous work remains scheduled
 until explicitly paused; bounded depths plan, research, verify, synthesize, export, and complete.
 
 The main-process `src/main/research/` engine owns every lifecycle transition. Eight additive SQLite
@@ -1798,6 +1806,32 @@ plus formula-injection safety before exposing Open/Reveal actions. Verify with `
 `npm run build`, `npm run verify:research`, and `npm run verify:research-live:check`; an intentional
 provider smoke run uses `npm run verify:research-live -- --provider all --continuous` (add
 `--persist` only when its test records should remain in the real Research Library).
+
+### Phase 70: Research Presentation, Unified Usage, and Sidebar Alignment
+
+The expanded sidebar brand now follows the same two columns as navigation: the Akorith icon aligns
+with the Workspace icon and the Akorith label aligns with the Workspace label. Preserve that shared
+geometry in both wide and narrow Electron layouts rather than positioning the brand independently.
+
+Research usage is part of the same additive `usage_events` ledger as Chat. A Research job contributes
+exactly one user-visible request; plan, cycle, and synthesis calls contribute their complete token
+usage (prompt, completion, cache read/write, reasoning, and canonical total) with
+`request_count=0`. Stable `(source_kind, source_id)` identities make live recording and historical
+backfill idempotent. Never infer `total_tokens` by adding cache or reasoning to a provider-reported
+canonical total.
+
+PowerPoint is the fifth Research deliverable beside PDF, Markdown, DOCX, and XLSX. Production decks
+are generated with JSZip and editable native 16:9 Open XML shapes, text, tables, and bar graphics;
+they preserve Unicode, follow a finding-led narrative, and end with a source appendix. The PPTX
+validator checks the package, presentation/slide relationships, readable slide content, and output
+MIME before an artifact becomes available. `@oai/artifact-tool` is licensed for internal rendering
+and QA only: it must never become an Akorith runtime dependency, be copied into the app, or ship in
+a release.
+
+The deterministic Research fixture matrix is now 4 depths × 2 provider families × 5 output formats
+= 40 combinations. Verification covers typecheck/build, the Research suite, OpenCode usage parsing,
+Research persistence/backfill, artifact-tool rendering plus `slides_test.py`, and wide/narrow
+Electron inspection of brand alignment and the updated Research UI.
 
 ## Conventions
 

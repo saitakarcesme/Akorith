@@ -106,8 +106,9 @@ function buildProviders(): Map<string, Provider> {
 
 /**
  * Meta/evaluation sends call providers directly without sessions, repo digest,
- * messages, or usage_events. Phase 8 uses this for the optional ISAScore judge;
- * dashboard accounting remains reserved for normal chat:send exchanges.
+ * messages, or implicit usage_events. Callers that represent user-visible work
+ * (such as Research) persist their returned usage with a stable logical turn ID;
+ * internal judges and summarizers intentionally leave the dashboard untouched.
  */
 export async function sendMetaPrompt(
   providerId: string,
@@ -617,6 +618,10 @@ export function registerChatIpc(): void {
             model: result.model,
             promptTokens: result.usage.promptTokens,
             completionTokens: result.usage.completionTokens,
+            cacheReadTokens: result.usage.cacheReadTokens,
+            cacheWriteTokens: result.usage.cacheWriteTokens,
+            reasoningTokens: result.usage.reasoningTokens,
+            totalTokens: result.usage.totalTokens,
             costUsd: result.usage.costUsd,
             estimated: result.usage.estimated,
             sessionId

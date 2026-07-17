@@ -63,6 +63,10 @@ export interface ProviderInfo {
 export interface ChatUsage {
   promptTokens?: number
   completionTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  reasoningTokens?: number
+  totalTokens?: number
   costUsd?: number
   estimated: boolean
 }
@@ -377,6 +381,10 @@ export interface ProviderUsageSummary {
   events: number
   promptTokens: number
   completionTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  reasoningTokens: number
+  totalTokens: number
   costUsd: number
   estimated: boolean
 }
@@ -1489,7 +1497,7 @@ export interface LocalRuntimeApi {
 
 // Evidence-backed autonomous Research.
 export type ResearchDepth = 'quick' | 'standard' | 'deep' | 'continuous'
-export type ResearchOutputFormat = 'pdf' | 'md' | 'docx' | 'xlsx'
+export type ResearchOutputFormat = 'pdf' | 'md' | 'docx' | 'xlsx' | 'pptx'
 export type ResearchStatus =
   | 'draft' | 'planning' | 'researching' | 'verifying' | 'synthesizing'
   | 'exporting' | 'completed' | 'paused' | 'error' | 'archived'

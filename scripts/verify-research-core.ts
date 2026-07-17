@@ -15,6 +15,7 @@ import {
 import { exportResearchDocx } from '../src/main/research/exporters/docx.ts'
 import { exportResearchMarkdown } from '../src/main/research/exporters/markdown.ts'
 import { exportResearchPdf } from '../src/main/research/exporters/pdf.ts'
+import { exportResearchPptx } from '../src/main/research/exporters/pptx.ts'
 import { sanitizeSpreadsheetCell, exportResearchXlsx } from '../src/main/research/exporters/xlsx.ts'
 import { validateResearchArtifact } from '../src/main/research/exporters/validate.ts'
 import { assertPublicResearchUrl, isPublicIp } from '../src/main/research/network-policy.ts'
@@ -59,10 +60,12 @@ async function main(): Promise<void> {
 async function verifyDepthProfiles(): Promise<void> {
   await check('depth profiles expose the three bounded modes and continuous mode', () => {
     assert.deepEqual(Object.keys(RESEARCH_DEPTH_PROFILES), ['quick', 'standard', 'deep', 'continuous'])
-    assert.deepEqual(TEST_RESEARCH_DEPTHS, ['quick', 'standard', 'deep'])
+    assert.deepEqual(TEST_RESEARCH_DEPTHS, ['quick', 'standard', 'deep', 'continuous'])
   })
   await check('bounded depth budgets increase monotonically', () => {
-    const profiles = TEST_RESEARCH_DEPTHS.map((depth) => RESEARCH_DEPTH_PROFILES[depth])
+    const profiles = TEST_RESEARCH_DEPTHS
+      .filter((depth) => depth !== 'continuous')
+      .map((depth) => RESEARCH_DEPTH_PROFILES[depth])
     for (let index = 1; index < profiles.length; index += 1) {
       assert.ok(profiles[index].targetDurationMs > profiles[index - 1].targetDurationMs)
       assert.ok(profiles[index].cycleIntervalMs > profiles[index - 1].cycleIntervalMs)
@@ -85,7 +88,7 @@ async function verifyDepthProfiles(): Promise<void> {
 }
 
 async function verifyFixtureMatrix(): Promise<void> {
-  await check('fixture manifest contains exactly 24 combinations', () => {
+  await check('fixture manifest contains exactly 40 combinations', () => {
     assert.equal(RESEARCH_CORE_FIXTURE_MATRIX.length, EXPECTED_RESEARCH_FIXTURE_COUNT)
     assert.equal(
       RESEARCH_CORE_FIXTURE_MATRIX.length,
@@ -100,7 +103,7 @@ async function verifyFixtureMatrix(): Promise<void> {
     assert.equal(ids.size, EXPECTED_RESEARCH_FIXTURE_COUNT)
     assert.equal(tuples.size, EXPECTED_RESEARCH_FIXTURE_COUNT)
   })
-  await check('every depth/provider pair covers all four outputs', () => {
+  await check('every depth/provider pair covers all five outputs', () => {
     for (const depth of TEST_RESEARCH_DEPTHS) {
       for (const provider of TEST_RESEARCH_PROVIDERS) {
         const formats = RESEARCH_CORE_FIXTURE_MATRIX
@@ -198,7 +201,7 @@ async function verifyNetworkPolicy(): Promise<void> {
 async function verifyExportValidators(): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'akorith-research-core-'))
   try {
-    await check('all 24 fixtures export and pass production artifact validation', async () => {
+    await check('all 40 fixtures export and pass production artifact validation', async () => {
       for (const fixture of RESEARCH_CORE_FIXTURE_MATRIX) {
         const workspace = join(root, fixture.id)
         mkdirSync(join(workspace, 'artifacts'), { recursive: true })
@@ -222,13 +225,16 @@ async function verifyExportValidators(): Promise<void> {
       assert.equal(orphanResult.ok, false)
       assert.match(orphanResult.error ?? '', /orphan source reference/i)
     })
-    await check('malformed PDF and DOCX packages are rejected', async () => {
+    await check('malformed PDF, DOCX, and PPTX packages are rejected', async () => {
       const invalidPdf = join(root, 'invalid.pdf')
       const invalidDocx = join(root, 'invalid.docx')
+      const invalidPptx = join(root, 'invalid.pptx')
       writeFileSync(invalidPdf, '%PDF-1.7\nnot a complete document')
       writeFileSync(invalidDocx, 'not a zip package')
+      writeFileSync(invalidPptx, 'not a zip package')
       assert.equal((await validateResearchArtifact('pdf', invalidPdf)).ok, false)
       assert.equal((await validateResearchArtifact('docx', invalidDocx)).ok, false)
+      assert.equal((await validateResearchArtifact('pptx', invalidPptx)).ok, false)
     })
     await check('workbooks missing required report sheets are rejected', async () => {
       const invalidXlsx = join(root, 'invalid.xlsx')
@@ -259,7 +265,8 @@ async function exportFixture(
   if (format === 'md') return exportResearchMarkdown(workspace, document)
   if (format === 'pdf') return exportResearchPdf(workspace, document)
   if (format === 'docx') return exportResearchDocx(workspace, document)
-  return exportResearchXlsx(workspace, document)
+  if (format === 'xlsx') return exportResearchXlsx(workspace, document)
+  return exportResearchPptx(workspace, document)
 }
 
 void main()

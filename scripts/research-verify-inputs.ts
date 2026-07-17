@@ -28,7 +28,7 @@ for (const depth of RESEARCH_DEPTHS) {
     }
   }
 }
-assert.equal(accepted, 32, 'all depth, output, and provider-class combinations must be accepted')
+assert.equal(accepted, 40, 'all depth, output, and provider-class combinations must be accepted')
 
 assert.equal(RESEARCH_DEPTH_PROFILES.quick.targetDurationMs, 10 * 60_000)
 assert.equal(RESEARCH_DEPTH_PROFILES.standard.targetDurationMs, 60 * 60_000)

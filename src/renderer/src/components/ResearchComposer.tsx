@@ -18,7 +18,8 @@ const OUTPUTS: Array<{ id: ResearchOutputFormat; label: string }> = [
   { id: 'pdf', label: 'PDF' },
   { id: 'md', label: 'Markdown' },
   { id: 'docx', label: 'DOCX' },
-  { id: 'xlsx', label: 'Excel' }
+  { id: 'xlsx', label: 'Excel' },
+  { id: 'pptx', label: 'PowerPoint' }
 ]
 
 interface ResearchComposerProps {

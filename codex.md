@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 69:
-Autonomous Research**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 70:
+Research Presentation, Unified Usage & Sidebar Alignment**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -32,8 +32,10 @@ Autonomous Research**.
   They return strict JSON patch attempts; Akorith validates paths, applies changes inside the
   workspace, runs allowlisted validation commands, scores the attempt, and commits only
   meaningful successful changes.
-- **One `usage_event` per assistant send,** written only at the `chat:send` choke point in
-  `registry.ts`. Meta calls (e.g. the router's classifier) must not write one.
+- **Usage is one additive canonical ledger.** Normal Chat writes one `usage_event` per assistant
+  send at the `chat:send` choke point. Each Research job writes one visible request, while its
+  plan/cycle/synthesis calls write token-only rows with stable source identities; unrelated meta
+  calls (for example the router classifier) still write none.
 - **Providers are equal:** no provider file imports another; `registry.ts` + config are the
   single source of truth. Don't change provider internals without cause.
 - **Native modules:**
@@ -353,7 +355,10 @@ Autonomous Research**.
       Changes, task search/pins, and per-session streaming/navigation continuity.
 - [x] **Phase 69** - Autonomous Research. A first-class Research sidebar surface runs concurrent,
       unattended CLI-model investigations across four depth modes, persists evidence/checkpoints,
-      and publishes validated PDF, Markdown, DOCX, or XLSX artifacts with A4 Library covers.
+      and publishes validated PDF, Markdown, DOCX, XLSX, or PowerPoint artifacts with A4 Library covers.
+- [x] **Phase 70** - Research Presentation, Unified Usage & Sidebar Alignment. Research adds native,
+      editable PowerPoint output; Dashboard accounting includes idempotent Research requests and
+      model tokens; and the sidebar brand shares the navigation icon/text columns.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -805,6 +810,25 @@ local model, attempts, validated changes, commits, last validation, and last com
   `npm run verify:research-live:check`. Run `npm run verify:research-live -- --provider all --continuous`
   only for an intentional signed-in provider smoke test; add `--persist` only to retain those jobs
   in the real Library.
+
+## Phase 70 - Research Presentation, Unified Usage & Sidebar Alignment
+
+- The sidebar Akorith icon aligns with the Workspace icon column and its label aligns with the
+  Workspace text column. Keep the brand centered on those columns in wide and narrow Electron
+  layouts.
+- `usage_events` remains an additive schema and now records cache read/write, reasoning,
+  provider-canonical total tokens, `request_count`, and optional source identity. Every Research
+  job contributes exactly one visible request; plan, cycle, and synthesis usage is included with
+  `request_count=0`. Stable source IDs make live retries and historical backfill idempotent.
+- PowerPoint (`.pptx`) is Research's fifth output. Production export uses JSZip/Open XML only and
+  emits editable native 16:9 shapes, text, tables, and bar graphics with Unicode-safe content, a
+  finding-led narrative, and a source appendix. Format validation checks package structure,
+  relationships, slide content, and MIME before publication.
+- `@oai/artifact-tool` is strictly an internal render/inspection tool for QA. Never make it an app
+  dependency, vendor its private implementation, or distribute it in a release.
+- The fixture matrix is 4 depths × 2 provider families × 5 formats = 40. Verification includes
+  typecheck/build, Research/OpenCode/persistence suites, artifact-tool rendering,
+  `slides_test.py`, and wide/narrow Electron checks for brand alignment and Research UI geometry.
 
 ## Rule: keep the docs current
 

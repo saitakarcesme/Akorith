@@ -10,6 +10,7 @@ import {
   type ResearchJob
 } from '../types'
 import { rowToResearchJob, type DbRow } from './rows'
+import { recordResearchRequest } from '../usage'
 
 const MAX_PROMPT_LENGTH = 120_000
 const MAX_TITLE_LENGTH = 160
@@ -76,7 +77,9 @@ export function createResearchJob(
     started_at: input.autoStart === false ? null : now,
     next_run_at: input.autoStart === false ? null : now
   })
-  return getResearchJob(id)!
+  const job = getResearchJob(id)!
+  recordResearchRequest(job)
+  return job
 }
 
 export function getResearchJob(id: string): ResearchJob | null {

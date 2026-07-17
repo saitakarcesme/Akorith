@@ -21,6 +21,7 @@ import {
 import { exportResearchDocx } from './docx'
 import { exportResearchMarkdown } from './markdown'
 import { exportResearchPdf } from './pdf'
+import { exportResearchPptx } from './pptx'
 import { validateResearchArtifact } from './validate'
 import { exportResearchXlsx } from './xlsx'
 
@@ -109,7 +110,8 @@ async function exportByFormat(
   if (format === 'md') return exportResearchMarkdown(workspaceDir, document, outputPath)
   if (format === 'pdf') return exportResearchPdf(workspaceDir, document, outputPath)
   if (format === 'docx') return exportResearchDocx(workspaceDir, document, outputPath)
-  return exportResearchXlsx(workspaceDir, document, outputPath)
+  if (format === 'xlsx') return exportResearchXlsx(workspaceDir, document, outputPath)
+  return exportResearchPptx(workspaceDir, document, outputPath)
 }
 
 export { validateResearchArtifact } from './validate'

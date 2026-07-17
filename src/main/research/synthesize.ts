@@ -18,6 +18,7 @@ import {
   safeResearchPath,
   writeResearchPlan
 } from './workspace'
+import { recordResearchModelUsage } from './usage'
 
 export async function synthesizeResearchJob(
   jobId: string,
@@ -41,6 +42,13 @@ export async function synthesizeResearchJob(
       options.signal,
       { workingDirectory: job.workspaceDir }
     )
+    recordResearchModelUsage({
+      job,
+      kind: 'research-synthesis',
+      turnId: `${job.id}:${job.cycleCount}:${options.final ? 'final' : 'snapshot'}`,
+      model: response.model,
+      usage: response.usage
+    })
     report = sanitizeResearchReportCitations(response.text.trim(), sources.length)
     if (!/^#\s+\S/m.test(report)) report = `# ${plan.title}\n\n${report}`
   } catch (error) {

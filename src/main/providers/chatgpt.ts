@@ -68,6 +68,7 @@ export class ChatGPTProvider implements Provider {
     if (opts.model && opts.model !== 'default') {
       args.push('-m', opts.model)
     }
+    let reportedUsage: SendResult['usage'] | null = null
 
     try {
       const res = await runCli('codex', args, {
@@ -104,6 +105,34 @@ export class ChatGPTProvider implements Provider {
             const text = typeof item?.text === 'string' ? item.text : 'Updating the plan'
             opts.onActivity?.({ kind: 'plan', label: text, status })
           } else if (type === 'turn.completed') {
+            const usage = event.usage && typeof event.usage === 'object'
+              ? event.usage as Record<string, unknown>
+              : null
+            if (usage) {
+              const count = (value: unknown): number =>
+                typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0
+              const inputDetails = usage.input_tokens_details && typeof usage.input_tokens_details === 'object'
+                ? usage.input_tokens_details as Record<string, unknown>
+                : {}
+              const outputDetails = usage.output_tokens_details && typeof usage.output_tokens_details === 'object'
+                ? usage.output_tokens_details as Record<string, unknown>
+                : {}
+              const input = count(usage.input_tokens ?? usage.prompt_tokens)
+              const cached = count(usage.cached_input_tokens ?? usage.cache_read_input_tokens ?? inputDetails.cached_tokens)
+              const output = count(usage.output_tokens ?? usage.completion_tokens)
+              const reasoning = count(usage.reasoning_tokens ?? usage.reasoning_output_tokens ?? outputDetails.reasoning_tokens)
+              const total = count(usage.total_tokens) || input + output
+              if (total > 0) {
+                reportedUsage = {
+                  promptTokens: Math.max(0, input - cached) || undefined,
+                  completionTokens: output || undefined,
+                  cacheReadTokens: cached || undefined,
+                  reasoningTokens: reasoning || undefined,
+                  totalTokens: total,
+                  estimated: false
+                }
+              }
+            }
             opts.onActivity?.({ kind: 'status', label: 'Preparing the final result', status: 'complete' })
           }
         }
@@ -131,11 +160,12 @@ export class ChatGPTProvider implements Provider {
 
       return {
         text,
-        usage: {
+        usage: reportedUsage ?? {
           // codex exec exposes no reliable counts or pricing — approximate,
           // flag it, and never fabricate a cost.
           promptTokens: estimateTokens(prompt),
           completionTokens: estimateTokens(text),
+          totalTokens: estimateTokens(prompt) + estimateTokens(text),
           estimated: true
         },
         model: opts.model ?? 'default',

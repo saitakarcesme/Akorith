@@ -25,6 +25,14 @@ export interface SendResult {
   usage: {
     promptTokens?: number
     completionTokens?: number
+    /** Provider-reported prompt-cache reads that are not part of promptTokens. */
+    cacheReadTokens?: number
+    /** Provider-reported prompt-cache writes that are not part of promptTokens. */
+    cacheWriteTokens?: number
+    /** Reasoning tokens when the CLI exposes them as a separate counter. */
+    reasoningTokens?: number
+    /** Canonical provider total; avoids double-counting counters that are subsets. */
+    totalTokens?: number
     costUsd?: number
     /** true when numbers are approximations (e.g. char-count heuristics). */
     estimated: boolean

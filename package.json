@@ -1,7 +1,7 @@
 {
   "name": "akorith",
   "productName": "Akorith",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Akorith — orchestrate AI coding agents (Claude/Codex CLIs, local Ollama) with no API keys",
   "author": "Akorith",
   "main": "./out/main/index.js",

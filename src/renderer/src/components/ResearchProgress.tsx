@@ -182,7 +182,7 @@ export default function ResearchProgress({
           <div className="research-section-heading">
             <div><span className="research-eyebrow">DELIVERABLES</span><h2>Validated outputs</h2></div>
             <div className="research-export-menu">
-              {(['pdf', 'md', 'docx', 'xlsx'] as ResearchOutputFormat[]).map((format) => (
+              {(['pdf', 'md', 'docx', 'xlsx', 'pptx'] as ResearchOutputFormat[]).map((format) => (
                 <button key={format} type="button" disabled={actionPending} onClick={() => void onExport(format)}>{format.toUpperCase()}</button>
               ))}
             </div>

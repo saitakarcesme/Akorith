@@ -68,10 +68,21 @@ textarea:focus-visible,
   padding: 5px 12px 3px;
 }
 .sidebar-brand-row .sidebar-brand {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  padding: 0 0 0 33px;
+  padding: 0 0 0 8px;
+  gap: 8px;
   font-weight: 400;
   letter-spacing: -0.01em;
+}
+.sidebar-brand-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  display: block;
+  border-radius: 5px;
+  object-fit: cover;
 }
 .sidebar-search-button {
   width: 29px;

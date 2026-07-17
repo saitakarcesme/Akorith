@@ -77,8 +77,8 @@ async function main(): Promise<void> {
       results.push(await seedFixture(fixture))
     }
 
-    assert.equal(results.length, 32, 'Research QA library must cover 4 depths × 2 providers × 4 formats')
-    assert.equal(new Set(results.map((result) => result.id)).size, 32, 'Research QA fixture IDs must be unique')
+    assert.equal(results.length, 40, 'Research QA library must cover 4 depths × 2 providers × 5 formats')
+    assert.equal(new Set(results.map((result) => result.id)).size, 40, 'Research QA fixture IDs must be unique')
     assert.equal(
       results.every((result) => existsSync(result.artifactPath) && existsSync(result.coverPath)),
       true,
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     assert.equal(
       repeated.every((result) => result.action === 'reused'),
       true,
-      'Re-running the seed must reuse all 32 valid fixtures without overwriting them'
+      'Re-running the seed must reuse all 40 valid fixtures without overwriting them'
     )
 
     const created = results.filter((result) => result.action === 'created').length
@@ -105,8 +105,8 @@ async function main(): Promise<void> {
     })}`)
     console.log(
       options.persist
-        ? `Research QA seed complete: ${created} created, ${reused} already valid; 32 fixtures retained in the Akorith library.`
-        : 'Research QA seed verified: 32 offline fixtures created in an isolated library and removed after verification.'
+        ? `Research QA seed complete: ${created} created, ${reused} already valid; 40 fixtures retained in the Akorith library.`
+        : 'Research QA seed verified: 40 offline fixtures created in an isolated library and removed after verification.'
     )
   } finally {
     closeDb()
@@ -323,13 +323,13 @@ function parseOptions(args: string[]): SeedOptions {
 function printHelp(): void {
   console.log(`Usage: npm run verify:research-seed -- [--persist]
 
-Creates 32 deterministic, QA-labelled Research library fixtures:
-  4 depths × 2 provider classes × 4 output formats.
+Creates 40 deterministic, QA-labelled Research library fixtures:
+  4 depths × 2 provider classes × 5 output formats.
 
 Default (safe): uses a temporary isolated Akorith userData directory, verifies every
 artifact and cover, then removes only that temporary directory.
 
---persist  DANGER / EXPLICIT OPT-IN: writes the 32 fixtures into the real Akorith
+--persist  DANGER / EXPLICIT OPT-IN: writes the 40 fixtures into the real Akorith
            userData and retains their library rows, artifacts, and covers. Existing
            rows and files are never deleted or overwritten. No model or network call
            is made in either mode.

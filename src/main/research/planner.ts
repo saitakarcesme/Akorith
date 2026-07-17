@@ -3,6 +3,7 @@ import { buildResearchPlanningPrompt, parseResearchPlan } from './prompts/plan'
 import { getResearchJob, logResearchEvent, updateResearchJob } from './store'
 import { RESEARCH_DEPTH_PROFILES, type ResearchPlan } from './types'
 import { readResearchState, writeResearchPlan, writeResearchState } from './workspace'
+import { recordResearchModelUsage } from './usage'
 
 export async function planResearchJob(jobId: string, signal?: AbortSignal): Promise<ResearchPlan> {
   const job = getResearchJob(jobId)
@@ -18,6 +19,13 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
   try {
     const response = await sendMetaPrompt(job.providerId, job.model, prompt, signal, {
       workingDirectory: job.workspaceDir
+    })
+    recordResearchModelUsage({
+      job,
+      kind: 'research-plan',
+      turnId: job.id,
+      model: response.model,
+      usage: response.usage
     })
     plan = parseResearchPlan(response.text)
   } catch (error) {

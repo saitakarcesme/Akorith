@@ -3,7 +3,8 @@
 //
 // usage_events is a CONTRACT: the dashboard reads it, and
 // TODO(phase 6): the router reads usage_events to pick providers by
-//                cost/volume. One row per assistant send, from SendResult.usage.
+//                cost/volume. Chat sends and autonomous Research calls share
+//                this ledger; stable source identities prevent double-counting.
 
 import { app, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
@@ -82,9 +83,16 @@ export function initDb(): void {
       model             TEXT,
       prompt_tokens     INTEGER,
       completion_tokens INTEGER,
+      cache_read_tokens INTEGER,
+      cache_write_tokens INTEGER,
+      reasoning_tokens  INTEGER,
+      total_tokens      INTEGER,
       cost_usd          REAL,
       estimated         INTEGER NOT NULL DEFAULT 0,
-      session_id        TEXT REFERENCES sessions(id) ON DELETE SET NULL
+      session_id        TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      request_count     INTEGER NOT NULL DEFAULT 1,
+      source_kind       TEXT,
+      source_id         TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
     CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_events(provider_id, ts);
@@ -606,6 +614,45 @@ export function initDb(): void {
   `)
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('benchmark_entries', 'artifact_path', 'TEXT')
+  ensureColumn('usage_events', 'cache_read_tokens', 'INTEGER')
+  ensureColumn('usage_events', 'cache_write_tokens', 'INTEGER')
+  ensureColumn('usage_events', 'reasoning_tokens', 'INTEGER')
+  ensureColumn('usage_events', 'total_tokens', 'INTEGER')
+  ensureColumn('usage_events', 'request_count', 'INTEGER NOT NULL DEFAULT 1')
+  ensureColumn('usage_events', 'source_kind', 'TEXT')
+  ensureColumn('usage_events', 'source_id', 'TEXT')
+  nextDb.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_source
+      ON usage_events(source_kind, source_id)
+      WHERE source_kind IS NOT NULL AND source_id IS NOT NULL;
+
+    INSERT OR IGNORE INTO usage_events (
+      id, ts, provider_id, model, total_tokens, estimated, request_count,
+      source_kind, source_id
+    )
+    SELECT 'research-request:' || id, created_at, provider_id, model, 0, 0, 1,
+           'research-request', id
+      FROM research_jobs;
+
+    INSERT OR IGNORE INTO usage_events (
+      id, ts, provider_id, model, prompt_tokens, completion_tokens,
+      total_tokens, estimated, request_count, source_kind, source_id
+    )
+    SELECT 'research-cycle:' || cycle.id,
+           COALESCE(cycle.ended_at, cycle.started_at),
+           job.provider_id,
+           job.model,
+           cycle.prompt_tokens,
+           cycle.completion_tokens,
+           COALESCE(cycle.prompt_tokens, 0) + COALESCE(cycle.completion_tokens, 0),
+           CASE WHEN job.provider_id IN ('claude', 'local') THEN 0 ELSE 1 END,
+           0,
+           'research-cycle',
+           cycle.id
+      FROM research_cycles AS cycle
+      JOIN research_jobs AS job ON job.id = cycle.job_id
+     WHERE cycle.prompt_tokens IS NOT NULL OR cycle.completion_tokens IS NOT NULL;
+  `)
   ensureColumn('research_sources', 'content_hash', 'TEXT')
   ensureColumn('research_jobs', 'lease_owner', 'TEXT')
   ensureColumn('research_jobs', 'lease_expires_at', 'INTEGER')
@@ -767,6 +814,10 @@ export interface StoredMessageMetadata {
   usage?: {
     promptTokens?: number
     completionTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+    reasoningTokens?: number
+    totalTokens?: number
     costUsd?: number
     estimated: boolean
   }
@@ -924,29 +975,50 @@ export interface UsageEventInput {
   model?: string
   promptTokens?: number
   completionTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  reasoningTokens?: number
+  totalTokens?: number
   costUsd?: number
   estimated: boolean
   sessionId?: string
+  /** User-visible requests. Internal autonomous calls use 0. */
+  requestCount?: number
+  /** Stable origin identity makes autonomous accounting idempotent. */
+  sourceKind?: string
+  sourceId?: string
+  timestamp?: number
 }
 
-/** One row per assistant send — the SendResult.usage contract lands here. */
-export function recordUsageEvent(input: UsageEventInput): void {
-  must()
+/** Persist a user request or provider usage turn in the shared dashboard ledger. */
+export function recordUsageEvent(input: UsageEventInput): boolean {
+  const result = must()
     .prepare(
-      `INSERT INTO usage_events (id, ts, provider_id, model, prompt_tokens, completion_tokens, cost_usd, estimated, session_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT OR IGNORE INTO usage_events (
+         id, ts, provider_id, model, prompt_tokens, completion_tokens,
+         cache_read_tokens, cache_write_tokens, reasoning_tokens, total_tokens,
+         cost_usd, estimated, session_id, request_count, source_kind, source_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       randomUUID(),
-      Date.now(),
+      input.timestamp ?? Date.now(),
       input.providerId,
       input.model ?? null,
       input.promptTokens ?? null,
       input.completionTokens ?? null,
+      input.cacheReadTokens ?? null,
+      input.cacheWriteTokens ?? null,
+      input.reasoningTokens ?? null,
+      input.totalTokens ?? null,
       input.costUsd ?? null,
       input.estimated ? 1 : 0,
-      input.sessionId ?? null
+      input.sessionId ?? null,
+      Math.max(0, Math.trunc(input.requestCount ?? 1)),
+      input.sourceKind ?? null,
+      input.sourceId ?? null
     )
+  return result.changes > 0
 }
 
 // ---- projects (Phase 9.1 sidebar workspace folders) ----
@@ -1152,6 +1224,10 @@ export interface ProviderUsageSummary {
   events: number
   promptTokens: number
   completionTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  reasoningTokens: number
+  totalTokens: number
   costUsd: number
   estimated: boolean
 }
@@ -1169,14 +1245,21 @@ export function usageSummary(): UsageSummary {
     d
       .prepare(
         `SELECT provider_id,
-                COUNT(*) AS events,
+                SUM(request_count) AS events,
                 SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
                 SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
+                SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
+                SUM(COALESCE(reasoning_tokens, 0)) AS reasoning_tokens,
+                SUM(COALESCE(total_tokens,
+                    COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0) +
+                    COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0) +
+                    COALESCE(reasoning_tokens, 0))) AS total_tokens,
                 SUM(COALESCE(cost_usd, 0)) AS cost_usd,
                 MAX(estimated) AS estimated
          FROM usage_events
          GROUP BY provider_id
-         ORDER BY prompt_tokens + completion_tokens DESC`
+         ORDER BY total_tokens DESC`
       )
       .all() as Record<string, number | string>[]
   ).map((r) => ({
@@ -1184,12 +1267,16 @@ export function usageSummary(): UsageSummary {
     events: r.events as number,
     promptTokens: (r.prompt_tokens as number) ?? 0,
     completionTokens: (r.completion_tokens as number) ?? 0,
+    cacheReadTokens: (r.cache_read_tokens as number) ?? 0,
+    cacheWriteTokens: (r.cache_write_tokens as number) ?? 0,
+    reasoningTokens: (r.reasoning_tokens as number) ?? 0,
+    totalTokens: (r.total_tokens as number) ?? 0,
     costUsd: (r.cost_usd as number) ?? 0,
     estimated: r.estimated === 1
   }))
   const sessionCount = (d.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c
   return {
-    totalTokens: byProvider.reduce((s, p) => s + p.promptTokens + p.completionTokens, 0),
+    totalTokens: byProvider.reduce((s, p) => s + p.totalTokens, 0),
     totalCostUsd: byProvider.reduce((s, p) => s + p.costUsd, 0),
     sessionCount,
     byProvider
@@ -1210,8 +1297,11 @@ export function recentUsageByProvider(sinceMs: number): Record<string, RecentPro
   const rows = must()
     .prepare(
       `SELECT provider_id,
-              COUNT(*) AS events,
-              SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)) AS tokens,
+              SUM(request_count) AS events,
+              SUM(COALESCE(total_tokens,
+                  COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0) +
+                  COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0) +
+                  COALESCE(reasoning_tokens, 0))) AS tokens,
               SUM(COALESCE(cost_usd, 0)) AS cost_usd
        FROM usage_events
        WHERE ts >= ?
@@ -2323,8 +2413,11 @@ export function usageDaily(days: number): DailyUsageRow[] {
       .prepare(
         `SELECT date(ts / 1000, 'unixepoch', 'localtime') AS day,
                 provider_id,
-                COUNT(*) AS events,
-                SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)) AS tokens,
+                SUM(request_count) AS events,
+                SUM(COALESCE(total_tokens,
+                    COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0) +
+                    COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0) +
+                    COALESCE(reasoning_tokens, 0))) AS tokens,
                 MAX(estimated) AS estimated
          FROM usage_events
          WHERE ts >= ?

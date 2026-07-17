@@ -21,7 +21,8 @@ const MIME_TYPES: Record<ResearchOutputFormat, string> = {
   pdf: 'application/pdf',
   md: 'text/markdown',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 }
 
 export async function validateResearchArtifact(
@@ -44,6 +45,7 @@ export async function validateResearchArtifact(
     }
     if (format === 'docx') await validateDocx(bytes)
     if (format === 'xlsx') await validateXlsx(bytes)
+    if (format === 'pptx') await validatePptx(bytes)
     return { ok: true, ...base }
   } catch (error) {
     return {
@@ -94,4 +96,25 @@ async function validateXlsx(bytes: Buffer): Promise<void> {
       }
     })
   })
+}
+
+async function validatePptx(bytes: Buffer): Promise<void> {
+  const zip = await JSZip.loadAsync(bytes)
+  for (const required of [
+    '[Content_Types].xml',
+    'ppt/presentation.xml',
+    'ppt/slideMasters/slideMaster1.xml',
+    'ppt/slideLayouts/slideLayout1.xml',
+    'ppt/theme/theme1.xml'
+  ]) {
+    if (!zip.file(required)) throw new Error(`PPTX package is missing ${required}.`)
+  }
+  const presentationXml = await zip.file('ppt/presentation.xml')!.async('string')
+  const slideCount = [...presentationXml.matchAll(/<p:sldId\b/g)].length
+  if (slideCount < 4) throw new Error('PowerPoint deck must contain at least four narrative slides.')
+  const slideFiles = Object.keys(zip.files).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
+  if (slideFiles.length !== slideCount) throw new Error('PowerPoint slide manifest does not match its slide files.')
+  const readable = (await Promise.all(slideFiles.map((path) => zip.file(path)!.async('string')))).join('\n')
+  if (!/AKORITH[\s\S]{0,32}RESEARCH/.test(readable)) throw new Error('PowerPoint deck is missing its Akorith identity.')
+  if (![...readable.matchAll(/<a:t>[^<]{2,}<\/a:t>/g)].length) throw new Error('PowerPoint deck contains no readable text.')
 }

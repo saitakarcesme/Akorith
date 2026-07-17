@@ -358,6 +358,7 @@ export class LocalProvider implements Provider {
         // Ollama reports real counts; local inference costs nothing.
         promptTokens: done?.prompt_eval_count,
         completionTokens: done?.eval_count,
+        totalTokens: (done?.prompt_eval_count ?? 0) + (done?.eval_count ?? 0),
         costUsd: 0,
         estimated: false
       },

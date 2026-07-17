@@ -34,6 +34,7 @@ import {
   readResearchState,
   writeResearchState
 } from './workspace'
+import { recordResearchModelUsage } from './usage'
 
 const MIN_SOURCE_GATE = { quick: 3, standard: 8, deep: 20, continuous: 3 } as const
 
@@ -90,6 +91,13 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
       signal,
       { workingDirectory: job.workspaceDir }
     )
+    recordResearchModelUsage({
+      job,
+      kind: 'research-cycle',
+      turnId: cycle.id,
+      model: response.model,
+      usage: response.usage
+    })
     const parsed = parseResearchCycle(response.text, sources.length)
     for (const candidate of parsed.claims) {
       const claim = recordResearchClaim({

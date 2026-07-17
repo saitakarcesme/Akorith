@@ -128,12 +128,18 @@ export class ClaudeProvider implements Provider {
     // count for this turn; the raw CLI event still carries the full provider
     // accounting for audits.
     const promptTokens = usage.input_tokens ?? 0
+    const cacheReadTokens = usage.cache_read_input_tokens ?? 0
+    const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+    const completionTokens = usage.output_tokens ?? 0
 
     return {
       text,
       usage: {
         promptTokens: promptTokens || undefined,
-        completionTokens: usage.output_tokens,
+        completionTokens: completionTokens || undefined,
+        cacheReadTokens: cacheReadTokens || undefined,
+        cacheWriteTokens: cacheWriteTokens || undefined,
+        totalTokens: promptTokens + completionTokens + cacheReadTokens + cacheWriteTokens,
         costUsd: result.total_cost_usd,
         estimated: false
       },

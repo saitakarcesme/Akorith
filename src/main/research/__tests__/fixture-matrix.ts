@@ -26,7 +26,7 @@ export const TEST_RESEARCH_PROVIDERS = [
   }
 ] as const
 
-export const TEST_RESEARCH_OUTPUTS = ['pdf', 'md', 'docx', 'xlsx'] as const satisfies readonly ResearchOutputFormat[]
+export const TEST_RESEARCH_OUTPUTS = ['pdf', 'md', 'docx', 'xlsx', 'pptx'] as const satisfies readonly ResearchOutputFormat[]
 
 export interface ResearchFixtureCase {
   id: string
@@ -54,7 +54,7 @@ export const RESEARCH_CORE_FIXTURE_MATRIX: readonly ResearchFixtureCase[] = Obje
   )
 )
 
-export const EXPECTED_RESEARCH_FIXTURE_COUNT = 32
+export const EXPECTED_RESEARCH_FIXTURE_COUNT = 40
 
 export function createDeterministicResearchDocument(fixture: ResearchFixtureCase): ResearchDocument {
   const sources: ResearchSource[] = [

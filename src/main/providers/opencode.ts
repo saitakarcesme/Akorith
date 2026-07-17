@@ -204,11 +204,14 @@ export class OpenCodeProvider implements Provider {
 
     return {
       text,
-      usage: {
-        promptTokens: estimateTokens(prompt),
-        completionTokens: estimateTokens(text),
-        estimated: true
-      },
+      usage: parsed.usage
+        ? { ...parsed.usage, estimated: false }
+        : {
+            promptTokens: estimateTokens(prompt),
+            completionTokens: estimateTokens(text),
+            totalTokens: estimateTokens(prompt) + estimateTokens(text),
+            estimated: true
+          },
       model: opts.model ?? 'default',
       raw: { stdout: res.stdout.slice(-2000), stderr: res.stderr.slice(-2000) }
     }

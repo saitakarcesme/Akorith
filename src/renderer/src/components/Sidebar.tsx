@@ -1,6 +1,7 @@
 import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
+import akorithLogo from '../assets/plugin-logos/akorith.png'
 import { useProfileIdentity } from '../profileIdentity'
 import {
   ChevronIcon,
@@ -582,7 +583,13 @@ export default function Sidebar({
         >
       {/* The top chrome owns sidebar collapse; this nav stays focused on
           destinations and creation. */}
-      <div className="sidebar-brand-row"><div className="sidebar-brand" aria-label="Akorith">Akorith</div><button type="button" className="sidebar-search-button" title="Search tasks (⌘K)" onClick={() => { setSearchOpen((open) => !open); window.setTimeout(() => searchRef.current?.focus(), 0) }}><SearchIcon size={15} /></button></div>
+      <div className="sidebar-brand-row">
+        <div className="sidebar-brand" aria-label="Akorith">
+          <img className="sidebar-brand-icon" src={akorithLogo} alt="" aria-hidden="true" />
+          <span>Akorith</span>
+        </div>
+        <button type="button" className="sidebar-search-button" title="Search tasks (⌘K)" onClick={() => { setSearchOpen((open) => !open); window.setTimeout(() => searchRef.current?.focus(), 0) }}><SearchIcon size={15} /></button>
+      </div>
       {searchOpen && <div className="sidebar-search"><SearchIcon size={14} /><input ref={searchRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search projects and tasks" /><kbd>⌘K</kbd></div>}
       <nav className="sidebar-nav" aria-label="Primary">
         <div className="sidebar-newchat-row">

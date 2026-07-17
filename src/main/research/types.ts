@@ -1,7 +1,7 @@
 export const RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'continuous'] as const
 export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number]
 
-export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'md', 'docx', 'xlsx'] as const
+export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'md', 'docx', 'xlsx', 'pptx'] as const
 export type ResearchOutputFormat = (typeof RESEARCH_OUTPUT_FORMATS)[number]
 
 export const RESEARCH_STATUSES = [

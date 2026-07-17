@@ -16,6 +16,7 @@ import { createResearchCoverSvg } from '../src/main/research/cover.ts'
 import { exportResearchDocx } from '../src/main/research/exporters/docx.ts'
 import { exportResearchMarkdown } from '../src/main/research/exporters/markdown.ts'
 import { exportResearchPdf } from '../src/main/research/exporters/pdf.ts'
+import { exportResearchPptx } from '../src/main/research/exporters/pptx.ts'
 import { resolveResearchPdfFontPaths } from '../src/main/research/exporters/pdf-fonts.ts'
 import { validateResearchArtifact } from '../src/main/research/exporters/validate.ts'
 import { exportResearchXlsx } from '../src/main/research/exporters/xlsx.ts'
@@ -74,13 +75,14 @@ async function main(): Promise<void> {
       generated += 1
     }
     await verifyPdfUnicodeRoundTrip(root)
+    await verifyPptxUnicodeRoundTrip(root)
   } finally {
     globalThis.fetch = originalFetch
     rmSync(root, { recursive: true, force: true })
   }
 
   assert.equal(generated, EXPECTED_RESEARCH_FIXTURE_COUNT)
-  console.log(`research artifact verifier passed (${generated} offline reports across four formats)`)
+  console.log(`research artifact verifier passed (${generated} offline reports across five formats)`)
 }
 
 function verifyVisualEvidenceModel(): void {
@@ -203,6 +205,54 @@ async function verifyPdfUnicodeRoundTrip(root: string): Promise<void> {
   }
 }
 
+async function verifyPptxUnicodeRoundTrip(root: string): Promise<void> {
+  const fixture = RESEARCH_CORE_FIXTURE_MATRIX.find((item) => item.outputFormat === 'pptx')!
+  const workspace = join(root, 'research-pptx-unicode-round-trip')
+  mkdirSync(join(workspace, 'artifacts'), { recursive: true })
+  const base = createDeterministicResearchDocument(fixture)
+  const multilingualText = [
+    'Türkçe: İnci Aral, Oğuz Atay, Hasan Ali Toptaş, Perihan Mağden, İhsan Oktay Anar, Nâzım Hikmet, Yaşar Kemal.',
+    'Français: élève et cœur. Polski: Łódź. Tiếng Việt: Nguyễn. Ελληνικά: Αθήνα. Кириллица: Москва. اردو: اردو. עברית: עברית.'
+  ].join(' ')
+  const document: ResearchDocument = {
+    ...base,
+    title: 'Çok dilli araştırma · İnci, Oğuz ve Nâzım',
+    subtitle: multilingualText,
+    executiveSummary: multilingualText,
+    sections: base.sections.map((section, index) =>
+      index === 0 ? { ...section, title: 'Ölçülen bulgular', body: multilingualText } : section
+    )
+  }
+
+  const path = await exportResearchPptx(workspace, document)
+  const zip = await JSZip.loadAsync(readFileSync(path))
+  const presentationXml = await zip.file('ppt/presentation.xml')!.async('text')
+  const slideCount = [...presentationXml.matchAll(/<p:sldId\b/g)].length
+  const slides = await Promise.all(Array.from({ length: slideCount }, (_, index) =>
+    zip.file(`ppt/slides/slide${index + 1}.xml`)!.async('text')
+  ))
+  const joined = slides.join('\n')
+  for (const expected of [
+    'İnci',
+    'Oğuz',
+    'Toptaş',
+    'Mağden',
+    'İhsan',
+    'Nâzım',
+    'Yaşar',
+    'Français',
+    'Łódź',
+    'Nguyễn',
+    'Αθήνα',
+    'Москва',
+    'اردو',
+    'עברית'
+  ]) {
+    assert.ok(joined.includes(expected), `Research PPTX must preserve multilingual text: ${expected}`)
+  }
+  assert.match(joined, /lang="tr-TR"/, 'Research PPTX text runs must retain a Unicode-aware language tag')
+}
+
 async function exportFixture(
   format: ResearchOutputFormat,
   workspace: string,
@@ -211,7 +261,8 @@ async function exportFixture(
   if (format === 'md') return exportResearchMarkdown(workspace, document)
   if (format === 'pdf') return exportResearchPdf(workspace, document)
   if (format === 'docx') return exportResearchDocx(workspace, document)
-  return exportResearchXlsx(workspace, document)
+  if (format === 'xlsx') return exportResearchXlsx(workspace, document)
+  return exportResearchPptx(workspace, document)
 }
 
 async function verifyContainer(
@@ -254,6 +305,28 @@ async function verifyContainer(
     assert.ok(documentXml, 'DOCX must contain its Word document body')
     assert.match(documentXml, /Visual evidence/, 'DOCX must include native visual evidence')
     assert.match(documentXml, /Web evidence snapshot/, 'DOCX must include source snapshot cards')
+    return
+  }
+  if (format === 'pptx') {
+    assert.ok(zip.file('ppt/presentation.xml'), 'PPTX must contain its presentation manifest')
+    assert.ok(zip.file('ppt/slideMasters/slideMaster1.xml'), 'PPTX must contain its editable slide master')
+    assert.ok(zip.file('ppt/theme/theme1.xml'), 'PPTX must contain its Akorith theme')
+    const presentationXml = await zip.file('ppt/presentation.xml')!.async('text')
+    const slideCount = [...presentationXml.matchAll(/<p:sldId\b/g)].length
+    assert.ok(slideCount >= 8, 'PPTX must deliver a complete narrative deck')
+    const slideXml = await Promise.all(Array.from({ length: slideCount }, (_, index) =>
+      zip.file(`ppt/slides/slide${index + 1}.xml`)!.async('text')
+    ))
+    const joined = slideXml.join('\n')
+    assert.match(slideXml[0], /name="Presentation title"[\s\S]*?sz="5000"/, 'PPTX deck titles must stay at 50pt or larger')
+    assert.match(joined, /name="Slide title"[\s\S]*?sz="3500"/, 'PPTX slide titles must stay at 35pt or larger')
+    assert.match(joined, /<a:tbl>[\s\S]*?<a:rPr\b[^>]*sz="1600"/, 'PPTX native table body text must stay at 16pt or larger')
+    assert.match(joined, /Executive takeaway/, 'PPTX must lead with an executive takeaway')
+    assert.match(joined, /Methodology &amp; limits/, 'PPTX must explain methodology and limitations')
+    assert.match(joined, /What the evidence supports/, 'PPTX must close with a supported conclusion')
+    assert.match(joined, /Sources/, 'PPTX must retain its source appendix')
+    assert.match(joined, /<a:tbl>/, 'PPTX evidence tables must remain native and editable')
+    assert.match(joined, /Türkçe|Research fixture/, 'PPTX must retain readable Unicode XML text')
     return
   }
   assert.ok(zip.file('xl/workbook.xml'), 'XLSX must contain a workbook manifest')

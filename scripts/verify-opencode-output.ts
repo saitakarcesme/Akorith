@@ -5,13 +5,27 @@ const textOutput = [
   JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }),
   JSON.stringify({ type: 'text', part: { type: 'text', text: 'Hello ' } }),
   JSON.stringify({ type: 'text', part: { type: 'text', text: 'workspace.' } }),
-  JSON.stringify({ type: 'step_finish', part: { type: 'step-finish' } })
+  JSON.stringify({
+    type: 'step_finish',
+    part: {
+      type: 'step-finish',
+      tokens: { total: 34_212, input: 154, output: 65, reasoning: 0, cache: { write: 0, read: 33_993 } }
+    }
+  })
 ].join('\n')
 
 const parsedText = parseOpenCodeJson(textOutput)
 assert.equal(parsedText.text, 'Hello workspace.')
 assert.equal(parsedText.eventCount, 4)
 assert.deepEqual(parsedText.toolErrors, [])
+assert.deepEqual(parsedText.usage, {
+  promptTokens: 154,
+  completionTokens: 65,
+  cacheReadTokens: 33_993,
+  cacheWriteTokens: 0,
+  reasoningTokens: 0,
+  totalTokens: 34_212
+})
 
 const deniedOutput = [
   JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }),

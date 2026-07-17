@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
-import { closeDb, getDb, initDb } from '../src/main/db.ts'
+import { closeDb, getDb, initDb, usageDaily, usageSummary } from '../src/main/db.ts'
 import { exportResearchJob } from '../src/main/research/exporters/index.ts'
 import {
   acquireResearchLease,
@@ -33,6 +33,7 @@ import {
   updateResearchJob
 } from '../src/main/research/store/index.ts'
 import type { ResearchPhase, ResearchStatus, ResearchWorkspaceState } from '../src/main/research/types.ts'
+import { recordResearchModelUsage, recordResearchRequest } from '../src/main/research/usage.ts'
 import {
   RESEARCH_REPORT_FILE,
   initializeResearchWorkspace,
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
     initDb()
     verifySchema()
     const jobId = seedPersistentLibraryRecord()
+    verifyUsageAccounting(jobId)
     verifyPhaseLifecycle(jobId)
     verifySafeSourcePersistence(jobId)
     verifyRestartRoundTrip(jobId)
@@ -114,6 +116,100 @@ function verifySchema(): void {
     ],
     'the complete Research library schema must be initialized'
   )
+  const usageColumns = new Set(
+    (getDb().prepare('PRAGMA table_info(usage_events)').all() as Array<{ name: string }>).map((row) => row.name)
+  )
+  for (const column of [
+    'cache_read_tokens',
+    'cache_write_tokens',
+    'reasoning_tokens',
+    'total_tokens',
+    'request_count',
+    'source_kind',
+    'source_id'
+  ]) {
+    assert.equal(usageColumns.has(column), true, `usage_events must include ${column}`)
+  }
+}
+
+function verifyUsageAccounting(jobId: string): void {
+  const job = getResearchJob(jobId)!
+  const request = getDb().prepare(
+    "SELECT request_count, total_tokens FROM usage_events WHERE source_kind = 'research-request' AND source_id = ?"
+  ).get(jobId) as { request_count: number; total_tokens: number }
+  assert.deepEqual(request, { request_count: 1, total_tokens: 0 }, 'one Research submission is one visible request')
+  assert.equal(recordResearchRequest(job), false, 'replaying job creation must not count a second user request')
+
+  assert.equal(recordResearchModelUsage({
+    job,
+    kind: 'research-plan',
+    turnId: job.id,
+    model: 'opencode-go/glm-5.2',
+    usage: { promptTokens: 15, completionTokens: 25, totalTokens: 40, estimated: false }
+  }), true, 'planning usage must enter the shared token ledger')
+
+  const first = recordResearchModelUsage({
+    job,
+    kind: 'research-cycle',
+    turnId: 'usage-fixture-cycle',
+    model: 'opencode-go/glm-5.2',
+    usage: {
+      promptTokens: 10,
+      completionTokens: 20,
+      cacheReadTokens: 30,
+      reasoningTokens: 5,
+      // reasoning is a subset of completion for this provider, so the
+      // canonical provider total intentionally differs from the component sum.
+      totalTokens: 60,
+      estimated: false
+    }
+  })
+  const duplicate = recordResearchModelUsage({
+    job,
+    kind: 'research-cycle',
+    turnId: 'usage-fixture-cycle',
+    model: 'opencode-go/glm-5.2',
+    usage: { promptTokens: 999, completionTokens: 999, totalTokens: 1_998, estimated: false }
+  })
+  assert.equal(first, true)
+  assert.equal(duplicate, false, 'a retried persistence path must not double-count the same Research turn')
+  assert.equal(recordResearchModelUsage({
+    job,
+    kind: 'research-synthesis',
+    turnId: `${job.id}:fixture:final`,
+    model: 'opencode-go/glm-5.2',
+    usage: { promptTokens: 12, completionTokens: 18, totalTokens: 30, estimated: false }
+  }), true, 'synthesis usage must enter the shared token ledger')
+
+  const provider = usageSummary().byProvider.find((row) => row.providerId === job.providerId)
+  assert.equal(provider?.events, 1, 'internal Research turns must not inflate the user request count')
+  assert.equal(provider?.totalTokens, 130, 'plan, cycle, and synthesis totals must be included without double counting subsets')
+  assert.equal(provider?.cacheReadTokens, 30)
+  assert.equal(provider?.reasoningTokens, 5)
+  const today = new Date().toLocaleDateString('en-CA')
+  const daily = usageDaily(1).find((row) => row.day === today && row.providerId === job.providerId)
+  assert.equal(daily?.events, 1)
+  assert.equal(daily?.tokens, 130)
+
+  getDb().prepare(
+    `INSERT INTO research_cycles (
+       id, job_id, cycle_index, phase, status, objective, source_count, finding_count,
+       prompt_tokens, completion_tokens, started_at, ended_at
+     ) VALUES (?, ?, ?, 'research', 'completed', 'Legacy usage migration', 0, 0, 7, 8, ?, ?)`
+  ).run('legacy-research-usage-cycle', jobId, 999, Date.now() - 1_000, Date.now())
+  closeDb()
+  initDb()
+  const migrated = getDb().prepare(
+    "SELECT request_count, total_tokens FROM usage_events WHERE source_kind = 'research-cycle' AND source_id = ?"
+  ).get('legacy-research-usage-cycle') as { request_count: number; total_tokens: number }
+  assert.deepEqual(migrated, { request_count: 0, total_tokens: 15 }, 'persisted legacy cycle usage must backfill once')
+  closeDb()
+  initDb()
+  const migratedCount = getDb().prepare(
+    "SELECT COUNT(*) AS count FROM usage_events WHERE source_kind = 'research-cycle' AND source_id = ?"
+  ).get('legacy-research-usage-cycle') as { count: number }
+  assert.equal(migratedCount.count, 1, 're-running the historical migration must remain idempotent')
+  getDb().prepare('DELETE FROM research_cycles WHERE id = ?').run('legacy-research-usage-cycle')
 }
 
 function seedPersistentLibraryRecord(): string {
