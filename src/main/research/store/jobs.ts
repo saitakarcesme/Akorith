@@ -16,7 +16,11 @@ const MAX_TITLE_LENGTH = 160
 
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.trim().split(/\r?\n/).find(Boolean) ?? 'Untitled research'
-  return firstLine.replace(/\s+/g, ' ').slice(0, 80)
+  return normalizeResearchTitle(firstLine).slice(0, 80)
+}
+
+function normalizeResearchTitle(value: string): string {
+  return value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export function validateCreateResearchJobInput(input: CreateResearchJobInput): void {
@@ -42,7 +46,7 @@ export function createResearchJob(
   validateCreateResearchJobInput(input)
   const now = Date.now()
   const profile = RESEARCH_DEPTH_PROFILES[input.depth]
-  const title = (input.title?.trim() || titleFromPrompt(input.prompt)).slice(0, MAX_TITLE_LENGTH)
+  const title = (normalizeResearchTitle(input.title ?? '') || titleFromPrompt(input.prompt)).slice(0, MAX_TITLE_LENGTH)
   const status = input.autoStart === false ? 'draft' : 'planning'
   getDb().prepare(
     `INSERT INTO research_jobs (
@@ -131,7 +135,7 @@ export function updateResearchJob(id: string, patch: Partial<ResearchJob>): Rese
     if (!(key in patch)) continue
     let value = (patch as Record<string, unknown>)[key]
     if (key === 'plan') value = value == null ? null : JSON.stringify(value)
-    if (key === 'title' && typeof value === 'string') value = value.trim().slice(0, MAX_TITLE_LENGTH)
+    if (key === 'title' && typeof value === 'string') value = normalizeResearchTitle(value).slice(0, MAX_TITLE_LENGTH)
     sets.push(`${column} = @${column}`)
     params[column] = value ?? null
   }
