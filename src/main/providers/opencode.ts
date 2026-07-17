@@ -129,7 +129,9 @@ export class OpenCodeProvider implements Provider {
     }
     for (const attachment of opts.attachments ?? []) args.push('-f', attachment.path)
     const workspacePrompt = opts.workingDirectory
-      ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts; never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
+      ? opts.intent === 'plan'
+        ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
+        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts; never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     args.push(workspacePrompt)
 

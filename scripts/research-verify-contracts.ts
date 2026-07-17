@@ -51,6 +51,11 @@ const declarationsSource = source('src/preload/index.d.ts')
 const mainSource = source('src/main/index.ts')
 const sidebarSource = source('src/renderer/src/components/Sidebar.tsx')
 const appSource = source('src/renderer/src/App.tsx')
+const providerRegistrySource = source('src/main/providers/registry.ts')
+const openCodeProviderSource = source('src/main/providers/opencode.ts')
+const researchPlannerSource = source('src/main/research/planner.ts')
+const researchRunnerSource = source('src/main/research/runner.ts')
+const researchSynthesisSource = source('src/main/research/synthesize.ts')
 
 const handledChannels = matches(ipcSource, /ipcMain\.handle\(['"](research:[^'"]+)['"]/g).sort()
 const invokedChannels = matches(preloadSource, /ipcRenderer\.invoke\(['"](research:[^'"]+)['"]/g).sort()
@@ -99,6 +104,28 @@ assert.match(mainSource, /before-quit[\s\S]*?shutdownResearchScheduler\(\)/, 'ap
 assert.ok(
   mainSource.indexOf('shutdownResearchScheduler()') < mainSource.lastIndexOf('closeDb()'),
   'Research scheduler shutdown must be wired before SQLite close'
+)
+
+assert.match(
+  providerRegistrySource,
+  /workingDirectory:\s*options\.workingDirectory,[\s\S]*?intent:\s*options\.workingDirectory\s*\?\s*'plan'/,
+  'managed meta prompts must bind CLI providers to a read-only working directory'
+)
+for (const [phase, phaseSource] of [
+  ['planning', researchPlannerSource],
+  ['research', researchRunnerSource],
+  ['synthesis', researchSynthesisSource]
+] as const) {
+  assert.match(
+    phaseSource,
+    /workingDirectory:\s*job\.workspaceDir/,
+    `${phase} prompts must stay inside the managed Research workspace`
+  )
+}
+assert.match(
+  openCodeProviderSource,
+  /trusted read-only boundary[\s\S]*?Do not create, edit, rename, or delete files/,
+  'OpenCode meta prompts must explicitly retain their read-only tool boundary'
 )
 
 console.log(`research contract verifier passed (${expectedChannels.length} IPC channels, ${expectedApiMethods.length} typed methods)`)

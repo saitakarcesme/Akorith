@@ -87,7 +87,8 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
         sources,
         priorFindings
       }),
-      signal
+      signal,
+      { workingDirectory: job.workspaceDir }
     )
     const parsed = parseResearchCycle(response.text, sources.length)
     for (const candidate of parsed.claims) {

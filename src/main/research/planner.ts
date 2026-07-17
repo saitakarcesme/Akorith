@@ -16,7 +16,9 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
   })
   let plan: ResearchPlan
   try {
-    const response = await sendMetaPrompt(job.providerId, job.model, prompt, signal)
+    const response = await sendMetaPrompt(job.providerId, job.model, prompt, signal, {
+      workingDirectory: job.workspaceDir
+    })
     plan = parseResearchPlan(response.text)
   } catch (error) {
     plan = fallbackResearchPlan(job.title, job.prompt, job.outputFormat)

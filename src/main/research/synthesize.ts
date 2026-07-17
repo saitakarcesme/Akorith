@@ -38,7 +38,8 @@ export async function synthesizeResearchJob(
       job.providerId,
       job.model,
       buildResearchSynthesisPrompt({ job, plan, findings, claims, sources }),
-      options.signal
+      options.signal,
+      { workingDirectory: job.workspaceDir }
     )
     report = sanitizeResearchReportCitations(response.text.trim(), sources.length)
     if (!/^#\s+\S/m.test(report)) report = `# ${plan.title}\n\n${report}`
