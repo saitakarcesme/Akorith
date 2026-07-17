@@ -179,6 +179,7 @@ export interface ResearchSource {
   excerpt?: string
   relevance?: string
   credibilityScore?: number
+  contentHash?: string
   verified: boolean
 }
 

@@ -433,10 +433,12 @@ export function initDb(): void {
       excerpt           TEXT,
       relevance         TEXT,
       credibility_score REAL,
+      content_hash      TEXT,
       verified          INTEGER NOT NULL DEFAULT 0,
       UNIQUE(job_id, url)
     );
     CREATE INDEX IF NOT EXISTS idx_research_sources_job ON research_sources(job_id, accessed_at);
+    CREATE INDEX IF NOT EXISTS idx_research_sources_hash ON research_sources(job_id, content_hash);
 
     CREATE TABLE IF NOT EXISTS research_artifacts (
       id         TEXT PRIMARY KEY,

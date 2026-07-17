@@ -105,6 +105,7 @@ export function rowToResearchSource(row: DbRow): ResearchSource {
     excerpt: optionalString(row.excerpt),
     relevance: optionalString(row.relevance),
     credibilityScore: optionalNumber(row.credibility_score),
+    contentHash: optionalString(row.content_hash),
     verified: numberValue(row.verified) === 1
   }
 }
