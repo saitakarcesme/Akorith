@@ -27,6 +27,8 @@
     "verify:research": "npm run verify:research-contracts && npm run verify:research-inputs && npm run verify:research-network && npm run verify:research-artifacts && npm run verify:research-persistence",
     "verify:research-live": "electron scripts/research-live-smoke-main.cjs",
     "verify:research-live:check": "electron scripts/research-live-smoke-main.cjs --check",
+    "verify:research-seed": "electron scripts/research-seed-main.cjs",
+    "verify:research-seed:help": "electron scripts/research-seed-main.cjs --help",
     "verify:update-version": "tsx scripts/verify-update-version.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
