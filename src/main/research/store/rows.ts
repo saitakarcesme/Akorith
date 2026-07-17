@@ -121,6 +121,12 @@ export function rowToResearchArtifact(row: DbRow): ResearchArtifact {
     path: String(row.path),
     coverPath: optionalString(row.cover_path),
     byteSize: numberValue(row.byte_size),
+    status: String(row.status ?? 'ready') as ResearchArtifact['status'],
+    checksum: optionalString(row.checksum),
+    mimeType: optionalString(row.mime_type),
+    version: numberValue(row.version, 1),
+    pageCount: optionalNumber(row.page_count),
+    validationError: optionalString(row.validation_error),
     createdAt: numberValue(row.created_at)
   }
 }

@@ -487,6 +487,12 @@ export function initDb(): void {
       path       TEXT NOT NULL,
       cover_path TEXT,
       byte_size  INTEGER NOT NULL DEFAULT 0,
+      status     TEXT NOT NULL DEFAULT 'ready',
+      checksum   TEXT,
+      mime_type  TEXT,
+      version    INTEGER NOT NULL DEFAULT 1,
+      page_count INTEGER,
+      validation_error TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_research_artifacts_job ON research_artifacts(job_id, created_at);
@@ -606,6 +612,12 @@ export function initDb(): void {
   ensureColumn('research_jobs', 'heartbeat_at', 'INTEGER')
   ensureColumn('research_jobs', 'revision', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('research_jobs', 'cancel_requested_at', 'INTEGER')
+  ensureColumn('research_artifacts', 'status', "TEXT NOT NULL DEFAULT 'ready'")
+  ensureColumn('research_artifacts', 'checksum', 'TEXT')
+  ensureColumn('research_artifacts', 'mime_type', 'TEXT')
+  ensureColumn('research_artifacts', 'version', 'INTEGER NOT NULL DEFAULT 1')
+  ensureColumn('research_artifacts', 'page_count', 'INTEGER')
+  ensureColumn('research_artifacts', 'validation_error', 'TEXT')
   nextDb.exec('CREATE INDEX IF NOT EXISTS idx_research_sources_hash ON research_sources(job_id, content_hash);')
   nextDb.exec('CREATE INDEX IF NOT EXISTS idx_research_jobs_lease ON research_jobs(lease_expires_at, status);')
   ensureColumn('sessions', 'project_id', 'TEXT')

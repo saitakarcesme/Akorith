@@ -215,6 +215,12 @@ export interface ResearchArtifact {
   path: string
   coverPath?: string
   byteSize: number
+  status: 'ready' | 'invalid'
+  checksum?: string
+  mimeType?: string
+  version: number
+  pageCount?: number
+  validationError?: string
   createdAt: number
 }
 
