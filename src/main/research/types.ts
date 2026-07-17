@@ -136,6 +136,8 @@ export interface ResearchJob {
   startedAt?: number
   completedAt?: number
   nextRunAt?: number
+  heartbeatAt?: number
+  revision: number
 }
 
 export type ResearchCycleStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -237,6 +239,16 @@ export interface ResearchWorkspaceState {
   findingCount: number
   readyToSynthesize: boolean
   updatedAt: number
+}
+
+export interface ResearchCheckpoint {
+  id: string
+  jobId: string
+  cycleId?: string
+  idempotencyKey: string
+  phase: ResearchPhase
+  state: ResearchWorkspaceState
+  createdAt: number
 }
 
 export interface ResearchCycleResult {

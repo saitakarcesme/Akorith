@@ -388,7 +388,12 @@ export function initDb(): void {
       updated_at         INTEGER NOT NULL,
       started_at         INTEGER,
       completed_at       INTEGER,
-      next_run_at        INTEGER
+      next_run_at        INTEGER,
+      lease_owner        TEXT,
+      lease_expires_at   INTEGER,
+      heartbeat_at       INTEGER,
+      revision           INTEGER NOT NULL DEFAULT 0,
+      cancel_requested_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_research_jobs_status ON research_jobs(status, next_run_at, updated_at);
 
@@ -409,6 +414,18 @@ export function initDb(): void {
       error             TEXT
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_research_cycles_order ON research_cycles(job_id, cycle_index);
+
+    CREATE TABLE IF NOT EXISTS research_checkpoints (
+      id              TEXT PRIMARY KEY,
+      job_id          TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      cycle_id        TEXT REFERENCES research_cycles(id) ON DELETE SET NULL,
+      idempotency_key TEXT NOT NULL,
+      phase           TEXT NOT NULL,
+      state_json      TEXT NOT NULL,
+      created_at      INTEGER NOT NULL,
+      UNIQUE(job_id, idempotency_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_checkpoints_job ON research_checkpoints(job_id, created_at);
 
     CREATE TABLE IF NOT EXISTS research_events (
       id         TEXT PRIMARY KEY,
@@ -584,7 +601,13 @@ export function initDb(): void {
   ensureColumn('test_runs', 'generated_files', 'TEXT')
   ensureColumn('benchmark_entries', 'artifact_path', 'TEXT')
   ensureColumn('research_sources', 'content_hash', 'TEXT')
+  ensureColumn('research_jobs', 'lease_owner', 'TEXT')
+  ensureColumn('research_jobs', 'lease_expires_at', 'INTEGER')
+  ensureColumn('research_jobs', 'heartbeat_at', 'INTEGER')
+  ensureColumn('research_jobs', 'revision', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('research_jobs', 'cancel_requested_at', 'INTEGER')
   nextDb.exec('CREATE INDEX IF NOT EXISTS idx_research_sources_hash ON research_sources(job_id, content_hash);')
+  nextDb.exec('CREATE INDEX IF NOT EXISTS idx_research_jobs_lease ON research_jobs(lease_expires_at, status);')
   ensureColumn('sessions', 'project_id', 'TEXT')
   ensureColumn('sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('messages', 'attachments', 'TEXT')
