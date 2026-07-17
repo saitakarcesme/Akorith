@@ -159,8 +159,8 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     <div className="research-page">
       <header className="research-page-toolbar">
         <div className="research-surface-switch" role="tablist" aria-label="Research views">
-          <button type="button" role="tab" aria-selected={surface === 'workspace'} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')}>Research</button>
-          <button type="button" role="tab" aria-selected={surface === 'library'} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')}>Library <span>{jobs.length}</span></button>
+          <button id="research-workspace-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'workspace'} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')}>Research</button>
+          <button id="research-library-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'library'} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')}>Library <span>{jobs.length}</span></button>
         </div>
         <div className="research-toolbar-status"><i />{runningCount > 0 ? `${runningCount} running` : 'Ready'}</div>
         <button
@@ -180,24 +180,25 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
                 key={job.id}
                 type="button"
                 className={selectedId === job.id ? 'is-active' : ''}
-                onClick={() => openJob(job.id)}
+                aria-label={`${job.plan?.title || job.title}${selectedId === job.id ? ', active; press Delete to close' : ''}`}
+                onClick={(event) => {
+                  if ((event.target as Element).closest('[data-research-tab-close]')) closeTab(job.id)
+                  else openJob(job.id)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Delete' && selectedId === job.id) {
+                    event.preventDefault()
+                    closeTab(job.id)
+                  }
+                }}
               >
-                <i className={`is-${job.status}`} />
+                <i className={`is-${job.status}`} aria-hidden="true" />
                 <span>{job.plan?.title || job.title}</span>
                 {selectedId === job.id && (
                   <em
-                    role="button"
-                    tabIndex={0}
+                    data-research-tab-close
                     title="Close tab"
-                    aria-label="Close tab"
-                    onClick={(event) => { event.stopPropagation(); closeTab(job.id) }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        closeTab(job.id)
-                      }
-                    }}
+                    aria-hidden="true"
                   >
                     <CloseIcon size={12} />
                   </em>
@@ -208,7 +209,12 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
         </nav>
       )}
 
-      <main className="research-page-content">
+      <main
+        id="research-view-panel"
+        className="research-page-content"
+        role="tabpanel"
+        aria-labelledby={surface === 'workspace' ? 'research-workspace-tab' : 'research-library-tab'}
+      >
         {error && <div className="research-page-alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
         {surface === 'library' ? (
           <ResearchLibrary jobs={jobs} covers={covers} onSelect={openJob} />

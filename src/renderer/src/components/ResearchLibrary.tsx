@@ -26,13 +26,12 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
           <h1>Reports built to keep</h1>
           <p>Every investigation, source ledger, and validated output remains available here.</p>
         </div>
-        <div className="research-library-filters" role="tablist" aria-label="Research library filter">
+        <div className="research-library-filters" role="group" aria-label="Research library filter">
           {(['all', 'published', 'active'] as LibraryFilter[]).map((item) => (
             <button
               key={item}
               type="button"
-              role="tab"
-              aria-selected={filter === item}
+              aria-pressed={filter === item}
               className={filter === item ? 'is-active' : ''}
               onClick={() => setFilter(item)}
             >
@@ -51,7 +50,13 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
       ) : (
         <div className="research-library-grid">
           {visibleJobs.map((job) => (
-            <button key={job.id} type="button" className="research-book" onClick={() => onSelect(job.id)}>
+            <button
+              key={job.id}
+              type="button"
+              className="research-book"
+              aria-label={`Open ${job.plan?.title || job.title}, ${job.status}`}
+              onClick={() => onSelect(job.id)}
+            >
               <span className="research-book-cover">
                 {covers[job.id]
                   ? <img src={covers[job.id] ?? undefined} alt={`Cover of ${job.title}`} />
@@ -62,7 +67,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
                       <em>{job.depth} · {job.outputFormat.toUpperCase()}</em>
                     </span>
                   )}
-                <i className={`research-book-status is-${job.status}`} />
+                <i className={`research-book-status is-${job.status}`} aria-hidden="true" />
               </span>
               <span className="research-book-meta">
                 <strong>{job.plan?.title || job.title}</strong>

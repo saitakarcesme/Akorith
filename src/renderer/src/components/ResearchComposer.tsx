@@ -86,9 +86,10 @@ export default function ResearchComposer({
       <div className="research-composer-box">
         <textarea
           value={prompt}
+          aria-label="Research request"
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault()
               void submit()
             }
@@ -100,12 +101,13 @@ export default function ResearchComposer({
         {!compact && (
           <div className="research-choice-block">
             <span className="research-choice-label">Depth</span>
-            <div className="research-depth-options">
+            <div className="research-depth-options" role="group" aria-label="Research depth">
               {DEPTHS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   className={depth === item.id ? 'is-selected' : ''}
+                  aria-pressed={depth === item.id}
                   onClick={() => setDepth(item.id)}
                   disabled={disabled || submitting}
                 >
@@ -142,12 +144,13 @@ export default function ResearchComposer({
               </select>
             </label>
           </div>
-          <div className="research-output-options" aria-label="Output format">
+          <div className="research-output-options" role="group" aria-label="Output format">
             {OUTPUTS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 className={outputFormat === item.id ? 'is-selected' : ''}
+                aria-pressed={outputFormat === item.id}
                 onClick={() => setOutputFormat(item.id)}
                 disabled={disabled || submitting}
               >

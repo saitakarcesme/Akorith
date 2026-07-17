@@ -76,17 +76,24 @@ export default function ResearchProgress({
               {paused ? <PlayIcon size={15} /> : <PauseIcon size={15} />}
             </button>
           )}
-          <span className={`research-status-badge is-${job.status}`}><i />{statusLabel(job.status)}</span>
+          <span className={`research-status-badge is-${job.status}`} role="status" aria-live="polite">
+            <i aria-hidden="true" />{statusLabel(job.status)}
+          </span>
         </div>
       </header>
 
-      <section className="research-phase-rail" aria-label="Research phases">
+      <section className="research-phase-rail" role="list" aria-label="Research phases">
         {PHASES.map((phase, index) => {
           const complete = terminal || index < currentIndex
           const active = !terminal && index === currentIndex
           return (
-            <div key={phase.id} className={`research-phase ${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}>
-              <span className="research-phase-dot">{complete ? '✓' : index + 1}</span>
+            <div
+              key={phase.id}
+              role="listitem"
+              aria-current={active ? 'step' : undefined}
+              className={`research-phase ${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}
+            >
+              <span className="research-phase-dot" aria-hidden="true">{complete ? '✓' : index + 1}</span>
               <span>{phase.label}</span>
             </div>
           )
@@ -101,7 +108,7 @@ export default function ResearchProgress({
         <Metric label="Output" value={job.outputFormat.toUpperCase()} />
       </section>
 
-      {job.error && <div className="research-error"><strong>Research needs attention</strong><span>{job.error}</span></div>}
+      {job.error && <div className="research-error" role="alert"><strong>Research needs attention</strong><span>{job.error}</span></div>}
 
       {job.plan && (
         <section className="research-plan-panel">
@@ -126,14 +133,14 @@ export default function ResearchProgress({
         <section className="research-event-stream">
           <div className="research-section-heading">
             <div><span className="research-eyebrow">LIVE NOTES</span><h2>Research log</h2></div>
-            {detail.running && <span className="research-live-label"><i />working</span>}
+            {detail.running && <span className="research-live-label" role="status"><i aria-hidden="true" />working</span>}
           </div>
           <div className="research-event-list">
             {recentEvents.map((event, index) => (
               <div key={event.id} className={`research-event is-${event.kind}`}>
                 <span className="research-event-marker" />
                 <div className="research-event-copy">
-                  <div><span>Step {index + 1}</span><time>{formatClock(event.createdAt)}</time></div>
+                  <div><span>Step {index + 1}</span><time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time></div>
                   <strong>{event.title}</strong>
                   {event.detail && <ChatMarkdown text={event.detail} />}
                 </div>
@@ -148,9 +155,9 @@ export default function ResearchProgress({
           <summary><span>Sources</span><em>{detail.sources.length} collected</em></summary>
           <div className="research-source-list">
             {detail.sources.map((source, index) => (
-              <button key={source.id} type="button" onClick={() => void onOpenSource(source.id)}>
+              <button key={source.id} type="button" disabled={actionPending} onClick={() => void onOpenSource(source.id)}>
                 <span>{index + 1}</span>
-                <div><strong>{source.title}</strong><small>{source.publisher || new URL(source.url).hostname}</small></div>
+                <div><strong>{source.title}</strong><small>{source.publisher || sourceHostname(source.url)}</small></div>
                 <em>{Math.round((source.credibilityScore ?? 0) * 100)}%</em>
               </button>
             ))}
@@ -173,8 +180,8 @@ export default function ResearchProgress({
               <div key={artifact.id} className="research-artifact-row">
                 <span className="research-artifact-icon"><FileIcon size={17} /></span>
                 <div><strong>{artifact.title}</strong><small>{artifact.format.toUpperCase()} · {formatBytes(artifact.byteSize)} · v{artifact.version}</small></div>
-                <button type="button" title="Open output" aria-label="Open output" onClick={() => void onOpenArtifact(artifact.id)}><FileIcon size={15} /></button>
-                <button type="button" title="Reveal in Finder" aria-label="Reveal in Finder" onClick={() => void onRevealArtifact(artifact.id)}><FolderOpenIcon size={15} /></button>
+                <button type="button" title="Open output" aria-label={`Open ${artifact.title}`} disabled={actionPending} onClick={() => void onOpenArtifact(artifact.id)}><FileIcon size={15} /></button>
+                <button type="button" title="Reveal in Finder" aria-label={`Reveal ${artifact.title} in Finder`} disabled={actionPending} onClick={() => void onRevealArtifact(artifact.id)}><FolderOpenIcon size={15} /></button>
               </div>
             ))}
           </div>
@@ -209,4 +216,12 @@ function formatBytes(bytes: number): string {
   if (bytes < 1_024) return `${bytes} B`
   if (bytes < 1_048_576) return `${Math.round(bytes / 1_024)} KB`
   return `${(bytes / 1_048_576).toFixed(1)} MB`
+}
+
+function sourceHostname(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
 }
