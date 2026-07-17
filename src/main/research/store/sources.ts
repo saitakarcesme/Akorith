@@ -87,6 +87,11 @@ export function listResearchSources(jobId: string): ResearchSource[] {
   return rows.map(rowToResearchSource)
 }
 
+export function getResearchSource(id: string): ResearchSource | null {
+  const row = getDb().prepare('SELECT * FROM research_sources WHERE id = ?').get(id) as DbRow | undefined
+  return row ? rowToResearchSource(row) : null
+}
+
 export function markResearchSourceVerified(id: string, verified = true): ResearchSource | null {
   getDb().prepare('UPDATE research_sources SET verified = ? WHERE id = ?').run(verified ? 1 : 0, id)
   const row = getDb().prepare('SELECT * FROM research_sources WHERE id = ?').get(id) as DbRow | undefined
