@@ -418,6 +418,26 @@ const projectLoop = Object.freeze({
   inspectTarget: (path: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:inspectTarget', path)
 })
 
+// Long-running, evidence-backed investigations. The renderer only receives
+// validated records and identity-based commands; filesystem and provider work
+// remain in the main process.
+const research = Object.freeze({
+  list: (): Promise<unknown> => ipcRenderer.invoke('research:list'),
+  get: (id: string): Promise<unknown> => ipcRenderer.invoke('research:get', id),
+  create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:create', input),
+  pause: (id: string): Promise<unknown> => ipcRenderer.invoke('research:pause', id),
+  resume: (id: string): Promise<unknown> => ipcRenderer.invoke('research:resume', id),
+  archive: (id: string): Promise<unknown> => ipcRenderer.invoke('research:archive', id),
+  remove: (id: string): Promise<unknown> => ipcRenderer.invoke('research:delete', id),
+  export: (jobId: string, format: string): Promise<unknown> =>
+    ipcRenderer.invoke('research:export', { jobId, format }),
+  openArtifact: (id: string): Promise<unknown> => ipcRenderer.invoke('research:openArtifact', id),
+  revealArtifact: (id: string): Promise<unknown> => ipcRenderer.invoke('research:revealArtifact', id),
+  coverDataUrl: (id: string): Promise<unknown> => ipcRenderer.invoke('research:coverDataUrl', id),
+  openSource: (id: string): Promise<unknown> => ipcRenderer.invoke('research:openSource', id),
+  scheduler: (): Promise<unknown> => ipcRenderer.invoke('research:scheduler')
+})
+
 // Permissioned local project runner + loopback-only visual stream.
 const projectPreview = Object.freeze({
   inspect: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:inspect', projectPath),
@@ -476,6 +496,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, projectPreview, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, research, projectPreview, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)
