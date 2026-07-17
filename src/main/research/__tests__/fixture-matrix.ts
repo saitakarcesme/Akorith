@@ -8,14 +8,14 @@ import type { ResearchDocument } from '../document'
 
 export const DETERMINISTIC_RESEARCH_NOW = Date.UTC(2026, 6, 17, 10, 0, 0)
 
-export const TEST_RESEARCH_DEPTHS = ['quick', 'standard', 'deep'] as const satisfies readonly ResearchDepth[]
+export const TEST_RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'continuous'] as const satisfies readonly ResearchDepth[]
 
 export const TEST_RESEARCH_PROVIDERS = [
   {
     class: 'free',
     providerId: 'opencode',
-    model: 'opencode-go/glm-5.2',
-    label: 'OpenCode Free · GLM 5.2'
+    model: 'opencode/deepseek-v4-flash-free',
+    label: 'OpenCode Free · DeepSeek V4 Flash'
   },
   {
     class: 'claude',
@@ -53,7 +53,7 @@ export const RESEARCH_CORE_FIXTURE_MATRIX: readonly ResearchFixtureCase[] = Obje
   )
 )
 
-export const EXPECTED_RESEARCH_FIXTURE_COUNT = 24
+export const EXPECTED_RESEARCH_FIXTURE_COUNT = 32
 
 export function createDeterministicResearchDocument(fixture: ResearchFixtureCase): ResearchDocument {
   const sources: ResearchSource[] = [
