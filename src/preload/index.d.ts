@@ -269,7 +269,7 @@ export interface ProjectsApi {
 
 // ---- app startup snapshot / hydration ----
 
-export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'plugins'
+export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
 
 export interface StartupSnapshotRequest {
   lastActiveProjectId?: string | null

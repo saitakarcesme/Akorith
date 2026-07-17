@@ -1,4 +1,4 @@
-export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'plugins'
+export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
 
 export interface StartupProjectLike {
   id: string
@@ -33,7 +33,7 @@ export interface StartupHydrationCounts {
 }
 
 const VALID_ID = /^[\w-]{1,64}$/
-const VALID_VIEWS = new Set<StartupView>(['workspace', 'general', 'dashboard', 'test', 'loops', 'plugins'])
+const VALID_VIEWS = new Set<StartupView>(['workspace', 'general', 'dashboard', 'test', 'loops', 'research', 'plugins'])
 
 function cleanId(value: unknown): string | null {
   return typeof value === 'string' && VALID_ID.test(value) ? value : null
@@ -91,6 +91,13 @@ export function resolveStartupRestore(
   const lastSessionId = cleanId(request.lastActiveSessionId)
   const lastProjectId = cleanId(request.lastActiveProjectId)
   const lastView = cleanStartupView(request.lastView)
+
+  // Feature pages own their own selection state and should reopen even when a
+  // previously active chat still exists. Chat/project restoration only wins
+  // when the stored view was one of the two chat surfaces.
+  if (lastView !== 'workspace' && lastView !== 'general') {
+    return { view: lastView, projectId: null, sessionId: null, reason: 'last-view' }
+  }
 
   const lastSession = lastSessionId ? sessionById.get(lastSessionId) ?? null : null
   if (lastSession) {

@@ -10,7 +10,7 @@ import { ChevronIcon, PanelsIcon } from './components/icons'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'plugins'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
 export type AppTheme = 'dark' | 'light'
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
