@@ -9,7 +9,15 @@ import { buildResearchVisualEvidence } from '../visual-evidence'
 
 export const DETERMINISTIC_RESEARCH_NOW = Date.UTC(2026, 6, 17, 10, 0, 0)
 
-export const TEST_RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'continuous'] as const satisfies readonly ResearchDepth[]
+export const TEST_RESEARCH_DEPTHS = [
+  'quick',
+  'standard',
+  'focused3h',
+  'extended6h',
+  'deep',
+  'day',
+  'continuous'
+] as const satisfies readonly ResearchDepth[]
 
 export const TEST_RESEARCH_PROVIDERS = [
   {
@@ -54,7 +62,7 @@ export const RESEARCH_CORE_FIXTURE_MATRIX: readonly ResearchFixtureCase[] = Obje
   )
 )
 
-export const EXPECTED_RESEARCH_FIXTURE_COUNT = 40
+export const EXPECTED_RESEARCH_FIXTURE_COUNT = 70
 
 export function createDeterministicResearchDocument(fixture: ResearchFixtureCase): ResearchDocument {
   const sources: ResearchSource[] = [
@@ -151,5 +159,59 @@ export function createDeterministicResearchDocument(fixture: ResearchFixtureCase
     ],
     sources,
     visuals: buildResearchVisualEvidence({ claims, sources, generatedAt: DETERMINISTIC_RESEARCH_NOW })
+  }
+}
+
+export function createLayoutStressResearchDocument(): ResearchDocument {
+  const fixture = RESEARCH_CORE_FIXTURE_MATRIX.find((item) => item.depth === 'continuous' && item.providerClass === 'claude')!
+  const base = createDeterministicResearchDocument(fixture)
+  const sources: ResearchSource[] = Array.from({ length: 9 }, (_, index) => ({
+    ...base.sources[index % base.sources.length],
+    id: `${fixture.id}-stress-source-${index + 1}`,
+    url: `https://example.com/research/${index + 1}/a-deliberately-long-but-valid-source-address-for-layout-verification`,
+    title: `Independent longitudinal evidence source ${index + 1}: reproducibility, limitations, implementation context, and boundary conditions`,
+    publisher: `Independent Evidence Consortium ${index + 1}`
+  }))
+  const claims: ResearchClaim[] = Array.from({ length: 12 }, (_, index) => ({
+    ...base.sections[index % base.sections.length].claims[0],
+    id: `${fixture.id}-stress-claim-${index + 1}`,
+    sectionId: 'stress-findings',
+    text: `Finding ${index + 1} remains supported after cross-checking the primary measurement, the independent limitation record, the implementation context, and the stated boundary conditions; the result should guide decisions without overstating certainty or generalizing beyond the evaluated population.`,
+    confidenceScore: 0.96 - index * 0.02,
+    evidence: [{ sourceId: sources[index % sources.length].id, relation: 'supports', evidence: 'Deterministic stress evidence.' }]
+  }))
+  const repeatedParagraph = [
+    'This deliberately long narrative verifies that report layouts remain readable when autonomous research returns dense prose instead of a short fixture paragraph.',
+    'The exporter must create a stable reading order, preserve evidence references, keep headings with their content, and never allow a title, summary, ledger, table, or footer to collide with another element.',
+    'Where a presentation cannot responsibly display every word on one slide, Akorith must paginate the evidence or shorten audience-facing copy deterministically rather than delegate the decision to viewer-specific auto-fit behavior.'
+  ].join(' ')
+  const generatedAt = DETERMINISTIC_RESEARCH_NOW
+  return {
+    ...base,
+    title: 'A longitudinal, multilingual, evidence-backed evaluation of autonomous research reliability, presentation quality, implementation constraints, and responsible decision boundaries across complex real-world operating environments',
+    subtitle: `${repeatedParagraph} Türkçe karakterler de korunmalıdır: İstanbul, Çanakkale, Öğrenme, Şeffaflık ve Güvenilirlik.`,
+    executiveSummary: `${repeatedParagraph} ${repeatedParagraph} ${repeatedParagraph}`,
+    sections: [
+      {
+        id: 'stress-findings',
+        title: 'The evidence supports a bounded conclusion, not an unlimited generalization across every deployment context',
+        body: `${repeatedParagraph}\n\n${repeatedParagraph}\n\n${repeatedParagraph}`,
+        claims
+      },
+      {
+        id: 'stress-implementation',
+        title: 'Implementation implications and safeguards for teams operating under material uncertainty',
+        body: `${repeatedParagraph}\n\n${repeatedParagraph}`,
+        claims: claims.slice(0, 6).map((claim, index) => ({
+          ...claim,
+          id: `${claim.id}-implementation-${index + 1}`,
+          sectionId: 'stress-implementation'
+        }))
+      }
+    ],
+    sources,
+    methodology: Array.from({ length: 6 }, (_, index) => `Method ${index + 1}: ${repeatedParagraph}`),
+    verificationCriteria: Array.from({ length: 6 }, (_, index) => `Verification criterion ${index + 1}: ${repeatedParagraph}`),
+    visuals: buildResearchVisualEvidence({ claims, sources, generatedAt })
   }
 }

@@ -53,11 +53,12 @@ export function createResearchJob(
     `INSERT INTO research_jobs (
       id, title, prompt, status, phase, provider_id, model, depth, output_format,
       target_duration_ms, max_cycles, source_target, cycle_count, source_count,
-      finding_count, workspace_dir, created_at, updated_at, started_at, next_run_at
+      finding_count, workspace_dir, created_at, updated_at, started_at,
+      active_elapsed_ms, active_accounted_at, next_run_at
     ) VALUES (
       @id, @title, @prompt, @status, 'understand', @provider_id, @model, @depth, @output_format,
       @target_duration_ms, @max_cycles, @source_target, 0, 0, 0, @workspace_dir,
-      @created_at, @updated_at, @started_at, @next_run_at
+      @created_at, @updated_at, @started_at, 0, NULL, @next_run_at
     )`
   ).run({
     id,
@@ -74,7 +75,9 @@ export function createResearchJob(
     workspace_dir: workspaceDir,
     created_at: now,
     updated_at: now,
-    started_at: input.autoStart === false ? null : now,
+    // The duration clock starts only when the scheduler actually leases the
+    // job. Time spent waiting behind the concurrency limit is not research.
+    started_at: null,
     next_run_at: input.autoStart === false ? null : now
   })
   const job = getResearchJob(id)!
@@ -134,6 +137,18 @@ export function updateResearchJob(id: string, patch: Partial<ResearchJob>): Rese
   }
   const sets: string[] = []
   const params: Record<string, unknown> = { id, updated_at: Date.now() }
+  if (
+    patch.status !== undefined
+    && ['draft', 'paused', 'error', 'completed', 'archived'].includes(patch.status)
+  ) {
+    // Settle the current active-clock segment atomically whenever a job stops
+    // being eligible to work. This avoids counting pauses and error downtime.
+    sets.push(`active_elapsed_ms = active_elapsed_ms + CASE
+      WHEN active_accounted_at IS NULL THEN 0
+      ELSE MIN(15000, MAX(0, @updated_at - active_accounted_at))
+    END`)
+    sets.push('active_accounted_at = NULL')
+  }
   for (const [key, column] of Object.entries(UPDATE_COLUMNS)) {
     if (!(key in patch)) continue
     let value = (patch as Record<string, unknown>)[key]

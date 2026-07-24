@@ -395,6 +395,8 @@ export function initDb(): void {
       created_at         INTEGER NOT NULL,
       updated_at         INTEGER NOT NULL,
       started_at         INTEGER,
+      active_elapsed_ms  INTEGER NOT NULL DEFAULT 0,
+      active_accounted_at INTEGER,
       completed_at       INTEGER,
       next_run_at        INTEGER,
       lease_owner        TEXT,
@@ -504,6 +506,26 @@ export function initDb(): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_research_artifacts_job ON research_artifacts(job_id, created_at);
+
+    -- Durable Discord handoff outbox. One artifact receives at most one
+    -- automatic delivery record; the remote message id is stored on success.
+    -- The webhook credential is never stored in SQLite.
+    CREATE TABLE IF NOT EXISTS research_discord_deliveries (
+      id              TEXT PRIMARY KEY,
+      job_id          TEXT NOT NULL REFERENCES research_jobs(id) ON DELETE CASCADE,
+      artifact_id     TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      attempt_count   INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER,
+      discord_message_id TEXT,
+      last_error      TEXT,
+      created_at      INTEGER NOT NULL,
+      updated_at      INTEGER NOT NULL,
+      delivered_at    INTEGER,
+      UNIQUE(artifact_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_discord_due
+      ON research_discord_deliveries(status, next_attempt_at, created_at);
 
     -- Phase 50: Companions — long-memory local personalities (no actions).
     CREATE TABLE IF NOT EXISTS companions (
@@ -659,6 +681,15 @@ export function initDb(): void {
   ensureColumn('research_jobs', 'heartbeat_at', 'INTEGER')
   ensureColumn('research_jobs', 'revision', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('research_jobs', 'cancel_requested_at', 'INTEGER')
+  ensureColumn('research_jobs', 'active_elapsed_ms', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('research_jobs', 'active_accounted_at', 'INTEGER')
+  nextDb.exec(`
+    UPDATE research_jobs
+       SET active_elapsed_ms = MAX(0, completed_at - started_at)
+     WHERE completed_at IS NOT NULL
+       AND started_at IS NOT NULL
+       AND active_elapsed_ms = 0;
+  `)
   ensureColumn('research_artifacts', 'status', "TEXT NOT NULL DEFAULT 'ready'")
   ensureColumn('research_artifacts', 'checksum', 'TEXT')
   ensureColumn('research_artifacts', 'mime_type', 'TEXT')

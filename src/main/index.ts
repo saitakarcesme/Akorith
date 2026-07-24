@@ -34,6 +34,7 @@ import { registerActionAgentIpc } from './action-agents'
 import { registerGitHubActivityIpc } from './github-activity'
 import { registerProjectPreviewIpc, stopAllProjectPreviews } from './project-preview'
 import { registerResearchIpc, shutdownResearchScheduler, startResearchScheduler } from './research'
+import { installUiZoom, performUiZoom } from './ui-zoom'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
@@ -145,9 +146,21 @@ function applyApplicationMenu(): void {
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        {
+          label: 'Reset Zoom',
+          accelerator: 'CommandOrControl+0',
+          click: () => performUiZoom(BrowserWindow.getFocusedWindow(), 'reset')
+        },
+        {
+          label: 'Zoom In',
+          accelerator: 'CommandOrControl+Plus',
+          click: () => performUiZoom(BrowserWindow.getFocusedWindow(), 'in')
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CommandOrControl+-',
+          click: () => performUiZoom(BrowserWindow.getFocusedWindow(), 'out')
+        },
         { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
@@ -309,6 +322,10 @@ function createWindow(): void {
   })
   mainWindowRef = mainWindow
 
+  // Scale every font/control/spacing uniformly from Akorith's comfortable 110%
+  // default, with bounded app-local keyboard shortcuts and reload persistence.
+  installUiZoom(mainWindow)
+
   // Keep the splash up for a guaranteed minimum so it's actually seen, even when
   // the renderer is ready almost instantly. Reveal the main window once the
   // renderer reports ready; if Electron never emits `ready-to-show`, fall back to
@@ -350,15 +367,6 @@ function createWindow(): void {
     if (!mainWindow.isDestroyed() && details.reason !== 'clean-exit') {
       mainWindow.reload()
     }
-  })
-
-  // Phase 14.4: nudge the whole UI up one comfortable notch. A single zoom
-  // factor scales every font/control/spacing uniformly (the layout viewport
-  // reflows, so nothing is clipped) — cleaner than per-component font bumps.
-  // Re-applied on each load so it survives reloads/HMR.
-  const UI_ZOOM = 1.1
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.setZoomFactor(UI_ZOOM)
   })
 
   // Any external links open in the default browser, never inside the app.

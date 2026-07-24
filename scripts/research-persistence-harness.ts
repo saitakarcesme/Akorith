@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
@@ -9,14 +9,19 @@ import {
   acquireResearchLease,
   archiveResearchJob,
   cancelInterruptedResearchCycles,
+  checkpointResearchActiveClocks,
+  claimResearchDiscordDelivery,
   createResearchJob,
   deleteResearchJob,
+  enqueueResearchDiscordDelivery,
   getResearchArtifact,
   getResearchClaim,
+  getResearchDiscordDelivery,
   getResearchJob,
   latestResearchCheckpoint,
   linkResearchClaimSource,
   listDueResearchJobs,
+  listDueResearchDiscordDeliveries,
   listLatestResearchEvents,
   listResearchArtifacts,
   listResearchClaims,
@@ -24,16 +29,28 @@ import {
   listResearchJobs,
   listResearchSources,
   logResearchEvent,
+  markResearchDiscordDeliveryDelivered,
+  markResearchDiscordDeliveryRetry,
   recordResearchArtifact,
   recordResearchClaim,
   recordResearchSource,
   releaseExpiredResearchLeases,
+  releaseResearchLease,
+  recoverInterruptedResearchDiscordDeliveries,
+  retryResearchDiscordDelivery,
+  freezeResearchActiveClocks,
+  resumeResearchActiveClocks,
   saveResearchCheckpoint,
+  startResearchActiveClock,
   startResearchCycle,
   updateResearchJob
 } from '../src/main/research/store/index.ts'
 import type { ResearchPhase, ResearchStatus, ResearchWorkspaceState } from '../src/main/research/types.ts'
 import { recordResearchModelUsage, recordResearchRequest } from '../src/main/research/usage.ts'
+import {
+  getResearchDiscordPublicSettings,
+  updateResearchDiscordSettings
+} from '../src/main/research/discord-delivery.ts'
 import {
   RESEARCH_REPORT_FILE,
   initializeResearchWorkspace,
@@ -48,6 +65,8 @@ async function main(): Promise<void> {
   try {
     initDb()
     verifySchema()
+    verifyDiscordCredentialProtection()
+    verifyActiveResearchClock()
     const jobId = seedPersistentLibraryRecord()
     verifyUsageAccounting(jobId)
     verifyPhaseLifecycle(jobId)
@@ -95,6 +114,53 @@ async function verifyArtifactVersioning(): Promise<void> {
   assert.deepEqual(rows.map((artifact) => artifact.version), [1, 2])
   assert.deepEqual(rows.map((artifact) => artifact.path), [first.path, second.path])
   assert.equal(getResearchJob(id)?.artifactPath, second.path, 'library preview must point at the latest publication')
+  verifyDiscordDeliveryOutbox(first.id, second.id, id)
+}
+
+function verifyDiscordCredentialProtection(): void {
+  const before = getResearchDiscordPublicSettings()
+  assert.equal(before.configured, false)
+  if (!before.secureStorageAvailable) return
+
+  const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'
+  const webhookUrl = `https://discord.com/api/webhooks/123456789012345678/${token}`
+  const saved = updateResearchDiscordSettings({ enabled: true, webhookUrl })
+  assert.equal(saved.enabled, true)
+  assert.equal(saved.configured, true)
+  assert.equal(saved.destinationLabel, 'AI Workspace / # 🔬 research')
+  assert.equal(Object.hasOwn(saved, 'webhookUrl'), false, 'read APIs must never return the webhook credential')
+  const configText = readFileSync(join(isolatedUserData, 'loopex.config.json'), 'utf8')
+  assert.equal(configText.includes(webhookUrl), false, 'the webhook URL must not be stored in plaintext')
+  assert.equal(configText.includes(token), false, 'the webhook token must not be stored in plaintext')
+
+  const cleared = updateResearchDiscordSettings({ webhookUrl: null })
+  assert.equal(cleared.enabled, false)
+  assert.equal(cleared.configured, false)
+}
+
+function verifyDiscordDeliveryOutbox(firstArtifactId: string, secondArtifactId: string, jobId: string): void {
+  const queued = enqueueResearchDiscordDelivery(jobId, firstArtifactId)
+  const duplicate = enqueueResearchDiscordDelivery(jobId, firstArtifactId)
+  assert.equal(duplicate.id, queued.id, 'artifact idempotency must reuse the existing Discord outbox row')
+  assert.equal(listDueResearchDiscordDeliveries(queued.createdAt, 10).some((row) => row.id === queued.id), true)
+
+  const claimed = claimResearchDiscordDelivery(queued.id, queued.createdAt)
+  assert.equal(claimed?.status, 'sending')
+  assert.equal(claimed?.attemptCount, 1)
+  const retryAt = queued.createdAt + 60_000
+  markResearchDiscordDeliveryRetry(queued.id, 'rate limited', retryAt, queued.createdAt + 1)
+  assert.equal(listDueResearchDiscordDeliveries(retryAt - 1, 10).some((row) => row.id === queued.id), false)
+  assert.equal(retryResearchDiscordDelivery(queued.id, retryAt - 1)?.status, 'pending')
+  assert.equal(claimResearchDiscordDelivery(queued.id, retryAt)?.attemptCount, 2)
+  markResearchDiscordDeliveryDelivered(queued.id, '123456789012345678', retryAt + 1)
+  assert.equal(getResearchDiscordDelivery(queued.id)?.status, 'delivered')
+  assert.equal(retryResearchDiscordDelivery(queued.id), null, 'delivered artifacts must not be sent twice')
+
+  const interrupted = enqueueResearchDiscordDelivery(jobId, secondArtifactId)
+  assert.equal(claimResearchDiscordDelivery(interrupted.id)?.status, 'sending')
+  assert.equal(recoverInterruptedResearchDiscordDeliveries(), 1)
+  assert.equal(getResearchDiscordDelivery(interrupted.id)?.status, 'needs_review')
+  assert.equal(retryResearchDiscordDelivery(interrupted.id)?.status, 'pending')
 }
 
 function verifySchema(): void {
@@ -110,6 +176,7 @@ function verifySchema(): void {
       'research_claim_sources',
       'research_claims',
       'research_cycles',
+      'research_discord_deliveries',
       'research_events',
       'research_jobs',
       'research_sources'
@@ -130,6 +197,59 @@ function verifySchema(): void {
   ]) {
     assert.equal(usageColumns.has(column), true, `usage_events must include ${column}`)
   }
+  const researchJobColumns = new Set(
+    (getDb().prepare('PRAGMA table_info(research_jobs)').all() as Array<{ name: string }>).map((row) => row.name)
+  )
+  assert.equal(researchJobColumns.has('active_elapsed_ms'), true)
+  assert.equal(researchJobColumns.has('active_accounted_at'), true)
+}
+
+function verifyActiveResearchClock(): void {
+  const id = 'research-active-clock-job'
+  const workspaceDir = initializeResearchWorkspace(id)
+  const queued = createResearchJob({
+    prompt: 'Verify that only active scheduler time consumes the duration promise.',
+    providerId: 'clocktest',
+    depth: 'standard',
+    outputFormat: 'md'
+  }, workspaceDir, id)
+  assert.equal(queued.startedAt, undefined, 'initial concurrency-queue time must not start the clock')
+  assert.equal(queued.activeElapsedMs, 0)
+
+  assert.equal(startResearchActiveClock(id, 1_000), true)
+  checkpointResearchActiveClocks(6_000)
+  assert.equal(getResearchJob(id)?.activeElapsedMs, 5_000)
+  freezeResearchActiveClocks(9_000)
+  assert.equal(getResearchJob(id)?.activeElapsedMs, 8_000)
+  assert.equal(getResearchJob(id)?.activeAccountingAt, undefined)
+
+  assert.equal(startResearchActiveClock(id, 10_000), true)
+  assert.equal(getResearchJob(id)?.activeAccountingAt, 10_000)
+  resumeResearchActiveClocks()
+  assert.equal(getResearchJob(id)?.activeElapsedMs, 8_000, 'offline time must not be added on resume')
+  assert.equal(getResearchJob(id)?.activeAccountingAt, undefined, 'startup must leave waiting jobs clock-stopped')
+  checkpointResearchActiveClocks(2_000_000)
+  assert.equal(getResearchJob(id)?.activeElapsedMs, 8_000, 'scheduler wait time must not consume active duration')
+
+  assert.equal(startResearchActiveClock(id, 2_000_000), true)
+  checkpointResearchActiveClocks(2_007_000)
+  assert.equal(getResearchJob(id)?.activeElapsedMs, 15_000, 'a direct run must restart active accounting')
+  freezeResearchActiveClocks(2_007_000)
+
+  assert.equal(acquireResearchLease(id, 'clock-owner'), true)
+  const beforeRelease = getResearchJob(id)?.activeElapsedMs ?? 0
+  getDb().prepare('UPDATE research_jobs SET active_accounted_at = ? WHERE id = ?').run(3_000_000, id)
+  releaseResearchLease(id, 'clock-owner', 3_030_000)
+  const released = getResearchJob(id)
+  assert.equal(released?.activeElapsedMs, beforeRelease + 15_000, 'lease release must cap its final segment at 15 seconds')
+  assert.equal(released?.activeAccountingAt, undefined, 'lease release must stop the active clock while waiting')
+  const releasedLease = getDb().prepare(
+    'SELECT lease_owner, lease_expires_at, heartbeat_at FROM research_jobs WHERE id = ?'
+  ).get(id) as { lease_owner: string | null; lease_expires_at: number | null; heartbeat_at: number | null }
+  assert.deepEqual(releasedLease, { lease_owner: null, lease_expires_at: null, heartbeat_at: null })
+  checkpointResearchActiveClocks(4_000_000)
+  assert.equal(getResearchJob(id)?.activeElapsedMs, beforeRelease + 15_000, 'post-release waiting must not consume active duration')
+  assert.equal(deleteResearchJob(id), true)
 }
 
 function verifyUsageAccounting(jobId: string): void {

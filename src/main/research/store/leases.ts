@@ -11,6 +11,8 @@ export function acquireResearchLease(jobId: string, owner: string, leaseMs = DEF
      SET lease_owner = @owner,
          lease_expires_at = @expires,
          heartbeat_at = @now,
+         started_at = COALESCE(started_at, @now),
+         active_accounted_at = @now,
          revision = revision + 1,
          updated_at = @now
      WHERE id = @id
@@ -31,12 +33,20 @@ export function heartbeatResearchLease(jobId: string, owner: string, leaseMs = D
   return result.changes === 1
 }
 
-export function releaseResearchLease(jobId: string, owner: string): void {
+export function releaseResearchLease(jobId: string, owner: string, now = Date.now()): void {
   getDb().prepare(
     `UPDATE research_jobs
-     SET lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL, updated_at = @now
+     SET active_elapsed_ms = active_elapsed_ms + CASE
+           WHEN active_accounted_at IS NULL THEN 0
+           ELSE MIN(15000, MAX(0, @now - active_accounted_at))
+         END,
+         active_accounted_at = NULL,
+         lease_owner = NULL,
+         lease_expires_at = NULL,
+         heartbeat_at = NULL,
+         updated_at = @now
      WHERE id = @id AND lease_owner = @owner`
-  ).run({ id: jobId, owner, now: Date.now() })
+  ).run({ id: jobId, owner, now })
 }
 
 export function requestResearchCancellation(jobId: string): boolean {
@@ -76,8 +86,57 @@ export function releaseExpiredResearchLeases(now = Date.now()): number {
   return getDb().prepare(
     `UPDATE research_jobs
      SET lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
-         next_run_at = @now, updated_at = @now
+         active_accounted_at = NULL, next_run_at = @now, updated_at = @now
      WHERE lease_expires_at IS NOT NULL AND lease_expires_at < @now
        AND status NOT IN ('completed', 'paused', 'archived')`
   ).run({ now }).changes
+}
+
+/**
+ * Persist active scheduler time in short checkpoints. Because elapsed time is
+ * accumulated while the app is alive, a closed app, a crash, or a machine
+ * sleep cannot consume a one-hour/twelve-hour research promise.
+ */
+export function checkpointResearchActiveClocks(now = Date.now()): number {
+  return getDb().prepare(
+    `UPDATE research_jobs
+     SET active_elapsed_ms = active_elapsed_ms + MIN(15000, MAX(0, @now - active_accounted_at)),
+         active_accounted_at = @now
+     WHERE active_accounted_at IS NOT NULL
+       AND status IN ('planning', 'researching', 'verifying', 'synthesizing', 'exporting')`
+  ).run({ now }).changes
+}
+
+/** Discard stale pre-shutdown anchors; the next lease/direct run starts a fresh segment. */
+export function resumeResearchActiveClocks(): number {
+  return getDb().prepare(
+    `UPDATE research_jobs
+     SET active_accounted_at = NULL
+     WHERE active_accounted_at IS NOT NULL`
+  ).run().changes
+}
+
+/** Freeze all clocks before the scheduler stops. */
+export function freezeResearchActiveClocks(now = Date.now()): number {
+  return getDb().prepare(
+    `UPDATE research_jobs
+     SET active_elapsed_ms = active_elapsed_ms + CASE
+           WHEN active_accounted_at IS NULL THEN 0
+           ELSE MIN(15000, MAX(0, @now - active_accounted_at))
+         END,
+         active_accounted_at = NULL
+     WHERE active_accounted_at IS NOT NULL`
+  ).run({ now }).changes
+}
+
+/** Start/restart one clock for direct runner calls and leased retries. */
+export function startResearchActiveClock(jobId: string, now = Date.now()): boolean {
+  return getDb().prepare(
+    `UPDATE research_jobs
+     SET started_at = COALESCE(started_at, @now),
+         active_accounted_at = @now,
+         updated_at = @now
+     WHERE id = @id
+       AND status IN ('planning', 'researching', 'verifying', 'synthesizing', 'exporting', 'error')`
+  ).run({ id: jobId, now }).changes === 1
 }

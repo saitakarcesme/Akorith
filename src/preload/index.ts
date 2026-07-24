@@ -435,7 +435,13 @@ const research = Object.freeze({
   revealArtifact: (id: string): Promise<unknown> => ipcRenderer.invoke('research:revealArtifact', id),
   coverDataUrl: (id: string): Promise<unknown> => ipcRenderer.invoke('research:coverDataUrl', id),
   openSource: (id: string): Promise<unknown> => ipcRenderer.invoke('research:openSource', id),
-  scheduler: (): Promise<unknown> => ipcRenderer.invoke('research:scheduler')
+  scheduler: (): Promise<unknown> => ipcRenderer.invoke('research:scheduler'),
+  discordSettings: (): Promise<unknown> => ipcRenderer.invoke('research:discordSettings'),
+  setDiscordSettings: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:setDiscordSettings', input),
+  testDiscord: (): Promise<unknown> => ipcRenderer.invoke('research:testDiscord'),
+  discordDeliveries: (jobId: string): Promise<unknown> => ipcRenderer.invoke('research:discordDeliveries', jobId),
+  retryDiscordDelivery: (deliveryId: string): Promise<unknown> =>
+    ipcRenderer.invoke('research:retryDiscordDelivery', deliveryId)
 })
 
 // Permissioned local project runner + loopback-only visual stream.

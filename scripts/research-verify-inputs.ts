@@ -28,11 +28,14 @@ for (const depth of RESEARCH_DEPTHS) {
     }
   }
 }
-assert.equal(accepted, 40, 'all depth, output, and provider-class combinations must be accepted')
+assert.equal(accepted, 70, 'all duration, output, and provider-class combinations must be accepted')
 
 assert.equal(RESEARCH_DEPTH_PROFILES.quick.targetDurationMs, 10 * 60_000)
 assert.equal(RESEARCH_DEPTH_PROFILES.standard.targetDurationMs, 60 * 60_000)
-assert.ok(RESEARCH_DEPTH_PROFILES.deep.targetDurationMs >= 10 * 60 * 60_000)
+assert.equal(RESEARCH_DEPTH_PROFILES.focused3h.targetDurationMs, 3 * 60 * 60_000)
+assert.equal(RESEARCH_DEPTH_PROFILES.extended6h.targetDurationMs, 6 * 60 * 60_000)
+assert.equal(RESEARCH_DEPTH_PROFILES.deep.targetDurationMs, 10 * 60 * 60_000)
+assert.equal(RESEARCH_DEPTH_PROFILES.day.targetDurationMs, 24 * 60 * 60_000)
 assert.equal(RESEARCH_DEPTH_PROFILES.continuous.maxCycles, 0)
 assert.equal(RESEARCH_DEPTH_PROFILES.continuous.sourceTarget, 0)
 

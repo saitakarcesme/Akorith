@@ -312,7 +312,8 @@ export class LocalProvider implements Provider {
           content: prompt,
           ...(opts.images?.length ? { images: opts.images.map((image) => image.dataBase64) } : {})
         }],
-        stream: true
+        stream: true,
+        ...(opts.background === true ? { keep_alive: '30m' } : {})
       }),
       signal: opts.signal
     })

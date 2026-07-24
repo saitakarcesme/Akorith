@@ -92,7 +92,6 @@ export function startResearchJob(id: string): ResearchJob {
   const resumed = updateResearchJob(job.id, {
     status,
     phase: job.plan ? 'research' : 'understand',
-    startedAt: job.startedAt ?? Date.now(),
     nextRunAt: Date.now(),
     error: undefined
   })!

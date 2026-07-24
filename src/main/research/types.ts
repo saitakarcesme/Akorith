@@ -1,4 +1,17 @@
-export const RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'continuous'] as const
+/**
+ * Stable persistence ids for the duration-first Research control. `quick`,
+ * `standard`, and `deep` stay intact so existing databases and exported
+ * reports remain readable after the UI moves from named tiers to time labels.
+ */
+export const RESEARCH_DEPTHS = [
+  'quick',
+  'standard',
+  'focused3h',
+  'extended6h',
+  'deep',
+  'day',
+  'continuous'
+] as const
 export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number]
 
 export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'md', 'docx', 'xlsx', 'pptx'] as const
@@ -57,7 +70,7 @@ export const RESEARCH_DEPTH_PROFILES: Record<ResearchDepth, ResearchDepthProfile
   quick: {
     id: 'quick',
     label: 'Quick search',
-    description: 'A focused scan that targets a useful answer in about 10 minutes.',
+    description: 'A focused evidence program with a minimum research window of 10 minutes.',
     targetDurationMs: 10 * 60_000,
     cycleIntervalMs: 20_000,
     maxCycles: 4,
@@ -66,20 +79,47 @@ export const RESEARCH_DEPTH_PROFILES: Record<ResearchDepth, ResearchDepthProfile
   standard: {
     id: 'standard',
     label: 'Research',
-    description: 'A broader, cross-checked investigation designed for roughly one hour.',
+    description: 'A broader, cross-checked investigation with a minimum research window of one hour.',
     targetDurationMs: 60 * 60_000,
     cycleIntervalMs: 45_000,
     maxCycles: 12,
     sourceTarget: 24
   },
+  focused3h: {
+    id: 'focused3h',
+    label: '3-hour research',
+    description: 'A sustained three-hour investigation with broader corroboration and follow-up passes.',
+    targetDurationMs: 3 * 60 * 60_000,
+    cycleIntervalMs: 60_000,
+    maxCycles: 24,
+    sourceTarget: 40
+  },
+  extended6h: {
+    id: 'extended6h',
+    label: '6-hour research',
+    description: 'An extended six-hour evidence program for complex, multi-angle questions.',
+    targetDurationMs: 6 * 60 * 60_000,
+    cycleIntervalMs: 90_000,
+    maxCycles: 36,
+    sourceTarget: 56
+  },
   deep: {
     id: 'deep',
-    label: 'Deep research',
-    description: 'A long-running evidence program that can continue for 10 hours or more.',
-    targetDurationMs: 12 * 60 * 60_000,
+    label: '10-hour research',
+    description: 'A deep ten-hour evidence program with repeated verification and contradiction checks.',
+    targetDurationMs: 10 * 60 * 60_000,
     cycleIntervalMs: 2 * 60_000,
-    maxCycles: 72,
+    maxCycles: 60,
     sourceTarget: 80
+  },
+  day: {
+    id: 'day',
+    label: '24-hour research',
+    description: 'A full-day research program for broad evidence coverage and measured re-verification.',
+    targetDurationMs: 24 * 60 * 60_000,
+    cycleIntervalMs: 5 * 60_000,
+    maxCycles: 96,
+    sourceTarget: 120
   },
   continuous: {
     id: 'continuous',
@@ -134,6 +174,8 @@ export interface ResearchJob {
   createdAt: number
   updatedAt: number
   startedAt?: number
+  activeElapsedMs: number
+  activeAccountingAt?: number
   completedAt?: number
   nextRunAt?: number
   heartbeatAt?: number

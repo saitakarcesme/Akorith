@@ -21,6 +21,14 @@ import {
 } from './service'
 import { RESEARCH_OUTPUT_FORMATS, type CreateResearchJobInput, type ResearchOutputFormat } from './types'
 import { getResearchSource } from './store'
+import {
+  getResearchDiscordPublicSettings,
+  researchDiscordDeliveriesForJob,
+  retryManagedResearchDiscordDelivery,
+  testResearchDiscordDelivery,
+  updateResearchDiscordSettings,
+  type ResearchDiscordSettingsPatch
+} from './discord-delivery'
 
 export function registerResearchIpc(): void {
   ipcMain.handle('research:list', async () => {
@@ -105,6 +113,51 @@ export function registerResearchIpc(): void {
     await ensureDbReady()
     return getResearchSchedulerSnapshot()
   })
+
+  ipcMain.handle('research:discordSettings', async () => {
+    await ensureDbReady()
+    return getResearchDiscordPublicSettings()
+  })
+
+  ipcMain.handle('research:setDiscordSettings', async (_event, input: unknown) => {
+    await ensureDbReady()
+    return updateResearchDiscordSettings(requireDiscordSettingsPatch(input))
+  })
+
+  ipcMain.handle('research:testDiscord', async () => {
+    await ensureDbReady()
+    return testResearchDiscordDelivery()
+  })
+
+  ipcMain.handle('research:discordDeliveries', async (_event, input: unknown) => {
+    await ensureDbReady()
+    return researchDiscordDeliveriesForJob(requireId(input, 'research job'))
+  })
+
+  ipcMain.handle('research:retryDiscordDelivery', async (_event, input: unknown) => {
+    await ensureDbReady()
+    return retryManagedResearchDiscordDelivery(requireId(input, 'Discord delivery'))
+  })
+}
+
+function requireDiscordSettingsPatch(input: unknown): ResearchDiscordSettingsPatch {
+  if (!isRecord(input)) throw new Error('invalid Research Discord settings')
+  if (input.enabled !== undefined && typeof input.enabled !== 'boolean') {
+    throw new Error('invalid Research Discord enabled setting')
+  }
+  if (
+    input.webhookUrl !== undefined &&
+    input.webhookUrl !== null &&
+    (typeof input.webhookUrl !== 'string' || input.webhookUrl.length > 2_048 || /[\0\r\n]/.test(input.webhookUrl))
+  ) {
+    throw new Error('invalid Research Discord webhook')
+  }
+  return {
+    ...(typeof input.enabled === 'boolean' ? { enabled: input.enabled } : {}),
+    ...(input.webhookUrl === null || typeof input.webhookUrl === 'string'
+      ? { webhookUrl: input.webhookUrl }
+      : {})
+  }
 }
 
 function requireCreateInput(input: unknown): CreateResearchJobInput {

@@ -115,7 +115,7 @@ export async function sendMetaPrompt(
   model: string | undefined,
   prompt: string,
   signal?: AbortSignal,
-  options: { workingDirectory?: string } = {}
+  options: { workingDirectory?: string; background?: boolean } = {}
 ): Promise<SendResult> {
   if (!VALID_ID.test(providerId)) throw new Error('invalid provider id')
   if (model !== undefined && !VALID_MODEL.test(model)) throw new Error('invalid model')
@@ -126,6 +126,7 @@ export async function sendMetaPrompt(
     {
       model,
       signal,
+      background: options.background,
       workingDirectory: options.workingDirectory,
       // Meta prompts may inspect their managed workspace, but must never edit
       // it. Passing an explicit directory also prevents reusable CLI daemons

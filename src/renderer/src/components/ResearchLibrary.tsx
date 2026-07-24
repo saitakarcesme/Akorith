@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { ResearchJob } from '../../../preload/index.d'
 import { FileIcon } from './icons'
+import { researchDurationLabel } from './researchDuration'
 
 type LibraryFilter = 'all' | 'published' | 'active'
 
@@ -83,7 +84,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
                     <span className="research-book-draft">
                       <small>AKORITH RESEARCH</small>
                       <strong>{job.plan?.title || job.title}</strong>
-                      <em>{job.depth} · {job.outputFormat.toUpperCase()}</em>
+                      <em>{researchDurationLabel(job.depth)} · {job.outputFormat.toUpperCase()}</em>
                     </span>
                   )}
                 <span className={`research-book-status is-${job.status}`} aria-hidden="true">

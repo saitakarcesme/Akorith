@@ -2,6 +2,13 @@ import { sendMetaPrompt } from '../providers/registry'
 import { acquireResearchSources } from './acquire'
 import { appendResearchFindings, setResearchPlanSectionStatus } from './findings'
 import { planResearchJob } from './planner'
+import {
+  chooseResearchSection,
+  completedResearchCycleCountAfterSuccess,
+  evaluateResearchCompletion,
+  nextResearchCycleAt,
+  prepareResearchSectionForCycle
+} from './policy'
 import { buildResearchCyclePrompt, parseResearchCycle } from './prompts/cycle'
 import {
   finishResearchCycle,
@@ -15,6 +22,7 @@ import {
   researchClaimCoverage,
   researchCancellationRequested,
   saveResearchCheckpoint,
+  startResearchActiveClock,
   startResearchCycle,
   updateResearchJob
 } from './store'
@@ -22,9 +30,7 @@ import { synthesizeResearchJob } from './synthesize'
 import {
   RESEARCH_DEPTH_PROFILES,
   type ResearchCycleResult,
-  type ResearchJob,
   type ResearchPlan,
-  type ResearchPlanSection,
   type ResearchWorkspaceState
 } from './types'
 import {
@@ -35,8 +41,6 @@ import {
   writeResearchState
 } from './workspace'
 import { recordResearchModelUsage } from './usage'
-
-const MIN_SOURCE_GATE = { quick: 3, standard: 8, deep: 20, continuous: 3 } as const
 
 export async function runResearchCycle(jobId: string, signal?: AbortSignal): Promise<ResearchCycleResult> {
   let job = getResearchJob(jobId)
@@ -49,6 +53,8 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
     job = getResearchJob(job.id)!
     return { ok: false, job, completed: false, error: 'Research was cancelled.' }
   }
+  startResearchActiveClock(job.id)
+  job = getResearchJob(job.id)!
 
   let plan = job.plan ?? readResearchPlan(job.workspaceDir)
   if (!plan) {
@@ -56,12 +62,38 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
     job = getResearchJob(job.id)!
   }
 
-  const section = chooseResearchSection(plan, job.cycleCount)
-  if (!section) {
+  if (job.depth !== 'continuous') {
+    const completion = evaluateResearchCompletion({
+      job,
+      plan,
+      coverage: researchClaimCoverage(job.id)
+    })
+    if (completion.shouldSynthesize) {
+      await synthesizeResearchJob(job.id, { final: true, signal })
+      job = getResearchJob(job.id)!
+      return { ok: true, job, completed: job.status === 'completed' }
+    }
+  }
+
+  const selectedSection = chooseResearchSection(plan, job.cycleCount, {
+    revisitCompleted: job.depth !== 'continuous'
+  })
+  if (!selectedSection) {
+    if (job.depth !== 'continuous') {
+      const error = 'Research plan contains no evidence sections; regenerate the plan before publishing.'
+      job = updateResearchJob(job.id, {
+        status: 'error',
+        error,
+        nextRunAt: undefined
+      })!
+      logResearchEvent({ jobId: job.id, kind: 'error', title: 'Research plan needs attention', detail: error })
+      return { ok: false, job, completed: false, error }
+    }
     await synthesizeResearchJob(job.id, { final: job.depth !== 'continuous', signal })
     job = getResearchJob(job.id)!
     return { ok: true, job, completed: job.status === 'completed' }
   }
+  const section = prepareResearchSectionForCycle(selectedSection, job.cycleCount)
 
   plan = setResearchPlanSectionStatus(job.workspaceDir, plan, section.id, 'active')
   updateResearchJob(job.id, { plan, status: 'researching', phase: 'research', error: undefined })
@@ -89,7 +121,7 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
         priorFindings
       }),
       signal,
-      { workingDirectory: job.workspaceDir }
+      { workingDirectory: job.workspaceDir, background: true }
     )
     recordResearchModelUsage({
       job,
@@ -139,10 +171,11 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
     )
     const latestSources = listResearchSources(job.id)
     const latestClaims = listResearchClaims(job.id)
+    const nextCycleCount = completedResearchCycleCountAfterSuccess(job.cycleCount)
     const state = nextWorkspaceState({
       current: readResearchState(job.workspaceDir),
       jobId: job.id,
-      cycleCount: cycle.cycleIndex,
+      cycleCount: nextCycleCount,
       plan,
       gaps: parsed.gaps,
       sourceCount: latestSources.length,
@@ -165,20 +198,28 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
       completionTokens: response.usage.completionTokens
     })
     const coverage = researchClaimCoverage(job.id)
-    const nextCycleCount = Math.max(job.cycleCount + 1, cycle.cycleIndex)
-    const ready = shouldSynthesize({
-      job: { ...job, cycleCount: nextCycleCount, sourceCount: latestSources.length },
+    const clockedJob = getResearchJob(job.id) ?? job
+    const decisionAt = Date.now()
+    const completion = evaluateResearchCompletion({
+      job: { ...clockedJob, cycleCount: nextCycleCount, sourceCount: latestSources.length },
       plan,
-      coverage
+      coverage,
+      now: decisionAt
     })
+    const nextRunAt = completion.shouldSynthesize
+      ? decisionAt
+      : nextResearchCycleAt(
+        { ...clockedJob, cycleCount: nextCycleCount, sourceCount: latestSources.length },
+        decisionAt
+      )
     updateResearchJob(job.id, {
       plan,
       cycleCount: nextCycleCount,
       sourceCount: latestSources.length,
       findingCount: latestClaims.length,
-      status: ready ? 'verifying' : 'researching',
-      phase: ready ? 'verify' : 'research',
-      nextRunAt: ready ? Date.now() : Date.now() + RESEARCH_DEPTH_PROFILES[job.depth].cycleIntervalMs,
+      status: completion.shouldSynthesize ? 'verifying' : 'researching',
+      phase: completion.shouldSynthesize ? 'verify' : 'research',
+      nextRunAt,
       error: undefined
     })
     logResearchEvent({
@@ -188,7 +229,7 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
       title: `Cycle ${cycle.cycleIndex} complete · ${sources.length} new sources`,
       detail: `${latestClaims.length} claims · ${Math.round(coverage.coverage * 100)}% verified coverage`
     })
-    if (ready) {
+    if (completion.shouldSynthesize) {
       await synthesizeResearchJob(job.id, { final: job.depth !== 'continuous', signal })
     }
     job = getResearchJob(job.id)!
@@ -210,29 +251,6 @@ export async function runResearchCycle(jobId: string, signal?: AbortSignal): Pro
     job = getResearchJob(job.id)!
     return { ok: false, job, cycle: failed ?? getResearchCycle(cycle.id) ?? undefined, completed: false, error: message }
   }
-}
-
-function chooseResearchSection(plan: ResearchPlan, cycleCount: number): ResearchPlanSection | null {
-  const pending = plan.sections.filter((section) => section.status !== 'complete')
-  if (pending.length === 0) return null
-  return pending[cycleCount % pending.length]
-}
-
-function shouldSynthesize(input: {
-  job: ResearchJob
-  plan: ResearchPlan
-  coverage: ReturnType<typeof researchClaimCoverage>
-}): boolean {
-  const job = input.job
-  const allSectionsComplete = input.plan.sections.every((section) => section.status === 'complete')
-  const completedRatio = input.plan.sections.filter((section) => section.status === 'complete').length /
-    Math.max(1, input.plan.sections.length)
-  const sourceGate = job.sourceCount >= MIN_SOURCE_GATE[job.depth]
-  const coverageGate = input.coverage.total > 0 && input.coverage.coverage >= 0.6
-  const targetReached = job.sourceCount >= job.sourceTarget && completedRatio >= 0.75 && coverageGate
-  const exhausted = job.maxCycles > 0 && job.cycleCount >= job.maxCycles
-  if (job.depth === 'continuous') return allSectionsComplete && sourceGate && coverageGate
-  return exhausted || (allSectionsComplete && sourceGate && coverageGate) || targetReached
 }
 
 function nextWorkspaceState(input: {

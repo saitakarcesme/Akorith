@@ -206,7 +206,7 @@ function sourceSnapshots(sources: ResearchSource[], generatedAt: number): Resear
         publisher: source.publisher || safeHostname(source.url),
         url: source.url,
         accessedAt: source.accessedAt,
-        excerpt: compactWhitespace(source.excerpt ?? '').slice(0, 1_100)
+        excerpt: Array.from(compactWhitespace(source.excerpt ?? '')).slice(0, 1_100).join('')
       }
     }))
 }
@@ -294,7 +294,7 @@ function renderChartSvg(visual: ResearchVisualEvidence): string {
 
 function renderTableSvg(visual: ResearchVisualEvidence): string {
   const width = 920
-  const rows = (visual.rows ?? []).slice(0, 8)
+  const rows = visual.rows ?? []
   const height = Math.max(380, 210 + rows.length * 54)
   const columns = visual.columns ?? []
   const header = columns.map((column, index) =>
@@ -375,7 +375,10 @@ function formatValue(value: number, unit: string): string {
 
 function compactLabel(value: string, max: number): string {
   const clean = compactWhitespace(value)
-  return clean.length <= max ? clean : `${clean.slice(0, Math.max(1, max - 1)).trimEnd()}…`
+  const characters = Array.from(clean)
+  return characters.length <= max
+    ? clean
+    : `${characters.slice(0, Math.max(1, max - 1)).join('').trimEnd()}…`
 }
 
 function compactWhitespace(value: string): string {

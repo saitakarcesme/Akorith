@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type {
   ResearchJobDetail,
   ResearchOutputFormat,
@@ -6,6 +7,7 @@ import type {
 } from '../../../preload/index.d'
 import ChatMarkdown from './ChatMarkdown'
 import { FileIcon, FolderOpenIcon, PauseIcon, PlayIcon } from './icons'
+import { researchDurationLabel } from './researchDuration'
 
 const PHASES: Array<{ id: ResearchPhase; label: string }> = [
   { id: 'understand', label: 'Understand' },
@@ -55,8 +57,25 @@ export default function ResearchProgress({
   const currentIndex = PHASES.findIndex((phase) => phase.id === job.phase)
   const terminal = job.status === 'completed' || job.status === 'archived'
   const paused = job.status === 'paused' || job.status === 'error'
-  const duration = formatDuration((job.completedAt ?? Date.now()) - (job.startedAt ?? job.createdAt))
+  const duration = formatDuration(
+    job.activeElapsedMs
+    + (job.activeAccountingAt == null
+      ? 0
+      : Math.min(15_000, Math.max(0, Date.now() - job.activeAccountingAt)))
+  )
   const recentEvents = detail.events.slice(-80)
+  const eventListRef = useRef<HTMLDivElement>(null)
+  const eventListJobRef = useRef<string | null>(null)
+  const followLatestEventRef = useRef(true)
+  const latestEventId = recentEvents.at(-1)?.id
+
+  useEffect(() => {
+    const list = eventListRef.current
+    if (!list || !latestEventId) return
+    const openedJob = eventListJobRef.current !== job.id
+    if (openedJob || followLatestEventRef.current) list.scrollTop = list.scrollHeight
+    eventListJobRef.current = job.id
+  }, [job.id, latestEventId])
 
   return (
     <article className="research-progress">
@@ -98,15 +117,16 @@ export default function ResearchProgress({
               aria-current={active ? 'step' : undefined}
               className={`research-phase ${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}
             >
-              <span className="research-phase-dot" aria-hidden="true">{complete ? '✓' : index + 1}</span>
-              <span>{phase.label}</span>
+              <span className="research-phase-dot" aria-hidden="true">{complete ? '\u2713' : index + 1}</span>
+              <span className="research-phase-copy">{phase.label}{active && <small>Current</small>}</span>
             </div>
           )
         })}
       </section>
 
       <section className="research-metrics" aria-label="Research metrics">
-        <Metric label="Worked for" value={duration} />
+        <Metric label="Active research" value={duration} />
+        <Metric label="Research duration" value={researchDurationLabel(job.depth)} />
         <Metric label="Cycles" value={String(job.cycleCount)} />
         <Metric label="Sources" value={String(job.sourceCount)} />
         <Metric label="Findings" value={String(job.findingCount)} />
@@ -140,7 +160,19 @@ export default function ResearchProgress({
             <div><span className="research-eyebrow">LIVE NOTES</span><h2>Research log</h2></div>
             {detail.running && <span className="research-live-label" role="status"><i aria-hidden="true" />working</span>}
           </div>
-          <div className="research-event-list">
+          <div
+            ref={eventListRef}
+            className="research-event-list"
+            role="log"
+            aria-label="Research activity, newest step last"
+            aria-live="polite"
+            aria-relevant="additions"
+            tabIndex={0}
+            onScroll={(event) => {
+              const list = event.currentTarget
+              followLatestEventRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 72
+            }}
+          >
             {recentEvents.map((event, index) => {
               const current = detail.running && index === recentEvents.length - 1
               return (
@@ -149,9 +181,12 @@ export default function ResearchProgress({
                   aria-current={current ? 'step' : undefined}
                   className={`research-event is-${event.kind} ${current ? 'is-current' : ''}`}
                 >
-                  <span className="research-event-marker" />
+                  <span className="research-event-marker" aria-hidden="true" />
                   <div className="research-event-copy">
-                    <div><span>Step {index + 1}</span><time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time></div>
+                    <div>
+                      <span className="research-event-step">Step {index + 1}{current && <em>Current</em>}</span>
+                      <time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time>
+                    </div>
                     <strong>{event.title}</strong>
                     {event.detail && <ChatMarkdown text={event.detail} />}
                   </div>

@@ -1,5 +1,6 @@
 export * from './artifacts'
 export * from './cycles'
+export * from './discord-deliveries'
 export * from './claims'
 export * from './checkpoints'
 export * from './events'

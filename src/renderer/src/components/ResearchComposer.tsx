@@ -2,17 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   CreateResearchJobInput,
   ProviderInfo,
-  ResearchDepth,
   ResearchOutputFormat
 } from '../../../preload/index.d'
 import { SendIcon } from './icons'
-
-const DEPTHS: Array<{ id: ResearchDepth; label: string; duration: string; detail: string }> = [
-  { id: 'quick', label: 'Quick', duration: '~10 min', detail: 'Focused scan' },
-  { id: 'standard', label: 'Research', duration: '~1 hour', detail: 'Cross-checked' },
-  { id: 'deep', label: 'Deep', duration: '10+ hours', detail: 'Broad evidence' },
-  { id: 'continuous', label: 'Continuous', duration: 'Until paused', detail: 'Keeps watching' }
-]
+import { RESEARCH_DURATION_OPTIONS } from './researchDuration'
 
 const OUTPUTS: Array<{ id: ResearchOutputFormat; label: string }> = [
   { id: 'pdf', label: 'PDF' },
@@ -42,7 +35,7 @@ export default function ResearchComposer({
   const [prompt, setPrompt] = useState('')
   const [providerId, setProviderId] = useState('')
   const [model, setModel] = useState('')
-  const [depth, setDepth] = useState<ResearchDepth>('standard')
+  const [depth, setDepth] = useState<CreateResearchJobInput['depth']>('standard')
   const [outputFormat, setOutputFormat] = useState<ResearchOutputFormat>('pdf')
   const [submitting, setSubmitting] = useState(false)
 
@@ -55,6 +48,8 @@ export default function ResearchComposer({
   }, [availableProviders, providerId])
 
   const activeProvider = availableProviders.find((provider) => provider.id === providerId) ?? null
+  const depthIndex = Math.max(0, RESEARCH_DURATION_OPTIONS.findIndex((item) => item.id === depth))
+  const selectedDepth = RESEARCH_DURATION_OPTIONS[depthIndex]
 
   useEffect(() => {
     const availableModels = activeProvider?.models ?? []
@@ -105,22 +100,31 @@ export default function ResearchComposer({
         />
         {!compact && (
           <div className="research-choice-block">
-            <span className="research-choice-label">Depth</span>
-            <div className="research-depth-options" role="group" aria-label="Research depth">
-              {DEPTHS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={depth === item.id ? 'is-selected' : ''}
-                  aria-pressed={depth === item.id}
-                  onClick={() => setDepth(item.id)}
-                  disabled={disabled || submitting}
-                >
-                  <strong>{item.label}</strong>
-                  <span>{item.duration}</span>
-                  <small>{item.detail}</small>
-                </button>
-              ))}
+            <div className="research-duration-heading">
+              <label id="research-duration-label" htmlFor="research-duration">Research duration</label>
+              <output htmlFor="research-duration" aria-live="polite">
+                <strong>{selectedDepth.label}</strong>
+                <span>{selectedDepth.detail}</span>
+              </output>
+            </div>
+            <div className="research-duration-control" data-duration-index={depthIndex}>
+              <input
+                id="research-duration"
+                type="range"
+                min={0}
+                max={RESEARCH_DURATION_OPTIONS.length - 1}
+                step={1}
+                value={depthIndex}
+                aria-labelledby="research-duration-label"
+                aria-valuetext={`${selectedDepth.label}, ${selectedDepth.detail}`}
+                onChange={(event) => setDepth(RESEARCH_DURATION_OPTIONS[Number(event.target.value)]?.id ?? 'standard')}
+                disabled={disabled || submitting}
+              />
+              <div className="research-duration-labels" aria-hidden="true">
+                {RESEARCH_DURATION_OPTIONS.map((item) => (
+                  <span key={item.id} data-short-label={item.shortLabel} className={depth === item.id ? 'is-selected' : ''}>{item.label}</span>
+                ))}
+              </div>
             </div>
           </div>
         )}

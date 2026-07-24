@@ -113,6 +113,7 @@ async function runQuickSmoke(providerId: SmokeProvider): Promise<SmokeResult> {
   updateResearchJob(job.id, {
     status: 'planning',
     phase: 'understand',
+    targetDurationMs: 0,
     maxCycles: 1,
     sourceTarget: 1,
     startedAt,

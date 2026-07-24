@@ -18,7 +18,8 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
   let plan: ResearchPlan
   try {
     const response = await sendMetaPrompt(job.providerId, job.model, prompt, signal, {
-      workingDirectory: job.workspaceDir
+      workingDirectory: job.workspaceDir,
+      background: true
     })
     recordResearchModelUsage({
       job,

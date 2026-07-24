@@ -171,6 +171,16 @@ export interface UsageLimitConfig {
   notes?: string
 }
 
+/** Optional automatic handoff of validated Research artifacts to a Discord
+ * channel. The credential is encrypted by Electron safeStorage before it is
+ * written here; renderer-facing APIs expose only `configured`, never this
+ * ciphertext or the decrypted webhook URL. */
+export interface ResearchDiscordConfig {
+  enabled: boolean
+  webhookUrlCiphertext?: string
+  destinationLabel: string
+}
+
 export interface LoopexConfig {
   providers: Record<string, ProviderConfigEntry>
   bridge?: Partial<BridgeSettings>
@@ -182,6 +192,7 @@ export interface LoopexConfig {
   plugins?: Partial<PluginSettings>
   telemetry?: Partial<TelemetrySettings>
   usageLimits?: Partial<UsageLimitConfig>
+  researchDiscord?: Partial<ResearchDiscordConfig>
   /** Last theme selected in the renderer; read by the splash at startup. */
   theme?: AppTheme
 }
@@ -247,6 +258,11 @@ export const DEFAULT_TELEMETRY: TelemetrySettings = {
   profiles: []
 }
 
+export const DEFAULT_RESEARCH_DISCORD: ResearchDiscordConfig = {
+  enabled: false,
+  destinationLabel: 'AI Workspace / # 🔬 research'
+}
+
 export const DEFAULT_CONFIG: LoopexConfig = {
   providers: {
     claude: { enabled: true },
@@ -261,7 +277,8 @@ export const DEFAULT_CONFIG: LoopexConfig = {
   isascore: DEFAULT_ISASCORE,
   controller: DEFAULT_CONTROLLER,
   plugins: DEFAULT_PLUGINS,
-  telemetry: DEFAULT_TELEMETRY
+  telemetry: DEFAULT_TELEMETRY,
+  researchDiscord: DEFAULT_RESEARCH_DISCORD
 }
 
 function withConfigDefaults(config: LoopexConfig): LoopexConfig {
@@ -275,6 +292,10 @@ function withConfigDefaults(config: LoopexConfig): LoopexConfig {
         ...DEFAULT_LOCAL_PROVIDER,
         ...(config.providers.local ?? {})
       }
+    },
+    researchDiscord: {
+      ...DEFAULT_RESEARCH_DISCORD,
+      ...(config.researchDiscord ?? {})
     }
   }
 }
@@ -531,6 +552,40 @@ export function setUsageLimitConfig(patch: Partial<UsageLimitConfig>): UsageLimi
     ...(pick('notes', 400) ? { notes: pick('notes', 400) } : {})
   }
   config.usageLimits = next
+  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return next
+}
+
+// ---- Research Discord delivery (main-process secret storage) ----
+
+export function getResearchDiscordConfig(): ResearchDiscordConfig {
+  const raw = loadConfig().researchDiscord ?? {}
+  const ciphertext = safeString(raw.webhookUrlCiphertext, 8_192)
+  return {
+    enabled: raw.enabled === true,
+    destinationLabel: safeString(raw.destinationLabel, 120) ?? DEFAULT_RESEARCH_DISCORD.destinationLabel,
+    ...(ciphertext ? { webhookUrlCiphertext: ciphertext } : {})
+  }
+}
+
+export function setResearchDiscordConfig(
+  patch: Partial<Omit<ResearchDiscordConfig, 'webhookUrlCiphertext'>> & {
+    webhookUrlCiphertext?: string | null
+  }
+): ResearchDiscordConfig {
+  const config = loadConfig()
+  const current = getResearchDiscordConfig()
+  const ciphertext = patch.webhookUrlCiphertext === undefined
+    ? current.webhookUrlCiphertext
+    : safeString(patch.webhookUrlCiphertext, 8_192)
+  const next: ResearchDiscordConfig = {
+    enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
+    destinationLabel: patch.destinationLabel === undefined
+      ? current.destinationLabel
+      : safeString(patch.destinationLabel, 120) ?? DEFAULT_RESEARCH_DISCORD.destinationLabel,
+    ...(ciphertext ? { webhookUrlCiphertext: ciphertext } : {})
+  }
+  config.researchDiscord = next
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
   return next
 }

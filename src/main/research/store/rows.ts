@@ -56,6 +56,8 @@ export function rowToResearchJob(row: DbRow): ResearchJob {
     createdAt: numberValue(row.created_at),
     updatedAt: numberValue(row.updated_at),
     startedAt: optionalNumber(row.started_at),
+    activeElapsedMs: numberValue(row.active_elapsed_ms),
+    activeAccountingAt: optionalNumber(row.active_accounted_at),
     completedAt: optionalNumber(row.completed_at),
     nextRunAt: optionalNumber(row.next_run_at),
     heartbeatAt: optionalNumber(row.heartbeat_at),

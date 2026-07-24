@@ -11,7 +11,10 @@ import { safeResearchPath, writeJsonAtomic } from './workspace'
 const FETCH_LIMITS: Record<ResearchJob['depth'], { queries: number; results: number; fetches: number }> = {
   quick: { queries: 2, results: 6, fetches: 4 },
   standard: { queries: 3, results: 8, fetches: 6 },
+  focused3h: { queries: 3, results: 9, fetches: 6 },
+  extended6h: { queries: 4, results: 10, fetches: 7 },
   deep: { queries: 4, results: 12, fetches: 8 },
+  day: { queries: 5, results: 14, fetches: 10 },
   continuous: { queries: 3, results: 8, fetches: 5 }
 }
 

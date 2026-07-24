@@ -26,7 +26,12 @@ const expectedChannels = [
   'research:revealArtifact',
   'research:coverDataUrl',
   'research:openSource',
-  'research:scheduler'
+  'research:scheduler',
+  'research:discordSettings',
+  'research:setDiscordSettings',
+  'research:testDiscord',
+  'research:discordDeliveries',
+  'research:retryDiscordDelivery'
 ].sort()
 
 const expectedApiMethods = [
@@ -42,7 +47,12 @@ const expectedApiMethods = [
   'revealArtifact',
   'coverDataUrl',
   'openSource',
-  'scheduler'
+  'scheduler',
+  'discordSettings',
+  'setDiscordSettings',
+  'testDiscord',
+  'discordDeliveries',
+  'retryDiscordDelivery'
 ].sort()
 
 const ipcSource = source('src/main/research/ipc.ts')
@@ -51,7 +61,9 @@ const declarationsSource = source('src/preload/index.d.ts')
 const mainSource = source('src/main/index.ts')
 const sidebarSource = source('src/renderer/src/components/Sidebar.tsx')
 const appSource = source('src/renderer/src/App.tsx')
+const providerTypesSource = source('src/main/providers/types.ts')
 const providerRegistrySource = source('src/main/providers/registry.ts')
+const localProviderSource = source('src/main/providers/local.ts')
 const openCodeProviderSource = source('src/main/providers/opencode.ts')
 const researchPlannerSource = source('src/main/research/planner.ts')
 const researchRunnerSource = source('src/main/research/runner.ts')
@@ -108,8 +120,18 @@ assert.ok(
 
 assert.match(
   providerRegistrySource,
-  /workingDirectory:\s*options\.workingDirectory,[\s\S]*?intent:\s*options\.workingDirectory\s*\?\s*'plan'/,
+  /background:\s*options\.background,[\s\S]*?workingDirectory:\s*options\.workingDirectory,[\s\S]*?intent:\s*options\.workingDirectory\s*\?\s*'plan'/,
   'managed meta prompts must bind CLI providers to a read-only working directory'
+)
+assert.match(
+  providerTypesSource,
+  /interface SendOptions \{[\s\S]*?background\?:\s*boolean/,
+  'provider sends must expose the provider-neutral background-work hint'
+)
+assert.match(
+  localProviderSource,
+  /opts\.background\s*===\s*true\s*\?\s*\{\s*keep_alive:\s*'30m'\s*\}\s*:\s*\{\}/,
+  'Ollama must retain models for background work without changing visible chat requests'
 )
 for (const [phase, phaseSource] of [
   ['planning', researchPlannerSource],
@@ -118,8 +140,8 @@ for (const [phase, phaseSource] of [
 ] as const) {
   assert.match(
     phaseSource,
-    /workingDirectory:\s*job\.workspaceDir/,
-    `${phase} prompts must stay inside the managed Research workspace`
+    /workingDirectory:\s*job\.workspaceDir[\s\S]{0,80}?background:\s*true/,
+    `${phase} prompts must stay inside the managed Research workspace and retain local models`
   )
 }
 assert.match(

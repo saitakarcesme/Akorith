@@ -60,6 +60,8 @@ export interface SendResult {
 export interface SendOptions {
   model?: string
   signal?: AbortSignal
+  /** Long-running background work may ask a local runtime to keep the model resident. */
+  background?: boolean
   /** Trusted project directory for workspace-scoped CLI providers. */
   workingDirectory?: string
   /** Normalized, user-facing activity emitted while a CLI works. */

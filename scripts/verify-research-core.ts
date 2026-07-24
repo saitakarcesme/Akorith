@@ -58,9 +58,10 @@ async function main(): Promise<void> {
 }
 
 async function verifyDepthProfiles(): Promise<void> {
-  await check('depth profiles expose the three bounded modes and continuous mode', () => {
-    assert.deepEqual(Object.keys(RESEARCH_DEPTH_PROFILES), ['quick', 'standard', 'deep', 'continuous'])
-    assert.deepEqual(TEST_RESEARCH_DEPTHS, ['quick', 'standard', 'deep', 'continuous'])
+  await check('depth profiles expose the six bounded durations and continuous mode', () => {
+    const expected = ['quick', 'standard', 'focused3h', 'extended6h', 'deep', 'day', 'continuous']
+    assert.deepEqual(Object.keys(RESEARCH_DEPTH_PROFILES), expected)
+    assert.deepEqual(TEST_RESEARCH_DEPTHS, expected)
   })
   await check('bounded depth budgets increase monotonically', () => {
     const profiles = TEST_RESEARCH_DEPTHS
@@ -76,7 +77,10 @@ async function verifyDepthProfiles(): Promise<void> {
   await check('depth profiles retain the promised duration bands', () => {
     assert.equal(RESEARCH_DEPTH_PROFILES.quick.targetDurationMs, 10 * 60_000)
     assert.equal(RESEARCH_DEPTH_PROFILES.standard.targetDurationMs, 60 * 60_000)
-    assert.ok(RESEARCH_DEPTH_PROFILES.deep.targetDurationMs >= 10 * 60 * 60_000)
+    assert.equal(RESEARCH_DEPTH_PROFILES.focused3h.targetDurationMs, 3 * 60 * 60_000)
+    assert.equal(RESEARCH_DEPTH_PROFILES.extended6h.targetDurationMs, 6 * 60 * 60_000)
+    assert.equal(RESEARCH_DEPTH_PROFILES.deep.targetDurationMs, 10 * 60 * 60_000)
+    assert.equal(RESEARCH_DEPTH_PROFILES.day.targetDurationMs, 24 * 60 * 60_000)
   })
   await check('continuous mode has no artificial completion budget', () => {
     const continuous = RESEARCH_DEPTH_PROFILES.continuous
@@ -88,7 +92,7 @@ async function verifyDepthProfiles(): Promise<void> {
 }
 
 async function verifyFixtureMatrix(): Promise<void> {
-  await check('fixture manifest contains exactly 40 combinations', () => {
+  await check('fixture manifest contains exactly 70 combinations', () => {
     assert.equal(RESEARCH_CORE_FIXTURE_MATRIX.length, EXPECTED_RESEARCH_FIXTURE_COUNT)
     assert.equal(
       RESEARCH_CORE_FIXTURE_MATRIX.length,
@@ -201,7 +205,7 @@ async function verifyNetworkPolicy(): Promise<void> {
 async function verifyExportValidators(): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'akorith-research-core-'))
   try {
-    await check('all 40 fixtures export and pass production artifact validation', async () => {
+    await check(`all ${EXPECTED_RESEARCH_FIXTURE_COUNT} fixtures export and pass production artifact validation`, async () => {
       for (const fixture of RESEARCH_CORE_FIXTURE_MATRIX) {
         const workspace = join(root, fixture.id)
         mkdirSync(join(workspace, 'artifacts'), { recursive: true })
@@ -220,7 +224,10 @@ async function verifyExportValidators(): Promise<void> {
       assert.equal((await validateResearchArtifact('md', missingSections)).ok, false)
 
       const orphan = join(root, 'invalid-orphan.md')
-      writeFileSync(orphan, '# Report\n\n## Executive summary\n\nSummary [1](#source-1).\n\n## Sources\n')
+      writeFileSync(
+        orphan,
+        '# Report\n\n## Contents\n\n- [Executive summary](#executive-summary)\n\n<a id="executive-summary"></a>\n## Executive summary\n\nSummary [1](#source-1).\n\n<a id="sources"></a>\n## Sources\n'
+      )
       const orphanResult = await validateResearchArtifact('md', orphan)
       assert.equal(orphanResult.ok, false)
       assert.match(orphanResult.error ?? '', /orphan source reference/i)

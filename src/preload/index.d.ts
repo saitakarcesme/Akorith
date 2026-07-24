@@ -1496,7 +1496,7 @@ export interface LocalRuntimeApi {
 }
 
 // Evidence-backed autonomous Research.
-export type ResearchDepth = 'quick' | 'standard' | 'deep' | 'continuous'
+export type ResearchDepth = 'quick' | 'standard' | 'focused3h' | 'extended6h' | 'deep' | 'day' | 'continuous'
 export type ResearchOutputFormat = 'pdf' | 'md' | 'docx' | 'xlsx' | 'pptx'
 export type ResearchStatus =
   | 'draft' | 'planning' | 'researching' | 'verifying' | 'synthesizing'
@@ -1545,6 +1545,8 @@ export interface ResearchJob {
   createdAt: number
   updatedAt: number
   startedAt?: number
+  activeElapsedMs: number
+  activeAccountingAt?: number
   completedAt?: number
   nextRunAt?: number
   heartbeatAt?: number
@@ -1681,6 +1683,44 @@ export interface ResearchSchedulerSnapshot {
   recoveredCycleCount: number
 }
 
+export type ResearchDiscordDeliveryStatus =
+  | 'pending' | 'sending' | 'retrying' | 'delivered' | 'failed' | 'needs_review'
+
+export interface ResearchDiscordDelivery {
+  id: string
+  jobId: string
+  artifactId: string
+  status: ResearchDiscordDeliveryStatus
+  attemptCount: number
+  nextAttemptAt?: number
+  discordMessageId?: string
+  lastError?: string
+  createdAt: number
+  updatedAt: number
+  deliveredAt?: number
+}
+
+export interface ResearchDiscordSettings {
+  enabled: boolean
+  configured: boolean
+  secureStorageAvailable: boolean
+  destinationLabel: string
+  maxAttachmentBytes: number
+  workerStarted: boolean
+  counts: {
+    pending: number
+    delivered: number
+    failed: number
+    needsReview: number
+  }
+}
+
+export interface ResearchDiscordTestResult {
+  ok: boolean
+  messageId?: string
+  error?: string
+}
+
 export interface ResearchApi {
   list(): Promise<ResearchJob[]>
   get(id: string): Promise<ResearchJobDetail>
@@ -1695,6 +1735,11 @@ export interface ResearchApi {
   coverDataUrl(id: string): Promise<string | null>
   openSource(id: string): Promise<boolean>
   scheduler(): Promise<ResearchSchedulerSnapshot>
+  discordSettings(): Promise<ResearchDiscordSettings>
+  setDiscordSettings(input: { enabled?: boolean; webhookUrl?: string | null }): Promise<ResearchDiscordSettings>
+  testDiscord(): Promise<ResearchDiscordTestResult>
+  discordDeliveries(jobId: string): Promise<ResearchDiscordDelivery[]>
+  retryDiscordDelivery(deliveryId: string): Promise<ResearchDiscordDelivery>
 }
 
 // Phase 48: project-focused Loop.

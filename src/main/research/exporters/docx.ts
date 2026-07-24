@@ -2,7 +2,9 @@ import { renameSync, writeFileSync } from 'fs'
 import {
   AlignmentType,
   Document,
+  ExternalHyperlink,
   Footer,
+  Header,
   HeadingLevel,
   PageBreak,
   PageNumber,
@@ -19,12 +21,16 @@ import {
   WidthType
 } from 'docx'
 import type { ResearchDocument } from '../document'
-import { sourceCitationLabel } from '../document'
 import {
   researchVisualCitationNumbers,
   type ResearchVisualEvidence
 } from '../visual-evidence'
 import { researchArtifactPath } from '../workspace'
+import {
+  compactArtifactText,
+  RESEARCH_ARTIFACT_DESIGN,
+  splitArtifactProse
+} from './design'
 
 const PAGE_WIDTH = 11_906
 const PAGE_HEIGHT = 16_838
@@ -40,17 +46,35 @@ export async function exportResearchDocx(
   const partial = `${path}.partial`
   const document = new Document({
     creator: 'Akorith Research',
+    lastModifiedBy: 'Akorith Research',
     title: research.title,
+    subject: research.subtitle,
+    keywords: 'research, evidence, sources, Akorith',
     description: research.subtitle,
     styles: researchStyles(),
     sections: [{
       properties: {
+        titlePage: true,
         page: {
           size: { width: PAGE_WIDTH, height: PAGE_HEIGHT },
           margin: { top: PAGE_MARGIN, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN }
         }
       },
+      headers: {
+        first: new Header({ children: [] }),
+        default: new Header({
+          children: [new Paragraph({
+            spacing: { after: 100 },
+            border: { bottom: { color: 'D8DEDA', size: 4, style: 'single', space: 6 } },
+            children: [
+              new TextRun({ text: 'AKORITH RESEARCH', bold: true, color: '4B6157', size: 16 }),
+              new TextRun({ text: `  ·  ${compactArtifactText(research.title, 76)}`, color: '7B827D', size: 16 })
+            ]
+          })]
+        })
+      },
       footers: {
+        first: new Footer({ children: [] }),
         default: new Footer({
           children: [new Paragraph({
             alignment: AlignmentType.RIGHT,
@@ -74,9 +98,12 @@ export async function exportResearchDocx(
 }
 
 function coverPage(research: ResearchDocument): Paragraph[] {
+  const coverTitle = compactArtifactText(research.title, 155)
+  const coverSubtitle = compactArtifactText(research.subtitle, 320)
+  const coverWasShortened = coverTitle !== research.title || coverSubtitle !== research.subtitle
   return [
     new Paragraph({
-      spacing: { before: 420, after: 1_900 },
+      spacing: { before: 320, after: 1_100 },
       border: { top: { color: '78D6AA', size: 22, style: 'single', space: 12 } },
       children: [new TextRun({
         text: 'AKORITH RESEARCH',
@@ -88,13 +115,22 @@ function coverPage(research: ResearchDocument): Paragraph[] {
     }),
     new Paragraph({
       style: 'ResearchCoverTitle',
-      children: [new TextRun({ text: research.title, bold: true })]
+      children: [new TextRun({ text: coverTitle, bold: true })]
     }),
     new Paragraph({
       style: 'ResearchCoverSubtitle',
-      children: [new TextRun(research.subtitle)]
+      children: [new TextRun(coverSubtitle)]
     }),
-    new Paragraph({ spacing: { before: 2_600, after: 180 }, children: [
+    ...(coverWasShortened ? [new Paragraph({
+      spacing: { after: 80 },
+      children: [new TextRun({
+        text: 'Full title and research brief continue in the report.',
+        italics: true,
+        size: 18,
+        color: '6B716D'
+      })]
+    })] : []),
+    new Paragraph({ spacing: { before: 360, after: 180 }, children: [
       new TextRun({ text: `${research.depthLabel.toUpperCase()}  ·  ${research.modelLabel}`, bold: true, size: 21, color: '35423C' })
     ] }),
     new Paragraph({ children: [
@@ -121,7 +157,7 @@ function reportBody(research: ResearchDocument): Array<Paragraph | Table> {
       })]
     }),
     heading('Executive summary', HeadingLevel.HEADING_1),
-    bodyParagraph(research.executiveSummary)
+    ...splitArtifactProse(research.executiveSummary).map(bodyParagraph)
   ]
   for (const section of research.sections) {
     children.push(heading(section.title, HeadingLevel.HEADING_1))
@@ -161,10 +197,27 @@ function reportBody(research: ResearchDocument): Array<Paragraph | Table> {
   }
   children.push(heading('Sources', HeadingLevel.HEADING_1))
   research.sources.forEach((source, index) => {
+    const sourceName = source.publisher || safeHostname(source.url)
     children.push(new Paragraph({
       spacing: { after: 140 },
       keepNext: false,
-      children: [new TextRun({ text: sourceCitationLabel(source, index), size: 18, color: '39403C' })]
+      children: [
+        new TextRun({ text: `[${index + 1}] ${sourceName}. ${source.title}. `, size: 18, color: '39403C' }),
+        new ExternalHyperlink({
+          link: source.url,
+          children: [new TextRun({
+            text: `Open cited source: ${sourceName}`,
+            size: 18,
+            color: '2F6D55',
+            underline: {}
+          })]
+        }),
+        new TextRun({
+          text: ` (${safeHostname(source.url)}). Accessed ${new Date(source.accessedAt).toISOString().slice(0, 10)}.`,
+          size: 18,
+          color: '68716B'
+        })
+      ]
     }))
   })
   return children
@@ -226,6 +279,8 @@ function chartTable(visual: ResearchVisualEvidence): Table {
   })
   return new Table({
     width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    indent: { size: 0, type: WidthType.DXA },
+    alignment: AlignmentType.LEFT,
     columnWidths: [labelWidth, ...Array(10).fill(segmentWidth), valueWidth],
     layout: TableLayoutType.FIXED,
     borders: TableBorders.NONE,
@@ -252,6 +307,8 @@ function evidenceTable(visual: ResearchVisualEvidence): Table {
   }))
   return new Table({
     width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    indent: { size: 0, type: WidthType.DXA },
+    alignment: AlignmentType.LEFT,
     columnWidths: widths,
     layout: TableLayoutType.FIXED,
     borders: {
@@ -267,6 +324,8 @@ function snapshotCard(visual: ResearchVisualEvidence): Table {
   const snapshot = visual.snapshot!
   return new Table({
     width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    indent: { size: 0, type: WidthType.DXA },
+    alignment: AlignmentType.LEFT,
     columnWidths: [CONTENT_WIDTH],
     layout: TableLayoutType.FIXED,
     borders: {
@@ -292,7 +351,15 @@ function snapshotCard(visual: ResearchVisualEvidence): Table {
           new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: snapshot.publisher, bold: true, size: 18, color: '39705B' })] }),
           new Paragraph({ spacing: { after: 100 }, keepNext: true, children: [new TextRun({ text: snapshot.title, bold: true, size: 25, color: '171B18' })] }),
           new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: compact(snapshot.excerpt, 1_000), size: 19, color: '343B37' })] }),
-          new Paragraph({ children: [new TextRun({ text: snapshot.url, size: 16, color: '2F6D55', underline: {} })] })
+          new Paragraph({ children: [new ExternalHyperlink({
+            link: snapshot.url,
+            children: [new TextRun({
+              text: `Open retrieved source: ${snapshot.publisher}`,
+              size: 16,
+              color: '2F6D55',
+              underline: {}
+            })]
+          })] })
         ]
       })]
     })]
@@ -323,17 +390,17 @@ function formatVisualValue(value: number, unit: string): string {
 }
 
 function compact(value: string, max: number): string {
-  const clean = value.replace(/\s+/g, ' ').trim()
-  return clean.length <= max ? clean : `${clean.slice(0, Math.max(1, max - 1)).trimEnd()}…`
+  return compactArtifactText(value, max)
 }
 
 function researchStyles(): ConstructorParameters<typeof Document>[0]['styles'] {
+  const officeFont = RESEARCH_ARTIFACT_DESIGN.fonts.office
   return {
     default: {
-      document: { run: { font: 'Aptos', size: 22, color: '252A27' }, paragraph: { spacing: { line: 310 } } },
-      heading1: { run: { font: 'Aptos Display', size: 34, bold: true, color: '171B18' }, paragraph: { spacing: { before: 360, after: 170 } } },
-      heading2: { run: { font: 'Aptos Display', size: 27, bold: true, color: '345247' }, paragraph: { spacing: { before: 260, after: 130 } } },
-      title: { run: { font: 'Aptos Display', size: 48, bold: true, color: '151916' }, paragraph: { spacing: { after: 240 } } }
+      document: { run: { font: officeFont, size: 22, color: '252A27' }, paragraph: { spacing: { line: 264 } } },
+      heading1: { run: { font: officeFont, size: 34, bold: true, color: '171B18' }, paragraph: { spacing: { before: 320, after: 160 } } },
+      heading2: { run: { font: officeFont, size: 27, bold: true, color: '345247' }, paragraph: { spacing: { before: 240, after: 120 } } },
+      title: { run: { font: officeFont, size: 48, bold: true, color: '151916' }, paragraph: { spacing: { after: 240 } } }
     },
     paragraphStyles: [
       {
@@ -341,16 +408,16 @@ function researchStyles(): ConstructorParameters<typeof Document>[0]['styles'] {
         name: 'Research Cover Title',
         basedOn: 'Normal',
         next: 'ResearchCoverSubtitle',
-        run: { font: 'Aptos Display', size: 58, bold: true, color: '141815' },
-        paragraph: { spacing: { after: 280 }, keepNext: true }
+        run: { font: officeFont, size: 64, bold: true, color: '141815' },
+        paragraph: { spacing: { after: 240 } }
       },
       {
         id: 'ResearchCoverSubtitle',
         name: 'Research Cover Subtitle',
         basedOn: 'Normal',
         next: 'Normal',
-        run: { font: 'Aptos', size: 25, color: '666D68' },
-        paragraph: { spacing: { after: 120 }, keepNext: true }
+        run: { font: officeFont, size: 26, color: '666D68' },
+        paragraph: { spacing: { after: 120 } }
       }
     ]
   }
@@ -381,7 +448,7 @@ function markdownParagraphs(markdown: string): Paragraph[] {
       return block.split('\n').filter(Boolean).map((line) => bulletParagraph(line.replace(/^\s*[-*]\s+/, '')))
     }
     const text = stripMarkdown(block)
-    return text ? [bodyParagraph(text)] : []
+    return text ? splitArtifactProse(text).map(bodyParagraph) : []
   })
 }
 
@@ -399,4 +466,8 @@ function statusColor(status: string): string {
   if (status === 'verified') return '26845F'
   if (status === 'conflicted') return '8B5EA7'
   return 'A65A52'
+}
+
+function safeHostname(url: string): string {
+  try { return new URL(url).hostname } catch { return 'Source' }
 }

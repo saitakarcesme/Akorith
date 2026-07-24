@@ -3,17 +3,24 @@ import { runResearchCycle } from './runner'
 import {
   acquireResearchLease,
   cancelInterruptedResearchCycles,
+  checkpointResearchActiveClocks,
   clearResearchCancellation,
+  freezeResearchActiveClocks,
   getResearchJob,
   heartbeatResearchLease,
   listDueResearchJobs,
   logResearchEvent,
   releaseExpiredResearchLeases,
   releaseResearchLease,
+  resumeResearchActiveClocks,
   requestResearchCancellation,
   updateResearchJob
 } from './store'
 import { RESEARCH_DEPTH_PROFILES, type ResearchJob, type ResearchStatus } from './types'
+import {
+  shutdownResearchDiscordDeliveryWorker,
+  startResearchDiscordDeliveryWorker
+} from './discord-delivery'
 
 const MAX_CONCURRENT_RESEARCH_JOBS = 3
 const SCHEDULER_TICK_MS = 5_000
@@ -145,6 +152,7 @@ async function drainDueResearchJobs(): Promise<void> {
   if (!schedulerStarted || drainInProgress) return
   drainInProgress = true
   try {
+    checkpointResearchActiveClocks()
     let remaining = MAX_CONCURRENT_RESEARCH_JOBS - activeRuns.size
     if (remaining <= 0) return
 
@@ -183,9 +191,13 @@ export function startResearchScheduler(): void {
     recoveredLeaseCount = releaseExpiredResearchLeases()
     recoveredCycleCount = cancelInterruptedResearchCycles()
   }
+  // Drop stale accounting anchors. A lease/direct run starts a fresh active
+  // segment, so app-offline and scheduler-wait time are never charged.
+  resumeResearchActiveClocks()
   schedulerStarted = true
   schedulerTimer = setInterval(queueSchedulerDrain, SCHEDULER_TICK_MS)
   schedulerTimer.unref()
+  startResearchDiscordDeliveryWorker()
   queueSchedulerDrain()
 }
 
@@ -201,12 +213,13 @@ export function stopResearchScheduler(): void {
   for (const jobId of activeRuns.keys()) {
     abortRun(jobId, 'The Research scheduler is shutting down.')
   }
+  freezeResearchActiveClocks()
 }
 
 export async function shutdownResearchScheduler(): Promise<void> {
   const pending = [...activeRuns.values()].map((active) => active.promise)
   stopResearchScheduler()
-  await Promise.allSettled(pending)
+  await Promise.allSettled([...pending, shutdownResearchDiscordDeliveryWorker()])
 }
 
 export function cancelActiveResearchRun(jobId: string): boolean {
@@ -226,12 +239,12 @@ export function pauseScheduledResearchJob(jobId: string): ResearchJob | null {
 export function resumeScheduledResearchJob(jobId: string): ResearchJob | null {
   const job = getResearchJob(jobId)
   if (!job || job.status === 'completed' || job.status === 'archived') return job
+  const now = Date.now()
   clearResearchCancellation(jobId)
   const resumed = updateResearchJob(jobId, {
     status: statusForPhase(job),
     error: undefined,
-    startedAt: job.startedAt ?? Date.now(),
-    nextRunAt: Date.now()
+    nextRunAt: now
   })
   logResearchEvent({ jobId, kind: 'resumed', title: 'Research resumed' })
   queueSchedulerDrain()

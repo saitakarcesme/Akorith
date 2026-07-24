@@ -19,6 +19,7 @@ import {
   writeResearchPlan
 } from './workspace'
 import { recordResearchModelUsage } from './usage'
+import { enqueueCompletedResearchDiscordDelivery } from './discord-delivery'
 
 export async function synthesizeResearchJob(
   jobId: string,
@@ -40,7 +41,7 @@ export async function synthesizeResearchJob(
       job.model,
       buildResearchSynthesisPrompt({ job, plan, findings, claims, sources }),
       options.signal,
-      { workingDirectory: job.workspaceDir }
+      { workingDirectory: job.workspaceDir, background: true }
     )
     recordResearchModelUsage({
       job,
@@ -81,6 +82,7 @@ export async function synthesizeResearchJob(
       title: 'Research completed with a validated deliverable',
       detail: artifact.path
     })
+    enqueueCompletedResearchDiscordDelivery(job.id, artifact.id)
   } else {
     const resetPlan: ResearchPlan = {
       ...plan,

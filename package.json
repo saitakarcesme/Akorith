@@ -1,7 +1,7 @@
 {
   "name": "akorith",
   "productName": "Akorith",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Akorith — orchestrate AI coding agents (Claude/Codex CLIs, local Ollama) with no API keys",
   "author": "Akorith",
   "main": "./out/main/index.js",
@@ -24,7 +24,12 @@
     "verify:research-persistence": "electron scripts/research-persistence-main.cjs",
     "verify:research-network": "tsx scripts/research-verify-network.ts",
     "verify:research-inputs": "tsx scripts/research-verify-inputs.ts",
-    "verify:research": "npm run verify:research-contracts && npm run verify:research-inputs && npm run verify:research-network && npm run verify:research-artifacts && npm run verify:research-persistence",
+    "verify:research-local-provider": "tsx scripts/research-verify-local-provider.ts",
+    "verify:research-scheduling": "tsx scripts/research-verify-scheduling.ts",
+    "verify:research-discord": "tsx scripts/research-verify-discord-delivery.ts",
+    "verify:research": "npm run verify:research-contracts && npm run verify:research-inputs && npm run verify:research-local-provider && npm run verify:research-scheduling && npm run verify:research-discord && npm run verify:research-network && npm run verify:research-artifacts && npm run verify:research-persistence",
+    "verify:research-gpu": "electron scripts/research-local-gpu-smoke-main.cjs",
+    "verify:research-gpu:help": "electron scripts/research-local-gpu-smoke-main.cjs --help",
     "verify:research-live": "electron scripts/research-live-smoke-main.cjs",
     "verify:research-live:check": "electron scripts/research-live-smoke-main.cjs --check",
     "verify:research-seed": "electron scripts/research-seed-main.cjs",
@@ -54,7 +59,8 @@
     "verify:agents": "tsx scripts/verify-agents.ts",
     "verify:opencode-output": "tsx scripts/verify-opencode-output.ts",
     "verify:plugin-tools": "tsx scripts/verify-plugin-tools.ts",
-    "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts"
+    "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts",
+    "verify:ui-zoom": "tsx scripts/verify-ui-zoom.ts"
   },
   "build": {
     "appId": "com.akorith.app",

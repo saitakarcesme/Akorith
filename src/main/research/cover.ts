@@ -2,6 +2,7 @@ import { writeFileSync } from 'fs'
 import { createHash } from 'crypto'
 import type { ResearchDocument } from './document'
 import { safeResearchPath } from './workspace'
+import { fitArtifactText } from './exporters/design'
 
 const PALETTES = [
   ['#111315', '#78D6AA', '#8A72D8'],
@@ -12,16 +13,19 @@ const PALETTES = [
 
 export function createResearchCoverSvg(document: ResearchDocument): string {
   const palette = paletteFor(document.title)
-  const titleLines = wrapCoverTitle(document.title, 24)
-  const subtitleLines = wrapCoverTitle(document.subtitle, 44).slice(0, 4)
-  const title = titleLines.map((line, index) =>
-    `<text x="72" y="${300 + index * 74}" fill="#F4F4F2" font-family="-apple-system,BlinkMacSystemFont,Inter,sans-serif" font-size="58" font-weight="680">${escapeXml(line)}</text>`
+  const layout = layoutResearchCover(document)
+  const title = layout.title.lines.map((line, index) =>
+    `<text x="72" y="${layout.titleTop + layout.title.fontSize + index * layout.title.lineHeight}" fill="#F4F4F2" font-family="Arial,Helvetica,sans-serif" font-size="${layout.title.fontSize}" font-weight="700">${escapeXml(line)}</text>`
   ).join('\n')
-  const subtitleStart = 350 + titleLines.length * 74
-  const subtitle = subtitleLines.map((line, index) =>
-    `<text x="74" y="${subtitleStart + index * 34}" fill="#B9BAB7" font-family="-apple-system,BlinkMacSystemFont,Inter,sans-serif" font-size="22">${escapeXml(line)}</text>`
+  const subtitle = layout.subtitle.lines.map((line, index) =>
+    `<text x="74" y="${layout.subtitleTop + layout.subtitle.fontSize + index * layout.subtitle.lineHeight}" fill="#B9BAB7" font-family="Arial,Helvetica,sans-serif" font-size="${layout.subtitle.fontSize}">${escapeXml(line)}</text>`
   ).join('\n')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
+  const continuationNotice = layout.title.truncated || layout.subtitle.truncated
+    ? '<text x="74" y="895" fill="#AEB2AE" font-family="Arial,Helvetica,sans-serif" font-size="12">Cover preview shortened; the full title and research brief continue in the report.</text>'
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123" role="img" aria-labelledby="cover-title cover-description">
+  <title id="cover-title">${escapeXml(document.title)}</title>
+  <desc id="cover-description">Akorith Research report cover. ${escapeXml(document.subtitle)}</desc>
   <defs>
     <radialGradient id="glowA" cx="0" cy="0" r="1" gradientTransform="translate(668 220) rotate(127) scale(430 480)" gradientUnits="userSpaceOnUse">
       <stop stop-color="${palette[1]}" stop-opacity=".36"/><stop offset="1" stop-color="${palette[1]}" stop-opacity="0"/>
@@ -38,6 +42,7 @@ export function createResearchCoverSvg(document: ResearchDocument): string {
   <rect x="72" y="88" width="44" height="5" rx="2.5" fill="${palette[1]}"/><text x="128" y="99" fill="#CDCFCC" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14" letter-spacing="3">AKORITH RESEARCH</text>
   ${title}
   ${subtitle}
+  ${continuationNotice}
   <line x1="72" y1="920" x2="722" y2="920" stroke="#FFFFFF" stroke-opacity=".12"/>
   <text x="72" y="970" fill="#E8E9E6" font-family="-apple-system,BlinkMacSystemFont,Inter,sans-serif" font-size="18">${escapeXml(document.depthLabel.toUpperCase())} · ${escapeXml(document.modelLabel)}</text>
   <text x="72" y="1010" fill="#8E918D" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13">${escapeXml(new Date(document.generatedAt).toLocaleDateString('en-CA'))} · ${document.sources.length} SOURCES</text>
@@ -52,26 +57,36 @@ export function writeResearchCover(workspaceDir: string, document: ResearchDocum
   return path
 }
 
+export function layoutResearchCover(document: Pick<ResearchDocument, 'title' | 'subtitle'>): {
+  titleTop: number
+  subtitleTop: number
+  title: ReturnType<typeof fitArtifactText>
+  subtitle: ReturnType<typeof fitArtifactText>
+} {
+  const titleTop = 206
+  const title = fitArtifactText(document.title, {
+    width: 650,
+    maxHeight: 360,
+    maxFontSize: 58,
+    minFontSize: 28,
+    maxLines: 9,
+    lineHeight: 1.12
+  })
+  const subtitleTop = titleTop + title.height + 34
+  const subtitle = fitArtifactText(document.subtitle, {
+    width: 646,
+    maxHeight: Math.max(72, 875 - subtitleTop),
+    maxFontSize: 22,
+    minFontSize: 16,
+    maxLines: 8,
+    lineHeight: 1.34
+  })
+  return { titleTop, subtitleTop, title, subtitle }
+}
+
 function paletteFor(title: string): (typeof PALETTES)[number] {
   const digest = createHash('sha256').update(title).digest()
   return PALETTES[digest[0] % PALETTES.length]
-}
-
-function wrapCoverTitle(value: string, maxChars: number): string[] {
-  const words = value.replace(/\s+/g, ' ').trim().split(' ')
-  const lines: string[] = []
-  let line = ''
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word
-    if (candidate.length > maxChars && line) {
-      lines.push(line)
-      line = word
-    } else {
-      line = candidate
-    }
-  }
-  if (line) lines.push(line)
-  return lines.slice(0, 6)
 }
 
 function escapeXml(value: string): string {

@@ -20,6 +20,7 @@ import type {
   OllamaRemoteProfile,
   OllamaShareInfo,
   ProviderInfo,
+  ResearchDiscordSettings,
   TestSettings
 } from '../../../preload/index.d'
 import type { AppTheme } from '../App'
@@ -216,6 +217,10 @@ export default function SettingsCenter({
   const [bridgeSettings, setBridgeSettings] = useState<BridgeSettings | null>(null)
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null)
   const [testSettings, setTestSettings] = useState<TestSettings | null>(null)
+  const [discordSettings, setDiscordSettings] = useState<ResearchDiscordSettings | null>(null)
+  const [discordWebhookDraft, setDiscordWebhookDraft] = useState('')
+  const [discordBusy, setDiscordBusy] = useState<'save' | 'toggle' | 'test' | 'remove' | null>(null)
+  const [discordNotice, setDiscordNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   const [ollamaSettings, setOllamaSettings] = useState<OllamaConnectionSettings | null>(null)
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434')
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
@@ -264,6 +269,7 @@ export default function SettingsCenter({
       setTestSettings(null)
       setTestSourceDraft('')
     })
+    void window.api.research.discordSettings().then(setDiscordSettings).catch(() => setDiscordSettings(null))
     void window.api.ollama.getSettings().then((settings) => {
       setOllamaSettings(settings)
       setOllamaEndpoint(settings.baseUrl)
@@ -621,6 +627,77 @@ export default function SettingsCenter({
     if (!res.ok) return
     setDigestDirDraft(res.path)
     await saveDigestDir(res.path)
+  }
+
+  const saveDiscordWebhook = async (): Promise<void> => {
+    const webhookUrl = discordWebhookDraft.trim()
+    if (!webhookUrl) {
+      setDiscordNotice({ kind: 'error', text: 'Paste the Discord webhook URL for the Research channel.' })
+      return
+    }
+    setDiscordBusy('save')
+    setDiscordNotice(null)
+    try {
+      const settings = await window.api.research.setDiscordSettings({ webhookUrl, enabled: true })
+      setDiscordSettings(settings)
+      setDiscordWebhookDraft('')
+      setDiscordNotice({ kind: 'ok', text: `Automatic delivery is on for ${settings.destinationLabel}.` })
+    } catch (error) {
+      setDiscordNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setDiscordBusy(null)
+    }
+  }
+
+  const toggleDiscordDelivery = async (): Promise<void> => {
+    if (!discordSettings?.configured) {
+      setDiscordNotice({ kind: 'error', text: 'Connect the Research channel webhook first.' })
+      return
+    }
+    setDiscordBusy('toggle')
+    setDiscordNotice(null)
+    try {
+      const settings = await window.api.research.setDiscordSettings({ enabled: !discordSettings.enabled })
+      setDiscordSettings(settings)
+      setDiscordNotice({
+        kind: 'info',
+        text: settings.enabled ? 'Automatic Discord delivery resumed.' : 'Automatic Discord delivery paused.'
+      })
+    } catch (error) {
+      setDiscordNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setDiscordBusy(null)
+    }
+  }
+
+  const testDiscordDelivery = async (): Promise<void> => {
+    setDiscordBusy('test')
+    setDiscordNotice(null)
+    try {
+      const result = await window.api.research.testDiscord()
+      setDiscordNotice(result.ok
+        ? { kind: 'ok', text: `Test message delivered to ${discordSettings?.destinationLabel ?? 'Discord'}.` }
+        : { kind: 'error', text: result.error ?? 'Discord rejected the test message.' })
+    } catch (error) {
+      setDiscordNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setDiscordBusy(null)
+    }
+  }
+
+  const removeDiscordWebhook = async (): Promise<void> => {
+    setDiscordBusy('remove')
+    setDiscordNotice(null)
+    try {
+      const settings = await window.api.research.setDiscordSettings({ webhookUrl: null })
+      setDiscordSettings(settings)
+      setDiscordWebhookDraft('')
+      setDiscordNotice({ kind: 'info', text: 'The stored Discord webhook was removed and delivery is off.' })
+    } catch (error) {
+      setDiscordNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setDiscordBusy(null)
+    }
   }
 
   const saveTest = async (patch: Partial<TestSettings>): Promise<void> => {
@@ -1560,6 +1637,81 @@ export default function SettingsCenter({
                   </button>
                 </div>
               </div>
+
+              <div className="settings-divider" />
+              <div className={`settings-integration-card ${discordSettings?.enabled ? 'is-enabled' : ''}`}>
+                <div className="settings-integration-head">
+                  <div>
+                    <span className="settings-kicker">RESEARCH DELIVERY</span>
+                    <strong>Discord</strong>
+                    <p>Publish every completed, validated Research output with its title, summary, duration, sources, claims, page count, and artifact.</p>
+                  </div>
+                  <span className={`settings-chip ${discordSettings?.enabled ? 'is-ok' : discordSettings?.configured ? 'is-warning' : 'is-muted'}`}>
+                    {discordSettings?.enabled ? 'Automatic' : discordSettings?.configured ? 'Paused' : 'Not connected'}
+                  </span>
+                </div>
+
+                <div className="settings-delivery-target">
+                  <span>Destination</span>
+                  <strong>{discordSettings?.destinationLabel ?? 'AI Workspace / # research'}</strong>
+                  <small>{discordSettings?.configured ? 'Webhook encrypted by Windows; its URL is write-only.' : 'Connect a channel webhook once. Akorith never exposes it back to the renderer.'}</small>
+                </div>
+
+                {discordSettings && (
+                  <div className="settings-delivery-stats" aria-label="Discord Research delivery status">
+                    <div><strong>{discordSettings.counts.pending}</strong><span>Pending</span></div>
+                    <div><strong>{discordSettings.counts.delivered}</strong><span>Delivered</span></div>
+                    <div><strong>{discordSettings.counts.failed}</strong><span>Failed</span></div>
+                    <div><strong>{discordSettings.counts.needsReview}</strong><span>Needs review</span></div>
+                  </div>
+                )}
+
+                <label className="settings-field is-stacked">
+                  <span>{discordSettings?.configured ? 'Replace webhook URL' : 'Discord webhook URL'}</span>
+                  <input
+                    type="password"
+                    value={discordWebhookDraft}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    disabled={discordBusy !== null || discordSettings?.secureStorageAvailable === false}
+                    onChange={(event) => setDiscordWebhookDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void saveDiscordWebhook()
+                    }}
+                  />
+                </label>
+
+                {discordSettings?.secureStorageAvailable === false && (
+                  <div className="ollama-status is-error">Windows secure storage is unavailable, so Akorith will not save a Discord credential.</div>
+                )}
+
+                <div className="settings-action-row">
+                  <button
+                    type="button"
+                    className="is-primary"
+                    disabled={discordBusy !== null || !discordWebhookDraft.trim() || discordSettings?.secureStorageAvailable === false}
+                    onClick={() => void saveDiscordWebhook()}
+                  >
+                    {discordBusy === 'save' ? 'Connecting...' : discordSettings?.configured ? 'Replace & enable' : 'Connect & enable'}
+                  </button>
+                  {discordSettings?.configured && (
+                    <>
+                      <button type="button" disabled={discordBusy !== null} onClick={() => void toggleDiscordDelivery()}>
+                        {discordBusy === 'toggle' ? 'Saving...' : discordSettings.enabled ? 'Pause automatic delivery' : 'Resume automatic delivery'}
+                      </button>
+                      <button type="button" disabled={discordBusy !== null} onClick={() => void testDiscordDelivery()}>
+                        {discordBusy === 'test' ? 'Sending...' : 'Send test'}
+                      </button>
+                      <button type="button" className="is-danger" disabled={discordBusy !== null} onClick={() => void removeDiscordWebhook()}>
+                        {discordBusy === 'remove' ? 'Removing...' : 'Disconnect'}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {discordNotice && <div className={`ollama-status is-${discordNotice.kind}`} role="status">{discordNotice.text}</div>}
+              </div>
+
               <div className="settings-readonly-grid">
                 <div>
                   <span>Loop repository</span>
