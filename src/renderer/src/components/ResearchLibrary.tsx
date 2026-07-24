@@ -10,6 +10,19 @@ const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
   year: 'numeric'
 })
 
+const STATUS_LABELS: Record<ResearchJob['status'], string> = {
+  draft: 'Draft',
+  planning: 'Planning',
+  researching: 'Researching',
+  verifying: 'Verifying',
+  synthesizing: 'Synthesizing',
+  exporting: 'Publishing',
+  completed: 'Published',
+  paused: 'Paused',
+  error: 'Needs attention',
+  archived: 'Archived'
+}
+
 interface ResearchLibraryProps {
   jobs: ResearchJob[]
   covers: Record<string, string | null>
@@ -60,7 +73,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
               key={job.id}
               type="button"
               className="research-book"
-              aria-label={`Open ${job.plan?.title || job.title}. Status: ${formatStatus(job.status)}.`}
+              aria-label={`Open ${job.plan?.title || job.title}. Status: ${STATUS_LABELS[job.status]}.`}
               onClick={() => onSelect(job.id)}
             >
               <span className="research-book-cover">
@@ -73,7 +86,10 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
                       <em>{job.depth} · {job.outputFormat.toUpperCase()}</em>
                     </span>
                   )}
-                <span className={`research-book-status is-${job.status}`} aria-hidden="true" />
+                <span className={`research-book-status is-${job.status}`} aria-hidden="true">
+                  <span className="research-book-status-symbol" />
+                  <span className="research-book-status-label">{STATUS_LABELS[job.status]}</span>
+                </span>
               </span>
               <span className="research-book-meta">
                 <strong>{job.plan?.title || job.title}</strong>
@@ -90,10 +106,4 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
 
 function formatDate(timestamp: number): string {
   return DATE_FORMATTER.format(new Date(timestamp))
-}
-
-function formatStatus(status: ResearchJob['status']): string {
-  if (status === 'completed') return 'published'
-  if (status === 'error') return 'needs attention'
-  return status
 }
