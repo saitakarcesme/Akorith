@@ -86,7 +86,6 @@ export default function ResearchComposer({
         <div className="research-composer-intro">
           <span className="research-eyebrow">AUTONOMOUS RESEARCH</span>
           <h1>What should Akorith investigate?</h1>
-          <p>Describe the outcome once. Akorith plans, gathers evidence, cross-checks claims, and publishes a validated deliverable without stopping for questions.</p>
         </div>
       )}
       <div className="research-composer-box">

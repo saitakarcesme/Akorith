@@ -60,7 +60,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
               key={job.id}
               type="button"
               className="research-book"
-              aria-label={`Open ${job.plan?.title || job.title}, ${job.status}`}
+              aria-label={`Open ${job.plan?.title || job.title}. Status: ${formatStatus(job.status)}.`}
               onClick={() => onSelect(job.id)}
             >
               <span className="research-book-cover">
@@ -73,7 +73,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
                       <em>{job.depth} · {job.outputFormat.toUpperCase()}</em>
                     </span>
                   )}
-                <i className={`research-book-status is-${job.status}`} aria-hidden="true" />
+                <span className={`research-book-status is-${job.status}`} aria-hidden="true" />
               </span>
               <span className="research-book-meta">
                 <strong>{job.plan?.title || job.title}</strong>
@@ -90,4 +90,10 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
 
 function formatDate(timestamp: number): string {
   return DATE_FORMATTER.format(new Date(timestamp))
+}
+
+function formatStatus(status: ResearchJob['status']): string {
+  if (status === 'completed') return 'published'
+  if (status === 'error') return 'needs attention'
+  return status
 }
