@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
@@ -24,38 +24,129 @@ export interface HistorySelection {
 
 function initialChromeSidebarWidth(): number {
   try {
+    if (localStorage.getItem('akorith.replicaSidebarVersion') !== '1') {
+      localStorage.setItem('akorith.sidebarWidth', '266')
+      localStorage.setItem('akorith.replicaSidebarVersion', '1')
+    }
+    if (window.innerWidth <= 720) return 0
     if (localStorage.getItem('akorith.sidebarCollapsed') === 'true') return 0
     const raw = Number(localStorage.getItem('akorith.sidebarWidth'))
-    return Number.isFinite(raw) && raw > 0 && raw <= 520 ? raw : 292
+    return Number.isFinite(raw) && raw > 0 && raw <= 520 ? raw : 266
   } catch {
-    return 292
+    return 266
   }
 }
 
+type NativeMenuId = 'file' | 'edit' | 'view' | 'help'
+
 function AppChrome({
-  title,
-  scope,
   canGoBack,
   canGoForward,
   onBack,
   onForward,
-  showWorkbench,
-  workbenchOpen,
-  onToggleWorkbench,
+  onNewChat,
+  onOpenProject,
+  onOpenSettings,
+  theme,
+  onThemeChange,
   pendingCount
 }: {
-  title: string
-  scope?: string
   canGoBack: boolean
   canGoForward: boolean
   onBack: () => void
   onForward: () => void
-  showWorkbench: boolean
-  workbenchOpen: boolean
-  onToggleWorkbench: () => void
+  onNewChat: () => void
+  onOpenProject: () => void
+  onOpenSettings: () => void
+  theme: AppTheme
+  onThemeChange: (theme: AppTheme) => void
   pendingCount: number
 }): JSX.Element {
   const hasWindowControls = Boolean(window.api?.windowControls) && /Mac/i.test(navigator.platform)
+  const [openMenu, setOpenMenu] = useState<NativeMenuId | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const lastEditableRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const rememberEditable = (event: FocusEvent): void => {
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
+        lastEditableRef.current = target
+      }
+    }
+    document.addEventListener('focusin', rememberEditable)
+    return () => document.removeEventListener('focusin', rememberEditable)
+  }, [])
+
+  useEffect(() => {
+    if (!openMenu) return
+    const menu = openMenu
+    const close = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setOpenMenu(null)
+      window.requestAnimationFrame(() => document.getElementById(`app-menu-trigger-${menu}`)?.focus())
+    }
+    window.addEventListener('keydown', close)
+    window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus())
+    return () => window.removeEventListener('keydown', close)
+  }, [openMenu])
+
+  const activate = (action?: () => void | Promise<void>): void => {
+    void action?.()
+    setOpenMenu(null)
+  }
+
+  const dismissMenu = (): void => {
+    const menu = openMenu
+    setOpenMenu(null)
+    if (menu) window.requestAnimationFrame(() => document.getElementById(`app-menu-trigger-${menu}`)?.focus())
+  }
+
+  const runEditCommand = async (command: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'): Promise<void> => {
+    const target = lastEditableRef.current
+    target?.focus()
+    if (command !== 'paste') {
+      document.execCommand(command)
+      return
+    }
+    try {
+      const text = await navigator.clipboard.readText()
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        const start = target.selectionStart ?? target.value.length
+        const end = target.selectionEnd ?? start
+        target.setRangeText(text, start, end, 'end')
+        target.dispatchEvent(new Event('input', { bubbles: true }))
+        return
+      }
+      if (target?.isContentEditable) {
+        document.execCommand('insertText', false, text)
+        return
+      }
+    } catch {
+      // The native command is still useful on hosts where clipboard read is
+      // unavailable but Electron grants paste to the focused editor.
+    }
+    document.execCommand('paste')
+  }
+
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
+    const current = items.indexOf(document.activeElement as HTMLButtonElement)
+    let next = current
+    if (event.key === 'ArrowDown') next = current < items.length - 1 ? current + 1 : 0
+    else if (event.key === 'ArrowUp') next = current > 0 ? current - 1 : items.length - 1
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = items.length - 1
+    else if (event.key === 'Tab') {
+      setOpenMenu(null)
+      return
+    } else {
+      return
+    }
+    event.preventDefault()
+    items[next]?.focus()
+  }
 
   return (
     <header className="app-chrome">
@@ -99,23 +190,121 @@ function AppChrome({
         <button type="button" className="app-chrome-nav" title="Forward" disabled={!canGoForward} onClick={onForward}>
           <ChevronIcon size={15} direction="right" />
         </button>
+        <nav className="app-native-menus" aria-label="Application menu">
+          {(['file', 'edit', 'view', 'help'] as NativeMenuId[]).map((menu) => (
+            <button
+              type="button"
+              key={menu}
+              id={`app-menu-trigger-${menu}`}
+              className={openMenu === menu ? 'is-open' : ''}
+              aria-haspopup="menu"
+              aria-expanded={openMenu === menu}
+              aria-controls={openMenu === menu ? `app-menu-${menu}` : undefined}
+              onClick={() => setOpenMenu((current) => current === menu ? null : menu)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setOpenMenu(menu)
+                }
+              }}
+            >
+              {menu[0].toUpperCase() + menu.slice(1)}
+            </button>
+          ))}
+        </nav>
       </div>
-      <div className="app-chrome-title">
-        <span>{title}</span>
-        {scope && <span className="app-chrome-scope">{scope}</span>}
-      </div>
+      <div className="app-chrome-drag-region" />
       <div className="app-chrome-right">
         {pendingCount > 0 && <span className="app-working-indicator"><i />{pendingCount} working</span>}
-        {showWorkbench && (
-          <button
-            type="button"
-            className={`activity-button ${workbenchOpen ? 'is-active' : ''}`}
-            onClick={onToggleWorkbench}
-            title="Show project changes"
+      </div>
+      {openMenu && (
+        <>
+          <button type="button" className="app-native-menu-backdrop" aria-label="Close menu" onClick={dismissMenu} />
+          <div
+            ref={menuRef}
+            id={`app-menu-${openMenu}`}
+            className={`app-native-menu is-${openMenu}`}
+            role="menu"
+            aria-labelledby={`app-menu-trigger-${openMenu}`}
+            onKeyDown={handleMenuKeyDown}
           >
-            Changes
-          </button>
-        )}
+            {openMenu === 'file' && (
+              <>
+                <button type="button" role="menuitem" onClick={() => activate(onNewChat)}><span>New chat</span><kbd>Ctrl+N</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(onOpenProject)}><span>Open project</span><kbd>Ctrl+O</kbd></button>
+                <div className="app-native-menu-rule" />
+                <button type="button" role="menuitem" onClick={() => activate(onOpenSettings)}><span>Settings</span><kbd>Ctrl+,</kbd></button>
+              </>
+            )}
+            {openMenu === 'edit' && (
+              <>
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('undo'))}><span>Undo</span><kbd>Ctrl+Z</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('redo'))}><span>Redo</span><kbd>Ctrl+Y</kbd></button>
+                <div className="app-native-menu-rule" />
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('cut'))}><span>Cut</span><kbd>Ctrl+X</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('copy'))}><span>Copy</span><kbd>Ctrl+C</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('paste'))}><span>Paste</span><kbd>Ctrl+V</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(() => runEditCommand('selectAll'))}><span>Select all</span><kbd>Ctrl+A</kbd></button>
+              </>
+            )}
+            {openMenu === 'view' && (
+              <>
+                <button type="button" role="menuitem" onClick={() => activate(() => { window.dispatchEvent(new Event('akorith:toggle-sidebar')) })}><span>Sidebar</span><kbd>Ctrl+B</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(() => onThemeChange(theme === 'dark' ? 'light' : 'dark'))}><span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span><kbd /></button>
+              </>
+            )}
+            {openMenu === 'help' && (
+              <>
+                <button type="button" role="menuitem" onClick={() => activate(onOpenSettings)}><span>Keyboard shortcuts</span><kbd>Ctrl+/</kbd></button>
+                <button type="button" role="menuitem" onClick={() => activate(onOpenSettings)}><span>Troubleshooting</span><kbd /></button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </header>
+  )
+}
+
+function SurfaceToolbar({
+  title,
+  scope,
+  showWorkbench,
+  workbenchOpen,
+  onToggleWorkbench
+}: {
+  title?: string
+  scope?: string
+  showWorkbench: boolean
+  workbenchOpen: boolean
+  onToggleWorkbench: () => void
+}): JSX.Element {
+  return (
+    <header className="app-surface-toolbar">
+      <div className="app-surface-toolbar-left">
+        {title && <strong>{title}</strong>}
+        {scope && <span>{scope}</span>}
+      </div>
+      <div className="app-surface-toolbar-right">
+        <button
+          type="button"
+          className={showWorkbench && workbenchOpen ? 'is-active' : ''}
+          aria-label="Toggle bottom panel"
+          aria-pressed={showWorkbench ? workbenchOpen : undefined}
+          title={showWorkbench ? 'Toggle project changes' : 'Bottom panel'}
+          disabled={!showWorkbench}
+          onClick={onToggleWorkbench}
+        >
+          <span className="replica-panel-glyph replica-panel-bottom-glyph" />
+        </button>
+        <button
+          type="button"
+          aria-label="Toggle sidebar panel"
+          title="Toggle sidebar"
+          onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
+        >
+          <span className="replica-panel-glyph replica-panel-right-glyph" />
+        </button>
       </div>
     </header>
   )
@@ -430,6 +619,29 @@ export default function App(): JSX.Element {
   }, [activeProject?.id, bumpProjects, openWorkspaceForProject])
 
   const requestCreateProject = useCallback(() => setCreateSignal((n) => n + 1), [])
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'n') {
+        event.preventDefault()
+        startNewGeneralChat()
+      } else if (key === 'o') {
+        event.preventDefault()
+        void openProject()
+      } else if (key === ',') {
+        event.preventDefault()
+        window.dispatchEvent(new Event('akorith:open-settings'))
+      } else if (key === 'b') {
+        event.preventDefault()
+        window.dispatchEvent(new Event('akorith:toggle-sidebar'))
+      }
+    }
+    window.addEventListener('keydown', onShortcut)
+    return () => window.removeEventListener('keydown', onShortcut)
+  }, [openProject, startNewGeneralChat])
+
   const chromeTitle =
     view === 'general'
       ? 'General chat'
@@ -461,19 +673,20 @@ export default function App(): JSX.Element {
     <div
       className="app"
       data-theme={theme}
+      data-ui="replica"
       data-sidebar-collapsed={chromeSidebarWidth === 0 ? 'true' : 'false'}
       style={{ ['--chrome-sidebar-width' as string]: `${chromeSidebarWidth}px` } as CSSProperties}
     >
       <AppChrome
-        title={chromeTitle}
-        scope={chromeScope}
         canGoBack={navBackStack.length > 0}
         canGoForward={navForwardStack.length > 0}
         onBack={goBack}
         onForward={goForward}
-        showWorkbench={showChromeWorkbench}
-        workbenchOpen={workbenchOpen}
-        onToggleWorkbench={() => setWorkbenchOpen((v) => !v)}
+        onNewChat={startNewGeneralChat}
+        onOpenProject={() => void openProject()}
+        onOpenSettings={() => window.dispatchEvent(new Event('akorith:open-settings'))}
+        theme={theme}
+        onThemeChange={setTheme}
         pendingCount={pendingSessions.size}
       />
       <div className="app-main">
@@ -501,6 +714,15 @@ export default function App(): JSX.Element {
         onChromeWidthChange={setChromeSidebarWidth}
         pendingSessions={pendingSessions}
       />
+      <section className="app-surface">
+        <SurfaceToolbar
+          title={view === 'workspace' && activeProject && activeSessionId ? chromeTitle : view === 'general' && activeSessionId ? chromeTitle : undefined}
+          scope={view === 'workspace' && activeProject && activeSessionId ? chromeScope : undefined}
+          showWorkbench={showChromeWorkbench}
+          workbenchOpen={workbenchOpen}
+          onToggleWorkbench={() => setWorkbenchOpen((value) => !value)}
+        />
+        <div className="app-view-stage">
       {/* Chat-first workspace. CLIs run headlessly and stream normalized progress
           into the conversation; no terminal or Agent Activity surface is mounted. */}
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
@@ -538,6 +760,8 @@ export default function App(): JSX.Element {
       </div>
       {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
       {view === 'plugins' && <Plugins />}
+        </div>
+      </section>
       </div>
     </div>
   )

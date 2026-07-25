@@ -12,8 +12,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 70:
-Research Presentation, Unified Usage & Sidebar Alignment**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 72:
+Replica Workspace UI**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -359,6 +359,14 @@ Research Presentation, Unified Usage & Sidebar Alignment**.
 - [x] **Phase 70** - Research Presentation, Unified Usage & Sidebar Alignment. Research adds native,
       editable PowerPoint output; Dashboard accounting includes idempotent Research requests and
       model tokens; and the sidebar brand shares the navigation icon/text columns.
+- [x] **Phase 71** - Launch-Safe macOS Releases. Publishable macOS archives use coherent signing
+      and inherited entitlements, then verify the exact extracted app and prove the executable
+      remains alive before upload or local replacement.
+- [x] **Phase 72** - Replica Workspace UI. Akorith keeps its existing Electron/preload/IPC and
+      persistently mounted functional surfaces while the renderer adopts the neutral 36 px
+      titlebar, 266/248 px sidebar, inset surface, grouped Settings, home/composer geometry,
+      native-style menus, command palette, exact dark/light tokens, and 720/676/540/400 px
+      responsive behavior.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -841,6 +849,25 @@ local model, attempts, validated changes, commits, last validation, and last com
 - `refresh-macos-app.sh` runs the same launch smoke test against the staged replacement after the
   current app exits and before the working installation is moved. Never treat a static codesign
   result as proof that a packaged Electron app can launch.
+
+## Phase 72 - Replica Workspace UI
+
+- `src/renderer/src/replica-ui.css` is imported after both historical CSS layers and owns the
+  workspace shell: 36 px titlebar, 266 px sidebar (248 px on compact desktop), 46 px toolbar,
+  10 px inset surface corner, 736 px home/composer measure, grouped Settings, and the shared
+  dark/light replica token families.
+- This is a visual integration only. Keep `App.tsx` as controller, keep the preload bridge frozen,
+  and keep Chat, Benchmark, Loop, and Research mounted while hidden. Suggestion cards prepare real
+  prompts; the feature banner remains the real permissioned Computer Use panel.
+- At 720 px and below the sidebar becomes a scrim-backed sheet. Responsive collapse is separate
+  from the persisted desktop choice, and the 360 px minimum window reaches the 400 px layout.
+  No feature page may create document-level horizontal overflow.
+- The command palette lives outside the sidebar's `aria-hidden` subtree and supports focus
+  restoration plus arrow/Home/End/Tab/Escape navigation. File/Edit/View/Help follow the ARIA
+  menu-button pattern and Edit actions operate on the last focused editor.
+- Verify with typecheck/build, `verify:replica-ui`, `verify:ui-zoom`, domain regression scripts,
+  and real Electron geometry/keyboard/overflow screenshots at 1440×900, 960×600, 640×800, and
+  390×780.
 
 ## Rule: keep the docs current
 

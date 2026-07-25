@@ -5,8 +5,8 @@ introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspac
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 70
-(Research presentations, unified usage accounting, and aligned sidebar identity).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 72
+(the replica workspace shell and responsive UI integration).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -27,8 +27,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 26 Settings Center ·
 **27 Local Executor Loop** · 28–56 product, UI, update, agent, and concurrent-loop phases
 (see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** ·
-**69 Autonomous Research** · **70 Research Presentation + unified usage + sidebar alignment** —
-all done.
+**69 Autonomous Research** · **70 Research Presentation + unified usage + sidebar alignment** ·
+**71 launch-safe macOS releases** · **72 replica workspace UI** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -1846,6 +1846,34 @@ bundle and Electron Framework signatures, requires the library-validation entitl
 the real executable and proves it remains alive. The local refresh flow performs the same launch
 smoke test on its staged replacement after quitting the current process but before moving the working
 installation. A static `codesign --verify` result alone is not a sufficient release gate.
+
+### Phase 72: Replica Workspace UI
+
+The renderer uses `replica-ui.css` as the final authoritative visual layer. It maps Akorith's real
+components onto the neutral workspace shell: 36 px black titlebar, 266 px sidebar (248 px at compact
+desktop widths), inset `#181818` app surface with a 10 px top-left corner, 46 px surface toolbar,
+736 px home/composer measure, grouped Settings navigation, native-style menus, and the exact
+dark/light token families. Keep `styles.css` and `product-polish.css` for feature-level layouts;
+`replica-ui.css` must remain the last stylesheet import.
+
+This phase is a visual integration, not a renderer rewrite. `App.tsx` remains the state controller,
+the frozen preload API remains the only capability boundary, and Chat, Benchmark, Loop, and Research
+remain mounted while hidden so requests, timers, queues, and durable jobs survive navigation.
+Workspace suggestion cards only prepare real prompts. The feature banner is the real permissioned
+`ProjectPreviewPanel`, and every navigation row, project action, model picker, Settings field, and
+domain page continues to use its existing IPC and persistence path.
+
+At 720 px and below the sidebar is an overlay sheet with a scrim; responsive auto-collapse must
+never overwrite the user's persisted desktop preference. The app supports a 360 px BrowserWindow
+minimum and 720/676/540/400 px layout breakpoints without page-level horizontal overflow. The
+command palette is rendered outside the hidden sidebar tree, restores focus, and implements arrow,
+Home/End, Enter, Tab, and Escape behavior. Native-style top menus expose valid ARIA menu-button
+state and working edit commands.
+
+Verification: `npm run typecheck`, `npm run build`, `npm run verify:replica-ui`,
+`npm run verify:ui-zoom`, the relevant Workspace/Goal/Loop/Research/Plugins/update regression
+scripts, plus real Electron screenshots and overflow/keyboard checks at 1440×900, 960×600,
+640×800, and 390×780.
 
 ## Conventions
 

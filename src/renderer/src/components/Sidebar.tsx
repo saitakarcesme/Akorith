@@ -1,7 +1,15 @@
-import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../../../preload/index.d'
 import type { AppTheme, AppView } from '../App'
-import akorithLogo from '../assets/plugin-logos/akorith.png'
 import { useProfileIdentity } from '../profileIdentity'
 import {
   ChevronIcon,
@@ -81,16 +89,17 @@ function storageNumber(key: string, fallback: number): number {
 
 // Phase 38.3: keep the sidebar between a usable min and a cap that never crowds
 // the workspace (the smaller of 520px / 40vw).
-const SIDEBAR_MIN = 240
-const SIDEBAR_DEFAULT = 292
+const SIDEBAR_MIN = 220
+const SIDEBAR_DEFAULT = 266
 function clampSidebarWidth(value: number): number {
-  const max = Math.min(520, Math.round((typeof window !== 'undefined' ? window.innerWidth : 1280) * 0.4))
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280
+  const max = viewportWidth <= 720 ? 520 : Math.min(520, Math.round(viewportWidth * 0.4))
   return Math.min(Math.max(value, SIDEBAR_MIN), Math.max(max, SIDEBAR_MIN))
 }
 
 function initialSidebarWidth(): number {
   const stored = storageNumber('akorith.sidebarWidth', SIDEBAR_DEFAULT)
-  return clampSidebarWidth(stored > 312 ? SIDEBAR_DEFAULT : stored)
+  return clampSidebarWidth(stored > 286 ? SIDEBAR_DEFAULT : stored)
 }
 
 function hasLocalAutoStarting(providers: ProviderInfo[]): boolean {
@@ -160,7 +169,12 @@ export default function Sidebar({
       return {}
     }
   })
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storageBoolean('akorith.sidebarCollapsed', false))
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => (typeof window !== 'undefined' && window.innerWidth <= 720)
+      ? true
+      : storageBoolean('akorith.sidebarCollapsed', false)
+  )
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1280)
   const [sidebarPeeking, setSidebarPeeking] = useState(false)
   // Phase 38.3: user-resizable sidebar width (persisted, bounded).
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth)
@@ -184,8 +198,16 @@ export default function Sidebar({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const searchButtonRef = useRef<HTMLButtonElement>(null)
+  const searchWasOpenRef = useRef(false)
+  const responsiveMobileRef = useRef(typeof window !== 'undefined' && window.innerWidth <= 720)
   const sidebarRef = useRef<HTMLElement>(null)
   const { identity, updateIdentity } = useProfileIdentity()
+  const effectiveSidebarWidth = viewportWidth <= 720
+    ? Math.min(300, Math.round(viewportWidth * 0.86))
+    : viewportWidth <= 1100
+      ? Math.min(sidebarWidth, 248)
+      : sidebarWidth
 
   const loadProviders = useCallback(() => {
     window.api.chat
@@ -212,7 +234,6 @@ export default function Sidebar({
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setSearchOpen(true)
-        window.setTimeout(() => searchRef.current?.focus(), 0)
       }
       if (event.key === 'Escape' && searchOpen) {
         setSearchOpen(false)
@@ -222,6 +243,37 @@ export default function Sidebar({
     window.addEventListener('keydown', onSearch)
     return () => window.removeEventListener('keydown', onSearch)
   }, [searchOpen])
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchWasOpenRef.current = true
+      window.requestAnimationFrame(() => searchRef.current?.focus())
+      return
+    }
+    if (searchWasOpenRef.current) {
+      searchWasOpenRef.current = false
+      window.requestAnimationFrame(() => searchButtonRef.current?.focus())
+    }
+  }, [searchOpen])
+
+  useEffect(() => {
+    const syncResponsiveSidebar = (): void => {
+      const mobile = window.innerWidth <= 720
+      setViewportWidth(window.innerWidth)
+      if (mobile === responsiveMobileRef.current) return
+      responsiveMobileRef.current = mobile
+      setSidebarPeeking(false)
+      setSidebarCollapsed(mobile ? true : storageBoolean('akorith.sidebarCollapsed', false))
+    }
+    window.addEventListener('resize', syncResponsiveSidebar)
+    return () => window.removeEventListener('resize', syncResponsiveSidebar)
+  }, [])
+
+  useEffect(() => {
+    if (viewportWidth > 720) return
+    setSidebarPeeking(false)
+    setSidebarCollapsed(true)
+  }, [activeProject?.id, activeSessionId, view, viewportWidth])
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
@@ -267,16 +319,20 @@ export default function Sidebar({
   }, [projectVersion, startupHydrated])
 
   useEffect(() => {
-    localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
+    if (!responsiveMobileRef.current) {
+      localStorage.setItem('akorith.sidebarCollapsed', String(sidebarCollapsed))
+    }
   }, [sidebarCollapsed])
 
   useEffect(() => {
-    localStorage.setItem('akorith.sidebarWidth', String(sidebarWidth))
+    if (!responsiveMobileRef.current) {
+      localStorage.setItem('akorith.sidebarWidth', String(sidebarWidth))
+    }
   }, [sidebarWidth])
 
   useEffect(() => {
-    onChromeWidthChange?.(sidebarCollapsed ? (sidebarPeeking ? sidebarWidth + 36 : 0) : sidebarWidth)
-  }, [onChromeWidthChange, sidebarCollapsed, sidebarPeeking, sidebarWidth])
+    onChromeWidthChange?.(sidebarCollapsed ? 0 : effectiveSidebarWidth)
+  }, [effectiveSidebarWidth, onChromeWidthChange, sidebarCollapsed])
 
   // Phase 38.3: drag the right edge to resize the open sidebar.
   const startSidebarResize = (event: ReactMouseEvent): void => {
@@ -538,10 +594,44 @@ export default function Sidebar({
     return () => window.removeEventListener('akorith:toggle-sidebar', onToggle)
   }, [])
 
+  useEffect(() => {
+    const openSettings = (): void => {
+      setSidebarPeeking(false)
+      setSettingsOpen(true)
+    }
+    window.addEventListener('akorith:open-settings', openSettings)
+    return () => window.removeEventListener('akorith:open-settings', openSettings)
+  }, [])
+
   const handleSidebarLeave = (): void => {
     if (sidebarCollapsed && !settingsOpen && !createOpen && !confirmRemoveProject && !projectMenuOpen && !projectRowMenu) {
       setSidebarPeeking(false)
     }
+  }
+
+  const handleCommandKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.replica-command-results button:not(:disabled)'))
+    if (items.length === 0) return
+    const current = items.indexOf(document.activeElement as HTMLButtonElement)
+    let next = current
+    if (event.key === 'ArrowDown') next = current < items.length - 1 ? current + 1 : 0
+    else if (event.key === 'ArrowUp') next = current > 0 ? current - 1 : items.length - 1
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = items.length - 1
+    else if (event.key === 'Tab') {
+      if (event.shiftKey && (current <= 0 || document.activeElement === searchRef.current)) next = items.length - 1
+      else if (!event.shiftKey && current === items.length - 1) {
+        event.preventDefault()
+        searchRef.current?.focus()
+        return
+      } else {
+        return
+      }
+    } else {
+      return
+    }
+    event.preventDefault()
+    items[next]?.focus()
   }
 
   return (
@@ -559,7 +649,7 @@ export default function Sidebar({
       <aside
         ref={sidebarRef}
         className={`sidebar ${sidebarCollapsed ? 'is-collapsed' : 'is-pinned'} ${sidebarPeeking ? 'is-peeking' : ''}`}
-        style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties}
+        style={{ ['--sidebar-width' as string]: `${effectiveSidebarWidth}px` } as CSSProperties}
         onMouseEnter={revealSidebar}
         onPointerEnter={revealSidebar}
         onMouseLeave={handleSidebarLeave}
@@ -585,12 +675,21 @@ export default function Sidebar({
           destinations and creation. */}
       <div className="sidebar-brand-row">
         <div className="sidebar-brand" aria-label="Akorith">
-          <img className="sidebar-brand-icon" src={akorithLogo} alt="" aria-hidden="true" />
           <span>Akorith</span>
+          <ChevronIcon size={13} direction="down" />
         </div>
-        <button type="button" className="sidebar-search-button" title="Search tasks (⌘K)" onClick={() => { setSearchOpen((open) => !open); window.setTimeout(() => searchRef.current?.focus(), 0) }}><SearchIcon size={15} /></button>
+        <button
+          ref={searchButtonRef}
+          type="button"
+          className="sidebar-search-button"
+          title="Search tasks (⌘K)"
+          aria-haspopup="dialog"
+          aria-expanded={searchOpen}
+          onClick={() => setSearchOpen((open) => !open)}
+        >
+          <SearchIcon size={15} />
+        </button>
       </div>
-      {searchOpen && <div className="sidebar-search"><SearchIcon size={14} /><input ref={searchRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search projects and tasks" /><kbd>⌘K</kbd></div>}
       <nav className="sidebar-nav" aria-label="Primary">
         <div className="sidebar-newchat-row">
           <button
@@ -1061,8 +1160,62 @@ export default function Sidebar({
       )}
       </aside>
 
+      {searchOpen && (
+        <div className="replica-command-overlay" onClick={() => setSearchOpen(false)}>
+          <div
+            className="replica-command-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search tasks"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleCommandKeyDown}
+          >
+            <label className="replica-command-input">
+              <SearchIcon size={17} />
+              <input
+                ref={searchRef}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search projects, chats, and commands"
+              />
+              <kbd>Esc</kbd>
+            </label>
+            <div className="replica-command-results">
+              <small>Navigation</small>
+              <button type="button" onClick={() => { setSearchOpen(false); onNewGeneralChat() }}><PlusIcon size={15} /><span>New chat</span></button>
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button type="button" key={item.view} onClick={() => { setSearchOpen(false); onNavigate(item.view) }}>
+                    <Icon size={15} />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+              {visibleProjects.length > 0 && <small>Projects</small>}
+              {visibleProjects.slice(0, 8).map((project) => (
+                <button type="button" key={project.id} onClick={() => { setSearchOpen(false); onSelectProject(project) }}>
+                  <FolderIcon size={15} />
+                  <span>{project.name}</span>
+                </button>
+              ))}
+            </div>
+            <footer><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Open</span></footer>
+          </div>
+        </div>
+      )}
+
+      {(!sidebarCollapsed || sidebarPeeking) && (
+        <button
+          type="button"
+          className="sidebar-mobile-scrim"
+          aria-label="Close sidebar"
+          onClick={closeSidebar}
+        />
+      )}
+
       {settingsOpen && (
-        <div className="settings-page-host">
+        <div className="settings-page-host replica-settings-host">
           <SettingsCenter
             theme={theme}
             displayName={identity.displayName}

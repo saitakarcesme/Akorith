@@ -100,6 +100,7 @@ export default function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const composerInputRef = useRef<HTMLTextAreaElement>(null)
   const activeSessionRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({})
@@ -459,16 +460,36 @@ export default function ChatPanel({
   const canSubmit = Boolean(draft.trim() && selected?.available.ok && (!isWorkspace || hasProject))
   const contextCount = contextInfo?.totalMessages ?? 0
   const memoryLabel = contextCount > 0 ? `Memory: ${contextCount} messages` : hasProject ? 'Project memory on' : 'Session memory on'
+  const quickActions = hasProject
+    ? [
+        { label: 'Build a feature', prompt: 'Build the next useful feature for this project and verify it end to end.', icon: SparkIcon, tone: 'blue' },
+        { label: 'Fix an issue', prompt: 'Find the most important issue in this project, fix it, and run the relevant checks.', icon: PlanIcon, tone: 'purple' },
+        { label: 'Improve the UI', prompt: 'Review the current interface and implement the highest-impact UI improvement.', icon: FileIcon, tone: 'green' },
+        { label: 'Run a review', prompt: 'Review the project for correctness, reliability, and maintainability. Fix concrete findings.', icon: QueueIcon, tone: 'orange' }
+      ]
+    : []
 
   const composer = (
     <div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }}>
-      {hasProject && activeProject?.path && <ProjectPreviewPanel projectPath={activeProject.path} projectName={activeProject.name} />}
+      {hasProject && activeProject?.path && (
+        <div className="replica-feature-banner">
+          <ProjectPreviewPanel projectPath={activeProject.path} projectName={activeProject.name} />
+        </div>
+      )}
       {suggestion && <div className="router-suggestion"><div className="router-suggestion-head"><span className={`tier-badge tier-${suggestion.tier}`}>{suggestion.rank} · {suggestion.tier}</span><span className="router-target">→ {suggestion.providerLabel}{suggestion.model ? ` · ${suggestion.model}` : ''}</span></div><div className="router-reason">{suggestion.reason}</div><div className="router-actions"><button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>Use model</button><button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>Dismiss</button></div></div>}
       {currentQueue.length > 0 && <div className="composer-queue"><QueueIcon size={14} /><span>{currentQueue.length} follow-up{currentQueue.length === 1 ? '' : 's'} queued</span><button type="button" onClick={() => { queuedTurnsRef.current[activeSessionId!] = []; setQueueVersion((version) => version + 1) }}>Clear</button></div>}
+      {hasProject && (
+        <div className="replica-composer-context">
+          <span><FolderIcon size={14} />{activeProject!.name}</span>
+          <span><PlanIcon size={14} />{intent === 'plan' ? 'Read-only plan' : 'Project workspace'}</span>
+          <span><SparkIcon size={14} />{selected?.label ?? 'Model'}</span>
+        </div>
+      )}
       <div className={`composer-box ${intent === 'plan' ? 'is-plan' : ''}`}>
         {attachments.length > 0 && <div className="composer-attachments">{attachments.map((item) => <div className={`composer-attachment is-${item.kind}`} key={item.id}>{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <FileIcon size={15} />}<span>{item.name}</span><small>{Math.max(1, Math.round(item.size / 1024))} KB</small><button type="button" aria-label={`Remove ${item.name}`} onClick={() => removeAttachment(item.id)}>×</button></div>)}</div>}
         {mentionQuery !== null && mentionFiles.length > 0 && <div className="composer-mention-pop" role="listbox"><div className="composer-mention-head">Project files</div>{mentionFiles.map((path) => <button type="button" role="option" key={path} onClick={() => insertMention(path)}><FileIcon size={13} /><span>{path}</span></button>)}</div>}
         <textarea
+          ref={composerInputRef}
           className="composer-input"
           placeholder={!selected?.available.ok ? 'Select an available model…' : hasProject ? `Describe a task for ${activeProject!.name}…` : isWorkspace ? 'Open a project to start…' : 'Message Akorith…'}
           value={draft}
@@ -480,13 +501,13 @@ export default function ChatPanel({
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
-            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
             <input ref={fileInputRef} type="file" multiple className="composer-file-input" onChange={(event) => void addFiles(event.target.files ?? [])} />
             <button type="button" className="composer-chip" title="Attach files or images" onClick={() => fileInputRef.current?.click()}><PaperclipIcon size={13} /><span>Attach</span></button>
             {isWorkspace && <button type="button" className={`composer-chip ${intent === 'plan' ? 'is-active' : ''}`} title="Plan without editing files" onClick={() => setIntent((current) => current === 'plan' ? 'execute' : 'plan')}><PlanIcon size={13} /><span>Plan</span></button>}
             <div className="composer-more"><button type="button" className={`composer-chip ${moreOpen ? 'is-active' : ''}`} onClick={() => setMoreOpen((open) => !open)}><SparkIcon size={13} /><span>More</span></button>{moreOpen && <><div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} /><div className="composer-more-pop" role="menu"><button type="button" className="composer-more-item" disabled={!draft.trim() || suggesting} onClick={() => { setMoreOpen(false); void suggestTask() }}><SparkIcon size={13} /><span>{suggesting ? 'Classifying…' : 'Suggest model'}</span></button>{hasProject && <><div className="composer-more-sep" /><label className="composer-more-toggle"><span>Repository context</span><input type="checkbox" checked={digestEnabled} onChange={() => { const next = !digestEnabled; setDigestEnabled(next); void window.api.digest.setEnabled(next) }} /></label></>}</div></>}</div>
           </div>
           <div className="composer-submit-group">
+            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
             {busyRequestId && canSubmit && <button type="button" className="composer-queue-button" onClick={sendOrQueue}><QueueIcon size={14} />Queue</button>}
             {busyRequestId ? <ComposerSendButton stop onClick={cancel}><StopIcon size={16} /></ComposerSendButton> : <ComposerSendButton disabled={!canSubmit} onClick={sendOrQueue}><SendIcon size={16} /></ComposerSendButton>}
           </div>
@@ -499,8 +520,53 @@ export default function ChatPanel({
 
   return (
     <main className="chat-panel">
-      {isWorkspace && !hasProject ? <div className="ws-hero"><div className="ws-hero-inner"><h1 className="ws-hero-title">What should we work on?</h1><p className="ws-hero-sub">Open a project, choose one model, and develop it from this chat.</p><div className="ws-hero-actions"><button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}><FolderIcon size={16} />Open Project</button><button type="button" className="ws-hero-btn" onClick={onCreateProject}><PlusIcon size={16} />Create Project</button></div></div></div>
-        : !hasConversation ? <div className="ws-hero"><div className="ws-hero-inner is-wide"><h1 className="ws-hero-title">{hasProject ? `What should we build in ${activeProject!.name}?` : `Welcome back, ${displayName}`}</h1><p className="ws-hero-sub">{hasProject ? 'Choose a model and describe the outcome. Akorith works directly in the project and reports each step here.' : 'Start a focused conversation, attach context, and keep every answer in one clean thread.'}</p>{composer}{selected && !selected.available.ok && <div className="chat-notice">{selected.label} unavailable: {selected.available.reason}</div>}{loadError && <div className="chat-notice">{loadError}</div>}</div></div>
+      {isWorkspace && !hasProject ? (
+        <div className="ws-hero replica-home">
+          <div className="ws-hero-inner">
+            <span className="replica-app-symbol" aria-hidden="true"><i /><i /><i /><i /></span>
+            <h1 className="ws-hero-title">What would you like to work on?</h1>
+            <p className="ws-hero-sub">Open a project to start a fully connected workspace.</p>
+            <div className="ws-hero-actions">
+              <button type="button" className="ws-hero-btn is-primary" onClick={onOpenProject}><FolderIcon size={16} />Open Project</button>
+              <button type="button" className="ws-hero-btn" onClick={onCreateProject}><PlusIcon size={16} />Create Project</button>
+            </div>
+          </div>
+        </div>
+      ) : !hasConversation ? (
+        <div className="ws-hero replica-home">
+          <div className="ws-hero-inner is-wide">
+            <div className="replica-home-greeting">
+              <span className="replica-app-symbol" aria-hidden="true"><i /><i /><i /><i /></span>
+              <h1 className="ws-hero-title">
+                {hasProject ? (
+                  <>What would you like to do in <button type="button" onClick={() => composerInputRef.current?.focus()}>{activeProject!.name}?</button></>
+                ) : `Welcome back, ${displayName}`}
+              </h1>
+            </div>
+            {hasProject && (
+              <div className="replica-suggestion-grid">
+                {quickActions.map(({ label, prompt, icon: Icon, tone }) => (
+                  <button
+                    type="button"
+                    className="replica-suggestion-card"
+                    key={label}
+                    onClick={() => {
+                      updateDraft(prompt)
+                      window.setTimeout(() => composerInputRef.current?.focus(), 0)
+                    }}
+                  >
+                    <Icon size={16} className={`is-${tone}`} />
+                    <strong>{label}</strong>
+                  </button>
+                ))}
+              </div>
+            )}
+            {composer}
+            {selected && !selected.available.ok && <div className="chat-notice">{selected.label} unavailable: {selected.available.reason}</div>}
+            {loadError && <div className="chat-notice">{loadError}</div>}
+          </div>
+        </div>
+      )
           : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col">{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} />)}</div></div><div className="composer-dock">{latestWorkspaceStep !== null && <WorkspaceStepDock step={latestWorkspaceStep} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
       {toast && <div className="bridge-toast ok">{toast}</div>}
     </main>

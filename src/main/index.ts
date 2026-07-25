@@ -285,8 +285,8 @@ function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
-    minWidth: 960,
-    minHeight: 600,
+    minWidth: 360,
+    minHeight: 520,
     show: false,
     backgroundColor: useTransparentWindow ? '#00000000' : mainBg,
     transparent: useTransparentWindow,
@@ -306,9 +306,9 @@ function createWindow(): void {
       ? {
           titleBarStyle: 'hidden' as const,
           titleBarOverlay: {
-            color: mainBg,
+            color: getTheme() === 'light' ? '#f9f9f9' : '#000000',
             symbolColor: getTheme() === 'light' ? '#1a1c1f' : '#ffffff',
-            height: 46
+            height: 36
           }
         }
       : {}),

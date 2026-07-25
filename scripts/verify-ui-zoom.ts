@@ -44,12 +44,12 @@ assert(resolveUiZoomAction(key({ control: true, key: '+' }), 'darwin') === null,
 assert(resolveUiZoomAction(key({ control: true, alt: true, key: '=' }), 'win32') === null, 'AltGr-style chord is not intercepted')
 assert(resolveUiZoomAction(key({ control: true, key: 'a' }), 'win32') === null, 'unrelated primary-modifier chord is not intercepted')
 
-assert(calculateUiZoomFactor(DEFAULT_UI_ZOOM_FACTOR, 'in') === 1.2, 'zoom increases in stable 10% steps')
-assert(calculateUiZoomFactor(1.2, 'out') === DEFAULT_UI_ZOOM_FACTOR, 'zoom decreases without floating-point drift')
+assert(calculateUiZoomFactor(DEFAULT_UI_ZOOM_FACTOR, 'in') === 1.1, 'zoom increases in stable 10% steps')
+assert(calculateUiZoomFactor(1.1, 'out') === DEFAULT_UI_ZOOM_FACTOR, 'zoom decreases without floating-point drift')
 assert(calculateUiZoomFactor(MAX_UI_ZOOM_FACTOR, 'in') === MAX_UI_ZOOM_FACTOR, 'zoom is capped at 200%')
 assert(calculateUiZoomFactor(MIN_UI_ZOOM_FACTOR, 'out') === MIN_UI_ZOOM_FACTOR, 'zoom is capped at 70%')
-assert(calculateUiZoomFactor(1.7, 'reset') === DEFAULT_UI_ZOOM_FACTOR, 'reset restores Akorith default 110%')
-assert(calculateUiZoomFactor(Number.NaN, 'in') === 1.2, 'invalid factor safely falls back to the default')
+assert(calculateUiZoomFactor(1.7, 'reset') === DEFAULT_UI_ZOOM_FACTOR, 'reset restores the replica default 100%')
+assert(calculateUiZoomFactor(Number.NaN, 'in') === 1.1, 'invalid factor safely falls back to the default')
 
 const listeners = new Map<string, (...args: unknown[]) => void>()
 const zoomFactors: number[] = []
@@ -74,9 +74,9 @@ listeners.get('before-input-event')?.(
   key({ control: true, key: '+' }) as Input
 )
 assert(prevented === 1, 'recognized zoom input is kept out of focused editors and terminals')
-assert(zoomFactors.at(-1) === 1.2, 'installed before-input handler applies one zoom step')
+assert(zoomFactors.at(-1) === 1.1, 'installed before-input handler applies one zoom step')
 listeners.get('did-finish-load')?.()
-assert(zoomFactors.at(-1) === 1.2, 'renderer reload preserves the per-window zoom factor')
+assert(zoomFactors.at(-1) === 1.1, 'renderer reload preserves the per-window zoom factor')
 closedListener?.()
 
 console.log('UI zoom verification passed.')

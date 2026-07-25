@@ -1,10 +1,10 @@
 import type { BrowserWindow, Event, Input } from 'electron'
 
 /**
- * Akorith deliberately starts one step above Chromium's 100% default. Keep UI
- * zoom bounded so an accidental key repeat cannot make the interface unusable.
+ * The replica shell is authored against Chromium's 100% CSS-pixel geometry.
+ * Keep zoom bounded so an accidental key repeat cannot make the interface unusable.
  */
-export const DEFAULT_UI_ZOOM_FACTOR = 1.1
+export const DEFAULT_UI_ZOOM_FACTOR = 1
 export const MIN_UI_ZOOM_FACTOR = 0.7
 export const MAX_UI_ZOOM_FACTOR = 2
 export const UI_ZOOM_STEP = 0.1

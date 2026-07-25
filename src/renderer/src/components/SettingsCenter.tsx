@@ -29,7 +29,7 @@ import ollamaLogo from '../assets/plugin-logos/ollama.png'
 import openaiLogo from '../assets/plugin-logos/openai.svg'
 import opencodeLogo from '../assets/plugin-logos/opencode-square.svg'
 import { profilePhotoFromFile } from '../profileIdentity'
-import { CloseIcon, CopyIcon } from './icons'
+import { ChevronIcon, CloseIcon, CopyIcon } from './icons'
 import MissionCenter from './MissionCenter'
 import { ProfileAvatar } from './ProfileAvatar'
 import UpdatePanel from './UpdatePanel'
@@ -773,14 +773,29 @@ export default function SettingsCenter({
     }
   }
 
-  const tabs: { id: SettingsTab; label: string }[] = [
-    { id: 'profile', label: 'General' },
-    { id: 'providers', label: 'Providers' },
-    { id: 'api', label: 'Remote' },
-    { id: 'workflow', label: 'Workflow' },
-    { id: 'test', label: 'Benchmark' },
-    { id: 'safety', label: 'Data' },
-    { id: 'update', label: 'Update' }
+  const tabGroups: { label: string; tabs: { id: SettingsTab; label: string }[] }[] = [
+    {
+      label: 'Application',
+      tabs: [
+        { id: 'profile', label: 'General' },
+        { id: 'providers', label: 'Providers' },
+        { id: 'api', label: 'Remote' }
+      ]
+    },
+    {
+      label: 'Workspace',
+      tabs: [
+        { id: 'workflow', label: 'Workflow' },
+        { id: 'test', label: 'Benchmark' }
+      ]
+    },
+    {
+      label: 'System',
+      tabs: [
+        { id: 'safety', label: 'Data' },
+        { id: 'update', label: 'Update' }
+      ]
+    }
   ]
 
   const observedSessions = useMemo(() => {
@@ -805,9 +820,10 @@ export default function SettingsCenter({
     >
       <div className="settings-page-inner">
       <div className="settings-header">
-        <div>
-          <div className="settings-title">Settings</div>
-        </div>
+        <button type="button" className="settings-back" onClick={onClose}>
+          <ChevronIcon size={15} direction="left" />
+          <span>Back to app</span>
+        </button>
         <button type="button" className="settings-close" onClick={onClose} aria-label="Close settings" title="Back to workspace">
           <CloseIcon size={16} />
         </button>
@@ -815,15 +831,21 @@ export default function SettingsCenter({
 
       <div className="settings-layout">
         <nav className="settings-tabs" aria-label="Settings sections">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`settings-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span>{tab.label}</span>
-            </button>
+          {tabGroups.map((group) => (
+            <section className="settings-tab-group" key={group.label}>
+              <h4>{group.label}</h4>
+              {group.tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`settings-tab ${activeTab === tab.id ? 'is-active' : ''}`}
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </section>
           ))}
         </nav>
 

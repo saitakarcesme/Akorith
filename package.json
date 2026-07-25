@@ -60,7 +60,8 @@
     "verify:opencode-output": "tsx scripts/verify-opencode-output.ts",
     "verify:plugin-tools": "tsx scripts/verify-plugin-tools.ts",
     "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts",
-    "verify:ui-zoom": "tsx scripts/verify-ui-zoom.ts"
+    "verify:ui-zoom": "tsx scripts/verify-ui-zoom.ts",
+    "verify:replica-ui": "tsx scripts/verify-replica-ui.ts"
   },
   "build": {
     "appId": "com.akorith.app",
