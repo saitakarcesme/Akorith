@@ -2,10 +2,9 @@ import { app, BrowserWindow, ipcMain, Menu, shell, type MenuItemConstructorOptio
 import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, dirname, join } from 'path'
-import { getTheme, loadConfig, setTheme, type AppTheme } from './config'
+import { getTheme, setTheme, type AppTheme } from './config'
 import { ptyManager, registerPtyIpc } from './pty'
 import { registerChatIpc } from './providers/registry'
-import { warmLocalProvider } from './providers/local'
 import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
@@ -326,11 +325,10 @@ function createWindow(): void {
   // default, with bounded app-local keyboard shortcuts and reload persistence.
   installUiZoom(mainWindow)
 
-  // Keep the splash up for a guaranteed minimum so it's actually seen, even when
-  // the renderer is ready almost instantly. Reveal the main window once the
-  // renderer reports ready; if Electron never emits `ready-to-show`, fall back to
-  // `did-finish-load` / a bounded timer so launch can never get stuck invisible.
-  const MIN_SPLASH_MS = 1500
+  // Keep only a brief anti-flash handoff. A fixed 1.5 s splash made a renderer
+  // that was already ready feel artificially slow; the main window now appears
+  // promptly while retaining a short, calm transition on fast machines.
+  const MIN_SPLASH_MS = 350
   const MAX_HIDDEN_MS = 5000
   const splashShownAt = Date.now()
   let revealed = false
@@ -344,7 +342,7 @@ function createWindow(): void {
       if (splashWindow && !splashWindow.isDestroyed()) {
         setTimeout(() => {
           if (!splashWindow.isDestroyed()) splashWindow.close()
-        }, 220)
+        }, 100)
       }
     }, wait)
   }
@@ -406,19 +404,17 @@ function registerWindowControlsIpc(): void {
   })
 }
 
-function warmLocalProviderAtStartup(): void {
-  const entry = loadConfig().providers.local
-  if (!entry?.enabled || entry.autoStart === false) return
-  warmLocalProvider(entry)
-}
-
 async function initializeStartupData(): Promise<void> {
   if (process.env.AKORITH_SKIP_DB_INIT === '1') return
   try {
     await ensureDbReady()
-    resumeActiveAutoLoopsAtStartup()
-    startProjectLoopAutoScheduler()
-    startResearchScheduler()
+    // Let startup-snapshot callers read the newly opened database before
+    // schedulers inspect or resume background work on the same event loop.
+    setTimeout(() => {
+      resumeActiveAutoLoopsAtStartup()
+      startProjectLoopAutoScheduler()
+      startResearchScheduler()
+    }, 0)
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
   }
@@ -467,7 +463,6 @@ app.whenReady().then(() => {
   // DB hydration immediately. Startup IPC reads await this readiness gate and
   // no longer return false-empty project/chat lists while SQLite is opening.
   void initializeStartupData().finally(() => {
-    warmLocalProviderAtStartup()
     // Phase 35: optional controller API — starts only if the user enabled it.
     void startControllerIfEnabled()
   })

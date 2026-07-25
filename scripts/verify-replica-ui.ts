@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
 
 const root = join(__dirname, '..')
 const failures: string[] = []
@@ -72,13 +73,17 @@ function hasHiddenMountedWrapper(
 
 const app = read('src/renderer/src/App.tsx')
 const chat = read('src/renderer/src/components/ChatPanel.tsx')
+const dashboard = read('src/renderer/src/components/Dashboard.tsx')
 const loop = read('src/renderer/src/components/ProjectLoopPage.tsx')
 const preview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
 const research = read('src/renderer/src/components/ResearchProgress.tsx')
+const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
+const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
 const sidebar = read('src/renderer/src/components/Sidebar.tsx')
 const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
+const stylesCss = read('src/renderer/src/styles.css')
 
 check(/data-ui\s*=\s*['"]replica['"]/.test(app), "App opts into data-ui='replica'")
 
@@ -136,6 +141,16 @@ check(!chat.includes('replica-composer-context'), 'chat omits the redundant stat
 check(!sidebar.includes('direction="down"'), 'Akorith brand omits the single-app dropdown chevron')
 check(chat.includes('Ask Akorith anything…'), 'general composer uses finished Akorith placeholder copy')
 check(
+  chat.includes('useLayoutEffect') &&
+  chat.includes('MAX_COMPOSER_HEIGHT = 192') &&
+  chat.includes('input.scrollHeight') &&
+  selectorBlocks(replicaCss, '.composer-input').some((block) =>
+    /max-height\s*:\s*192px/.test(block) &&
+    /overflow-y\s*:\s*hidden/.test(block)
+  ),
+  'Workspace composer grows with content to a bounded 192px height'
+)
+check(
   /position\s*:\s*relative[\s\S]{0,240}place-items\s*:\s*center/.test(
     selectorBlocks(replicaCss, '.replica-home').join('\n')
   ) &&
@@ -149,6 +164,51 @@ check(
     !/(?:purple|gradient|animation)/i.test(block)
   ),
   'Research uses a compact neutral phase strip'
+)
+check(
+  research.includes('research-workbench-grid') &&
+  selectorBlocks(stylesCss, '.research-workbench-grid').some((block) =>
+    /display\s*:\s*grid/.test(block) &&
+    /auto-fit/.test(block) &&
+    /gap\s*:\s*clamp\(/.test(block)
+  ),
+  'Evidence program and Research log share a responsive, spacious grid'
+)
+check(
+  dashboard.includes('gpuHistory') &&
+  dashboard.includes('ComputeUsageWave') &&
+  dashboard.includes('tone="gpu"') &&
+  dashboard.includes('window.api.gpu.getStatus()'),
+  'GPU utilization records real samples and renders a history wave'
+)
+check(
+  !workspaceActivity.includes('workspace-activity-icon') &&
+  selectorBlocks(stylesCss, '.workspace-activity-row').some((block) => /display\s*:\s*block/.test(block)),
+  'Workspace activity prose starts flush without leading status icons'
+)
+check(
+  !workspaceStepDock.includes('const STEPS') &&
+  workspaceStepDock.includes('steps.map') &&
+  chat.includes('deriveWorkspaceWorkflow'),
+  'Workspace workflow uses task-derived steps instead of a fixed phase list'
+)
+
+const derivedWorkflow = deriveWorkspaceWorkflow({
+  prompt: 'Create a single-file fighting game in index.html',
+  projectName: 'aicompanion',
+  activities: [
+    { kind: 'status', label: 'Claude session started', status: 'complete', timestamp: 1 },
+    { kind: 'file', label: 'C:\\aicompanion\\index.html', status: 'complete', timestamp: 2 },
+    { kind: 'command', label: 'npm run test', status: 'running', timestamp: 3 }
+  ],
+  active: true
+})
+check(
+  derivedWorkflow[0]?.title.toLowerCase().includes('single-file fighting game') &&
+  derivedWorkflow.some((step) => step.title.includes('index.html')) &&
+  derivedWorkflow.some((step) => step.title.includes('npm run test')) &&
+  derivedWorkflow.every((step) => !['Prepare', 'Understand', 'Plan', 'Work', 'Validate', 'Finish'].includes(step.title)),
+  'derived Workspace workflow reflects the actual request, file and validation command'
 )
 check(
   loop.includes('loop-v3-goalbar') &&

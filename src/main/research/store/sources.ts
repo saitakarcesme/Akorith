@@ -87,6 +87,22 @@ export function listResearchSources(jobId: string): ResearchSource[] {
   return rows.map(rowToResearchSource)
 }
 
+/**
+ * Lightweight source metadata for the live renderer. Full excerpts and
+ * relevance text remain available to main-process synthesis/export through
+ * listResearchSources(), but are intentionally excluded from frequent IPC.
+ */
+export function listResearchSourceSummaries(jobId: string): ResearchSource[] {
+  const rows = getDb().prepare(
+    `SELECT id, job_id, cycle_id, url, title, publisher, published_at, accessed_at,
+            credibility_score, verified
+     FROM research_sources
+     WHERE job_id = ?
+     ORDER BY verified DESC, credibility_score DESC, accessed_at DESC`
+  ).all(jobId) as DbRow[]
+  return rows.map(rowToResearchSource)
+}
+
 export function getResearchSource(id: string): ResearchSource | null {
   const row = getDb().prepare('SELECT * FROM research_sources WHERE id = ?').get(id) as DbRow | undefined
   return row ? rowToResearchSource(row) : null

@@ -5,6 +5,8 @@ import { FolderOpenIcon, GlobeIcon, PanelsIcon, PlayIcon, StopIcon } from './ico
 interface ProjectPreviewPanelProps {
   projectPath: string
   projectName: string
+  /** Whether the owning route is currently visible. Hidden routes never capture frames. */
+  active?: boolean
   hideWhenUnavailable?: boolean
   /** Re-inspect after a workspace turn/cycle may have added a runnable entry point. */
   refreshKey?: string | number
@@ -16,7 +18,13 @@ interface FrameState {
   height: number
 }
 
-export function ProjectPreviewPanel({ projectPath, projectName, hideWhenUnavailable = false, refreshKey }: ProjectPreviewPanelProps): JSX.Element | null {
+export function ProjectPreviewPanel({
+  projectPath,
+  projectName,
+  active = true,
+  hideWhenUnavailable = false,
+  refreshKey
+}: ProjectPreviewPanelProps): JSX.Element | null {
   const [inspection, setInspection] = useState<ProjectPreviewInspection | null>(null)
   const [session, setSession] = useState<ProjectPreviewStatus | null>(null)
   const [frame, setFrame] = useState<FrameState | null>(null)
@@ -28,6 +36,7 @@ export function ProjectPreviewPanel({ projectPath, projectName, hideWhenUnavaila
   const lastMoveRef = useRef(0)
 
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     setInspection(null)
     setSession(null)
@@ -43,13 +52,13 @@ export function ProjectPreviewPanel({ projectPath, projectName, hideWhenUnavaila
       })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)) })
     return () => { cancelled = true }
-  }, [projectPath, refreshKey])
+  }, [active, projectPath, refreshKey])
 
   useEffect(() => {
-    if (!session || (session.state !== 'starting' && session.state !== 'running')) return
+    if (!active || !session || (session.state !== 'starting' && session.state !== 'running')) return
     let cancelled = false
     const refresh = async (): Promise<void> => {
-      if (pollingRef.current) return
+      if (document.hidden || pollingRef.current) return
       pollingRef.current = true
       try {
         if (live) {
@@ -71,7 +80,7 @@ export function ProjectPreviewPanel({ projectPath, projectName, hideWhenUnavaila
     void refresh()
     const timer = window.setInterval(() => void refresh(), live ? 850 : 1600)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [live, session?.id, session?.state])
+  }, [active, live, session?.id, session?.state])
 
   const start = async (): Promise<void> => {
     setError(null)

@@ -151,7 +151,7 @@ async function verify(): Promise<void> {
   )
   assert.match(
     previewPanelSource,
-    /\[projectPath,\s*refreshKey\]/,
+    /\[active,\s*projectPath,\s*refreshKey\]/,
     'the preview panel must re-inspect after a turn creates a runnable entry point'
   )
 

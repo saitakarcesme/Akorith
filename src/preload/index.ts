@@ -71,7 +71,7 @@ interface ChatActivityPayload {
 }
 
 const chat = Object.freeze({
-  listProviders: (): Promise<unknown> => ipcRenderer.invoke('chat:providers'),
+  listProviders: (force = false): Promise<unknown> => ipcRenderer.invoke('chat:providers', { force }),
 
   send: (args: {
     requestId: string
@@ -424,6 +424,8 @@ const projectLoop = Object.freeze({
 const research = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('research:list'),
   get: (id: string): Promise<unknown> => ipcRenderer.invoke('research:get', id),
+  poll: (id: string, version?: string): Promise<unknown> =>
+    ipcRenderer.invoke('research:poll', { id, version }),
   create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:create', input),
   pause: (id: string): Promise<unknown> => ipcRenderer.invoke('research:pause', id),
   resume: (id: string): Promise<unknown> => ipcRenderer.invoke('research:resume', id),

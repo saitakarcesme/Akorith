@@ -79,7 +79,15 @@ function CompletionSummary({ message }: { message: ChatMessage }): JSX.Element |
   )
 }
 
-function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWorkspace: boolean }): JSX.Element {
+function ChatMessageView({
+  message,
+  isWorkspace,
+  projectName
+}: {
+  message: ChatMessage
+  isWorkspace: boolean
+  projectName?: string
+}): JSX.Element {
   const [copied, setCopied] = useState(false)
   const activityOwnsError = message.status === 'error' && (message.activities ?? []).some((activity) => activity.status === 'error')
   const showAssistantText = message.status === 'streaming' ? Boolean(message.text) : !activityOwnsError
@@ -93,7 +101,7 @@ function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWor
   }
   return (
     <article className={`chat-msg ${message.role} ${message.status}`}>
-      {images.length > 0 && <div className="chat-image-strip">{images.map((image) => <img key={image.id} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} />)}</div>}
+      {images.length > 0 && <div className="chat-image-strip">{images.map((image) => <img key={image.id} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} loading="lazy" decoding="async" />)}</div>}
       {files.length > 0 && <div className="chat-attachment-strip">{files.map((file) => <span className="chat-attachment" key={file.id}><FileIcon size={14} /><span>{file.name}</span><small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>)}</div>}
       {message.intent === 'plan' && <span className="chat-intent-badge">Plan</span>}
       {isWorkspace && message.role === 'assistant' && message.startedAt && (
@@ -103,6 +111,7 @@ function ChatMessageView({ message, isWorkspace }: { message: ChatMessage; isWor
           endedAt={message.endedAt}
           active={message.status === 'streaming'}
           failed={message.status === 'error'}
+          projectName={projectName}
         />
       )}
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'

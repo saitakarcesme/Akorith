@@ -199,7 +199,11 @@ function applyProfileUpdates(
  * automatically. Read-only health checks (/api/tags) with short timeouts — no
  * polling, no aggressive retries.
  */
-async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
+const AUTO_CONNECT_CACHE_MS = 2_500
+let autoConnectCached: { capturedAt: number; result: OllamaAutoConnectResult } | null = null
+let autoConnectInFlight: Promise<OllamaAutoConnectResult> | null = null
+
+async function autoConnectOllamaFresh(): Promise<OllamaAutoConnectResult> {
   const settings = getLocalProviderSettings()
   type Candidate = { baseUrl: string; source: OllamaActiveEndpoint['source']; profileId?: string; label: string }
   const candidates: Candidate[] = []
@@ -256,7 +260,9 @@ async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
       if (updates.size && settings.remoteProfiles) {
         patch.remoteProfiles = applyProfileUpdates(settings.remoteProfiles, updates)
       }
-      setLocalProviderSettings(patch)
+      if (switched || settings.lastSuccessfulBaseUrl !== candidate.baseUrl || updates.size > 0) {
+        setLocalProviderSettings(patch)
+      }
       return {
         ok: true,
         active: { baseUrl: candidate.baseUrl, source: candidate.source, profileId: candidate.profileId, label: candidate.label },
@@ -276,6 +282,22 @@ async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
     error: firstError || 'No Ollama endpoint is reachable right now.',
     lastSuccessfulBaseUrl: settings.lastSuccessfulBaseUrl,
     triedCount: candidates.length
+  }
+}
+
+async function autoConnectOllama(): Promise<OllamaAutoConnectResult> {
+  if (autoConnectCached && Date.now() - autoConnectCached.capturedAt < AUTO_CONNECT_CACHE_MS) {
+    return autoConnectCached.result
+  }
+  if (autoConnectInFlight) return autoConnectInFlight
+  const request = autoConnectOllamaFresh()
+  autoConnectInFlight = request
+  try {
+    const result = await request
+    autoConnectCached = { capturedAt: Date.now(), result }
+    return result
+  } finally {
+    if (autoConnectInFlight === request) autoConnectInFlight = null
   }
 }
 
@@ -387,6 +409,7 @@ export function registerOllamaConnectionIpc(): void {
       // Phase 33.13: remote profiles are validated/sanitized in config.
       ...(input.remoteProfiles !== undefined ? { remoteProfiles: sanitizeRemoteProfiles(input.remoteProfiles) } : {})
     })
+    autoConnectCached = null
     return { ok: true, settings }
   })
 }

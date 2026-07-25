@@ -25,6 +25,9 @@ const MAX_PROJECT_NAME = 120
 const MAX_PROJECT_PATH = 2_000
 const MAX_PROJECT_META = 48
 const SAFE_PROJECT_DIR_NAME = /^[^/\\:*?"<>|\0\r\n]{1,120}$/
+// Bump whenever initDb adds or changes a table, column, index, or backfill.
+// The version is written only after every idempotent migration succeeds.
+const DB_SCHEMA_VERSION = 1
 
 interface StoredGeneratedFile {
   path: string
@@ -44,6 +47,8 @@ export function initDb(): void {
   try {
     nextDb.pragma('journal_mode = WAL')
     nextDb.pragma('foreign_keys = ON')
+    const currentSchemaVersion = Number(nextDb.pragma('user_version', { simple: true }))
+    if (currentSchemaVersion >= DB_SCHEMA_VERSION) return
     nextDb.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id          TEXT PRIMARY KEY,
@@ -762,6 +767,7 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'last_attempt_status', 'TEXT')
   ensureColumn('macro_sessions', 'last_validation_result', 'TEXT')
   ensureColumn('macro_sessions', 'last_commit_message', 'TEXT')
+  nextDb.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
   } catch (err) {
     nextDb.close()
     db = null

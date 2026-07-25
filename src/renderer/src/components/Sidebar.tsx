@@ -2,6 +2,8 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -29,7 +31,8 @@ import {
   TrashIcon
 } from './icons'
 import { ProfileAvatar } from './ProfileAvatar'
-import SettingsCenter from './SettingsCenter'
+
+const SettingsCenter = lazy(() => import('./SettingsCenter'))
 
 interface SidebarProps {
   view: AppView
@@ -68,6 +71,22 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon }
 ]
+
+const FEATURE_PRELOADERS: Partial<Record<AppView, () => Promise<unknown>>> = {
+  dashboard: () => import('./Dashboard'),
+  loops: () => import('./ProjectLoopPage'),
+  research: () => import('./ResearchPage'),
+  test: () => import('./TestPage'),
+  plugins: () => import('./Plugins')
+}
+
+function preloadFeatureView(view: AppView): void {
+  void FEATURE_PRELOADERS[view]?.()
+}
+
+function preloadSettingsCenter(): void {
+  void import('./SettingsCenter')
+}
 
 function storageBoolean(key: string, fallback: boolean): boolean {
   try {
@@ -208,9 +227,9 @@ export default function Sidebar({
       ? Math.min(sidebarWidth, 248)
       : sidebarWidth
 
-  const loadProviders = useCallback(() => {
+  const loadProviders = useCallback((force = false) => {
     window.api.chat
-      .listProviders()
+      .listProviders(force)
       .then(setProviders)
       .catch(() => setProviders([]))
   }, [])
@@ -276,7 +295,7 @@ export default function Sidebar({
 
   useEffect(() => {
     if (!hasLocalAutoStarting(providers)) return
-    const timer = window.setTimeout(loadProviders, 3000)
+    const timer = window.setTimeout(() => loadProviders(true), 3000)
     return () => window.clearTimeout(timer)
   }, [providers, loadProviders])
 
@@ -303,19 +322,21 @@ export default function Sidebar({
 
   useEffect(() => {
     if (!startupHydrated) return
+    if (startupSnapshot && historyVersion === 0) return
     window.api.history
       .list()
       .then(setSessions)
       .catch(() => setSessions([]))
-  }, [historyVersion, startupHydrated])
+  }, [historyVersion, startupHydrated, startupSnapshot])
 
   useEffect(() => {
     if (!startupHydrated) return
+    if (startupSnapshot && projectVersion === 0) return
     window.api.projects
       .list()
       .then(setProjects)
       .catch(() => setProjects([]))
-  }, [projectVersion, startupHydrated])
+  }, [projectVersion, startupHydrated, startupSnapshot])
 
   useEffect(() => {
     if (!responsiveMobileRef.current) {
@@ -708,6 +729,8 @@ export default function Sidebar({
               type="button"
               className={view === item.view ? 'is-active' : ''}
               onClick={() => onNavigate(item.view)}
+              onPointerEnter={() => preloadFeatureView(item.view)}
+              onFocus={() => preloadFeatureView(item.view)}
               title={item.label}
             >
               <Icon size={17} />
@@ -1066,11 +1089,26 @@ export default function Sidebar({
 
       <div className="sidebar-profile">
         <div className="sidebar-profile-row">
-          <button type="button" className="profile-identity-button" onClick={() => { setSettingsOpen(false); onNavigate('dashboard') }} title="Open Dashboard">
+          <button
+            type="button"
+            className="profile-identity-button"
+            onClick={() => { setSettingsOpen(false); onNavigate('dashboard') }}
+            onPointerEnter={() => preloadFeatureView('dashboard')}
+            onFocus={() => preloadFeatureView('dashboard')}
+            title="Open Dashboard"
+          >
             <ProfileAvatar name={identity.displayName} photo={identity.profilePhoto} />
             <strong>{identity.displayName.trim() || 'User'}</strong>
           </button>
-          <button type="button" className="profile-settings-button" onClick={() => setSettingsOpen((value) => !value)} aria-label="Settings" title="Settings">
+          <button
+            type="button"
+            className="profile-settings-button"
+            onClick={() => setSettingsOpen((value) => !value)}
+            onPointerEnter={preloadSettingsCenter}
+            onFocus={preloadSettingsCenter}
+            aria-label="Settings"
+            title="Settings"
+          >
             <SettingsIcon size={17} />
           </button>
         </div>
@@ -1214,17 +1252,19 @@ export default function Sidebar({
 
       {settingsOpen && (
         <div className="settings-page-host replica-settings-host">
-          <SettingsCenter
-            theme={theme}
-            displayName={identity.displayName}
-            profilePhoto={identity.profilePhoto}
-            providers={providers}
-            onThemeChange={onThemeChange}
-            onDisplayNameChange={(displayName) => updateIdentity({ displayName })}
-            onProfilePhotoChange={(profilePhoto) => updateIdentity({ profilePhoto })}
-            onRefreshProviders={loadProviders}
-            onClose={() => setSettingsOpen(false)}
-          />
+          <Suspense fallback={<div className="feature-page-loading" role="status">Loading Settingsâ€¦</div>}>
+            <SettingsCenter
+              theme={theme}
+              displayName={identity.displayName}
+              profilePhoto={identity.profilePhoto}
+              providers={providers}
+              onThemeChange={onThemeChange}
+              onDisplayNameChange={(displayName) => updateIdentity({ displayName })}
+              onProfilePhotoChange={(profilePhoto) => updateIdentity({ profilePhoto })}
+            onRefreshProviders={() => loadProviders(true)}
+              onClose={() => setSettingsOpen(false)}
+            />
+          </Suspense>
         </div>
       )}
     </>

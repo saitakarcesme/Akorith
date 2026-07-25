@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react'
 import type {
   DailyUsageRow,
   GitHubActivity,
@@ -126,23 +126,33 @@ function smoothWavePath(values: number[]): string {
   return path
 }
 
-function CpuUsageWave({ values, current }: { values: number[]; current: number }): JSX.Element {
+function ComputeUsageWave({
+  values,
+  current,
+  label,
+  tone
+}: {
+  values: number[]
+  current: number
+  label: string
+  tone: 'cpu' | 'gpu'
+}): JSX.Element {
   const samples = values.length ? values : [current, current]
   const path = smoothWavePath(samples)
   const id = useId().replace(/:/g, '')
   const strokeId = `compute-wave-stroke-${id}`
   const areaId = `compute-wave-area-${id}`
   return (
-    <div className="compute-wave" role="img" aria-label={`CPU utilization history, currently ${Math.round(current)} percent`}>
+    <div className={`compute-wave is-${tone}`} role="img" aria-label={`${label} utilization history, currently ${Math.round(current)} percent`}>
       <svg viewBox="0 0 640 64" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id={strokeId} x1="0" x2="1">
-            <stop offset="0" stopColor="#6fda9d" />
-            <stop offset="1" stopColor="#9a6cf0" />
+            <stop offset="0" stopColor={tone === 'gpu' ? '#4bb8ff' : '#6fda9d'} />
+            <stop offset="1" stopColor={tone === 'gpu' ? '#a56eff' : '#9a6cf0'} />
           </linearGradient>
           <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#906ce8" stopOpacity=".22" />
-            <stop offset="1" stopColor="#65d49a" stopOpacity="0" />
+            <stop offset="0" stopColor={tone === 'gpu' ? '#6f8df0' : '#906ce8'} stopOpacity=".22" />
+            <stop offset="1" stopColor={tone === 'gpu' ? '#4bb8ff' : '#65d49a'} stopOpacity="0" />
           </linearGradient>
         </defs>
         <path className="compute-wave-area" d={`${path} L 640 64 L 0 64 Z`} style={{ fill: `url(#${areaId})` }} />
@@ -158,9 +168,21 @@ interface MachineGpuPanelProps {
   status: GpuStatusResult | null
   note?: string
   cpuHistory?: number[]
+  gpuHistory?: Record<string, number[]>
 }
 
-function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: MachineGpuPanelProps): JSX.Element {
+function gpuHistoryKey(device: GpuDevice, index: number): string {
+  return `${index}:${device.name}`
+}
+
+const MachineGpuPanel = memo(function MachineGpuPanel({
+  eyebrow,
+  name,
+  status,
+  note,
+  cpuHistory = [],
+  gpuHistory
+}: MachineGpuPanelProps): JSX.Element {
   const devices = status?.gpus ?? []
   const cpu = status?.cpu
   const memory = machineMemory(devices)
@@ -188,7 +210,7 @@ function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: Machi
             <div className="gpu-device-row cpu-device-row">
               <span className="gpu-device-index">CPU</span>
               <span className="gpu-device-name" title={cpu.name}>{cpu.name}</span>
-              <CpuUsageWave values={cpuHistory} current={cpu.utilizationPercent} />
+              <ComputeUsageWave values={cpuHistory} current={cpu.utilizationPercent} label="CPU" tone="cpu" />
               <span className="gpu-device-memory">{cpu.logicalCores} cores</span>
               <span className="gpu-device-util">{Math.round(cpu.utilizationPercent)}%</span>
               <span className="gpu-device-temp">—</span>
@@ -200,13 +222,19 @@ function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: Machi
               ? Math.max(0, Math.min(100, ((device.memoryUsedMb ?? 0) / device.memoryTotalMb) * 100))
               : 0
             const barValue = typeof device.utilizationPercent === 'number' ? utilization : memoryRatio
+            const history = gpuHistory?.[gpuHistoryKey(device, index)] ?? []
+            const hasLiveHistory = typeof device.utilizationPercent === 'number' && gpuHistory !== undefined
             return (
-              <div className="gpu-device-row" key={`${device.name}-${index}`}>
+              <div className={`gpu-device-row ${hasLiveHistory ? 'gpu-wave-device-row' : ''}`} key={`${device.name}-${index}`}>
                 <span className="gpu-device-index">G{index}</span>
                 <span className="gpu-device-name" title={device.name}>{device.name}</span>
-                <span className="gpu-device-track" aria-hidden="true">
-                  <span style={{ width: `${barValue}%` }} />
-                </span>
+                {hasLiveHistory
+                  ? <ComputeUsageWave values={history} current={utilization} label={`GPU ${index}`} tone="gpu" />
+                  : (
+                      <span className="gpu-device-track" aria-hidden="true">
+                        <span style={{ width: `${barValue}%` }} />
+                      </span>
+                    )}
                 <span className="gpu-device-memory">
                   {device.memoryTotalMb ? `${memoryLabel(device.memoryUsedMb)}/${memoryLabel(device.memoryTotalMb)}` : 'shared'}
                 </span>
@@ -226,7 +254,83 @@ function MachineGpuPanel({ eyebrow, name, status, note, cpuHistory = [] }: Machi
       {(note || status?.reason || status?.ollama.note) && <p className="gpu-machine-note">{note ?? status?.reason ?? status?.ollama.note}</p>}
     </section>
   )
-}
+})
+
+const ActivityHeatmaps = memo(function ActivityHeatmaps({
+  activityDays,
+  peakTokens,
+  githubByDay,
+  githubVisibleTotal,
+  monthLabels
+}: {
+  activityDays: ActivityDay[]
+  peakTokens: number
+  githubByDay: Map<string, NonNullable<GitHubActivity['days']>[number]>
+  githubVisibleTotal: number
+  monthLabels: { column: number; label: string }[]
+}): JSX.Element {
+  return (
+    <div className="activity-stack">
+      <div className="token-activity">
+        <div className="token-activity-head">
+          <h2>Token activity</h2>
+          <span>Daily</span>
+        </div>
+        <div className="heatmap-shell">
+          <div className="heatmap-grid" role="grid" aria-label="Daily token activity">
+            {activityDays.map((day) => {
+              const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${formatTokens(day.tokens)} tokens · ${day.events} ${day.events === 1 ? 'request' : 'requests'}`
+              return (
+                <span
+                  className={`hm-cell hm-l${day.future ? 0 : activityLevel(day.tokens, peakTokens)} ${day.future ? 'is-future' : ''}`}
+                  key={day.key}
+                  role="gridcell"
+                  aria-label={tooltip}
+                  data-tooltip={tooltip}
+                />
+              )
+            })}
+          </div>
+          <div className="heatmap-months" aria-hidden="true">
+            {monthLabels.map((month) => (
+              <span key={`${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="token-activity github-activity">
+        <div className="token-activity-head">
+          <h2>GitHub activity</h2>
+          <span>@saitakarcesme · {githubVisibleTotal.toLocaleString()}</span>
+        </div>
+        <div className="heatmap-shell">
+          <div className="heatmap-grid" role="grid" aria-label="saitakarcesme GitHub contribution activity">
+            {activityDays.map((day) => {
+              const contribution = githubByDay.get(day.key)
+              const count = contribution?.count ?? 0
+              const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${count} ${count === 1 ? 'contribution' : 'contributions'}`
+              return (
+                <span
+                  className={`hm-cell github-l${day.future ? 0 : contribution?.level ?? 0} ${day.future ? 'is-future' : ''}`}
+                  key={day.key}
+                  role="gridcell"
+                  aria-label={tooltip}
+                  data-tooltip={tooltip}
+                />
+              )
+            })}
+          </div>
+          <div className="heatmap-months" aria-hidden="true">
+            {monthLabels.map((month) => (
+              <span key={`github-${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 export default function Dashboard(_props: DashboardProps): JSX.Element {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
@@ -238,8 +342,27 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
   const [remoteProfiles, setRemoteProfiles] = useState<RemoteTelemetryProfileView[]>([])
   const [gpuBusy, setGpuBusy] = useState(false)
   const [cpuHistory, setCpuHistory] = useState<number[]>([])
+  const [gpuHistory, setGpuHistory] = useState<Record<string, number[]>>({})
   const [error, setError] = useState<string | null>(null)
   const { identity } = useProfileIdentity()
+
+  const recordLocalSnapshot = useCallback((snapshot: GpuStatusResult): void => {
+    setLocalGpu(snapshot)
+    const cpu = snapshot.cpu
+    if (cpu) {
+      setCpuHistory((current) => [...current, cpu.utilizationPercent].slice(-56))
+    }
+    setGpuHistory((current) => {
+      let next = current
+      snapshot.gpus.forEach((device, index) => {
+        if (typeof device.utilizationPercent !== 'number') return
+        if (next === current) next = { ...current }
+        const key = gpuHistoryKey(device, index)
+        next[key] = [...(current[key] ?? []), device.utilizationPercent].slice(-56)
+      })
+      return next
+    })
+  }, [])
 
   const loadGpu = useCallback(async (): Promise<void> => {
     setGpuBusy(true)
@@ -249,11 +372,7 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
         window.api.telemetry.getStatus(),
         window.api.telemetry.getProfiles()
       ])
-      setLocalGpu(local)
-      const initialCpu = local.cpu
-      if (initialCpu) {
-        setCpuHistory((current) => [...current, initialCpu.utilizationPercent].slice(-56))
-      }
+      recordLocalSnapshot(local)
       setRemoteTelemetry(remote)
       setRemoteProfiles(profiles)
     } catch (reason) {
@@ -261,7 +380,7 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
     } finally {
       setGpuBusy(false)
     }
-  }, [])
+  }, [recordLocalSnapshot])
 
   useEffect(() => {
     let cancelled = false
@@ -289,19 +408,42 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    const sampleCpu = async (): Promise<void> => {
-      const cpu = await window.api.gpu.getCpuStatus().catch(() => undefined)
-      if (cancelled || !cpu) return
-      setCpuHistory((current) => [...current, cpu.utilizationPercent].slice(-56))
-      setLocalGpu((current) => current ? { ...current, cpu } : current)
+    let timer: number | undefined
+    let sampling = false
+    const schedule = (delay: number): void => {
+      if (cancelled) return
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = window.setTimeout(() => void sampleCompute(), delay)
     }
-    const timer = window.setInterval(() => void sampleCpu(), 1800)
-    void sampleCpu()
+    const sampleCompute = async (): Promise<void> => {
+      if (cancelled || sampling) return
+      if (document.hidden) {
+        schedule(10_000)
+        return
+      }
+      sampling = true
+      try {
+        const snapshot = await window.api.gpu.getStatus().catch(() => undefined)
+        if (!cancelled && snapshot) recordLocalSnapshot(snapshot)
+      } finally {
+        sampling = false
+        schedule(document.hidden ? 10_000 : 3_000)
+      }
+    }
+    const handleVisibility = (): void => {
+      if (!document.hidden) {
+        if (timer !== undefined) window.clearTimeout(timer)
+        void sampleCompute()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    schedule(3_000)
     return () => {
       cancelled = true
-      window.clearInterval(timer)
+      if (timer !== undefined) window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [])
+  }, [recordLocalSnapshot])
 
   const dailyTotals = useMemo(() => {
     const totals = new Map<string, { tokens: number; events: number }>()
@@ -385,65 +527,13 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
           <div><strong>{streaks.longest} {streaks.longest === 1 ? 'day' : 'days'}</strong><span>Longest streak</span></div>
         </div>
 
-        <div className="activity-stack">
-          <div className="token-activity">
-            <div className="token-activity-head">
-              <h2>Token activity</h2>
-              <span>Daily</span>
-            </div>
-            <div className="heatmap-shell">
-              <div className="heatmap-grid" role="grid" aria-label="Daily token activity">
-                {activityDays.map((day) => {
-                  const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${formatTokens(day.tokens)} tokens · ${day.events} ${day.events === 1 ? 'request' : 'requests'}`
-                  return (
-                    <span
-                      className={`hm-cell hm-l${day.future ? 0 : activityLevel(day.tokens, peakTokens)} ${day.future ? 'is-future' : ''}`}
-                      key={day.key}
-                      role="gridcell"
-                      aria-label={tooltip}
-                      data-tooltip={tooltip}
-                    />
-                  )
-                })}
-              </div>
-              <div className="heatmap-months" aria-hidden="true">
-                {monthLabels.map((month) => (
-                  <span key={`${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="token-activity github-activity">
-            <div className="token-activity-head">
-              <h2>GitHub activity</h2>
-              <span>@saitakarcesme · {githubVisibleTotal.toLocaleString()}</span>
-            </div>
-            <div className="heatmap-shell">
-              <div className="heatmap-grid" role="grid" aria-label="saitakarcesme GitHub contribution activity">
-              {activityDays.map((day) => {
-                const contribution = githubByDay.get(day.key)
-                const count = contribution?.count ?? 0
-                const tooltip = `${day.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${count} ${count === 1 ? 'contribution' : 'contributions'}`
-                return (
-                  <span
-                    className={`hm-cell github-l${day.future ? 0 : contribution?.level ?? 0} ${day.future ? 'is-future' : ''}`}
-                    key={day.key}
-                    role="gridcell"
-                    aria-label={tooltip}
-                    data-tooltip={tooltip}
-                  />
-                )
-              })}
-            </div>
-            <div className="heatmap-months" aria-hidden="true">
-              {monthLabels.map((month) => (
-                <span key={`github-${month.column}-${month.label}`} style={{ gridColumn: month.column + 1 }}>{month.label}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-        </div>
+        <ActivityHeatmaps
+          activityDays={activityDays}
+          peakTokens={peakTokens}
+          githubByDay={githubByDay}
+          githubVisibleTotal={githubVisibleTotal}
+          monthLabels={monthLabels}
+        />
       </section>
 
       <section className="gpu-console">
@@ -457,7 +547,13 @@ export default function Dashboard(_props: DashboardProps): JSX.Element {
           </button>
         </header>
 
-        <MachineGpuPanel eyebrow="CURRENT COMPUTER" name="This Mac" status={localGpu} cpuHistory={cpuHistory} />
+        <MachineGpuPanel
+          eyebrow="CURRENT COMPUTER"
+          name="This Mac"
+          status={localGpu}
+          cpuHistory={cpuHistory}
+          gpuHistory={gpuHistory}
+        />
         <MachineGpuPanel
           eyebrow="CONNECTED COMPUTER"
           name={remoteName}

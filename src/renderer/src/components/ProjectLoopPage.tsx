@@ -197,8 +197,8 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const fleetSignatureRef = useRef('')
   const detailSignatureRef = useRef('')
 
-  const loadProviders = useCallback(async (): Promise<void> => {
-    const list = await window.api.chat.listProviders()
+  const loadProviders = useCallback(async (force = false): Promise<void> => {
+    const list = await window.api.chat.listProviders(force)
     const executors = list.filter((provider) => provider.available.ok && provider.kind.includes('executor'))
     setProviders(executors)
     setProviderId((current) => executors.some((provider) => provider.id === current) ? current : executors[0]?.id ?? '')
@@ -236,9 +236,14 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   }, [])
 
   useEffect(() => {
+    if (!active || providers) return
+    void loadProviders().catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }, [active, loadProviders, providers])
+
+  useEffect(() => {
     if (!active) return
-    void Promise.all([loadProviders(), refreshFleet()]).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
-  }, [active, loadProviders, refreshFleet])
+    void refreshFleet().catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }, [active, refreshFleet])
 
   useEffect(() => {
     if (!active || !selectedLoopId) return
@@ -252,11 +257,27 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   useEffect(() => {
     if (!active) return
     const selectedCurrentlyRunning = Boolean(selectedLoopId && runningIds.has(selectedLoopId))
-    const timer = window.setInterval(() => {
-      void refreshFleet()
-      if (selectedLoopId) void refreshDetails(selectedLoopId)
-    }, selectedCurrentlyRunning ? 1000 : 5000)
-    return () => window.clearInterval(timer)
+    const delay = selectedCurrentlyRunning ? 1000 : 5000
+    let cancelled = false
+    let timer: number | undefined
+    const poll = async (): Promise<void> => {
+      if (cancelled) return
+      try {
+        await Promise.all([
+          refreshFleet(),
+          selectedLoopId ? refreshDetails(selectedLoopId) : Promise.resolve()
+        ])
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), delay)
+      }
+    }
+    timer = window.setTimeout(() => void poll(), delay)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
   }, [active, refreshDetails, refreshFleet, runningIds, selectedLoopId])
 
   const selectedProvider = providers?.find((provider) => provider.id === providerId)
@@ -426,7 +447,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
         />
         <div className="composer-controls">
           <div className="composer-controls-left">
-            <ModelPicker providers={providers} providerId={providerId} model={model} disabled={selectedRunning} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} />
+            <ModelPicker providers={providers} providerId={providerId} model={model} disabled={selectedRunning} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders(true)} />
             <span className="composer-chip loop-target-chip"><FolderOpenIcon size={13} />{composerTarget.name}</span>
           </div>
           {selectedRunning && selectedLoop
@@ -506,6 +527,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
                 <ProjectPreviewPanel
                   projectPath={selectedLoop.localPath}
                   projectName={selectedLoop.githubName ?? projectName(selectedLoop.localPath)}
+                  active={active}
                   hideWhenUnavailable
                   refreshKey={`${selectedLoop.status}:${iteration}:${lastRun?.endedAt ?? ''}`}
                 />

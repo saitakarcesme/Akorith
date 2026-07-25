@@ -45,6 +45,14 @@ export interface GpuStatusResult {
 const NVIDIA_TIMEOUT_MS = 3_000
 const SYSTEM_PROFILER_TIMEOUT_MS = 5_000
 const CPU_SAMPLE_MS = 180
+// Dashboard, remote-telemetry fallback, and the Controller API can request the
+// same sample at nearly the same time. Keep the expensive OS probe single-flight
+// and briefly reuse its result instead of spawning duplicate nvidia-smi /
+// system_profiler processes.
+const GPU_STATUS_CACHE_MS = 2_500
+
+let gpuStatusCache: { sampledAt: number; value: GpuStatusResult } | null = null
+let gpuStatusInFlight: Promise<GpuStatusResult> | null = null
 
 interface CpuTimeSnapshot {
   idle: number
@@ -168,7 +176,7 @@ function ollamaInfo(): GpuOllamaInfo {
   }
 }
 
-export async function getGpuStatus(): Promise<GpuStatusResult> {
+async function sampleGpuStatus(): Promise<GpuStatusResult> {
   const plat = platform()
   const ollama = ollamaInfo()
   const cpu = await getCpuStatus()
@@ -228,6 +236,22 @@ export async function getGpuStatus(): Promise<GpuStatusResult> {
     gpus: [],
     cpu,
     ollama
+  }
+}
+
+export async function getGpuStatus(): Promise<GpuStatusResult> {
+  const cached = gpuStatusCache
+  if (cached && Date.now() - cached.sampledAt < GPU_STATUS_CACHE_MS) return cached.value
+  if (gpuStatusInFlight) return gpuStatusInFlight
+
+  const request = sampleGpuStatus()
+  gpuStatusInFlight = request
+  try {
+    const value = await request
+    gpuStatusCache = { sampledAt: Date.now(), value }
+    return value
+  } finally {
+    if (gpuStatusInFlight === request) gpuStatusInFlight = null
   }
 }
 

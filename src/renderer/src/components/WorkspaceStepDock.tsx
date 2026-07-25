@@ -1,32 +1,45 @@
+import { memo } from 'react'
+import type { WorkspaceWorkflowStep } from '../workspaceWorkflow'
+
 interface WorkspaceStepDockProps {
-  step: number
+  steps: WorkspaceWorkflowStep[]
   active: boolean
 }
 
-const STEPS = [
-  ['Prepare', 'Load the project and selected local CLI.'],
-  ['Understand', 'Connect the request to the current project state.'],
-  ['Plan', 'Choose the next safe, bounded project action.'],
-  ['Work', 'Inspect files, run tools, and make the requested changes.'],
-  ['Validate', 'Check the result against the request and project constraints.'],
-  ['Finish', 'Explain the outcome and preserve the conversation context.']
-] as const
+function currentStepIndex(steps: WorkspaceWorkflowStep[], active: boolean): number {
+  const running = steps.findIndex((step) => step.state === 'running' || step.state === 'error')
+  if (running >= 0) return running
+  const firstWaiting = steps.findIndex((step) => step.state === 'waiting')
+  if (firstWaiting >= 0) return firstWaiting
+  return active ? Math.max(0, steps.length - 1) : steps.length - 1
+}
 
-export default function WorkspaceStepDock({ step, active }: WorkspaceStepDockProps): JSX.Element {
-  const current = Math.min(STEPS.length, Math.max(1, step))
+function WorkspaceStepDock({ steps, active }: WorkspaceStepDockProps): JSX.Element | null {
+  if (steps.length === 0) return null
+  const currentIndex = currentStepIndex(steps, active)
+  const current = currentIndex + 1
+
   return (
     <div className={`workspace-step-dock ${active ? 'is-active' : ''}`}>
-      <button type="button" className="workspace-step" aria-label={`Workspace step ${current} of ${STEPS.length}`} aria-haspopup="true">
-        <i />Step {current} / {STEPS.length}
+      <button
+        type="button"
+        className="workspace-step"
+        aria-label={`Project workflow step ${current} of ${steps.length}`}
+        aria-haspopup="true"
+      >
+        <i />Step {current} / {steps.length}
       </button>
       <div className="workspace-step-popover" role="tooltip">
         <span>PROJECT WORKFLOW</span>
-        {STEPS.map(([label, description], index) => {
-          const number = index + 1
-          const state = number < current ? 'complete' : number === current ? active ? 'current' : 'complete' : 'waiting'
-          return <div className={`is-${state}`} key={label}><i>{number}</i><p><strong>{label}</strong><small>{description}</small></p></div>
-        })}
+        {steps.map((step, index) => (
+          <div className={`is-${step.state} ${index === currentIndex ? 'is-current' : ''}`} key={step.id}>
+            <i>{index + 1}</i>
+            <p><strong>{step.title}</strong><small>{step.description}</small></p>
+          </div>
+        ))}
       </div>
     </div>
   )
 }
+
+export default memo(WorkspaceStepDock)

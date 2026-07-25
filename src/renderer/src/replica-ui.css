@@ -502,6 +502,17 @@ body {
   background: var(--surface);
 }
 
+.app[data-ui='replica'] .feature-page-loading {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--text-secondary);
+  background: var(--surface);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
 .app[data-ui='replica'] .workspace {
   border: 0;
   background: var(--surface);
@@ -1242,6 +1253,17 @@ body {
 
 .app[data-ui='replica'] .chat-msg {
   color: var(--text);
+}
+
+.app[data-ui='replica'] .chat-msg:not(.streaming) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
+.app[data-ui='replica'] .chat-transcript-loading {
+  padding: 18px 0;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 
 .app[data-ui='replica'] .chat-msg.user,
@@ -2169,7 +2191,8 @@ body {
 
 .app[data-ui='replica'] .composer-input {
   min-height: 48px !important;
-  max-height: 120px;
+  max-height: 192px;
+  overflow-y: hidden;
   padding: 12px 12px 3px !important;
   font-size: 13px;
 }
@@ -2389,7 +2412,7 @@ body {
 }
 
 .app[data-ui='replica'] .research-progress {
-  width: min(1040px, calc(100% - 48px));
+  width: min(1180px, calc(100% - 48px));
   gap: 22px;
   padding: 28px 0 80px;
 }
@@ -3206,7 +3229,7 @@ body {
   }
 
   .app[data-ui='replica'] .research-progress {
-    width: min(100% - 28px, 1040px);
+    width: min(100% - 28px, 1180px);
   }
 
   .app[data-ui='replica'] .loop-v3-goalbar {

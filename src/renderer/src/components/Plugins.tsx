@@ -102,8 +102,11 @@ export default function Plugins(): JSX.Element {
   }, [load])
 
   useEffect(() => {
-    void load().then(runChecks)
-  }, [load, runChecks])
+    // Main warms the bounded diagnostics cache after first paint. Loading this
+    // surface should only read that snapshot; the explicit button owns a fresh
+    // tool scan so navigation never launches a duplicate process storm.
+    void load()
+  }, [load])
 
   const toggle = async (plugin: PluginInfo): Promise<void> => {
     const next = plugin.enabled
@@ -178,7 +181,7 @@ export default function Plugins(): JSX.Element {
               <article className={`plugin-row ${logo ? 'has-logo' : 'has-no-logo'}`} key={plugin.id}>
                 {logo && (
                   <div className={`plugin-row-logo ${plugin.id === 'remote-ollama-telemetry' ? 'is-light' : ''}`}>
-                    <img src={logo} alt="" />
+                    <img src={logo} alt="" loading="lazy" decoding="async" />
                   </div>
                 )}
                 <div className="plugin-row-copy">

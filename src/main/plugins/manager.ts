@@ -10,6 +10,11 @@ import type { PluginDiagnostic, PluginId, PluginInfo, PluginManifest, PluginStat
 // CLI capabilities are rendered into the trusted Workspace / Goal prompt only.
 
 const diagnosticsCache = new Map<PluginId, PluginDiagnostic>()
+const DIAGNOSTIC_CACHE_TTL_MS = 60_000
+const STARTUP_DIAGNOSTIC_DELAY_MS = 2_000
+
+let diagnosticsSweepCompletedAt = 0
+let diagnosticsSweepInFlight: Promise<PluginDiagnostic[]> | null = null
 
 function manifestById(id: PluginId): PluginManifest | undefined {
   return BUILTIN_PLUGINS.find((plugin) => plugin.id === id)
@@ -116,9 +121,28 @@ export async function checkPlugin(id: PluginId): Promise<PluginDiagnostic> {
   return diagnostic
 }
 
-export async function checkAllPlugins(): Promise<PluginDiagnostic[]> {
-  const results = await Promise.all(BUILTIN_PLUGINS.map((plugin) => checkPlugin(plugin.id)))
-  return results
+export function checkAllPlugins(options: { force?: boolean } = {}): Promise<PluginDiagnostic[]> {
+  if (diagnosticsSweepInFlight) return diagnosticsSweepInFlight
+
+  const cacheComplete = BUILTIN_PLUGINS.every((plugin) => diagnosticsCache.has(plugin.id))
+  if (
+    options.force !== true &&
+    cacheComplete &&
+    Date.now() - diagnosticsSweepCompletedAt < DIAGNOSTIC_CACHE_TTL_MS
+  ) {
+    return Promise.resolve(BUILTIN_PLUGINS.map((plugin) => diagnosticsCache.get(plugin.id)!))
+  }
+
+  const request = Promise.all(BUILTIN_PLUGINS.map((plugin) => checkPlugin(plugin.id)))
+    .then((results) => {
+      diagnosticsSweepCompletedAt = Date.now()
+      return results
+    })
+    .finally(() => {
+      if (diagnosticsSweepInFlight === request) diagnosticsSweepInFlight = null
+    })
+  diagnosticsSweepInFlight = request
+  return request
 }
 
 export function getDiagnostics(): PluginDiagnostic[] {
@@ -153,7 +177,14 @@ function setEnabled(id: PluginId, enabled: boolean): PluginInfo[] {
 export function registerPluginIpc(): void {
   // Expose the live plugin list to the controller API (read-only).
   setControllerPluginProvider(() => listPlugins())
-  void checkAllPlugins().catch((error) => console.error('[plugins] background diagnostics failed:', error))
+  // Starting every `--version` probe in this registration call delayed
+  // BrowserWindow creation and made 15+ child processes compete with renderer
+  // hydration. Warm the cache after the first UI paint instead. `unref()` keeps
+  // this best-effort work from extending shutdown.
+  const startupDiagnostics = setTimeout(() => {
+    void checkAllPlugins().catch((error) => console.error('[plugins] background diagnostics failed:', error))
+  }, STARTUP_DIAGNOSTIC_DELAY_MS)
+  startupDiagnostics.unref()
 
   ipcMain.handle('plugins:list', () => listPlugins())
   ipcMain.handle('plugins:getDiagnostics', () => getDiagnostics())
@@ -161,7 +192,7 @@ export function registerPluginIpc(): void {
     typeof id === 'string' ? checkPlugin(id) : null
   )
   ipcMain.handle('plugins:checkAll', async () => {
-    await checkAllPlugins()
+    await checkAllPlugins({ force: true })
     return listPlugins()
   })
   ipcMain.handle('plugins:enable', (_event, id: unknown) => (typeof id === 'string' ? setEnabled(id, true) : listPlugins()))

@@ -579,9 +579,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
     void window.api.evaluate.list(12).then(setEvaluations).catch(() => setEvaluations([]))
   }, [])
 
-  const refreshProviders = useCallback(async () => {
+  const refreshProviders = useCallback(async (force = false) => {
     try {
-      const list = await window.api.chat.listProviders()
+      const list = await window.api.chat.listProviders(force)
       setProviders(list)
       setProviderId((cur) => {
         if (list.some((p) => p.id === cur && (p.available.ok || isLocalAutoStarting(p)))) return cur
@@ -613,10 +613,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   }, [refreshRecent, refreshBenchmarks, refreshEvaluations, refreshProviders])
 
   useEffect(() => {
-    if (!isLocalAutoStarting(localProvider)) return
-    const timer = window.setTimeout(() => void refreshProviders(), 3000)
+    if (!active || !isLocalAutoStarting(localProvider)) return
+    const timer = window.setTimeout(() => void refreshProviders(true), 3000)
     return () => window.clearTimeout(timer)
-  }, [localProvider, refreshProviders])
+  }, [active, localProvider, refreshProviders])
 
   useEffect(() => {
     if (!active) {
@@ -629,9 +629,9 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   // If the user already has an active project, make it the simple-flow default
   // without overwriting an explicit Test Lab repo path from settings/user input.
   useEffect(() => {
-    if (!activeProject?.path) return
+    if (!active || !activeProject?.path) return
     setSourceRepo((cur) => cur || activeProject.path || '')
-  }, [activeProject?.path])
+  }, [active, activeProject?.path])
 
   // Default the model when the provider/model list changes.
   useEffect(() => {

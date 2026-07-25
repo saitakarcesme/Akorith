@@ -317,6 +317,9 @@ function verifyUsageAccounting(jobId: string): void {
        prompt_tokens, completion_tokens, started_at, ended_at
      ) VALUES (?, ?, ?, 'research', 'completed', 'Legacy usage migration', 0, 0, 7, 8, ?, ?)`
   ).run('legacy-research-usage-cycle', jobId, 999, Date.now() - 1_000, Date.now())
+  // Accurately model a database from before versioned migrations. A current
+  // schema records Research usage at write time and should keep its fast path.
+  getDb().pragma('user_version = 0')
   closeDb()
   initDb()
   const migrated = getDb().prepare(

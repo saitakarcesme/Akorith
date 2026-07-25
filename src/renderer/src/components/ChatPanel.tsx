@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ContextInfo, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import { normalizeStoredOpenCodeMessage } from '../../../shared/opencode-output'
 import type { ChatMode, HistorySelection } from '../App'
+import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
 import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, SendIcon, SparkIcon, StopIcon } from './icons'
-import ChatMessageView from './ChatMessageView'
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
-import { workspaceActivityStep } from './WorkspaceActivity'
 import WorkspaceStepDock from './WorkspaceStepDock'
 import { ProjectPreviewPanel } from './ProjectPreviewPanel'
 
+const loadChatMessageView = () => import('./ChatMessageView')
+const ChatMessageView = lazy(loadChatMessageView)
+
 interface ChatPanelProps {
   mode: ChatMode
+  active: boolean
   historySel: HistorySelection | null
   activeProject: ProjectRow | null
   onOpenProject: () => void
@@ -25,6 +28,9 @@ interface ChatPanelProps {
 
 const MAX_ATTACHMENTS = 8
 const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024
+const MAX_TOTAL_ATTACHMENT_BYTES = 40 * 1024 * 1024
+const MAX_COMPOSER_HEIGHT = 192
+const TOKEN_RENDER_INTERVAL_MS = 100
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
@@ -65,6 +71,7 @@ function fileBase64(file: File): Promise<string> {
 
 export default function ChatPanel({
   mode,
+  active,
   historySel,
   activeProject,
   onOpenProject,
@@ -106,9 +113,31 @@ export default function ChatPanel({
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({})
   const queuedTurnsRef = useRef<Record<string, QueuedTurn[]>>({})
   const tokenBuffersRef = useRef<Record<string, string>>({})
-  const tokenFramesRef = useRef<Record<string, number>>({})
+  const tokenTimersRef = useRef<Record<string, number>>({})
+  const historyHydrationRequestRef = useRef(0)
+  const activeRef = useRef(active)
+  activeRef.current = active
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
+
+  const resizeComposer = useCallback((): void => {
+    const input = composerInputRef.current
+    if (!input) return
+    input.style.height = '0px'
+    const scrollHeight = input.scrollHeight
+    const nextHeight = Math.min(MAX_COMPOSER_HEIGHT, Math.max(48, scrollHeight))
+    input.style.height = `${nextHeight}px`
+    input.style.overflowY = scrollHeight > MAX_COMPOSER_HEIGHT ? 'auto' : 'hidden'
+  }, [])
+
+  useLayoutEffect(() => {
+    resizeComposer()
+  }, [draft, resizeComposer])
+
+  useEffect(() => {
+    window.addEventListener('resize', resizeComposer)
+    return () => window.removeEventListener('resize', resizeComposer)
+  }, [resizeComposer])
 
   // Plan is a workspace-only capability. A user who leaves a planned project
   // turn for General Chat must never carry the hidden read-only intent into a
@@ -117,19 +146,37 @@ export default function ChatPanel({
     if (!isWorkspace) setIntent('execute')
   }, [isWorkspace])
 
+  const publishMessages = useCallback((next: ChatMessage[]): void => {
+    messagesRef.current = next
+    if (activeRef.current) setMessages(next)
+  }, [])
+
   const setSessionMessages = useCallback((sessionId: string, updater: (items: ChatMessage[]) => ChatMessage[]): void => {
     const base = sessionMessagesRef.current[sessionId] ?? (activeSessionRef.current === sessionId ? messagesRef.current : [])
     const next = updater(base)
     sessionMessagesRef.current[sessionId] = next
     if (activeSessionRef.current === sessionId) {
       messagesRef.current = next
-      setMessages(next)
+      if (activeRef.current) setMessages(next)
     }
   }, [])
 
-  const loadProviders = useCallback(async (): Promise<void> => {
+  // Streaming and activity events continue updating the canonical refs while
+  // Workspace is hidden. Publish the accumulated transcript only once when the
+  // user returns so hidden Markdown never reparses on every token batch.
+  useLayoutEffect(() => {
+    if (!active) return
+    const sessionId = activeSessionRef.current
+    const latest = sessionId
+      ? sessionMessagesRef.current[sessionId] ?? messagesRef.current
+      : messagesRef.current
+    messagesRef.current = latest
+    setMessages((current) => current === latest ? current : latest)
+  }, [active])
+
+  const loadProviders = useCallback(async (force = false): Promise<void> => {
     try {
-      const list = await window.api.chat.listProviders()
+      const list = await window.api.chat.listProviders(force)
       setProviders(list)
       setProviderId((current) => {
         const existing = list.find((provider) => provider.id === current)
@@ -166,6 +213,7 @@ export default function ChatPanel({
   }, [moreOpen])
 
   useEffect(() => {
+    const requestNonce = ++historyHydrationRequestRef.current
     if (!historySel || historySel.mode !== mode) return
     if (activeSessionRef.current) sessionMessagesRef.current[activeSessionRef.current] = messagesRef.current
     nearBottomRef.current = true
@@ -173,8 +221,7 @@ export default function ChatPanel({
     setMentionQuery(null)
     setMentionFiles([])
     if (!historySel.sessionId) {
-      setMessages([])
-      messagesRef.current = []
+      publishMessages([])
       setActiveSessionId(null)
       activeSessionRef.current = null
       onActiveSession(null)
@@ -184,15 +231,19 @@ export default function ChatPanel({
     }
     if (pendingSessions?.has(historySel.sessionId)) {
       const cached = sessionMessagesRef.current[historySel.sessionId] ?? []
-      setMessages(cached)
-      messagesRef.current = cached
+      publishMessages(cached)
       setActiveSessionId(historySel.sessionId)
       activeSessionRef.current = historySel.sessionId
       onActiveSession(historySel.sessionId)
       return
     }
-    void window.api.history.messages(historySel.sessionId).then((data) => {
-      if (!data || historySel.sessionId !== data.session.id) return
+    const selectedSessionId = historySel.sessionId
+    void window.api.history.messages(selectedSessionId).then((data) => {
+      if (
+        requestNonce !== historyHydrationRequestRef.current ||
+        !data ||
+        selectedSessionId !== data.session.id
+      ) return
       const loaded: ChatMessage[] = data.messages.map((message) => ({
         id: message.id,
         role: message.role,
@@ -208,8 +259,7 @@ export default function ChatPanel({
         endedAt: message.role === 'assistant' ? message.metadata?.endedAt : undefined
       }))
       sessionMessagesRef.current[data.session.id] = loaded
-      messagesRef.current = loaded
-      setMessages(loaded)
+      publishMessages(loaded)
       setActiveSessionId(data.session.id)
       activeSessionRef.current = data.session.id
       onActiveSession(data.session.id)
@@ -249,14 +299,28 @@ export default function ChatPanel({
     const available = Math.max(0, MAX_ATTACHMENTS - attachments.length)
     const inputFiles = Array.from(input)
     const files = inputFiles.slice(0, available)
-    const valid = files.filter((file) => {
-      if (file.size > MAX_ATTACHMENT_BYTES) { showToast(`${file.name} is larger than 16 MB`); return false }
-      return file.size > 0
-    })
+    let totalBytes = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
+    const valid: File[] = []
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        showToast(`${file.name} is larger than 16 MB`)
+        continue
+      }
+      if (file.size <= 0) continue
+      if (totalBytes + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
+        showToast('Attachments are limited to 40 MB per message')
+        continue
+      }
+      totalBytes += file.size
+      valid.push(file)
+    }
     try {
-      const next = await Promise.all(valid.map(async (file): Promise<ComposerAttachment> => {
+      // Read sequentially so several large FileReader buffers are never held
+      // concurrently before the already-bounded base64 payload crosses IPC.
+      const next: ComposerAttachment[] = []
+      for (const file of valid) {
         const kind = attachmentKind(file)
-        return {
+        next.push({
           id: newId(),
           name: file.name,
           mimeType: file.type || 'application/octet-stream',
@@ -264,8 +328,8 @@ export default function ChatPanel({
           kind,
           dataBase64: await fileBase64(file),
           previewUrl: kind === 'image' ? URL.createObjectURL(file) : undefined
-        }
-      }))
+        })
+      }
       setAttachments((current) => [...current, ...next])
       if (inputFiles.length > available) showToast(`Up to ${MAX_ATTACHMENTS} files can be attached`)
     } catch (error) {
@@ -273,7 +337,7 @@ export default function ChatPanel({
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
-  }, [attachments.length])
+  }, [attachments])
 
   const removeAttachment = (id: string): void => {
     setAttachments((current) => {
@@ -296,7 +360,7 @@ export default function ChatPanel({
   const flushToken = useCallback((requestId: string, sessionId: string, assistantId: string): void => {
     const token = tokenBuffersRef.current[requestId] ?? ''
     delete tokenBuffersRef.current[requestId]
-    delete tokenFramesRef.current[requestId]
+    delete tokenTimersRef.current[requestId]
     if (!token) return
     setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
       ? { ...message, text: message.text + token }
@@ -311,16 +375,28 @@ export default function ChatPanel({
     setActiveRequests((current) => ({ ...current, [sessionId]: requestId }))
     onPendingChange?.(sessionId, true)
     const startedAt = Date.now()
-    const publicAttachments = turn.attachments.map(({ previewUrl: _previewUrl, dataBase64, ...item }) => ({ ...item, dataBase64 }))
+    let publicAttachments = turn.attachments.map(({ previewUrl: _previewUrl, dataBase64, ...item }) => ({ ...item, dataBase64 }))
+    const visibleAttachments = publicAttachments.map((item) => item.kind === 'image'
+      ? item
+      : {
+          id: item.id,
+          name: item.name,
+          mimeType: item.mimeType,
+          size: item.size,
+          kind: item.kind
+        })
     setSessionMessages(sessionId, (current) => [
       ...current,
-      { id: newId(), role: 'user', text: turn.prompt, status: 'done', attachments: publicAttachments, intent: turn.intent },
+      { id: newId(), role: 'user', text: turn.prompt, status: 'done', attachments: visibleAttachments, intent: turn.intent },
       { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: isWorkspace ? [] : undefined, startedAt, intent: turn.intent }
     ])
     const offToken = window.api.chat.onToken(requestId, (token) => {
       tokenBuffersRef.current[requestId] = `${tokenBuffersRef.current[requestId] ?? ''}${token}`
-      if (tokenFramesRef.current[requestId] === undefined) {
-        tokenFramesRef.current[requestId] = window.requestAnimationFrame(() => flushToken(requestId, sessionId, assistantId))
+      if (tokenTimersRef.current[requestId] === undefined) {
+        tokenTimersRef.current[requestId] = window.setTimeout(
+          () => flushToken(requestId, sessionId, assistantId),
+          TOKEN_RENDER_INTERVAL_MS
+        )
       }
     })
     const offActivity = isWorkspace
@@ -331,7 +407,7 @@ export default function ChatPanel({
         })
       : () => {}
     try {
-      const response = await window.api.chat.send({
+      const responsePromise = window.api.chat.send({
         requestId,
         providerId: turn.providerId,
         model: turn.model || undefined,
@@ -342,10 +418,15 @@ export default function ChatPanel({
         attachments: publicAttachments,
         intent: turn.intent
       })
-      const frame = tokenFramesRef.current[requestId]
-      if (frame !== undefined) window.cancelAnimationFrame(frame)
+      // ipcRenderer.invoke clones its argument synchronously. Release the
+      // renderer's non-display base64 copies while the provider is working.
+      turn.attachments.length = 0
+      publicAttachments = []
+      const response = await responsePromise
+      const timer = tokenTimersRef.current[requestId]
+      if (timer !== undefined) window.clearTimeout(timer)
       delete tokenBuffersRef.current[requestId]
-      delete tokenFramesRef.current[requestId]
+      delete tokenTimersRef.current[requestId]
       setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
         ? response.ok
           ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: turn.providerId, model: response.result.model, usage: response.result.usage, changes: response.result.changes } }
@@ -359,8 +440,8 @@ export default function ChatPanel({
     } finally {
       offToken()
       offActivity()
-      const frame = tokenFramesRef.current[requestId]
-      if (frame !== undefined) window.cancelAnimationFrame(frame)
+      const timer = tokenTimersRef.current[requestId]
+      if (timer !== undefined) window.clearTimeout(timer)
       flushToken(requestId, sessionId, assistantId)
       setActiveRequests((current) => {
         if (current[sessionId] !== requestId) return current
@@ -412,8 +493,7 @@ export default function ChatPanel({
     if (!activeSessionRef.current) return
     if (!confirmingClear) { setConfirmingClear(true); return }
     await window.api.history.clearMessages(activeSessionRef.current)
-    setMessages([])
-    messagesRef.current = []
+    publishMessages([])
     sessionMessagesRef.current[activeSessionRef.current] = []
     setConfirmingClear(false)
     void refreshContext(activeSessionRef.current)
@@ -450,10 +530,49 @@ export default function ChatPanel({
   }
 
   const hasConversation = messages.length > 0
-  const latestWorkspaceRun = isWorkspace ? [...messages].reverse().find((message) => message.role === 'assistant' && message.startedAt) : undefined
-  const latestWorkspaceStep = latestWorkspaceRun
-    ? workspaceActivityStep(latestWorkspaceRun.activities ?? [], latestWorkspaceRun.status === 'streaming', latestWorkspaceRun.status === 'error')
-    : null
+  const latestWorkspaceContext = useMemo(() => {
+    if (!isWorkspace) return null
+    let runIndex = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'assistant' && messages[index].startedAt) {
+        runIndex = index
+        break
+      }
+    }
+    if (runIndex < 0) return null
+    const run = messages[runIndex]
+    let prompt = ''
+    for (let index = runIndex - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'user') {
+        prompt = messages[index].text
+        break
+      }
+    }
+    return { run, prompt }
+  }, [isWorkspace, messages])
+  const latestWorkspaceRun = latestWorkspaceContext?.run
+  const latestWorkspaceActivities = latestWorkspaceRun?.activities
+  const latestWorkspacePrompt = latestWorkspaceContext?.prompt ?? ''
+  const latestWorkspaceStatus = latestWorkspaceRun?.status
+  const hasLatestWorkspaceRun = latestWorkspaceRun !== undefined
+  const latestWorkspaceSteps = useMemo(
+    () => hasLatestWorkspaceRun
+      ? deriveWorkspaceWorkflow({
+          prompt: latestWorkspacePrompt,
+          projectName: activeProject?.name,
+          activities: latestWorkspaceActivities ?? [],
+          active: latestWorkspaceStatus === 'streaming',
+          failed: latestWorkspaceStatus === 'error'
+        })
+      : [],
+    [
+      activeProject?.name,
+      hasLatestWorkspaceRun,
+      latestWorkspaceActivities,
+      latestWorkspacePrompt,
+      latestWorkspaceStatus
+    ]
+  )
   const busyRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
   const currentQueue = activeSessionId ? queuedTurnsRef.current[activeSessionId] ?? [] : []
   void queueVersion
@@ -476,6 +595,7 @@ export default function ChatPanel({
           <ProjectPreviewPanel
             projectPath={activeProject.path}
             projectName={activeProject.name}
+            active={active}
             hideWhenUnavailable
             refreshKey={latestWorkspaceRun?.endedAt ?? latestWorkspaceRun?.startedAt}
           />
@@ -491,10 +611,11 @@ export default function ChatPanel({
           className="composer-input"
           placeholder={!selected?.available.ok ? 'Select an available model…' : hasProject ? `Ask Akorith to work in ${activeProject!.name}…` : isWorkspace ? 'Open a project to start…' : 'Ask Akorith anything…'}
           value={draft}
+          onFocus={() => { void loadChatMessageView() }}
           onChange={(event) => updateDraft(event.target.value)}
           onPaste={(event) => { if (event.clipboardData.files.length) void addFiles(event.clipboardData.files) }}
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendOrQueue() } }}
-          rows={2}
+          rows={1}
           spellCheck
         />
         <div className="composer-controls">
@@ -505,7 +626,7 @@ export default function ChatPanel({
             <div className="composer-more"><button type="button" className={`composer-chip ${moreOpen ? 'is-active' : ''}`} onClick={() => setMoreOpen((open) => !open)}><SparkIcon size={13} /><span>More</span></button>{moreOpen && <><div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} /><div className="composer-more-pop" role="menu"><button type="button" className="composer-more-item" disabled={!draft.trim() || suggesting} onClick={() => { setMoreOpen(false); void suggestTask() }}><SparkIcon size={13} /><span>{suggesting ? 'Classifying…' : 'Suggest model'}</span></button>{hasProject && <><div className="composer-more-sep" /><label className="composer-more-toggle"><span>Repository context</span><input type="checkbox" checked={digestEnabled} onChange={() => { const next = !digestEnabled; setDigestEnabled(next); void window.api.digest.setEnabled(next) }} /></label></>}</div></>}</div>
           </div>
           <div className="composer-submit-group">
-            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders()} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
+            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders(true)} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
             {busyRequestId && canSubmit && <button type="button" className="composer-queue-button" onClick={sendOrQueue}><QueueIcon size={14} />Queue</button>}
             {busyRequestId ? <ComposerSendButton stop onClick={cancel}><StopIcon size={16} /></ComposerSendButton> : <ComposerSendButton disabled={!canSubmit} onClick={sendOrQueue}><SendIcon size={16} /></ComposerSendButton>}
           </div>
@@ -562,7 +683,7 @@ export default function ChatPanel({
           </div>
         </div>
       )
-          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col">{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} />)}</div></div><div className="composer-dock">{latestWorkspaceStep !== null && <WorkspaceStepDock step={latestWorkspaceStep} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
+          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
       {toast && <div className="bridge-toast ok">{toast}</div>}
     </main>
   )

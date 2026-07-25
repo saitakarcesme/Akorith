@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync, rmSync } from 'fs'
 import { shell } from 'electron'
-import { exportResearchJob } from './exporters'
 import {
   archiveResearchJob,
   clearResearchCancellation,
@@ -9,12 +8,15 @@ import {
   deleteResearchJob,
   getResearchArtifact,
   getResearchJob,
+  latestResearchEventCursor,
   latestResearchCheckpoint,
+  listLatestResearchEventSummaries,
   listLatestResearchEvents,
   listResearchArtifacts,
   listResearchClaims,
   listResearchCycles,
   listResearchJobs,
+  listResearchSourceSummaries,
   listResearchSources,
   logResearchEvent,
   requestResearchCancellation,
@@ -29,7 +31,8 @@ import type {
   ResearchEvent,
   ResearchJob,
   ResearchOutputFormat,
-  ResearchSource
+  ResearchSource,
+  ResearchStatus
 } from './types'
 import {
   initializeResearchWorkspace,
@@ -45,6 +48,22 @@ export interface ResearchJobDetail {
   claims: ResearchClaim[]
   artifacts: ResearchArtifact[]
   checkpoint: ResearchCheckpoint | null
+}
+
+export interface ResearchLiveDetail {
+  job: ResearchJob
+  events: ResearchEvent[]
+  sources: ResearchSource[]
+  artifacts: ResearchArtifact[]
+  running: boolean
+}
+
+export interface ResearchPollResponse {
+  version: string
+  unchanged: boolean
+  status: ResearchStatus
+  running: boolean
+  detail?: ResearchLiveDetail
 }
 
 export function createManagedResearchJob(input: CreateResearchJobInput): ResearchJob {
@@ -75,6 +94,48 @@ export function getResearchJobDetail(id: string): ResearchJobDetail {
     claims: listResearchClaims(job.id),
     artifacts: listResearchArtifacts(job.id),
     checkpoint: latestResearchCheckpoint(job.id)
+  }
+}
+
+function researchPollVersion(job: ResearchJob, latestEventId: string | undefined, running: boolean): string {
+  return [
+    job.revision,
+    job.updatedAt,
+    job.activeElapsedMs,
+    job.activeAccountingAt ?? 0,
+    job.status,
+    job.phase,
+    job.cycleCount,
+    job.sourceCount,
+    job.findingCount,
+    latestEventId ?? 'none',
+    running ? 1 : 0
+  ].join('.')
+}
+
+/**
+ * Small, conditional snapshot for the live Research surface. The full detail
+ * path above remains intact for main-process synthesis/export and compatibility.
+ */
+export function pollResearchJob(id: string, running: boolean, knownVersion?: string): ResearchPollResponse {
+  const job = requireResearchJob(id)
+  const latestEvent = latestResearchEventCursor(job.id)
+  const version = researchPollVersion(job, latestEvent?.id, running)
+  if (knownVersion === version) {
+    return { version, unchanged: true, status: job.status, running }
+  }
+  return {
+    version,
+    unchanged: false,
+    status: job.status,
+    running,
+    detail: {
+      job,
+      events: listLatestResearchEventSummaries(job.id, 80),
+      sources: listResearchSourceSummaries(job.id),
+      artifacts: listResearchArtifacts(job.id),
+      running
+    }
   }
 }
 
@@ -138,6 +199,7 @@ export async function exportManagedResearchJob(
   format?: ResearchOutputFormat
 ): Promise<ResearchArtifact> {
   requireResearchJob(id)
+  const { exportResearchJob } = await import('./exporters')
   return exportResearchJob(id, format)
 }
 

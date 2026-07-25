@@ -5,6 +5,12 @@ import { rowToResearchEvent, type DbRow } from './rows'
 
 const MAX_EVENT_TITLE = 240
 const MAX_EVENT_DETAIL = 80_000
+const MAX_LIVE_EVENT_DETAIL = 4_000
+
+export interface ResearchEventCursor {
+  id: string
+  createdAt: number
+}
 
 export function logResearchEvent(input: {
   jobId: string
@@ -54,4 +60,31 @@ export function listLatestResearchEvents(jobId: string, limit = 200): ResearchEv
      ) ORDER BY created_at ASC`
   ).all(jobId, bounded) as DbRow[]
   return rows.map(rowToResearchEvent)
+}
+
+/**
+ * Renderer polling only needs the recent activity stream. Bound each detail in
+ * SQL so a verbose tool result never crosses IPC on every refresh.
+ */
+export function listLatestResearchEventSummaries(jobId: string, limit = 80): ResearchEvent[] {
+  const bounded = Math.min(Math.max(limit, 1), 200)
+  const rows = getDb().prepare(
+    `SELECT * FROM (
+       SELECT id, job_id, cycle_id, kind, title,
+              CASE WHEN detail IS NULL THEN NULL ELSE substr(detail, 1, ?) END AS detail,
+              created_at
+       FROM research_events
+       WHERE job_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?
+     ) ORDER BY created_at ASC`
+  ).all(MAX_LIVE_EVENT_DETAIL, jobId, bounded) as DbRow[]
+  return rows.map(rowToResearchEvent)
+}
+
+export function latestResearchEventCursor(jobId: string): ResearchEventCursor | null {
+  const row = getDb().prepare(
+    'SELECT id, created_at FROM research_events WHERE job_id = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(jobId) as { id: string; created_at: number } | undefined
+  return row ? { id: row.id, createdAt: row.created_at } : null
 }

@@ -149,7 +149,7 @@ export interface ContextInfo {
 
 export interface ChatApi {
   /** Providers from the registry (config-driven), with availability + models. */
-  listProviders(): Promise<ProviderInfo[]>
+  listProviders(force?: boolean): Promise<ProviderInfo[]>
   /** Send a prompt; tokens stream via onToken for the same requestId. */
   send(args: ChatSendRequest): Promise<ChatSendResponse>
   /** Abort an in-flight send. */
@@ -1664,6 +1664,22 @@ export interface ResearchJobDetail {
   running: boolean
 }
 
+export interface ResearchLiveDetail {
+  job: ResearchJob
+  events: ResearchEvent[]
+  sources: ResearchSource[]
+  artifacts: ResearchArtifact[]
+  running: boolean
+}
+
+export interface ResearchPollResponse {
+  version: string
+  unchanged: boolean
+  status: ResearchStatus
+  running: boolean
+  detail?: ResearchLiveDetail
+}
+
 export interface CreateResearchJobInput {
   prompt: string
   title?: string
@@ -1724,6 +1740,7 @@ export interface ResearchDiscordTestResult {
 export interface ResearchApi {
   list(): Promise<ResearchJob[]>
   get(id: string): Promise<ResearchJobDetail>
+  poll(id: string, version?: string): Promise<ResearchPollResponse>
   create(input: CreateResearchJobInput): Promise<ResearchJob>
   pause(id: string): Promise<ResearchJob | null>
   resume(id: string): Promise<ResearchJob | null>

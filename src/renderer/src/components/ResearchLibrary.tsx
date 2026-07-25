@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ResearchJob } from '../../../preload/index.d'
 import { FileIcon } from './icons'
 import { researchDurationLabel } from './researchDuration'
 
 type LibraryFilter = 'all' | 'published' | 'active'
+const LIBRARY_PAGE_SIZE = 48
 
 const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
   month: 'short',
@@ -27,16 +28,23 @@ const STATUS_LABELS: Record<ResearchJob['status'], string> = {
 interface ResearchLibraryProps {
   jobs: ResearchJob[]
   covers: Record<string, string | null>
+  onNeedCovers: (ids: string[]) => void
   onSelect: (id: string) => void
 }
 
-export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibraryProps): JSX.Element {
+export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }: ResearchLibraryProps): JSX.Element {
   const [filter, setFilter] = useState<LibraryFilter>('all')
+  const [visibleLimit, setVisibleLimit] = useState(LIBRARY_PAGE_SIZE)
   const visibleJobs = useMemo(() => jobs.filter((job) => {
     if (filter === 'published') return job.status === 'completed' && Boolean(job.artifactPath)
     if (filter === 'active') return !['completed', 'archived'].includes(job.status)
     return job.status !== 'archived'
   }), [filter, jobs])
+  const renderedJobs = useMemo(() => visibleJobs.slice(0, visibleLimit), [visibleJobs, visibleLimit])
+
+  useEffect(() => {
+    onNeedCovers(renderedJobs.filter((job) => Boolean(job.coverPath)).map((job) => job.id))
+  }, [onNeedCovers, renderedJobs])
 
   return (
     <section className="research-library">
@@ -53,7 +61,10 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
               type="button"
               aria-pressed={filter === item}
               className={filter === item ? 'is-active' : ''}
-              onClick={() => setFilter(item)}
+              onClick={() => {
+                setFilter(item)
+                setVisibleLimit(LIBRARY_PAGE_SIZE)
+              }}
             >
               {item === 'all' ? 'All' : item === 'published' ? 'Published' : 'In progress'}
             </button>
@@ -69,7 +80,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
         </div>
       ) : (
         <div className="research-library-grid">
-          {visibleJobs.map((job) => (
+          {renderedJobs.map((job) => (
             <button
               key={job.id}
               type="button"
@@ -79,7 +90,7 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
             >
               <span className="research-book-cover">
                 {covers[job.id]
-                  ? <img src={covers[job.id] ?? undefined} alt={`Cover of ${job.title}`} />
+                  ? <img src={covers[job.id] ?? undefined} alt={`Cover of ${job.title}`} loading="lazy" decoding="async" />
                   : (
                     <span className="research-book-draft">
                       <small>AKORITH RESEARCH</small>
@@ -99,6 +110,15 @@ export default function ResearchLibrary({ jobs, covers, onSelect }: ResearchLibr
               </span>
             </button>
           ))}
+          {renderedJobs.length < visibleJobs.length && (
+            <button
+              type="button"
+              className="research-library-more"
+              onClick={() => setVisibleLimit((current) => current + LIBRARY_PAGE_SIZE)}
+            >
+              Load {Math.min(LIBRARY_PAGE_SIZE, visibleJobs.length - renderedJobs.length)} more
+            </button>
+          )}
         </div>
       )}
     </section>

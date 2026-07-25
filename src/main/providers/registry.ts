@@ -75,6 +75,17 @@ const MAX_PROMPT_CHARS = 200_000
 const MAX_CHAT_IMAGES = 4
 const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
 const VALID_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const PROVIDER_SNAPSHOT_CACHE_MS = 60_000
+
+let providerSnapshotCache: {
+  configSignature: string
+  capturedAt: number
+  value: ProviderInfo[]
+} | null = null
+let providerSnapshotInFlight: {
+  configSignature: string
+  request: Promise<ProviderInfo[]>
+} | null = null
 
 function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider {
   const modulePath = isAbsolute(entry.module!) ? entry.module! : join(app.getPath('userData'), entry.module!)
@@ -91,8 +102,7 @@ function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider 
 
 /** Build provider instances from the current config. Failures skip the
  *  provider (logged) — a bad entry must never take the app down. */
-function buildProviders(): Map<string, Provider> {
-  const config = loadConfig()
+function buildProviders(config: ReturnType<typeof loadConfig> = loadConfig()): Map<string, Provider> {
   const providers = new Map<string, Provider>()
   for (const [id, entry] of Object.entries(config.providers)) {
     if (!entry?.enabled || !VALID_ID.test(id)) continue
@@ -169,8 +179,8 @@ export async function sendWorkspacePrompt(
 }
 
 /** The available-provider snapshot, also consumed by the Phase 6 router. */
-export async function describeProviders(): Promise<ProviderInfo[]> {
-  const providers = buildProviders()
+async function describeProvidersFresh(config: ReturnType<typeof loadConfig>): Promise<ProviderInfo[]> {
+  const providers = buildProviders(config)
   return Promise.all(
     [...providers.values()].map(async (provider): Promise<ProviderInfo> => {
       let available: ProviderAvailability = { ok: false, reason: 'availability check failed' }
@@ -190,6 +200,35 @@ export async function describeProviders(): Promise<ProviderInfo[]> {
       return { id: provider.id, label: provider.label, kind: provider.kind, available, models }
     })
   )
+}
+
+export async function describeProviders(force = false): Promise<ProviderInfo[]> {
+  // Config changes remain immediately visible while duplicate startup callers
+  // share one expensive CLI/Ollama discovery pass.
+  const config = loadConfig()
+  const configSignature = JSON.stringify(config.providers)
+  const cached = providerSnapshotCache
+  if (
+    !force &&
+    cached &&
+    cached.configSignature === configSignature &&
+    Date.now() - cached.capturedAt < PROVIDER_SNAPSHOT_CACHE_MS
+  ) {
+    return cached.value
+  }
+  if (providerSnapshotInFlight?.configSignature === configSignature) {
+    return providerSnapshotInFlight.request
+  }
+
+  const request = describeProvidersFresh(config)
+  providerSnapshotInFlight = { configSignature, request }
+  try {
+    const value = await request
+    providerSnapshotCache = { configSignature, capturedAt: Date.now(), value }
+    return value
+  } finally {
+    if (providerSnapshotInFlight?.request === request) providerSnapshotInFlight = null
+  }
 }
 
 interface ChatSendArgs {
@@ -487,7 +526,10 @@ function validImages(images: unknown): images is NonNullable<ChatSendArgs['image
 }
 
 export function registerChatIpc(): void {
-  ipcMain.handle('chat:providers', () => describeProviders())
+  ipcMain.handle('chat:providers', (_event, args: unknown) => {
+    const force = Boolean(args && typeof args === 'object' && (args as { force?: unknown }).force === true)
+    return describeProviders(force)
+  })
 
   ipcMain.handle('chat:send', async (event, args: ChatSendArgs): Promise<ChatSendResponse> => {
     if (

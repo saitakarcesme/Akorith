@@ -4,7 +4,7 @@ import type {
   CreateResearchJobInput,
   ProviderInfo,
   ResearchJob,
-  ResearchJobDetail,
+  ResearchLiveDetail,
   ResearchOutputFormat
 } from '../../../preload/index.d'
 import { CloseIcon, PlusIcon } from './icons'
@@ -23,16 +23,20 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const [jobs, setJobs] = useState<ResearchJob[]>([])
   const [openTabIds, setOpenTabIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<ResearchJobDetail | null>(null)
+  const [detail, setDetail] = useState<ResearchLiveDetail | null>(null)
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [covers, setCovers] = useState<Record<string, string | null>>({})
   const [loading, setLoading] = useState(true)
   const [actionPending, setActionPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const actionPendingRef = useRef(false)
+  const coversRef = useRef<Record<string, string | null>>({})
+  const pendingCoverIdsRef = useRef(new Set<string>())
   const detailRequestRef = useRef(0)
+  const detailVersionsRef = useRef<Record<string, string>>({})
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selectedId
+  coversRef.current = covers
 
   const loadJobs = useCallback(async (preserveSelection = true): Promise<ResearchJob[]> => {
     const next = await window.api.research.list()
@@ -53,12 +57,13 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     return next
   }, [])
 
-  const loadDetail = useCallback(async (id: string): Promise<ResearchJobDetail> => {
+  const loadDetail = useCallback(async (id: string, force = false) => {
     const request = ++detailRequestRef.current
-    const next = await window.api.research.get(id)
-    if (request === detailRequestRef.current && selectedRef.current === id) {
-      setDetail(next)
-      setJobs((current) => current.map((job) => job.id === next.job.id ? next.job : job))
+    const next = await window.api.research.poll(id, force ? undefined : detailVersionsRef.current[id])
+    detailVersionsRef.current[id] = next.version
+    if (next.detail && request === detailRequestRef.current && selectedRef.current === id) {
+      setDetail(next.detail)
+      setJobs((current) => current.map((job) => job.id === next.detail!.job.id ? next.detail!.job : job))
     }
     return next
   }, [])
@@ -104,11 +109,13 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     }
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
+    let firstLoad = true
     const poll = async (): Promise<void> => {
       try {
-        const next = await loadDetail(selectedId)
+        const next = await loadDetail(selectedId, firstLoad)
+        firstLoad = false
         if (cancelled) return
-        const activeStatus = next.running || !['completed', 'paused', 'archived'].includes(next.job.status)
+        const activeStatus = next.running || !['completed', 'paused', 'archived'].includes(next.status)
         timer = setTimeout(() => void poll(), activeStatus ? 1_500 : 6_000)
       } catch (nextError) {
         if (!cancelled) {
@@ -124,19 +131,29 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     }
   }, [active, loadDetail, selectedId])
 
-  useEffect(() => {
+  const requestCovers = useCallback((ids: string[]): void => {
     if (!active) return
-    const missing = jobs.filter((job) => job.coverPath && !(job.id in covers))
+    const missing = ids.filter((id) =>
+      !(id in coversRef.current) && !pendingCoverIdsRef.current.has(id)
+    )
     if (missing.length === 0) return
-    let cancelled = false
-    void Promise.all(missing.map(async (job) => [job.id, await window.api.research.coverDataUrl(job.id)] as const))
-      .then((entries) => {
-        if (cancelled) return
-        setCovers((current) => ({ ...current, ...Object.fromEntries(entries) }))
+    for (const id of missing) pendingCoverIdsRef.current.add(id)
+    void Promise.all(missing.map(async (id) => {
+      try {
+        return [id, await window.api.research.coverDataUrl(id)] as const
+      } catch {
+        return [id, null] as const
+      }
+    })).then((entries) => {
+      setCovers((current) => {
+        const next = { ...current, ...Object.fromEntries(entries) }
+        coversRef.current = next
+        return next
       })
-      .catch((nextError) => { if (!cancelled) setError(errorMessage(nextError)) })
-    return () => { cancelled = true }
-  }, [active, covers, jobs])
+    }).finally(() => {
+      for (const id of missing) pendingCoverIdsRef.current.delete(id)
+    })
+  }, [active])
 
   const runningCount = useMemo(
     () => jobs.filter((job) => !['completed', 'paused', 'error', 'archived'].includes(job.status)).length,
@@ -156,7 +173,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       await action()
       const nextJobs = await loadJobs()
       if (selectedRef.current && nextJobs.some((job) => job.id === selectedRef.current)) {
-        await loadDetail(selectedRef.current)
+        await loadDetail(selectedRef.current, true)
       }
       return true
     } catch (nextError) {
@@ -264,7 +281,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       >
         {error && <div className="research-page-alert" role="alert"><span>{error}</span><button type="button" title="Dismiss" aria-label="Dismiss" onClick={() => setError(null)}><CloseIcon size={13} /></button></div>}
         {surface === 'library' ? (
-          <ResearchLibrary jobs={jobs} covers={covers} onSelect={openJob} />
+          <ResearchLibrary jobs={jobs} covers={covers} onNeedCovers={requestCovers} onSelect={openJob} />
         ) : selectedId ? (
           detail?.job.id === selectedId ? (
             <ResearchProgress

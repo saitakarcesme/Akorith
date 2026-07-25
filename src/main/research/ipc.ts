@@ -1,6 +1,5 @@
 import { ipcMain, shell } from 'electron'
 import { ensureDbReady } from '../db'
-import { exportResearchJob } from './exporters'
 import {
   cancelActiveResearchRun,
   getResearchSchedulerSnapshot,
@@ -16,6 +15,7 @@ import {
   getResearchJobDetail,
   listResearchLibrary,
   openResearchArtifact,
+  pollResearchJob,
   researchCoverDataUrl,
   revealResearchArtifact
 } from './service'
@@ -40,6 +40,16 @@ export function registerResearchIpc(): void {
     await ensureDbReady()
     const id = requireId(input, 'research job')
     return { ...getResearchJobDetail(id), running: isResearchJobRunning(id) }
+  })
+
+  ipcMain.handle('research:poll', async (_event, input: unknown) => {
+    await ensureDbReady()
+    if (!isRecord(input)) throw new Error('invalid research poll request')
+    const id = requireId(input.id, 'research job')
+    const version = typeof input.version === 'string' && input.version.length <= 512
+      ? input.version
+      : undefined
+    return pollResearchJob(id, isResearchJobRunning(id), version)
   })
 
   ipcMain.handle('research:create', async (_event, input: unknown) => {
@@ -81,6 +91,7 @@ export function registerResearchIpc(): void {
     if (typeof format !== 'string' || !RESEARCH_OUTPUT_FORMATS.includes(format as ResearchOutputFormat)) {
       throw new Error('invalid research output format')
     }
+    const { exportResearchJob } = await import('./exporters')
     return exportResearchJob(jobId, format as ResearchOutputFormat)
   })
 

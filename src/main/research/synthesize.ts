@@ -1,6 +1,5 @@
 import { renameSync, writeFileSync } from 'fs'
 import { sendMetaPrompt } from '../providers/registry'
-import { exportResearchJob } from './exporters'
 import { buildResearchSynthesisPrompt, sanitizeResearchReportCitations } from './prompts/synthesis'
 import {
   getResearchJob,
@@ -66,6 +65,7 @@ export async function synthesizeResearchJob(
   writeFileSync(partial, `${report.trim()}\n`, 'utf8')
   renameSync(partial, reportPath)
   updateResearchJob(job.id, { summary: reportSummary(report) })
+  const { exportResearchJob } = await import('./exporters')
   const artifact = await exportResearchJob(job.id, undefined, { trackLifecycle: true })
   const now = Date.now()
   if (options.final) {

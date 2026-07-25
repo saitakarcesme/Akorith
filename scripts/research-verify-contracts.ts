@@ -16,6 +16,7 @@ function matches(text: string, pattern: RegExp): string[] {
 const expectedChannels = [
   'research:list',
   'research:get',
+  'research:poll',
   'research:create',
   'research:pause',
   'research:resume',
@@ -37,6 +38,7 @@ const expectedChannels = [
 const expectedApiMethods = [
   'list',
   'get',
+  'poll',
   'create',
   'pause',
   'resume',

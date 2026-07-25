@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type {
-  ResearchJobDetail,
+  ResearchLiveDetail,
   ResearchOutputFormat,
   ResearchPhase,
   ResearchStatus
@@ -33,7 +33,7 @@ const CLOCK_FORMATTER = new Intl.DateTimeFormat(undefined, {
 })
 
 interface ResearchProgressProps {
-  detail: ResearchJobDetail
+  detail: ResearchLiveDetail
   actionPending?: boolean
   onPause: () => Promise<void>
   onResume: () => Promise<void>
@@ -139,66 +139,70 @@ export default function ResearchProgress({
 
       {job.error && <div className="research-error" role="alert"><strong>Research needs attention</strong><span>{job.error}</span></div>}
 
-      {job.plan && (
-        <section className="research-plan-panel">
-          <div className="research-section-heading">
-            <div><span className="research-eyebrow">PLAN</span><h2>Evidence program</h2></div>
-            <span>{job.plan.sections.filter((section) => section.status === 'complete').length}/{job.plan.sections.length} tracks</span>
-          </div>
-          <p className="research-plan-thesis">{job.plan.thesis}</p>
-          <div className="research-plan-list">
-            {job.plan.sections.map((section, index) => (
-              <div key={section.id} className={`research-plan-row is-${section.status}`}>
-                <span className="research-plan-index">{String(index + 1).padStart(2, '0')}</span>
-                <div><strong>{section.title}</strong><p>{section.objective}</p></div>
-                <span className="research-plan-state">{section.status}</span>
+      {(job.plan || recentEvents.length > 0) && (
+        <div className="research-workbench-grid">
+          {job.plan && (
+            <section className="research-plan-panel">
+              <div className="research-section-heading">
+                <div><span className="research-eyebrow">PLAN</span><h2>Evidence program</h2></div>
+                <span>{job.plan.sections.filter((section) => section.status === 'complete').length}/{job.plan.sections.length} tracks</span>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {recentEvents.length > 0 && (
-        <section className="research-event-stream">
-          <div className="research-section-heading">
-            <div><span className="research-eyebrow">LIVE NOTES</span><h2>Research log</h2></div>
-            {detail.running && <span className="research-live-label" role="status"><i aria-hidden="true" />working</span>}
-          </div>
-          <div
-            ref={eventListRef}
-            className="research-event-list"
-            role="log"
-            aria-label="Research activity, newest step last"
-            aria-live="polite"
-            aria-relevant="additions"
-            tabIndex={0}
-            onScroll={(event) => {
-              const list = event.currentTarget
-              followLatestEventRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 72
-            }}
-          >
-            {recentEvents.map((event, index) => {
-              const current = detail.running && index === recentEvents.length - 1
-              return (
-                <div
-                  key={event.id}
-                  aria-current={current ? 'step' : undefined}
-                  className={`research-event is-${event.kind} ${current ? 'is-current' : ''}`}
-                >
-                  <span className="research-event-marker" aria-hidden="true" />
-                  <div className="research-event-copy">
-                    <div>
-                      <span className="research-event-step">Step {recentEventOffset + index + 1}{current && <em>Current</em>}</span>
-                      <time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time>
-                    </div>
-                    <strong>{event.title}</strong>
-                    {event.detail && <ChatMarkdown text={event.detail} />}
+              <p className="research-plan-thesis">{job.plan.thesis}</p>
+              <div className="research-plan-list">
+                {job.plan.sections.map((section, index) => (
+                  <div key={section.id} className={`research-plan-row is-${section.status}`}>
+                    <span className="research-plan-index">{String(index + 1).padStart(2, '0')}</span>
+                    <div><strong>{section.title}</strong><p>{section.objective}</p></div>
+                    <span className="research-plan-state">{section.status}</span>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {recentEvents.length > 0 && (
+            <section className="research-event-stream">
+              <div className="research-section-heading">
+                <div><span className="research-eyebrow">LIVE NOTES</span><h2>Research log</h2></div>
+                {detail.running && <span className="research-live-label" role="status"><i aria-hidden="true" />working</span>}
+              </div>
+              <div
+                ref={eventListRef}
+                className="research-event-list"
+                role="log"
+                aria-label="Research activity, newest step last"
+                aria-live="polite"
+                aria-relevant="additions"
+                tabIndex={0}
+                onScroll={(event) => {
+                  const list = event.currentTarget
+                  followLatestEventRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 72
+                }}
+              >
+                {recentEvents.map((event, index) => {
+                  const current = detail.running && index === recentEvents.length - 1
+                  return (
+                    <div
+                      key={event.id}
+                      aria-current={current ? 'step' : undefined}
+                      className={`research-event is-${event.kind} ${current ? 'is-current' : ''}`}
+                    >
+                      <span className="research-event-marker" aria-hidden="true" />
+                      <div className="research-event-copy">
+                        <div>
+                          <span className="research-event-step">Step {recentEventOffset + index + 1}{current && <em>Current</em>}</span>
+                          <time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time>
+                        </div>
+                        <strong>{event.title}</strong>
+                        {event.detail && <ChatMarkdown text={event.detail} />}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+        </div>
       )}
 
       {detail.sources.length > 0 && (

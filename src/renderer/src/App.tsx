@@ -1,18 +1,38 @@
-import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 import Sidebar from './components/Sidebar'
 import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
-import Dashboard from './components/Dashboard'
-import Plugins from './components/Plugins'
-import TestPage from './components/TestPage'
-import ProjectLoopPage from './components/ProjectLoopPage'
-import ResearchPage from './components/ResearchPage'
 import { ChevronIcon, PanelsIcon } from './components/icons'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
+
+const Dashboard = lazy(() => import('./components/Dashboard'))
+const Plugins = lazy(() => import('./components/Plugins'))
+const TestPage = lazy(() => import('./components/TestPage'))
+const ProjectLoopPage = lazy(() => import('./components/ProjectLoopPage'))
+const ResearchPage = lazy(() => import('./components/ResearchPage'))
 
 export type ChatMode = 'workspace' | 'general'
 export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
 export type AppTheme = 'dark' | 'light'
+
+const PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'loops', 'research'])
+
+function FeaturePageFallback({ label }: { label: string }): JSX.Element {
+  return (
+    <div className="feature-page-loading" role="status" aria-live="polite">
+      <span>{label}</span>
+    </div>
+  )
+}
 
 /** A sidebar→chat instruction: load a session (id) or start fresh (null). */
 export interface HistorySelection {
@@ -330,6 +350,7 @@ function latestSessionFrom(sessions: SessionRow[], projectId: string | null): Se
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
+  const [mountedFeatureViews, setMountedFeatureViews] = useState<Set<AppView>>(() => new Set())
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       return localStorage.getItem('akorith.theme') === 'light' ? 'light' : 'dark'
@@ -381,6 +402,16 @@ export default function App(): JSX.Element {
     lastViewRef.current = view
     navTravelRef.current = null
   }, [view, startupHydrated])
+
+  useEffect(() => {
+    if (!PERSISTENT_FEATURE_VIEWS.has(view)) return
+    setMountedFeatureViews((mounted) => {
+      if (mounted.has(view)) return mounted
+      const next = new Set(mounted)
+      next.add(view)
+      return next
+    })
+  }, [view])
 
   const goBack = useCallback((): void => {
     setNavBackStack((stack) => {
@@ -728,6 +759,7 @@ export default function App(): JSX.Element {
       <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
         <ChatPanel
           mode={activeChatMode}
+          active={view === 'workspace' || view === 'general'}
           historySel={historySel}
           activeProject={activeChatMode === 'general' ? null : activeProject}
           onOpenProject={() => void openProject()}
@@ -743,23 +775,39 @@ export default function App(): JSX.Element {
           onClose={() => setWorkbenchOpen(false)}
         />
       </div>
-      {/* The test page stays mounted while hidden so a streaming run is never
-          interrupted by navigating to the Workspace or Dashboard. */}
-      <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
-        <TestPage active={view === 'test'} activeProject={activeProject} />
-      </div>
-      {/* Loops stay mounted so an in-progress "create" or live timers survive nav. */}
-      <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-        <ProjectLoopPage active={view === 'loops'} activeProject={activeProject} />
-      </div>
-      {/* Research remains mounted so its open tabs and library selection survive
-          navigation. The durable main-process scheduler keeps working even when
-          this renderer surface is hidden or the window is unfocused. */}
-      <div className="research-page-wrap" style={{ display: view === 'research' ? 'flex' : 'none' }}>
-        <ResearchPage active={view === 'research'} />
-      </div>
-      {view === 'dashboard' && <Dashboard activeProject={activeProject} />}
-      {view === 'plugins' && <Plugins />}
+      {/* Heavy feature surfaces load only on first use. Long-running pages remain
+          mounted after that first visit so navigation never interrupts a run. */}
+      {(view === 'test' || mountedFeatureViews.has('test')) && (
+        <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
+          <Suspense fallback={<FeaturePageFallback label="Loading Benchmark…" />}>
+            <TestPage active={view === 'test'} activeProject={activeProject} />
+          </Suspense>
+        </div>
+      )}
+      {(view === 'loops' || mountedFeatureViews.has('loops')) && (
+        <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
+          <Suspense fallback={<FeaturePageFallback label="Loading Loop…" />}>
+            <ProjectLoopPage active={view === 'loops'} activeProject={activeProject} />
+          </Suspense>
+        </div>
+      )}
+      {(view === 'research' || mountedFeatureViews.has('research')) && (
+        <div className="research-page-wrap" style={{ display: view === 'research' ? 'flex' : 'none' }}>
+          <Suspense fallback={<FeaturePageFallback label="Loading Research…" />}>
+            <ResearchPage active={view === 'research'} />
+          </Suspense>
+        </div>
+      )}
+      {view === 'dashboard' && (
+        <Suspense fallback={<FeaturePageFallback label="Loading Dashboard…" />}>
+          <Dashboard activeProject={activeProject} />
+        </Suspense>
+      )}
+      {view === 'plugins' && (
+        <Suspense fallback={<FeaturePageFallback label="Loading Plugins…" />}>
+          <Plugins />
+        </Suspense>
+      )}
         </div>
       </section>
       </div>
