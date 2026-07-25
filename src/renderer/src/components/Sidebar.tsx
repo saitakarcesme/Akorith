@@ -12,7 +12,6 @@ import type { ProjectRow, ProviderInfo, SessionRow, StartupSnapshot } from '../.
 import type { AppTheme, AppView } from '../App'
 import { useProfileIdentity } from '../profileIdentity'
 import {
-  ChevronIcon,
   CopyIcon,
   FlaskIcon,
   FolderIcon,
@@ -676,7 +675,6 @@ export default function Sidebar({
       <div className="sidebar-brand-row">
         <div className="sidebar-brand" aria-label="Akorith">
           <span>Akorith</span>
-          <ChevronIcon size={13} direction="down" />
         </div>
         <button
           ref={searchButtonRef}
@@ -694,7 +692,7 @@ export default function Sidebar({
         <div className="sidebar-newchat-row">
           <button
             type="button"
-            className={`sidebar-newchat ${view === 'general' ? 'is-active' : ''}`}
+            className={`sidebar-newchat ${view === 'general' && !activeSessionId ? 'is-active' : ''}`}
             onClick={onNewGeneralChat}
             title="Start a fresh general chat"
           >
@@ -793,7 +791,7 @@ export default function Sidebar({
                     visibleProjects.map((project) => {
                       const chats = (sessionsByProject.get(project.id) ?? []).filter((session) => matchesSearch(session.title))
                       const isExpanded = expandedProjects[project.id] ?? false
-                      const isActiveProject = view === 'workspace' && activeProject?.id === project.id
+                      const isActiveProject = view === 'workspace' && activeProject?.id === project.id && !activeSessionId
                       return (
                         <div className={`project-group ${isExpanded ? 'is-expanded' : ''}`} key={project.id}>
                           <div
@@ -928,7 +926,7 @@ export default function Sidebar({
                                   </div>
                                 ) : (
                                   <div
-                                    className={`project-chat ${chat.id === activeSessionId ? 'is-active' : ''} ${chat.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(chat.id) ? 'is-running' : ''}`}
+                                    className={`project-chat ${view === 'workspace' && chat.id === activeSessionId ? 'is-active' : ''} ${chat.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(chat.id) ? 'is-running' : ''}`}
                                     key={chat.id}
                                     role="button"
                                     tabIndex={0}
@@ -1023,7 +1021,7 @@ export default function Sidebar({
                   </div>
                 ) : (
                   <div
-                    className={`recent-chat ${session.id === activeSessionId ? 'is-active' : ''} ${session.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(session.id) ? 'is-running' : ''}`}
+                    className={`recent-chat ${view === 'general' && session.id === activeSessionId ? 'is-active' : ''} ${session.pinned ? 'is-pinned' : ''} ${pendingSessions?.has(session.id) ? 'is-running' : ''}`}
                     key={session.id}
                     role="button"
                     tabIndex={0}

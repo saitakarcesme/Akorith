@@ -1762,14 +1762,21 @@ with Avenir Next and the existing centered profile geometry remains intact.
 
 Workspace and Loop share `ProjectPreviewPanel`, a compact launcher and live project surface for the
 currently selected project. Main-process `project-preview.ts` canonicalizes the directory, reads
-declared package scripts, and permits only `dev`, `start`, `serve`, or `preview`. Never accept an
-arbitrary command string from renderer state.
+declared package scripts, and permits only `dev`, `start`, `serve`, or `preview`. A contained root
+`index.html` may instead run through Akorith's built-in loopback-only static server. Never accept an
+arbitrary command string or browser target from renderer or model output.
 
 Each launch uses a reserved loopback port and `spawn()` with `shell:false`. The hidden offscreen
 BrowserWindow is sandboxed, denies new windows, and blocks every non-loopback navigation. Renderer
 capture/input IPC is session-scoped and supports pointer movement, click, bounded text insertion,
 and bounded key input. Stopping a preview or quitting Akorith terminates the process group and
 destroys the offscreen window.
+
+An explicit Workspace/Loop request to open the site in Chrome or the default browser is handled by
+the provider-neutral `workspace-actions.ts` broker after the model finishes its project work. The
+broker derives the trusted project root from the persisted session, opens only the preview session's
+verified loopback URL, and launches Chrome by a known executable with `shell:false`. Provider shell
+allowlists must continue to reject generic `open`, `start`, or arbitrary browser commands.
 
 The reference interaction lab lives outside the repository at
 `~/Desktop/Projects/AkorithComputerUseLab`. Verification includes typecheck/build, Workspace and

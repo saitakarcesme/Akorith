@@ -527,6 +527,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
 
   const currentRunId = useRef<string | null>(null)
   const currentReqId = useRef<string | null>(null)
+  const benchmarkModelsRef = useRef<HTMLDetailsElement | null>(null)
 
   const localProvider = providers.find((p) => p.id === 'local')
   const selected = providers.find((p) => p.id === providerId)
@@ -618,7 +619,10 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
   }, [localProvider, refreshProviders])
 
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      benchmarkModelsRef.current?.removeAttribute('open')
+      return
+    }
     void window.api.projects.list().then(setProjects).catch(() => setProjects([]))
   }, [active])
 
@@ -1402,7 +1406,7 @@ export default function TestPage({ active, activeProject }: TestPageProps): JSX.
                   <i />{benchmarkOptionLabel(option)}
                 </button>
               ))}
-              <details className="benchmark-add-models">
+              <details ref={benchmarkModelsRef} className="benchmark-add-models">
                 <summary>+ Models</summary>
                 <div className="benchmark-add-models-menu">
                   {benchmarkProviderGroups.map((group) => (

@@ -64,6 +64,7 @@ export default function ResearchProgress({
       : Math.min(15_000, Math.max(0, Date.now() - job.activeAccountingAt)))
   )
   const recentEvents = detail.events.slice(-80)
+  const recentEventOffset = detail.events.length - recentEvents.length
   const eventListRef = useRef<HTMLDivElement>(null)
   const eventListJobRef = useRef<string | null>(null)
   const followLatestEventRef = useRef(true)
@@ -106,23 +107,26 @@ export default function ResearchProgress({
         </div>
       </header>
 
-      <section className="research-phase-rail" role="list" aria-label="Research phases">
-        {PHASES.map((phase, index) => {
-          const complete = terminal || index < currentIndex
-          const active = !terminal && index === currentIndex
-          return (
-            <div
-              key={phase.id}
-              role="listitem"
-              aria-current={active ? 'step' : undefined}
-              className={`research-phase ${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}
-            >
-              <span className="research-phase-dot" aria-hidden="true">{complete ? '\u2713' : index + 1}</span>
-              <span className="research-phase-copy">{phase.label}{active && <small>Current</small>}</span>
-            </div>
-          )
-        })}
-      </section>
+      <div className="research-phase-scroll">
+        <section className="research-phase-rail" role="list" aria-label="Research phases">
+          {PHASES.map((phase, index) => {
+            const complete = terminal || index < currentIndex
+            const active = !terminal && index === currentIndex
+            const stateLabel = complete ? 'Done' : active ? 'Current' : 'Pending'
+            return (
+              <div
+                key={phase.id}
+                role="listitem"
+                aria-current={active ? 'step' : undefined}
+                className={`research-phase ${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}
+              >
+                <span className="research-phase-dot" aria-hidden="true">{complete ? '\u2713' : index + 1}</span>
+                <span className="research-phase-copy"><strong>{phase.label}</strong><small>{stateLabel}</small></span>
+              </div>
+            )
+          })}
+        </section>
+      </div>
 
       <section className="research-metrics" aria-label="Research metrics">
         <Metric label="Active research" value={duration} />
@@ -184,7 +188,7 @@ export default function ResearchProgress({
                   <span className="research-event-marker" aria-hidden="true" />
                   <div className="research-event-copy">
                     <div>
-                      <span className="research-event-step">Step {index + 1}{current && <em>Current</em>}</span>
+                      <span className="research-event-step">Step {recentEventOffset + index + 1}{current && <em>Current</em>}</span>
                       <time dateTime={new Date(event.createdAt).toISOString()}>{formatClock(event.createdAt)}</time>
                     </div>
                     <strong>{event.title}</strong>

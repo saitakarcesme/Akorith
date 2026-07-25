@@ -194,6 +194,8 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const [commits, setCommits] = useState<ProjectLoopCommit[]>([])
   const [error, setError] = useState<string | null>(null)
   const selectionInitialized = useRef(false)
+  const fleetSignatureRef = useRef('')
+  const detailSignatureRef = useRef('')
 
   const loadProviders = useCallback(async (): Promise<void> => {
     const list = await window.api.chat.listProviders()
@@ -205,8 +207,12 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
   const refreshFleet = useCallback(async (): Promise<void> => {
     const [stored, activeIds] = await Promise.all([window.api.projectLoop.list(), window.api.projectLoop.runningIds()])
     const visible = stored.filter((loop) => loop.status !== 'archived')
-    setLoops(visible)
-    setRunningIds(new Set(activeIds))
+    const signature = JSON.stringify([visible, [...activeIds].sort()])
+    if (signature !== fleetSignatureRef.current) {
+      fleetSignatureRef.current = signature
+      setLoops(visible)
+      setRunningIds(new Set(activeIds))
+    }
     if (!selectionInitialized.current) {
       selectionInitialized.current = true
       if (visible[0]) setSelectedLoopId(visible[0].id)
@@ -220,7 +226,11 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
       window.api.projectLoop.listRuns(id),
       window.api.projectLoop.listCommits(id)
     ])
-    setEvents([...nextEvents].reverse())
+    const orderedEvents = [...nextEvents].reverse()
+    const signature = `${id}\n${JSON.stringify([orderedEvents, nextRuns, nextCommits])}`
+    if (signature === detailSignatureRef.current) return
+    detailSignatureRef.current = signature
+    setEvents(orderedEvents)
     setRuns(nextRuns)
     setCommits(nextCommits)
   }, [])
@@ -232,6 +242,7 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
 
   useEffect(() => {
     if (!active || !selectedLoopId) return
+    detailSignatureRef.current = ''
     setEvents([])
     setRuns([])
     setCommits([])
@@ -240,12 +251,13 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
 
   useEffect(() => {
     if (!active) return
+    const selectedCurrentlyRunning = Boolean(selectedLoopId && runningIds.has(selectedLoopId))
     const timer = window.setInterval(() => {
       void refreshFleet()
       if (selectedLoopId) void refreshDetails(selectedLoopId)
-    }, 1000)
+    }, selectedCurrentlyRunning ? 1000 : 5000)
     return () => window.clearInterval(timer)
-  }, [active, refreshDetails, refreshFleet, selectedLoopId])
+  }, [active, refreshDetails, refreshFleet, runningIds, selectedLoopId])
 
   const selectedProvider = providers?.find((provider) => provider.id === providerId)
   const selectedLoop = loops.find((loop) => loop.id === selectedLoopId) ?? null
@@ -428,19 +440,32 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
 
   return (
     <main className="loop-page loop-page-v2">
-      <header className="loop-v2-header">
-        <span className="loop-eyebrow">CONCURRENT GOALS</span>
-        <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={15} />New tab</button>
+      <header className="loop-v3-goalbar">
+        <span className="loop-eyebrow">GOALS</span>
+        {loops.length > 0 && (
+          <nav className="loop-switcher" aria-label="Concurrent Goals">
+            {loops.map((loop) => {
+              const running = runningIds.has(loop.id)
+              const selected = loop.id === selectedLoopId && !creating
+              return (
+                <button
+                  type="button"
+                  className={selected ? 'is-selected' : ''}
+                  title={`${loop.title} · ${statusLabel(loop.status, running)}`}
+                  aria-current={selected ? 'page' : undefined}
+                  onClick={() => { setCreating(false); setSelectedLoopId(loop.id); setError(null) }}
+                  key={loop.id}
+                >
+                  <i className={`is-${running ? 'running' : loop.status}`} />
+                  <span>{loop.title}</span>
+                  <em>{statusLabel(loop.status, running)}</em>
+                </button>
+              )
+            })}
+          </nav>
+        )}
+        <button type="button" className="loop-new-button" onClick={startNewLoop}><PlusIcon size={14} />New goal</button>
       </header>
-
-      {loops.length > 0 && (
-        <nav className="loop-switcher" aria-label="Concurrent Goals">
-          {loops.map((loop) => {
-            const running = runningIds.has(loop.id)
-            return <button type="button" className={loop.id === selectedLoopId && !creating ? 'is-selected' : ''} onClick={() => { setCreating(false); setSelectedLoopId(loop.id); setError(null) }} key={loop.id}><i className={`is-${running ? 'running' : loop.status}`} /><span>{loop.title}</span><em>{statusLabel(loop.status, running)}</em></button>
-          })}
-        </nav>
-      )}
 
       <section className="loop-v2-surface">
         {creating ? (
@@ -468,18 +493,30 @@ export default function ProjectLoopPage({ active, activeProject }: ProjectLoopPa
               <div className="loop-v2-time"><span>{selectedRunning ? 'Working for' : 'Worked for'}</span><strong>{selectedElapsed}</strong>{!selectedRunning && <button type="button" className="loop-archive-button" title="Archive Loop" aria-label="Archive Loop" onClick={() => void archiveSelected()}><ArchiveIcon size={15} /></button>}</div>
             </div>
 
-            <div className="loop-v2-steps">
-              <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
-            </div>
+            <div className="loop-v3-workspace">
+              <aside className="loop-v3-cycle" aria-label="Current Goal cycle">
+                <div className="loop-v3-section-label"><span>CYCLE</span><small>{iteration}</small></div>
+                <div className="loop-v2-steps">
+                  <LoopPipeline phase={phase} status={selectedLoop.status} iteration={iteration} />
+                </div>
+              </aside>
 
-            <ProjectPreviewPanel projectPath={selectedLoop.localPath} projectName={selectedLoop.githubName ?? projectName(selectedLoop.localPath)} />
-
-            <div className="loop-chat-thread" aria-live="polite">
-              <div className="loop-user-message">{selectedLoop.title}</div>
-              <div className={`loop-assistant-message ${selectedRunning ? 'is-running' : ''}`}>
-                <div className="loop-assistant-state"><span className="loop-v2-current-orb" /><div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div></div>
-                {progressSteps.length > 0 && <div className="loop-chat-events">{progressSteps.map((step, index) => <article key={step.id} className={`loop-progress-step is-${step.kind}`}><i /><div><span>Step {index + 1}</span><strong>{step.title}</strong><p>{step.body}</p></div><time>{new Date(step.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>)}</div>}
-              </div>
+              <section className="loop-v3-activity" aria-label="Goal activity">
+                <div className="loop-v3-section-label"><span>ACTIVITY</span><small>{progressSteps.length} updates</small></div>
+                <ProjectPreviewPanel
+                  projectPath={selectedLoop.localPath}
+                  projectName={selectedLoop.githubName ?? projectName(selectedLoop.localPath)}
+                  hideWhenUnavailable
+                  refreshKey={`${selectedLoop.status}:${iteration}:${lastRun?.endedAt ?? ''}`}
+                />
+                <div className="loop-chat-thread" aria-live="polite">
+                  <div className="loop-user-message">{selectedLoop.title}</div>
+                  <div className={`loop-assistant-message ${selectedRunning ? 'is-running' : ''}`}>
+                    <div className="loop-assistant-state"><span className="loop-v2-current-orb" /><div><strong>{currentCopy.title}</strong><p>{currentCopy.body}</p></div></div>
+                    {progressSteps.length > 0 && <div className="loop-chat-events">{progressSteps.map((step, index) => <article key={step.id} className={`loop-progress-step is-${step.kind}`}><i /><div><span>Step {index + 1}</span><strong>{step.title}</strong><p>{step.body}</p></div><time>{new Date(step.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></article>)}</div>}
+                  </div>
+                </div>
+              </section>
             </div>
 
             {!selectedRunning && (selectedLoop.status === 'completed' || selectedLoop.error) && <div className={`loop-outcome ${selectedLoop.error ? 'is-error' : ''}`}><span>{selectedLoop.status === 'completed' ? 'GOAL REACHED' : 'REVIEW NEEDED'}</span><strong>{lastRun?.summary ?? selectedLoop.error}</strong><p>{lastRun?.filesChanged ?? 0} changed files · {commits.length} checkpoints · {selectedLoop.pushEnabled ? 'synced to GitHub' : 'local'}</p></div>}

@@ -38,6 +38,7 @@ export default function TestTerminal({ clearKey, active }: TestTerminalProps): J
         // Phase 14.1: lighter, more readable sandbox surface (was near-black).
         background: '#181818',
         foreground: '#ffffff',
+        brightBlack: '#a3a3a3',
         cursor: '#181818',
         selectionBackground: 'rgba(255, 255, 255, 0.22)'
       }

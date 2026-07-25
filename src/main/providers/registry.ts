@@ -44,6 +44,12 @@ import { buildLocalExecutorPrompt, executeLocalExecutorAttempt } from '../local-
 import { inspectProject, renderProjectContext } from '../project-loop/context'
 import { changedSince, summarizeGitChanges } from '../git-status'
 import { enabledPluginContext } from '../plugins/manager'
+import { openWorkspacePreview } from '../project-preview'
+import {
+  detectWorkspaceBrowserAction,
+  runWorkspaceBrowserAction,
+  WORKSPACE_BROWSER_ACTION_INSTRUCTION
+} from '../workspace-actions'
 import {
   attachmentPrompt,
   inlineTextAttachmentContext,
@@ -151,8 +157,15 @@ export async function sendWorkspacePrompt(
   const provider = buildProviders().get(providerId)
   if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
   const tools = enabledPluginContext()
-  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
-  return provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
+  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
+  const result = await provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
+  return completeWorkspaceBrowserAction({
+    prompt,
+    intent: 'execute',
+    workspacePath: workingDirectory,
+    result,
+    emit: onActivity
+  })
 }
 
 /** The available-provider snapshot, also consumed by the Phase 6 router. */
@@ -211,6 +224,57 @@ function cleanActivity(activity: ProviderActivity): ProviderActivity {
     detail: clean(activity.detail, 500),
     status: activity.status ?? 'running'
   }
+}
+
+async function completeWorkspaceBrowserAction(input: {
+  prompt: string
+  intent: 'execute' | 'plan' | undefined
+  workspacePath: string
+  result: SendResult
+  emit?: (activity: ProviderActivity) => void
+}): Promise<SendResult> {
+  const requested = detectWorkspaceBrowserAction(input.prompt, input.intent)
+  if (!requested) return input.result
+
+  const browserLabel = requested.browser === 'chrome' ? 'Chrome' : 'the default browser'
+  input.emit?.({
+    kind: 'tool',
+    label: `Opening the project preview in ${browserLabel}`,
+    status: 'running'
+  })
+  const outcome = await runWorkspaceBrowserAction({
+    prompt: input.prompt,
+    intent: input.intent,
+    workspacePath: input.workspacePath
+  }, {
+    opener: async (request) => {
+      const opened = await openWorkspacePreview(request)
+      return { url: opened.url }
+    }
+  })
+  if (!outcome) return input.result
+
+  if ('error' in outcome) {
+    input.emit?.({
+      kind: 'warning',
+      label: outcome.label,
+      detail: outcome.error,
+      status: 'error'
+    })
+    const text = input.result.text.trim()
+    const receipt = `${outcome.label}: ${outcome.error}`
+    return { ...input.result, text: text ? `${text}\n\n${receipt}` : receipt }
+  }
+
+  input.emit?.({
+    kind: 'tool',
+    label: outcome.label,
+    detail: outcome.url,
+    status: 'complete'
+  })
+  const text = input.result.text.trim()
+  const receipt = `${outcome.label}: ${outcome.url}`
+  return { ...input.result, text: text ? `${text}\n\n${receipt}` : receipt }
 }
 
 async function sendWorkspaceLocal(
@@ -540,7 +604,7 @@ export function registerChatIpc(): void {
       const workspaceInstruction = workspaceContext
         ? args.intent === 'plan'
           ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
-          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
+          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
       const changesBefore = workspaceContext?.projectPath && args.intent !== 'plan'
@@ -594,6 +658,13 @@ export function registerChatIpc(): void {
         if (workspaceContext?.projectPath && args.intent !== 'plan') {
           const changesAfter = await summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
           result = { ...result, changes: changedSince(changesBefore, changesAfter) }
+          result = await completeWorkspaceBrowserAction({
+            prompt: args.prompt,
+            intent: args.intent ?? 'execute',
+            workspacePath: workspaceContext.projectPath,
+            result,
+            emit: emitActivity
+          })
         }
         emitActivity({ kind: 'status', label: 'Workspace task complete', status: 'complete' })
         completeProviderObservation(observation, result)

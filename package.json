@@ -58,6 +58,7 @@
     "verify:companions": "tsx scripts/verify-companions.ts",
     "verify:agents": "tsx scripts/verify-agents.ts",
     "verify:opencode-output": "tsx scripts/verify-opencode-output.ts",
+    "verify:workspace-actions": "tsx scripts/verify-workspace-actions.ts",
     "verify:plugin-tools": "tsx scripts/verify-plugin-tools.ts",
     "verify:windows-identity": "tsx scripts/verify-windows-app-identity.ts",
     "verify:ui-zoom": "tsx scripts/verify-ui-zoom.ts",

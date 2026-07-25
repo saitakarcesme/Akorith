@@ -5,6 +5,9 @@ import { FolderOpenIcon, GlobeIcon, PanelsIcon, PlayIcon, StopIcon } from './ico
 interface ProjectPreviewPanelProps {
   projectPath: string
   projectName: string
+  hideWhenUnavailable?: boolean
+  /** Re-inspect after a workspace turn/cycle may have added a runnable entry point. */
+  refreshKey?: string | number
 }
 
 interface FrameState {
@@ -13,7 +16,7 @@ interface FrameState {
   height: number
 }
 
-export function ProjectPreviewPanel({ projectPath, projectName }: ProjectPreviewPanelProps): JSX.Element {
+export function ProjectPreviewPanel({ projectPath, projectName, hideWhenUnavailable = false, refreshKey }: ProjectPreviewPanelProps): JSX.Element | null {
   const [inspection, setInspection] = useState<ProjectPreviewInspection | null>(null)
   const [session, setSession] = useState<ProjectPreviewStatus | null>(null)
   const [frame, setFrame] = useState<FrameState | null>(null)
@@ -40,7 +43,7 @@ export function ProjectPreviewPanel({ projectPath, projectName }: ProjectPreview
       })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)) })
     return () => { cancelled = true }
-  }, [projectPath])
+  }, [projectPath, refreshKey])
 
   useEffect(() => {
     if (!session || (session.state !== 'starting' && session.state !== 'running')) return
@@ -121,6 +124,8 @@ export function ProjectPreviewPanel({ projectPath, projectName }: ProjectPreview
 
   const running = session?.state === 'starting' || session?.state === 'running'
   const statusLabel = session?.state === 'starting' ? 'Starting' : session?.state === 'running' ? 'Live' : session?.state === 'error' ? 'Needs attention' : 'Ready'
+
+  if (hideWhenUnavailable && !session && !inspection?.runnable) return null
 
   return (
     <section className={`project-preview ${live ? 'is-open' : ''}`} aria-label={`${projectName} live project preview`}>

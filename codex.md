@@ -781,15 +781,20 @@ local model, attempts, validated changes, commits, last validation, and last com
 ## Phase 68 - Permissioned Project Computer Use
 
 - Workspace and Loop mount the same compact Computer Use surface for the active project, without
-  changing General Chat. Users may reveal the directory, start an allowlisted declared web script,
-  open the loopback URL, watch a live frame, move/click the pointer, type into a focused field, and
-  stop the process.
+  changing General Chat. Users may reveal the directory, start an allowlisted declared web script
+  or a contained root `index.html`, open the loopback URL, watch a live frame, move/click the
+  pointer, type into a focused field, and stop the process.
 - `src/main/project-preview.ts` owns all trust decisions: canonical project paths, declared-script
-  inspection, loopback port allocation, `shell:false` process spawning, bounded logs, sandboxed
-  offscreen rendering, loopback-only navigation, session-scoped input, and process-group cleanup.
+  inspection, path/symlink-contained static serving, loopback port allocation, `shell:false`
+  process spawning, bounded logs, sandboxed offscreen rendering, loopback-only navigation,
+  session-scoped input, and process/server cleanup.
 - Renderer code must not receive a generic shell primitive or unrestricted browser target. Only
-  `dev`, `start`, `serve`, and `preview` scripts are launchable, and external opening is restricted
-  to the session's verified localhost URL.
+  `dev`, `start`, `serve`, and `preview` scripts or the internal static server are launchable, and
+  external opening is restricted to the session's verified localhost URL.
+- `workspace-actions.ts` handles an explicit Workspace/Loop browser request after provider work
+  completes. It derives the project root from the trusted session, starts/reuses the verified
+  preview, and launches a known Chrome executable with `shell:false` (or Electron's default-browser
+  API). Provider shell policies continue to deny generic `open`/browser commands.
 - The Browser Computer Use reference was exercised against
   `~/Desktop/Projects/AkorithComputerUseLab`; the Akorith Electron smoke test then launched that
   project, streamed it in Workspace, typed into the real page, stopped it, verified its port was

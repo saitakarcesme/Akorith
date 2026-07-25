@@ -14,29 +14,44 @@
   --replica-sidebar-width: 266px;
   --content-max: 768px;
   --bg-under: #000;
-  --surface: #181818;
-  --surface-soft: #1f1f1f;
-  --surface-card: #232323;
-  --surface-control: #2d2d2d;
-  --surface-hover: #ffffff0d;
-  --surface-hover-strong: #ffffff14;
-  --surface-active: #ffffff1f;
-  --elevated: #212121f5;
-  --elevated-opaque: #282828;
-  --text: #fff;
-  --text-secondary: #ffffffb3;
-  --text-tertiary: #ffffff80;
-  --text-quaternary: #ffffff52;
-  --border: #ffffff14;
-  --border-heavy: #ffffff29;
-  --border-light: #ffffff0a;
+  --surface: #090909;
+  --surface-soft: #0d0d0d;
+  --surface-card: #111;
+  --surface-control: #151515;
+  --surface-hover: #ffffff0a;
+  --surface-hover-strong: #ffffff10;
+  --surface-active: #ffffff15;
+  --surface-selected: #ffffff12;
+  --surface-selected-hover: #ffffff18;
+  --focus-neutral: #bdbdbd;
+  --elevated: #131313f7;
+  --elevated-opaque: #151515;
+  --text: #f2f2f2;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #6f6f6f;
+  --text-quaternary: #555;
+  --replica-border-subtle: #ffffff0d;
+  --replica-border-default: #ffffff18;
+  --replica-border-strong: #ffffff24;
+  --border: var(--replica-border-default);
+  --border-heavy: var(--replica-border-strong);
+  --border-light: var(--replica-border-subtle);
   --blue: #339cff;
-  --green: #00a240;
+  --green: #34d17b;
+  --accent-muted: #34d17b1f;
+  --accent-border: #34d17b61;
   --orange: #ff5c00;
   --purple: #a56eff;
   --red: #e02e2a;
-  --white-button: #f7f7f7;
+  --white-button: #f2f2f2;
   --white-button-text: #1a1c1f;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-composer: 8px;
   --replica-font-ui: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   --replica-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --replica-shadow-menu:
@@ -75,11 +90,11 @@ body {
   --bg-chat: var(--surface);
   --bg-chat-raised: var(--surface-card);
   --bg-composer: var(--surface-control);
-  --text: #fff;
+  --text: #f2f2f2;
   --text-dim: var(--text-secondary);
   --text-faint: var(--text-tertiary);
-  --border: var(--border-heavy);
-  --border-soft: var(--border);
+  --border: var(--replica-border-default);
+  --border-soft: var(--replica-border-subtle);
   --hover: var(--surface-hover);
   --hover-strong: var(--surface-hover-strong);
   --accent: var(--white-button);
@@ -104,19 +119,28 @@ body {
   --surface: #fff;
   --surface-soft: #f9f9f9;
   --surface-card: #fff;
-  --surface-control: #ededed66;
+  --surface-control: #ededed;
   --surface-hover: #1a1c1f0a;
   --surface-hover-strong: #1a1c1f12;
   --surface-active: #1a1c1f1a;
+  --surface-selected: #1a1c1f12;
+  --surface-selected-hover: #1a1c1f18;
+  --focus-neutral: #1a1c1f80;
   --elevated: #fffffff5;
   --elevated-opaque: #fff;
   --text: #1a1c1f;
-  --text-secondary: #1a1c1fb3;
-  --text-tertiary: #1a1c1f80;
-  --text-quaternary: #1a1c1f52;
-  --border: #1a1c1f14;
-  --border-heavy: #1a1c1f24;
-  --border-light: #1a1c1f0a;
+  --text-secondary: #50545a;
+  --text-tertiary: #646a72;
+  --text-quaternary: #70767e;
+  --replica-border-subtle: #1a1c1f14;
+  --replica-border-default: #1a1c1f26;
+  --replica-border-strong: #1a1c1f3a;
+  --semantic-success-text: #21704b;
+  --semantic-danger-text: #9f3632;
+  --semantic-warning-text: #795d0b;
+  --border: var(--replica-border-default);
+  --border-heavy: var(--replica-border-strong);
+  --border-light: var(--replica-border-subtle);
   --white-button: #1a1c1f;
   --white-button-text: #fff;
   --bg: var(--surface);
@@ -129,8 +153,8 @@ body {
   --bg-composer: var(--surface-control);
   --text-dim: var(--text-secondary);
   --text-faint: var(--text-tertiary);
-  --border: var(--border-heavy);
-  --border-soft: var(--border);
+  --border: var(--replica-border-default);
+  --border-soft: var(--replica-border-subtle);
   --hover: var(--surface-hover);
   --hover-strong: var(--surface-hover-strong);
   --accent: var(--white-button);
@@ -161,8 +185,14 @@ body {
 .app[data-ui='replica'] input:focus-visible,
 .app[data-ui='replica'] textarea:focus-visible,
 .app[data-ui='replica'] [role='button']:focus-visible {
-  outline: 2px solid #339cffb3;
+  outline: 1px solid var(--focus-neutral);
   outline-offset: 1px;
+}
+
+.app[data-ui='replica'] .composer-input:focus,
+.app[data-ui='replica'] .composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Window chrome */
@@ -585,7 +615,7 @@ body {
 }
 
 .app[data-ui='replica'] .sidebar-brand-row .sidebar-brand:hover {
-  background: var(--surface-hover-strong);
+  background: transparent;
 }
 
 .app[data-ui='replica'] .sidebar-search-button {
@@ -634,6 +664,7 @@ body {
   font-size: 13px;
   font-weight: 445;
   text-align: left;
+  transition: color 120ms ease, background-color 120ms ease;
   white-space: nowrap;
 }
 
@@ -645,9 +676,14 @@ body {
 
 .app[data-ui='replica'] .sidebar-nav button.is-active,
 .app[data-ui='replica'] .sidebar-newchat-row .sidebar-newchat.is-active {
-  color: var(--white-button-text);
-  background: var(--white-button);
+  color: var(--text);
+  background: var(--surface-selected);
   box-shadow: none;
+}
+
+.app[data-ui='replica'] .sidebar-nav button.is-active:hover,
+.app[data-ui='replica'] .sidebar-newchat-row .sidebar-newchat.is-active:hover {
+  background: var(--surface-selected-hover);
 }
 
 .app[data-ui='replica'] .sidebar-scroll {
@@ -726,6 +762,7 @@ body {
   border-radius: 8px !important;
   font-size: 12.5px;
   box-shadow: none;
+  transition: color 120ms ease, background-color 120ms ease;
 }
 
 .app[data-ui='replica'] .project-row {
@@ -748,8 +785,14 @@ body {
 .app[data-ui='replica'] .project-row.is-active,
 .app[data-ui='replica'] .project-chat.is-active,
 .app[data-ui='replica'] .recent-chat.is-active {
-  color: var(--white-button-text);
-  background: var(--white-button);
+  color: var(--text);
+  background: var(--surface-selected);
+}
+
+.app[data-ui='replica'] .project-row.is-active:hover,
+.app[data-ui='replica'] .project-chat.is-active:hover,
+.app[data-ui='replica'] .recent-chat.is-active:hover {
+  background: var(--surface-selected-hover);
 }
 
 .app[data-ui='replica'] .project-row.is-active *,
@@ -1032,6 +1075,10 @@ body {
   border-radius: 16px;
 }
 
+.app[data-ui='replica'] .replica-feature-banner:empty {
+  display: none;
+}
+
 .app[data-ui='replica'][data-theme='light'] .replica-feature-banner {
   color: var(--text);
   background: var(--surface-card);
@@ -1100,37 +1147,6 @@ body {
   overflow-y: auto;
 }
 
-.app[data-ui='replica'] .replica-composer-context {
-  display: flex;
-  height: 38px;
-  align-items: center;
-  gap: 5px;
-  margin: 11px 13px 0;
-  padding: 0 10px;
-  overflow: hidden;
-  color: var(--text);
-  background: var(--surface-soft);
-  border-radius: 16px 16px 0 0;
-}
-
-.app[data-ui='replica'] .replica-composer-context > span {
-  display: flex;
-  min-width: 0;
-  height: 28px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 7px;
-  overflow: hidden;
-  border-radius: 7px;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app[data-ui='replica'] .replica-composer-context > span:hover {
-  background: var(--surface-hover-strong);
-}
-
 .app[data-ui='replica'] .composer-box {
   position: relative;
   min-height: 100px;
@@ -1144,14 +1160,10 @@ body {
     0 3px 8px rgb(0 0 0 / 0.14) !important;
 }
 
-.app[data-ui='replica'] .replica-composer-context + .composer-box {
-  border-radius: 0 0 16px 16px !important;
-}
-
 .app[data-ui='replica'] .composer-box:focus-within {
   background: var(--surface-control) !important;
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--border-heavy) 62%, var(--blue) 38%),
+    0 0 0 0.5px var(--border-heavy),
     0 3px 8px rgb(0 0 0 / 0.18) !important;
 }
 
@@ -1230,6 +1242,12 @@ body {
 
 .app[data-ui='replica'] .chat-msg {
   color: var(--text);
+}
+
+.app[data-ui='replica'] .chat-msg.user,
+.app[data-ui='replica'] .chat-msg.user .chat-prose,
+.app[data-ui='replica'] .chat-msg.user .chat-attachment {
+  color: var(--bubble-user-text);
 }
 
 /* Command palette */
@@ -1551,24 +1569,84 @@ body {
   border-color: var(--border);
 }
 
-/* Existing feature pages inherit the replica surface and typography. */
-.app[data-ui='replica'] .dashboard-page,
+/* Feature pages share one constrained surface. Every page owns its scrolling
+   axis so the fixed app shell never clips long content. */
+.app[data-ui='replica'] .profile-dashboard,
 .app[data-ui='replica'] .plugins-page,
 .app[data-ui='replica'] .test-page,
-.app[data-ui='replica'] .goal-page,
+.app[data-ui='replica'] .loop-page-v2,
 .app[data-ui='replica'] .research-page {
+  width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   color: var(--text);
   background: var(--surface);
   font-family: var(--replica-font-ui);
 }
 
-.app[data-ui='replica'] .dashboard-page,
+.app[data-ui='replica'] .profile-dashboard,
 .app[data-ui='replica'] .plugins-page,
 .app[data-ui='replica'] .test-page,
-.app[data-ui='replica'] .goal-page,
 .app[data-ui='replica'] .research-page {
   padding-top: var(--toolbar-height);
+}
+
+.app[data-ui='replica'] .profile-dashboard,
+.app[data-ui='replica'] .plugins-page {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.app[data-ui='replica'] .loop-page-v2 {
+  padding-top: calc(var(--toolbar-height) + 12px);
+}
+
+.app[data-ui='replica'] .profile-stats,
+.app[data-ui='replica'] .loop-v2-surface,
+.app[data-ui='replica'] .research-composer-box,
+.app[data-ui='replica'] .benchmark-launch,
+.app[data-ui='replica'] .benchmark-library,
+.app[data-ui='replica'] .plugins-search {
+  color: var(--text);
+  background: var(--surface-card);
+  border-color: var(--border-heavy);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .profile-stats,
+.app[data-ui='replica'] .loop-v2-surface,
+.app[data-ui='replica'] .research-composer-box {
+  border-radius: 14px;
+}
+
+.app[data-ui='replica'] .codex-plugins-header h1,
+.app[data-ui='replica'] .benchmark-header h2 {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.app[data-ui='replica'] .codex-plugins-header h1 {
+  font-size: 24px;
+}
+
+.app[data-ui='replica'] .plugin-row {
+  border-radius: 9px;
+}
+
+.app[data-ui='replica'] .plugin-row:hover {
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .codex-switch input:checked + span {
+  background: var(--text);
+}
+
+.app[data-ui='replica'] .codex-switch input:checked + span::after {
+  background: var(--surface-control);
 }
 
 .app[data-ui='replica'] .modal-overlay {
@@ -1813,14 +1891,6 @@ body {
     display: none;
   }
 
-  .app[data-ui='replica'] .replica-composer-context {
-    margin-top: 8px;
-  }
-
-  .app[data-ui='replica'] .replica-composer-context > span:nth-child(3) {
-    display: none;
-  }
-
   .app[data-ui='replica'] .composer-box {
     min-height: 94px;
   }
@@ -1862,10 +1932,6 @@ body {
     min-height: 80px;
   }
 
-  .app[data-ui='replica'] .replica-composer-context {
-    margin-top: 12px;
-  }
-
   .app[data-ui='replica'] .composer-chip span,
   .app[data-ui='replica'] .model-picker-label {
     display: none;
@@ -1905,6 +1971,1329 @@ body {
     width: 40px;
     height: 40px;
     flex-basis: 40px;
+  }
+}
+
+/* Cohesive replica surface system
+   -------------------------------
+   This final scoped layer resolves legacy product-polish generations into one
+   near-black, hairline-border desktop language without changing feature logic. */
+.app[data-ui='replica'] .app-surface,
+.app[data-ui='replica'] .chat-panel,
+.app[data-ui='replica'] .app-surface-toolbar,
+.app[data-ui='replica'] .profile-dashboard,
+.app[data-ui='replica'] .plugins-page,
+.app[data-ui='replica'] .test-page,
+.app[data-ui='replica'] .research-page,
+.app[data-ui='replica'] .loop-page-v2 {
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .app-surface,
+.app[data-ui='replica'] .chat-panel,
+.app[data-ui='replica'] .app-surface-toolbar {
+  transition: none;
+}
+
+.app[data-ui='replica'] button,
+.app[data-ui='replica'] a,
+.app[data-ui='replica'] summary,
+.app[data-ui='replica'] [role='button'],
+.app[data-ui='replica'] [role='tab'],
+.app[data-ui='replica'] input,
+.app[data-ui='replica'] textarea,
+.app[data-ui='replica'] select {
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.app[data-ui='replica'] .replica-command-overlay,
+.app[data-ui='replica'] .modal-overlay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app[data-ui='replica'] .project-menu,
+.app[data-ui='replica'] .composer-more-pop,
+.app[data-ui='replica'] .model-picker-pop {
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg) !important;
+  background: var(--elevated-opaque);
+}
+
+/* Empty chat: the composer is the primary action and stays centered. */
+.app[data-ui='replica'] .replica-home {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(24px, 6vh, 64px) 24px;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .replica-home > .ws-hero-inner,
+.app[data-ui='replica'] .replica-home > .ws-hero-inner:not(.is-wide),
+.app[data-ui='replica'] .replica-home > .ws-hero-inner.is-wide {
+  position: relative;
+  inset: auto;
+  width: 100% !important;
+  max-width: 720px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin: auto;
+  transform: none;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .replica-home > .ws-hero-inner:not(.is-wide) {
+  max-width: 520px !important;
+  align-items: center;
+  text-align: center;
+}
+
+.app[data-ui='replica'] .replica-home-greeting .ws-hero-title,
+.app[data-ui='replica'] .replica-home > .ws-hero-inner:not(.is-wide) .ws-hero-title {
+  margin: 0 0 2px;
+  color: var(--text);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.app[data-ui='replica'] .replica-home-greeting .ws-hero-title button {
+  border-bottom: 0;
+}
+
+.app[data-ui='replica'] .replica-home .ws-hero-sub {
+  margin: -4px 0 8px;
+}
+
+.app[data-ui='replica'] .replica-suggestion-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.app[data-ui='replica'] .replica-suggestion-card {
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .replica-suggestion-card:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .replica-suggestion-card strong {
+  max-width: none;
+  font-size: 11.5px;
+  font-weight: 540;
+  line-height: 1.25;
+}
+
+.app[data-ui='replica'] .replica-feature-banner {
+  height: auto;
+  margin: 0 0 8px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+}
+
+.app[data-ui='replica'] .replica-feature-banner .project-preview-bar {
+  min-height: 42px;
+  padding: 5px 7px 5px 10px;
+}
+
+.app[data-ui='replica'] .replica-feature-banner .project-preview-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .replica-feature-banner .project-preview-title span {
+  color: var(--text-tertiary);
+}
+
+.app[data-ui='replica'] .replica-feature-banner .project-preview-actions button {
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary);
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'] .replica-feature-banner .project-preview-actions button:hover {
+  color: var(--text);
+  background: var(--surface-hover-strong);
+}
+
+/* Composer geometry and state are shared by Chat, Workspace and Loop. */
+.app[data-ui='replica'] .composer-box {
+  min-height: 86px;
+  color: var(--text);
+  background: var(--surface-control) !important;
+  border: 1px solid var(--replica-border-default) !important;
+  border-radius: var(--radius-composer) !important;
+  box-shadow: none !important;
+}
+
+.app[data-ui='replica'] .composer-box:focus-within {
+  background: var(--surface-control) !important;
+  border-color: var(--replica-border-strong) !important;
+  box-shadow: 0 0 0 1px var(--replica-border-strong) !important;
+}
+
+.app[data-ui='replica'] .composer-input {
+  min-height: 48px !important;
+  max-height: 120px;
+  padding: 12px 12px 3px !important;
+  font-size: 13px;
+}
+
+.app[data-ui='replica'] .composer-controls {
+  min-height: 36px;
+  padding: 3px 6px 6px !important;
+}
+
+.app[data-ui='replica'] .composer-chip,
+.app[data-ui='replica'] .model-picker-trigger,
+.app[data-ui='replica'] .composer-queue-button {
+  height: 28px;
+  min-height: 28px;
+  border-radius: var(--radius-sm) !important;
+}
+
+.app[data-ui='replica'] .composer-chip.is-active,
+.app[data-ui='replica'] .model-picker.is-open .model-picker-trigger {
+  color: var(--text);
+  background: var(--surface-active) !important;
+  border: 1px solid var(--replica-border-default) !important;
+}
+
+.app[data-ui='replica'] .composer-box .send-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border-radius: var(--radius) !important;
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .composer-dock {
+  padding: 10px 18px 14px !important;
+  background: var(--surface);
+  border-top: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .chat-msg.user {
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.app[data-ui='replica'] .composer-attachment,
+.app[data-ui='replica'] .composer-queue,
+.app[data-ui='replica'] .composer-mention-pop,
+.app[data-ui='replica'] .router-suggestion {
+  border-radius: var(--radius);
+}
+
+/* Shared feature surfaces use the same quiet geometry. */
+.app[data-ui='replica'] .profile-stats,
+.app[data-ui='replica'] .research-composer-box,
+.app[data-ui='replica'] .benchmark-launch,
+.app[data-ui='replica'] .benchmark-library,
+.app[data-ui='replica'] .plugins-search,
+.app[data-ui='replica'] .settings-section > label,
+.app[data-ui='replica'] .settings-field,
+.app[data-ui='replica'] .provider-status-row,
+.app[data-ui='replica'] .settings-toggle-row,
+.app[data-ui='replica'] .settings-path-row,
+.app[data-ui='replica'] .ollama-share-box,
+.app[data-ui='replica'] .remote-provider-card,
+.app[data-ui='replica'] .mission-center {
+  border-color: var(--replica-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .plugin-row,
+.app[data-ui='replica'] .settings-tab,
+.app[data-ui='replica'] .modal-card {
+  border-radius: var(--radius) !important;
+}
+
+/* Benchmark: keep the configuration readable in light mode while the terminal
+   remains an intentionally dark, self-contained surface. */
+.app[data-ui='replica'] .test-config {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.app[data-ui='replica'] .test-terminal-col {
+  --text: #f2f2f2;
+  --text-secondary: #ffffffb3;
+  --text-tertiary: #ffffff80;
+  --text-quaternary: #ffffff61;
+  --text-dim: var(--text-secondary);
+  --text-faint: var(--text-tertiary);
+  --accent: #f2f2f2;
+  --accent-dim: #ffffff12;
+  --border: #ffffff26;
+  --border-soft: #ffffff17;
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.app[data-ui='replica'] .benchmark-comparison-table-wrap,
+.app[data-ui='replica'] .benchmark-library-table-wrap,
+.app[data-ui='replica'] .benchmark-insight-strip,
+.app[data-ui='replica'] .benchmark-matrix-panel,
+.app[data-ui='replica'] .benchmark-latest-feed {
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .benchmark-table-challenge > span,
+.app[data-ui='replica'] .benchmark-comparison-table thead th,
+.app[data-ui='replica'] .benchmark-library-table thead th,
+.app[data-ui='replica'] .benchmark-insight-strip span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .benchmark-lineup > p,
+.app[data-ui='replica'] .benchmark-library-actions,
+.app[data-ui='replica'] .benchmark-insight-strip strong {
+  color: var(--text-secondary);
+}
+
+.app[data-ui='replica'] .benchmark-add-models-menu label {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+.app[data-ui='replica'][data-theme='light'] .benchmark-lineup-pill.is-selected,
+.app[data-ui='replica'][data-theme='light'] .benchmark-add-models-menu label.is-selected,
+.app[data-ui='replica'][data-theme='light'] .benchmark-comparison-table tbody td:is(.is-excellent,.is-strong),
+.app[data-ui='replica'][data-theme='light'] .bench-status.is-pass {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .test-btn.is-stop {
+  color: var(--semantic-danger-text);
+  background: #9f363214;
+  border-color: #9f363252;
+}
+
+.app[data-ui='replica'][data-theme='light'] .bench-score-bar > div {
+  background: #1a1c1f2e;
+}
+
+.app[data-ui='replica'][data-theme='light'] .bench-row.is-muted {
+  opacity: 1;
+}
+
+/* Research: compact segmented status, then calm evidence sections. */
+.app[data-ui='replica'] .research-page {
+  overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.app[data-ui='replica'] .research-page-content {
+  min-height: 0;
+  flex: 1 1 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.app[data-ui='replica'] .research-page-toolbar {
+  min-height: 50px;
+  padding: 6px 20px;
+  background: var(--surface);
+  border-bottom-color: var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .research-surface-switch {
+  padding: 2px;
+  background: var(--surface-soft);
+  border-color: var(--replica-border-subtle);
+  border-radius: var(--radius);
+}
+
+.app[data-ui='replica'] .research-surface-switch button {
+  min-height: 30px;
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'] .research-surface-switch button.is-active {
+  background: var(--surface-control);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .research-toolbar-status i {
+  background: var(--green);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .research-new-tab {
+  min-height: 31px;
+  padding-inline: 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--replica-border-default);
+  border-radius: 5px;
+  font-weight: 550;
+}
+
+.app[data-ui='replica'] .research-new-tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--replica-border-strong);
+}
+
+.app[data-ui='replica'] .research-tabs {
+  border-bottom-color: var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .research-tabs > div {
+  padding-block: 6px;
+}
+
+.app[data-ui='replica'] .research-tabs button {
+  height: 30px;
+  border-radius: 5px;
+}
+
+.app[data-ui='replica'] .research-progress {
+  width: min(1040px, calc(100% - 48px));
+  gap: 22px;
+  padding: 28px 0 80px;
+}
+
+.app[data-ui='replica'] .research-request-bubble span {
+  color: var(--text);
+  background: var(--surface-control);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.app[data-ui='replica'] .research-progress-header h1 {
+  font-size: clamp(23px, 2.7vw, 31px);
+  font-weight: 580;
+}
+
+.app[data-ui='replica'] .research-icon-action,
+.app[data-ui='replica'] .research-status-badge {
+  border-color: var(--replica-border-subtle);
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.app[data-ui='replica'] .research-status-badge:is(.is-planning,.is-researching,.is-verifying,.is-synthesizing,.is-exporting) i {
+  background: var(--green);
+  animation: none;
+}
+
+.app[data-ui='replica'] .research-phase-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--surface-card);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+  scrollbar-width: thin;
+}
+
+.app[data-ui='replica'] .research-phase-rail {
+  min-width: 660px;
+  padding: 0;
+  border: 0;
+}
+
+.app[data-ui='replica'] .research-phase-rail::before {
+  display: none;
+}
+
+.app[data-ui='replica'] .research-phase {
+  min-height: 52px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--replica-border-subtle);
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .research-phase:last-child {
+  border-right: 0;
+}
+
+.app[data-ui='replica'] .research-phase-dot,
+.app[data-ui='replica'] .research-phase.is-active .research-phase-dot {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--text-tertiary);
+  background: var(--surface);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  animation: none;
+}
+
+.app[data-ui='replica'] .research-phase.is-complete {
+  color: var(--text-secondary);
+}
+
+.app[data-ui='replica'] .research-phase.is-complete .research-phase-dot {
+  color: var(--green);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+}
+
+.app[data-ui='replica'] .research-phase.is-active {
+  color: var(--text);
+  background: var(--surface-hover-strong);
+  border-color: var(--replica-border-subtle);
+  box-shadow: inset 0 -2px var(--green);
+}
+
+.app[data-ui='replica'] .research-phase.is-active .research-phase-dot {
+  color: var(--green);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+}
+
+.app[data-ui='replica'] .research-phase-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .research-phase-copy strong {
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+}
+
+.app[data-ui='replica'] .research-phase-copy small {
+  display: block;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+
+.app[data-ui='replica'] .research-metrics,
+.app[data-ui='replica'] .research-plan-list,
+.app[data-ui='replica'] .research-event-list,
+.app[data-ui='replica'] .research-source-panel,
+.app[data-ui='replica'] .research-artifact-list {
+  background: var(--surface-soft);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .research-plan-row.is-active {
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .research-plan-row.is-active .research-plan-state,
+.app[data-ui='replica'] .research-plan-row.is-complete .research-plan-state {
+  color: var(--text-secondary);
+  background: var(--surface-control);
+}
+
+.app[data-ui='replica'] .research-event-list {
+  max-height: clamp(280px, 42vh, 440px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  scrollbar-gutter: stable;
+}
+
+.app[data-ui='replica'] .research-event {
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'] .research-event.is-current {
+  background: var(--surface-card);
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .research-event-marker,
+.app[data-ui='replica'] .research-event.is-current .research-event-marker {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  background: var(--text-tertiary);
+  border: 1px solid var(--surface-soft);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .research-event.is-current .research-event-marker,
+.app[data-ui='replica'] .research-event:is(.is-source_found,.is-finding_added,.is-source_verified,.is-artifact_created,.is-completed) .research-event-marker {
+  background: var(--green);
+}
+
+.app[data-ui='replica'] .research-event-step em {
+  color: var(--green);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-event-step em,
+.app[data-ui='replica'][data-theme='light'] .research-source-list em {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-phase.is-complete .research-phase-dot,
+.app[data-ui='replica'][data-theme='light'] .research-phase.is-active .research-phase-dot {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-status {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface-card) 94%, var(--research-state-color) 6%);
+  border-color: color-mix(in srgb, var(--research-state-color) 42%, var(--replica-border-default));
+  box-shadow: 0 8px 22px #1a1c1f14, inset 0 1px #ffffff;
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-status-symbol {
+  background: color-mix(in srgb, var(--research-state-color) 12%, var(--surface-control));
+  box-shadow: none;
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-status:is(.is-planning,.is-researching,.is-verifying,.is-synthesizing,.is-exporting,.is-completed) .research-book-status-label {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-status.is-error .research-book-status-label {
+  color: var(--semantic-danger-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-status.is-paused .research-book-status-label {
+  color: var(--semantic-warning-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .research-book-cover::after {
+  background: #1a1c1f14;
+  box-shadow: 2px 0 7px #1a1c1f1f;
+}
+
+.app[data-ui='replica'] .research-composer-box,
+.app[data-ui='replica'] .research-composer-selects select,
+.app[data-ui='replica'] .research-output-options {
+  border-radius: var(--radius);
+}
+
+.app[data-ui='replica'] .research-duration-control input[type='range']::-webkit-slider-thumb {
+  border-radius: var(--radius-sm);
+  background: var(--green);
+  box-shadow: 0 0 0 1px var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .research-submit {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  transform: none;
+}
+
+/* Loop: one compact toolbar, a deliberate cycle rail and a readable event stream. */
+.app[data-ui='replica'] .loop-page-v2 {
+  --loop-reading-width: none;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--toolbar-height) 0 0 !important;
+  overflow: hidden;
+}
+
+.app[data-ui='replica'] .loop-v3-goalbar {
+  min-height: 44px;
+  display: flex;
+  flex: 0 0 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-v3-goalbar > .loop-eyebrow {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font: 9px/1 var(--replica-font-mono);
+  letter-spacing: .12em;
+}
+
+.app[data-ui='replica'] .loop-switcher {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.app[data-ui='replica'] .loop-switcher::-webkit-scrollbar {
+  display: none;
+}
+
+.app[data-ui='replica'] .loop-switcher button {
+  width: auto;
+  min-width: 116px;
+  max-width: 220px;
+  height: 30px;
+  flex: 0 1 220px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.app[data-ui='replica'] .loop-switcher button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .loop-switcher button.is-selected {
+  color: var(--text);
+  background: var(--surface-control);
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .loop-switcher button > em {
+  display: none;
+}
+
+.app[data-ui='replica'] .loop-switcher button > i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+}
+
+.app[data-ui='replica'] .loop-new-button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--replica-border-default);
+  border-radius: 5px !important;
+}
+
+.app[data-ui='replica'] .loop-new-button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--replica-border-strong);
+}
+
+.app[data-ui='replica'] .loop-v2-surface {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .loop-v2-detail,
+.app[data-ui='replica'][data-sidebar-collapsed='true'] .loop-v2-detail {
+  width: min(1120px, 100%);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.app[data-ui='replica'] .loop-v2-goal-head {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-v2-goal-head > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app[data-ui='replica'] .loop-v2-goal-head h2 {
+  max-width: 760px;
+  margin: 5px 0 0;
+  overflow: hidden;
+  display: -webkit-box;
+  font-size: 18px;
+  font-weight: 580;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.app[data-ui='replica'] .loop-v2-goal-head p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+}
+
+.app[data-ui='replica'] .loop-status {
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .loop-status i,
+.app[data-ui='replica'] .loop-v2-current-orb {
+  background: var(--green);
+  box-shadow: none;
+  animation: none;
+}
+
+.app[data-ui='replica'] .loop-status:is(.is-error,.is-needs_review) {
+  color: var(--danger);
+}
+
+.app[data-ui='replica'] .loop-status:is(.is-error,.is-needs_review) i {
+  background: var(--danger);
+}
+
+.app[data-ui='replica'] .loop-status.is-paused {
+  color: var(--warning);
+}
+
+.app[data-ui='replica'] .loop-status.is-paused i {
+  background: var(--warning);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-status:is(.is-running,.is-completed) {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-status:is(.is-error,.is-needs_review) {
+  color: var(--semantic-danger-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-status.is-paused {
+  color: var(--semantic-warning-text);
+}
+
+.app[data-ui='replica'] .loop-v3-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-v3-cycle {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  min-width: 0;
+  align-self: start;
+  padding: 16px 16px 20px 0;
+  background: var(--surface);
+  border-right: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-v3-activity {
+  min-width: 0;
+  padding: 16px 0 24px 20px;
+}
+
+.app[data-ui='replica'] .loop-v3-section-label {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font: 10px/1 var(--replica-font-mono);
+  letter-spacing: .12em;
+}
+
+.app[data-ui='replica'] .loop-v3-section-label small {
+  color: var(--text-tertiary);
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.app[data-ui='replica'] .loop-v2-steps {
+  padding: 6px 0 0;
+  border: 0;
+}
+
+.app[data-ui='replica'] .loop-cycle-simple {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.app[data-ui='replica'] .loop-step-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app[data-ui='replica'] .loop-step-dots::before {
+  display: none;
+}
+
+.app[data-ui='replica'] .loop-step-dots li {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  justify-items: stretch;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'] .loop-step-dots li > span {
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  background: var(--surface);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-sm);
+}
+
+.app[data-ui='replica'] .loop-step-dots li > small {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+.app[data-ui='replica'] .loop-step-dots li.is-complete > span {
+  color: var(--green);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+}
+
+.app[data-ui='replica'] .loop-step-dots li.is-current {
+  background: var(--surface-card);
+  box-shadow: inset 2px 0 var(--green);
+}
+
+.app[data-ui='replica'] .loop-step-dots li.is-current > span {
+  color: var(--green);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+  box-shadow: none;
+  animation: none;
+}
+
+.app[data-ui='replica'] .loop-step-dots li.is-blocked > span {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.app[data-ui='replica'] .loop-cycle-simple.is-blocked .loop-cycle-count {
+  color: var(--danger);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-step-dots li:is(.is-complete,.is-current) > span {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'] .loop-cycle-count {
+  padding-left: 8px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .loop-v3-activity > .project-preview {
+  margin: 6px 0 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.app[data-ui='replica'] .loop-chat-thread {
+  min-height: 240px;
+  gap: 18px;
+  padding: 12px 0 8px;
+}
+
+.app[data-ui='replica'] .loop-user-message {
+  max-width: min(72%, 620px);
+  padding: 9px 12px;
+  color: var(--text);
+  background: var(--surface-control);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.app[data-ui='replica'] .loop-assistant-message,
+.app[data-ui='replica'] .loop-assistant-state p {
+  width: 100%;
+  max-width: none;
+}
+
+.app[data-ui='replica'] .loop-assistant-message.is-running .loop-assistant-state strong {
+  color: var(--text);
+  background: none;
+  animation: none;
+}
+
+.app[data-ui='replica'] .loop-chat-events {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 52px 14px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step + .loop-progress-step {
+  border-top: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step > time {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--text-tertiary);
+  font: 9.5px/1.5 var(--replica-font-mono);
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step > i {
+  grid-column: 2;
+  grid-row: 1;
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step > div {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step strong {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.app[data-ui='replica'] .loop-chat-events .loop-progress-step p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.app[data-ui='replica'] .loop-outcome {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-soft) 94%, var(--green) 6%);
+  border: 0;
+  border-top: 1px solid var(--accent-border);
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .loop-outcome > span {
+  color: var(--green);
+  font-size: 9.5px;
+}
+
+.app[data-ui='replica'] .loop-outcome > strong {
+  overflow: hidden;
+  display: -webkit-box;
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.app[data-ui='replica'] .loop-outcome > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.app[data-ui='replica'] .loop-outcome.is-error {
+  background: color-mix(in srgb, var(--surface-soft) 94%, var(--danger) 6%);
+  border-top-color: color-mix(in srgb, var(--danger) 42%, var(--replica-border-default));
+}
+
+.app[data-ui='replica'] .loop-outcome.is-error > span {
+  color: var(--danger);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-outcome:not(.is-error) > span {
+  color: var(--semantic-success-text);
+}
+
+.app[data-ui='replica'][data-theme='light'] .loop-outcome.is-error > span {
+  color: var(--semantic-danger-text);
+}
+
+.app[data-ui='replica'] .loop-page-v2 .loop-focus-composer {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  width: 100%;
+  margin: auto 0 0;
+  padding: 10px 0 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, transparent), var(--surface) 24px);
+  border-top: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .loop-page-v2 .loop-focus-composer .composer-box {
+  min-height: 74px;
+}
+
+.app[data-ui='replica'] .loop-page-v2 .loop-focus-composer .composer-input {
+  min-height: 38px !important;
+  padding-top: 9px !important;
+}
+
+.app[data-ui='replica'] .loop-v2-create {
+  width: min(680px, calc(100% - 48px));
+  margin: auto;
+  padding: 48px 0;
+}
+
+@media (max-width: 900px) {
+  .app[data-ui='replica'] .replica-suggestion-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app[data-ui='replica'] .replica-suggestion-card:nth-child(4) {
+    display: grid;
+  }
+
+  .app[data-ui='replica'] .loop-v2-detail,
+  .app[data-ui='replica'][data-sidebar-collapsed='true'] .loop-v2-detail {
+    padding-inline: 18px;
+  }
+
+  .app[data-ui='replica'] .loop-v3-workspace {
+    display: block;
+  }
+
+  .app[data-ui='replica'] .loop-v3-cycle {
+    position: static;
+    padding: 14px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--replica-border-subtle);
+  }
+
+  .app[data-ui='replica'] .loop-v3-activity {
+    padding-left: 0;
+  }
+
+  .app[data-ui='replica'] .loop-step-dots {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(64px, 1fr));
+    gap: 2px;
+    overflow-x: auto;
+  }
+
+  .app[data-ui='replica'] .loop-step-dots li {
+    display: flex;
+    min-height: 52px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .app[data-ui='replica'] .loop-step-dots li.is-current {
+    box-shadow: inset 0 -2px var(--green);
+  }
+
+  .app[data-ui='replica'] .loop-cycle-count {
+    padding-left: 0;
+    text-align: right;
+  }
+}
+
+@media (max-width: 720px) {
+  .app[data-ui='replica'] .benchmark-comparison-table-wrap,
+  .app[data-ui='replica'] .benchmark-library-table-wrap {
+    overflow-x: hidden;
+  }
+
+  .app[data-ui='replica'] .benchmark-comparison-table,
+  .app[data-ui='replica'] .benchmark-library-table {
+    min-width: 100%;
+  }
+
+  .app[data-ui='replica'] .benchmark-comparison-table th,
+  .app[data-ui='replica'] .benchmark-comparison-table td,
+  .app[data-ui='replica'] .benchmark-library-table th,
+  .app[data-ui='replica'] .benchmark-library-table td {
+    overflow: hidden;
+    padding-inline: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .app[data-ui='replica'] .replica-home {
+    padding: 20px 14px;
+  }
+
+  .app[data-ui='replica'] .replica-suggestion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app[data-ui='replica'] .replica-suggestion-card {
+    min-height: 42px;
+  }
+
+  .app[data-ui='replica'] .research-progress {
+    width: min(100% - 28px, 1040px);
+  }
+
+  .app[data-ui='replica'] .loop-v3-goalbar {
+    padding-inline: 10px;
+  }
+
+  .app[data-ui='replica'] .loop-v3-goalbar > .loop-eyebrow {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .loop-v2-detail,
+  .app[data-ui='replica'][data-sidebar-collapsed='true'] .loop-v2-detail {
+    padding-inline: 14px;
+  }
+
+  .app[data-ui='replica'] .loop-v2-goal-head {
+    min-height: 0;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding-block: 14px;
+  }
+
+  .app[data-ui='replica'] .loop-v2-time {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .app[data-ui='replica'] .loop-v2-time > span {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .loop-chat-events .loop-progress-step {
+    grid-template-columns: 42px 10px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .app[data-ui='replica'] .loop-outcome {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .app[data-ui='replica'] .loop-outcome > p {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .app[data-ui='replica'] .benchmark-comparison-table th:nth-child(3),
+  .app[data-ui='replica'] .benchmark-comparison-table td:nth-child(3),
+  .app[data-ui='replica'] .benchmark-library-table th:nth-child(2),
+  .app[data-ui='replica'] .benchmark-library-table td:nth-child(2),
+  .app[data-ui='replica'] .benchmark-library-table th:nth-child(4),
+  .app[data-ui='replica'] .benchmark-library-table td:nth-child(4) {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .benchmark-comparison-table th:first-child {
+    width: 46%;
+  }
+
+  .app[data-ui='replica'] .benchmark-library-table th:first-child {
+    width: 52%;
+  }
+
+  .app[data-ui='replica'] .benchmark-insight-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app[data-ui='replica'] .benchmark-insight-strip > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--replica-border-default);
+  }
+
+  .app[data-ui='replica'] .benchmark-insight-strip > div:nth-child(4) {
+    border-top: 1px solid var(--replica-border-default);
+  }
+}
+
+@media (max-height: 720px) and (min-width: 677px) {
+  .app[data-ui='replica'] .replica-home {
+    place-items: start center;
+    padding-block: 24px;
+  }
+
+  .app[data-ui='replica'] .replica-home > .ws-hero-inner,
+  .app[data-ui='replica'] .replica-home > .ws-hero-inner.is-wide {
+    margin-block: auto;
   }
 }
 

@@ -1,14 +1,50 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
 import { spawn, type ChildProcess } from 'child_process'
-import { existsSync } from 'fs'
+import { createReadStream, existsSync } from 'fs'
 import { readFile, realpath, stat } from 'fs/promises'
-import { createServer } from 'net'
-import { basename, join, resolve } from 'path'
+import { createServer as createHttpServer, type Server as HttpServer, type ServerResponse } from 'http'
+import { createServer as createNetServer } from 'net'
+import { homedir } from 'os'
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'path'
 
 const SCRIPT_PRIORITY = ['dev', 'start', 'serve', 'preview'] as const
+const STATIC_SCRIPT = 'static'
 const MAX_LOG_LINES = 160
 const MAX_CAPTURE_WIDTH = 1440
+const PREVIEW_READY_TIMEOUT_MS = 8_000
+const PREVIEW_READY_POLL_MS = 100
+const STATIC_MIME_TYPES = new Map<string, string>([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.txt', 'text/plain; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.ico', 'image/x-icon'],
+  ['.avif', 'image/avif'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+  ['.ttf', 'font/ttf'],
+  ['.otf', 'font/otf'],
+  ['.wasm', 'application/wasm'],
+  ['.mp3', 'audio/mpeg'],
+  ['.mp4', 'video/mp4'],
+  ['.webm', 'video/webm']
+])
+
+export type ProjectPreviewBrowser = 'default' | 'chrome'
+export type OpenedProjectPreviewStatus = ProjectPreviewStatus & { url: string }
+export interface WorkspacePreviewOpenRequest {
+  workspacePath: unknown
+  browser?: ProjectPreviewBrowser
+}
 
 export interface ProjectPreviewInspection {
   projectPath: string
@@ -33,14 +69,15 @@ export interface ProjectPreviewStatus {
 }
 
 interface PreviewSession extends ProjectPreviewStatus {
-  process: ChildProcess
+  process: ChildProcess | null
+  staticServer: HttpServer | null
   previewWindow: BrowserWindow | null
 }
 
 const sessions = new Map<string, PreviewSession>()
 
 function publicStatus(session: PreviewSession): ProjectPreviewStatus {
-  const { process: _process, previewWindow: _previewWindow, ...status } = session
+  const { process: _process, staticServer: _staticServer, previewWindow: _previewWindow, ...status } = session
   return { ...status, logs: [...status.logs] }
 }
 
@@ -60,6 +97,20 @@ async function canonicalProjectPath(input: unknown): Promise<string> {
   return canonical
 }
 
+function isContainedPath(root: string, target: string): boolean {
+  const child = relative(root, target)
+  return child === '' || (!isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`))
+}
+
+async function canonicalStaticIndex(root: string): Promise<string | null> {
+  try {
+    const index = await realpath(join(root, 'index.html'))
+    return isContainedPath(root, index) && (await stat(index)).isFile() ? index : null
+  } catch {
+    return null
+  }
+}
+
 function packageManagerFor(root: string): ProjectPreviewInspection['packageManager'] {
   if (existsSync(join(root, 'pnpm-lock.yaml'))) return 'pnpm'
   if (existsSync(join(root, 'yarn.lock'))) return 'yarn'
@@ -71,6 +122,7 @@ function packageManagerFor(root: string): ProjectPreviewInspection['packageManag
 export async function inspectProjectPreview(projectPath: unknown): Promise<ProjectPreviewInspection> {
   const root = await canonicalProjectPath(projectPath)
   const packageManager = packageManagerFor(root)
+  const staticIndex = await canonicalStaticIndex(root)
   let scripts: string[] = []
   try {
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { scripts?: Record<string, unknown> }
@@ -78,29 +130,154 @@ export async function inspectProjectPreview(projectPath: unknown): Promise<Proje
   } catch {
     scripts = []
   }
-  const suggestedScript = SCRIPT_PRIORITY.find((name) => scripts.includes(name)) ?? null
+  const declaredScript = SCRIPT_PRIORITY.find((name) => scripts.includes(name)) ?? null
+  const suggestedScript = declaredScript ?? (staticIndex ? STATIC_SCRIPT : null)
   return {
     projectPath: root,
     projectName: basename(root),
     packageManager,
     scripts,
     suggestedScript,
-    runnable: Boolean(packageManager && suggestedScript),
-    note: suggestedScript
+    runnable: Boolean((packageManager && declaredScript) || staticIndex),
+    note: declaredScript
       ? `Ready to run ${packageManager} ${packageManager === 'npm' ? 'run ' : ''}${suggestedScript}.`
-      : 'Add a dev, start, serve, or preview script to enable the live project stream.'
+      : staticIndex
+        ? 'Ready to serve index.html on a private loopback preview.'
+        : 'Add an index.html or a dev, start, serve, or preview script to enable the live project stream.'
   }
 }
 
 async function availablePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
-    const server = createServer()
+    const server = createNetServer()
     server.unref()
     server.once('error', reject)
     server.listen(0, '127.0.0.1', () => {
       const address = server.address()
       const port = typeof address === 'object' && address ? address.port : 0
       server.close(() => port ? resolvePort(port) : reject(new Error('Could not reserve a preview port.')))
+    })
+  })
+}
+
+function endStaticResponse(response: ServerResponse, status: number, message: string): void {
+  response.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer'
+  })
+  response.end(message)
+}
+
+async function resolveStaticRequest(root: string, requestUrl: string): Promise<{ path: string; size: number; mimeType: string }> {
+  const rawPath = requestUrl.split(/[?#]/, 1)[0] || '/'
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(rawPath)
+  } catch {
+    throw new Error('malformed')
+  }
+  if (decoded.includes('\0') || decoded.includes('\\')) throw new Error('forbidden')
+
+  const segments = decoded.split('/').filter(Boolean)
+  if (segments.some((segment) => segment === '.' || segment === '..' || segment.startsWith('.'))) {
+    throw new Error('forbidden')
+  }
+  const requested = resolve(root, ...segments)
+  if (!isContainedPath(root, requested)) throw new Error('forbidden')
+
+  let canonical: string
+  try {
+    canonical = await realpath(requested)
+  } catch {
+    throw new Error('missing')
+  }
+  if (!isContainedPath(root, canonical)) throw new Error('forbidden')
+
+  let fileStat = await stat(canonical)
+  if (fileStat.isDirectory()) {
+    try {
+      canonical = await realpath(join(canonical, 'index.html'))
+      if (!isContainedPath(root, canonical)) throw new Error('forbidden')
+      fileStat = await stat(canonical)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'forbidden') throw error
+      throw new Error('missing')
+    }
+  }
+  if (!fileStat.isFile()) throw new Error('missing')
+
+  const mimeType = STATIC_MIME_TYPES.get(extname(canonical).toLowerCase())
+  if (!mimeType) throw new Error('forbidden')
+  return { path: canonical, size: fileStat.size, mimeType }
+}
+
+async function serveStaticRequest(
+  root: string,
+  method: string | undefined,
+  requestUrl: string | undefined,
+  response: ServerResponse
+): Promise<void> {
+  if (method !== 'GET' && method !== 'HEAD') {
+    response.setHeader('Allow', 'GET, HEAD')
+    endStaticResponse(response, 405, 'Method not allowed')
+    return
+  }
+
+  let file: Awaited<ReturnType<typeof resolveStaticRequest>>
+  try {
+    file = await resolveStaticRequest(root, requestUrl ?? '/')
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'missing'
+    if (reason === 'malformed') endStaticResponse(response, 400, 'Malformed request path')
+    else if (reason === 'forbidden') endStaticResponse(response, 403, 'Forbidden')
+    else endStaticResponse(response, 404, 'Not found')
+    return
+  }
+
+  response.writeHead(200, {
+    'Content-Type': file.mimeType,
+    'Content-Length': file.size,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'Cross-Origin-Resource-Policy': 'same-origin'
+  })
+  if (method === 'HEAD') {
+    response.end()
+    return
+  }
+  const stream = createReadStream(file.path)
+  stream.once('error', () => response.destroy())
+  response.once('close', () => stream.destroy())
+  stream.pipe(response)
+}
+
+async function startStaticServer(root: string): Promise<{ server: HttpServer; url: string }> {
+  const server = createHttpServer((request, response) => {
+    void serveStaticRequest(root, request.method, request.url, response)
+      .catch(() => {
+        if (!response.headersSent) endStaticResponse(response, 500, 'Preview server error')
+        else response.destroy()
+      })
+  })
+  server.unref()
+  return new Promise((resolveServer, reject) => {
+    const fail = (error: Error): void => {
+      server.close()
+      reject(error)
+    }
+    server.once('error', fail)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', fail)
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : 0
+      if (!port) {
+        fail(new Error('Could not start the static preview server.'))
+        return
+      }
+      resolveServer({ server, url: `http://127.0.0.1:${port}/` })
     })
   })
 }
@@ -156,15 +333,34 @@ async function loadPreview(session: PreviewSession): Promise<void> {
       await new Promise((resolveWait) => setTimeout(resolveWait, 350))
     }
   }
+  session.state = 'error'
   session.error = 'The process started, but its local preview did not become reachable.'
 }
 
-async function startProject(input: unknown): Promise<ProjectPreviewStatus> {
+async function waitForPreviewReady(session: PreviewSession, timeoutMs = PREVIEW_READY_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (session.state === 'running') return
+    if (session.state === 'error') throw new Error(session.error ?? 'The project preview failed to start.')
+    if (session.state === 'stopped') throw new Error('The project preview stopped before it became ready.')
+    await new Promise((resolveWait) => setTimeout(resolveWait, PREVIEW_READY_POLL_MS))
+  }
+  throw new Error('The project preview did not become ready in time.')
+}
+
+export async function startProjectPreview(input: unknown): Promise<ProjectPreviewStatus> {
   const args = input && typeof input === 'object' ? input as { projectPath?: unknown; script?: unknown } : {}
   const inspection = await inspectProjectPreview(args.projectPath)
-  if (!inspection.packageManager || !inspection.suggestedScript) throw new Error(inspection.note)
+  if (!inspection.suggestedScript) throw new Error(inspection.note)
   const script = typeof args.script === 'string' ? args.script : inspection.suggestedScript
-  if (!SCRIPT_PRIORITY.includes(script as (typeof SCRIPT_PRIORITY)[number]) || !inspection.scripts.includes(script)) {
+  const staticPreview = script === STATIC_SCRIPT
+  if (staticPreview) {
+    if (!(await canonicalStaticIndex(inspection.projectPath))) throw new Error('A contained index.html is required for a static preview.')
+  } else if (
+    !inspection.packageManager ||
+    !SCRIPT_PRIORITY.includes(script as (typeof SCRIPT_PRIORITY)[number]) ||
+    !inspection.scripts.includes(script)
+  ) {
     throw new Error('Only a declared dev, start, serve, or preview script can be launched.')
   }
 
@@ -172,8 +368,37 @@ async function startProject(input: unknown): Promise<ProjectPreviewStatus> {
     if (session.projectPath === inspection.projectPath && (session.state === 'starting' || session.state === 'running')) return publicStatus(session)
   }
 
+  if (staticPreview) {
+    const runtime = await startStaticServer(inspection.projectPath)
+    const session: PreviewSession = {
+      id: randomUUID(),
+      projectPath: inspection.projectPath,
+      projectName: inspection.projectName,
+      script: STATIC_SCRIPT,
+      state: 'starting',
+      url: runtime.url,
+      startedAt: Date.now(),
+      logs: ['Serving index.html on a private loopback preview.'],
+      process: null,
+      staticServer: runtime.server,
+      previewWindow: null
+    }
+    sessions.set(session.id, session)
+    runtime.server.once('error', (error) => {
+      if (session.state === 'stopped') return
+      session.state = 'error'
+      session.error = error.message
+      addLog(session, error.message)
+    })
+    runtime.server.once('close', () => {
+      if (session.state !== 'stopped' && session.state !== 'error') session.state = 'stopped'
+    })
+    void loadPreview(session)
+    return publicStatus(session)
+  }
+
   const port = await availablePort()
-  const command = commandFor(inspection.packageManager, script)
+  const command = commandFor(inspection.packageManager!, script)
   const child = spawn(command.command, command.args, {
     cwd: inspection.projectPath,
     env: { ...process.env, PORT: String(port), BROWSER: 'none', HOST: '127.0.0.1' },
@@ -191,6 +416,7 @@ async function startProject(input: unknown): Promise<ProjectPreviewStatus> {
     startedAt: Date.now(),
     logs: [],
     process: child,
+    staticServer: null,
     previewWindow: null
   }
   sessions.set(session.id, session)
@@ -218,6 +444,99 @@ function requireSession(id: unknown): PreviewSession {
   return session
 }
 
+export async function activeProjectPreview(projectPath: unknown): Promise<ProjectPreviewStatus | null> {
+  const root = await canonicalProjectPath(projectPath)
+  const session = [...sessions.values()].find((candidate) =>
+    candidate.projectPath === root && (candidate.state === 'starting' || candidate.state === 'running')
+  )
+  return session ? publicStatus(session) : null
+}
+
+function chromeExecutables(): string[] {
+  if (process.platform === 'darwin') {
+    return [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      join(homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome'),
+      '/Applications/Chromium.app/Contents/MacOS/Chromium'
+    ]
+  }
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env['PROGRAMFILES'],
+      process.env['PROGRAMFILES(X86)'],
+      process.env['LOCALAPPDATA']
+    ].filter((root): root is string => Boolean(root))
+    return roots.flatMap((root) => [
+      join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      join(root, 'Chromium', 'Application', 'chrome.exe')
+    ])
+  }
+  return [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium'
+  ]
+}
+
+async function openInChrome(url: string): Promise<void> {
+  const executable = chromeExecutables().find((candidate) => existsSync(candidate))
+  if (!executable) throw new Error('Google Chrome or Chromium was not found in a known install location.')
+  await new Promise<void>((resolveOpen, reject) => {
+    const child = spawn(executable, [url], {
+      detached: true,
+      shell: false,
+      stdio: 'ignore'
+    })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolveOpen()
+    })
+  })
+}
+
+export async function openProjectPreview(
+  id: unknown,
+  browser: ProjectPreviewBrowser = 'default'
+): Promise<boolean> {
+  if (browser !== 'default' && browser !== 'chrome') throw new Error('Unsupported preview browser.')
+  const session = requireSession(id)
+  await waitForPreviewReady(session)
+  if (!session.url || !isLoopbackUrl(session.url)) throw new Error('No local preview URL is available yet.')
+  if (browser === 'chrome') await openInChrome(session.url)
+  else await shell.openExternal(session.url)
+  return true
+}
+
+export function openWorkspacePreview(
+  projectPath: unknown,
+  browser?: ProjectPreviewBrowser
+): Promise<OpenedProjectPreviewStatus>
+export function openWorkspacePreview(input: WorkspacePreviewOpenRequest): Promise<OpenedProjectPreviewStatus>
+export async function openWorkspacePreview(
+  projectPathOrInput: unknown,
+  browser: ProjectPreviewBrowser = 'default'
+): Promise<OpenedProjectPreviewStatus> {
+  const objectInput = projectPathOrInput && typeof projectPathOrInput === 'object'
+    ? projectPathOrInput as Partial<WorkspacePreviewOpenRequest>
+    : null
+  const projectPath = objectInput && 'workspacePath' in objectInput
+    ? objectInput.workspacePath
+    : projectPathOrInput
+  const requestedBrowser = objectInput?.browser ?? browser
+  if (requestedBrowser !== 'default' && requestedBrowser !== 'chrome') throw new Error('Unsupported preview browser.')
+
+  const root = await canonicalProjectPath(projectPath)
+  const active = await activeProjectPreview(root)
+  const status = active ?? await startProjectPreview({ projectPath: root })
+  await openProjectPreview(status.id, requestedBrowser)
+  const opened = publicStatus(requireSession(status.id))
+  if (!opened.url || !isLoopbackUrl(opened.url)) throw new Error('No local preview URL is available yet.')
+  return { ...opened, url: opened.url }
+}
+
 async function captureProject(id: unknown): Promise<{ status: ProjectPreviewStatus; dataUrl: string | null; width: number; height: number }> {
   const session = requireSession(id)
   const previewWindow = session.previewWindow
@@ -229,42 +548,43 @@ async function captureProject(id: unknown): Promise<{ status: ProjectPreviewStat
   return { status: publicStatus(session), dataUrl: resized.toDataURL(), width: bounds.width, height: bounds.height }
 }
 
-async function stopProject(id: unknown): Promise<ProjectPreviewStatus> {
+export async function stopProjectPreview(id: unknown): Promise<ProjectPreviewStatus> {
   const session = requireSession(id)
   session.state = 'stopped'
   if (session.previewWindow && !session.previewWindow.isDestroyed()) session.previewWindow.destroy()
-  if (session.process.pid && !session.process.killed) {
+  const child = session.process
+  session.process = null
+  if (child?.pid && !child.killed) {
     try {
-      if (process.platform === 'win32') session.process.kill('SIGTERM')
-      else process.kill(-session.process.pid, 'SIGTERM')
+      if (process.platform === 'win32') child.kill('SIGTERM')
+      else process.kill(-child.pid, 'SIGTERM')
     } catch {
-      session.process.kill('SIGTERM')
+      child.kill('SIGTERM')
     }
+  }
+  const server = session.staticServer
+  session.staticServer = null
+  if (server) {
+    await new Promise<void>((resolveClose) => {
+      server.close(() => resolveClose())
+      server.closeAllConnections()
+    })
   }
   return publicStatus(session)
 }
 
 export function stopAllProjectPreviews(): void {
-  for (const id of sessions.keys()) void stopProject(id)
+  for (const id of sessions.keys()) void stopProjectPreview(id)
 }
 
 export function registerProjectPreviewIpc(): void {
   ipcMain.handle('projectPreview:inspect', (_event, path: unknown) => inspectProjectPreview(path))
-  ipcMain.handle('projectPreview:start', (_event, input: unknown) => startProject(input))
+  ipcMain.handle('projectPreview:start', (_event, input: unknown) => startProjectPreview(input))
   ipcMain.handle('projectPreview:status', (_event, id: unknown) => publicStatus(requireSession(id)))
-  ipcMain.handle('projectPreview:active', async (_event, path: unknown) => {
-    const projectPath = await canonicalProjectPath(path)
-    const session = [...sessions.values()].find((candidate) => candidate.projectPath === projectPath && (candidate.state === 'starting' || candidate.state === 'running'))
-    return session ? publicStatus(session) : null
-  })
+  ipcMain.handle('projectPreview:active', (_event, path: unknown) => activeProjectPreview(path))
   ipcMain.handle('projectPreview:capture', (_event, id: unknown) => captureProject(id))
-  ipcMain.handle('projectPreview:stop', (_event, id: unknown) => stopProject(id))
-  ipcMain.handle('projectPreview:open', async (_event, id: unknown) => {
-    const session = requireSession(id)
-    if (!session.url || !isLoopbackUrl(session.url)) throw new Error('No local preview URL is available yet.')
-    await shell.openExternal(session.url)
-    return true
-  })
+  ipcMain.handle('projectPreview:stop', (_event, id: unknown) => stopProjectPreview(id))
+  ipcMain.handle('projectPreview:open', (_event, id: unknown) => openProjectPreview(id))
   ipcMain.handle('projectPreview:reveal', async (_event, path: unknown) => {
     const projectPath = await canonicalProjectPath(path)
     shell.showItemInFolder(projectPath)

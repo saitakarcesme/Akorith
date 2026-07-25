@@ -131,7 +131,7 @@ export class OpenCodeProvider implements Provider {
     const workspacePrompt = opts.workingDirectory
       ? opts.intent === 'plan'
         ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
-        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts; never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
+        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested browser launch after this turn, so do not try to run an app-opening shell command or give the user a manual browser command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     args.push(workspacePrompt)
 
@@ -200,6 +200,14 @@ export class OpenCodeProvider implements Provider {
       }
       throw new Error('OpenCode completed without a text response. Check its workspace permissions and try again.')
     }
+    if (parsed.toolErrors.length > 0) {
+      opts.onActivity?.({
+        kind: 'warning',
+        label: 'A workspace tool was blocked',
+        detail: parsed.toolErrors.at(-1),
+        status: 'error'
+      })
+    }
     onToken(text)
 
     return {
@@ -213,7 +221,11 @@ export class OpenCodeProvider implements Provider {
             estimated: true
           },
       model: opts.model ?? 'default',
-      raw: { stdout: res.stdout.slice(-2000), stderr: res.stderr.slice(-2000) }
+      raw: {
+        stdout: res.stdout.slice(-2000),
+        stderr: res.stderr.slice(-2000),
+        toolErrors: parsed.toolErrors
+      }
     }
   }
 }
