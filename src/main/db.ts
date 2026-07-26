@@ -27,7 +27,7 @@ const MAX_PROJECT_META = 48
 const SAFE_PROJECT_DIR_NAME = /^[^/\\:*?"<>|\0\r\n]{1,120}$/
 // Bump whenever initDb adds or changes a table, column, index, or backfill.
 // The version is written only after every idempotent migration succeeds.
-const DB_SCHEMA_VERSION = 1
+const DB_SCHEMA_VERSION = 2
 
 interface StoredGeneratedFile {
   path: string
@@ -162,6 +162,55 @@ export function initDb(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_benchmark_entries_updated ON benchmark_entries(updated_at);
     CREATE INDEX IF NOT EXISTS idx_benchmark_entries_category ON benchmark_entries(category, updated_at);
+    CREATE TABLE IF NOT EXISTS benchmark_runs (
+      id                 TEXT PRIMARY KEY,
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL,
+      started_at         INTEGER,
+      completed_at       INTEGER,
+      status             TEXT NOT NULL CHECK (
+        status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')
+      ),
+      challenge_id       TEXT NOT NULL,
+      challenge_label    TEXT NOT NULL,
+      category           TEXT NOT NULL,
+      metric             TEXT NOT NULL,
+      source             TEXT,
+      config_json        TEXT NOT NULL DEFAULT '{}',
+      parallel_execution INTEGER NOT NULL DEFAULT 0,
+      error              TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_benchmark_runs_updated
+      ON benchmark_runs(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_runs_status
+      ON benchmark_runs(status, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS benchmark_run_items (
+      id                 TEXT PRIMARY KEY,
+      benchmark_run_id   TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+      position           INTEGER NOT NULL,
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL,
+      started_at         INTEGER,
+      completed_at       INTEGER,
+      provider_id        TEXT NOT NULL,
+      model              TEXT NOT NULL,
+      status             TEXT NOT NULL CHECK (
+        status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted', 'skipped')
+      ),
+      phase              TEXT,
+      test_run_id        TEXT REFERENCES test_runs(id) ON DELETE SET NULL,
+      benchmark_entry_id TEXT REFERENCES benchmark_entries(id) ON DELETE SET NULL,
+      score              REAL,
+      rank               INTEGER,
+      duration_ms        INTEGER,
+      tokens             INTEGER,
+      error              TEXT,
+      UNIQUE(benchmark_run_id, position)
+    );
+    CREATE INDEX IF NOT EXISTS idx_benchmark_run_items_run
+      ON benchmark_run_items(benchmark_run_id, position);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_run_items_status
+      ON benchmark_run_items(status, updated_at DESC);
     CREATE TABLE IF NOT EXISTS macro_sessions (
       id                    TEXT PRIMARY KEY,
       created_at            INTEGER NOT NULL,

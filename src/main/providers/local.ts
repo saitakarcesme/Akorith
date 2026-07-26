@@ -302,6 +302,20 @@ export class LocalProvider implements Provider {
       if (!model) throw new Error('No Ollama models installed — run `ollama pull <model>` first')
     }
 
+    const generationOptions: Record<string, number> = {}
+    if (
+      typeof opts.generation?.temperature === 'number' &&
+      Number.isFinite(opts.generation.temperature)
+    ) {
+      generationOptions.temperature = opts.generation.temperature
+    }
+    if (
+      typeof opts.generation?.maxTokens === 'number' &&
+      Number.isInteger(opts.generation.maxTokens)
+    ) {
+      generationOptions.num_predict = opts.generation.maxTokens
+    }
+
     const res = await fetch(`${this.reachableBaseUrl ?? baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -313,6 +327,7 @@ export class LocalProvider implements Provider {
           ...(opts.images?.length ? { images: opts.images.map((image) => image.dataBase64) } : {})
         }],
         stream: true,
+        ...(Object.keys(generationOptions).length > 0 ? { options: generationOptions } : {}),
         ...(opts.background === true ? { keep_alive: '30m' } : {})
       }),
       signal: opts.signal

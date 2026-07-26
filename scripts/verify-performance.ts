@@ -43,6 +43,7 @@ const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.ts
 const projectPreview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
 const projectLoop = read('src/renderer/src/components/ProjectLoopPage.tsx')
 const testPage = read('src/renderer/src/components/TestPage.tsx')
+const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
 const researchPage = read('src/renderer/src/components/ResearchPage.tsx')
 const researchLibrary = read('src/renderer/src/components/ResearchLibrary.tsx')
 const projectFiles = read('src/main/project-files.ts')
@@ -193,7 +194,8 @@ check(
   'Loop polling is single-flight and provider catalogs load only once'
 )
 check(
-  testPage.includes('if (!active || !isLocalAutoStarting(localProvider)) return'),
+  testPage.includes("export { default } from './BenchmarkPage'") &&
+    benchmarkPage.includes('if (!active || !providers.some(isLocalStarting)) return'),
   'hidden Benchmark stops local-provider retry polling'
 )
 check(

@@ -91,6 +91,15 @@ const chat = Object.freeze({
       dataBase64: string
     }[]
     intent?: 'execute' | 'plan'
+    generation?: {
+      maxTokens?: number
+      temperature?: number
+      timeoutMs?: number
+    }
+    usageSource?: {
+      kind: 'benchmark'
+      id: string
+    }
   }): Promise<unknown> => ipcRenderer.invoke('chat:send', args),
 
   cancel: (requestId: string): void => {
@@ -226,7 +235,11 @@ const benchmark = Object.freeze({
   list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:list', { limit }),
   get: (id: string): Promise<unknown> => ipcRenderer.invoke('benchmark:get', id),
   upsert: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:upsert', input),
-  exportForWeb: (): Promise<unknown> => ipcRenderer.invoke('benchmark:export')
+  exportForWeb: (): Promise<unknown> => ipcRenderer.invoke('benchmark:export'),
+  createRun: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:createRun', input),
+  updateRunItem: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:updateRunItem', input),
+  finishRun: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:finishRun', input),
+  listRuns: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:listRuns', { limit })
 })
 
 const macro = Object.freeze({

@@ -30,6 +30,8 @@ import type {
   ProviderAvailability,
   ProviderConfigEntry,
   ProviderInfo,
+  ProviderGenerationOptions,
+  ProviderUsageSource,
   SendResult
 } from './types'
 import { ClaudeProvider } from './claude'
@@ -71,7 +73,56 @@ const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/
 const VALID_MODEL = /^[\w.:/-]{1,64}$/
+const VALID_USAGE_SOURCE_ID = /^[\w:.-]{1,128}$/
 const MAX_PROMPT_CHARS = 200_000
+
+function validGenerationOptions(value: unknown): value is ProviderGenerationOptions {
+  if (value === undefined) return true
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const generation = value as Record<string, unknown>
+  const keys = Object.keys(generation)
+  if (keys.some((key) => !['maxTokens', 'temperature', 'timeoutMs'].includes(key))) return false
+  if (
+    generation.maxTokens !== undefined &&
+    (typeof generation.maxTokens !== 'number' ||
+      !Number.isInteger(generation.maxTokens) ||
+      generation.maxTokens < 1 ||
+      generation.maxTokens > 1_000_000)
+  ) {
+    return false
+  }
+  if (
+    generation.temperature !== undefined &&
+    (typeof generation.temperature !== 'number' ||
+      !Number.isFinite(generation.temperature) ||
+      generation.temperature < 0 ||
+      generation.temperature > 2)
+  ) {
+    return false
+  }
+  if (
+    generation.timeoutMs !== undefined &&
+    (typeof generation.timeoutMs !== 'number' ||
+      !Number.isInteger(generation.timeoutMs) ||
+      generation.timeoutMs < 1_000 ||
+      generation.timeoutMs > 1_800_000)
+  ) {
+    return false
+  }
+  return true
+}
+
+function validUsageSource(value: unknown): value is ProviderUsageSource {
+  if (value === undefined) return true
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const source = value as Record<string, unknown>
+  return (
+    Object.keys(source).every((key) => key === 'kind' || key === 'id') &&
+    source.kind === 'benchmark' &&
+    typeof source.id === 'string' &&
+    VALID_USAGE_SOURCE_ID.test(source.id)
+  )
+}
 const MAX_CHAT_IMAGES = 4
 const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
 const VALID_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
@@ -245,6 +296,8 @@ interface ChatSendArgs {
   images?: { name: string; mimeType: string; dataBase64: string }[]
   attachments?: IncomingChatAttachment[]
   intent?: 'execute' | 'plan'
+  generation?: ProviderGenerationOptions
+  usageSource?: ProviderUsageSource
 }
 
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
@@ -323,7 +376,9 @@ async function sendWorkspaceLocal(
   workspaceDir: string,
   signal: AbortSignal,
   emit: (activity: ProviderActivity) => void,
-  onToken: (token: string) => void
+  onToken: (token: string) => void,
+  generation?: ProviderGenerationOptions,
+  usageSource?: ProviderUsageSource
 ): Promise<SendResult> {
   emit({ kind: 'status', label: 'Inspecting the project', status: 'running' })
   const context = inspectProject(workspaceDir)
@@ -335,7 +390,7 @@ async function sendWorkspaceLocal(
     previousAttempts: '',
     validationCommands: ''
   })
-  const generated = await provider.send(prompt, { model, signal }, () => {})
+  const generated = await provider.send(prompt, { model, signal, generation, usageSource }, () => {})
   emit({ kind: 'reasoning', label: 'Workspace patch planned', status: 'complete' })
   emit({ kind: 'file', label: 'Applying scoped file changes', status: 'running' })
   const attempt = await executeLocalExecutorAttempt({
@@ -553,6 +608,8 @@ export function registerChatIpc(): void {
       !validImages(args.images)
       || !validChatAttachments(args.attachments)
       || (args.intent !== undefined && args.intent !== 'execute' && args.intent !== 'plan')
+      || !validGenerationOptions(args.generation)
+      || !validUsageSource(args.usageSource)
     ) {
       return { ok: false, error: 'invalid chat:send payload' }
     }
@@ -602,6 +659,14 @@ export function registerChatIpc(): void {
     const sender = event.sender
     const controller = new AbortController()
     const requestStartedAt = Date.now()
+    const requestTimeoutMs = args.generation?.timeoutMs
+    let requestTimedOut = false
+    const requestTimeout = requestTimeoutMs
+      ? setTimeout(() => {
+          requestTimedOut = true
+          controller.abort()
+        }, requestTimeoutMs)
+      : null
     activeRequests.set(args.requestId, controller)
     try {
       // Opt-in repo context (Phase 6): a bounded digest the PROVIDER sees — the
@@ -678,7 +743,9 @@ export function registerChatIpc(): void {
               workspaceContext.projectPath,
               controller.signal,
               emitActivity,
-              onToken
+              onToken,
+              args.generation,
+              args.usageSource
             )
           : await provider.send(
               promptForProvider,
@@ -693,6 +760,8 @@ export function registerChatIpc(): void {
                 })),
                 attachments: storedAttachments,
                 intent: args.intent ?? 'execute',
+                generation: args.generation,
+                usageSource: args.usageSource,
                 onActivity: emitActivity
               },
               onToken
@@ -727,6 +796,12 @@ export function registerChatIpc(): void {
             usage: result.usage,
             changes: result.changes
           })
+        } catch (err) {
+          console.error('[registry] failed to persist assistant message:', err)
+        }
+      }
+      if (sessionId || args.usageSource) {
+        try {
           recordUsageEvent({
             providerId: args.providerId,
             model: result.model,
@@ -738,16 +813,22 @@ export function registerChatIpc(): void {
             totalTokens: result.usage.totalTokens,
             costUsd: result.usage.costUsd,
             estimated: result.usage.estimated,
-            sessionId
+            sessionId,
+            sourceKind: args.usageSource?.kind,
+            sourceId: args.usageSource?.id
           })
         } catch (err) {
-          console.error('[registry] failed to persist exchange:', err)
+          console.error('[registry] failed to persist usage:', err)
         }
       }
       return { ok: true, result }
     } catch (err) {
+      if (requestTimedOut && requestTimeoutMs) {
+        return { ok: false, error: `request timed out after ${requestTimeoutMs}ms` }
+      }
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     } finally {
+      if (requestTimeout) clearTimeout(requestTimeout)
       activeRequests.delete(args.requestId)
     }
   })

@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './product-polish.css'
 import './replica-ui.css'
+import './benchmark.css'
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

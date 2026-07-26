@@ -57,6 +57,17 @@ export interface SendResult {
   // TODO(phase 6): usage feeds the router.
 }
 
+export interface ProviderGenerationOptions {
+  maxTokens?: number
+  temperature?: number
+  timeoutMs?: number
+}
+
+export interface ProviderUsageSource {
+  kind: 'benchmark'
+  id: string
+}
+
 export interface SendOptions {
   model?: string
   signal?: AbortSignal
@@ -84,6 +95,10 @@ export interface SendOptions {
   }[]
   /** Read-only planning pass: inspect and propose, but do not edit files. */
   intent?: 'execute' | 'plan'
+  /** Optional generation controls; providers may ignore controls they cannot honor. */
+  generation?: ProviderGenerationOptions
+  /** Stable accounting identity. Providers do not persist it; the registry does. */
+  usageSource?: ProviderUsageSource
 }
 
 export interface Provider {

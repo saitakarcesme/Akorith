@@ -121,6 +121,21 @@ export interface ChatAttachmentInput extends ChatAttachment {
   dataBase64: string
 }
 
+export interface ChatGenerationOptions {
+  /** Provider output-token ceiling. Providers that cannot control it may ignore it. */
+  maxTokens?: number
+  /** Provider sampling temperature. Providers that cannot control it may ignore it. */
+  temperature?: number
+  /** End-to-end request timeout enforced by the main-process registry. */
+  timeoutMs?: number
+}
+
+export interface ChatUsageSource {
+  kind: 'benchmark'
+  /** Stable benchmark item id; retries with the same id are accounted once. */
+  id: string
+}
+
 export interface ChatSendRequest {
   requestId: string
   providerId: string
@@ -135,6 +150,8 @@ export interface ChatSendRequest {
   images?: ChatImageAttachment[]
   attachments?: ChatAttachmentInput[]
   intent?: 'execute' | 'plan'
+  generation?: ChatGenerationOptions
+  usageSource?: ChatUsageSource
 }
 
 /** Phase 14.2: what conversation context a session would send (memory indicator). */
@@ -605,11 +622,95 @@ export type BenchmarkUpsertInput = Omit<BenchmarkEntry, 'id' | 'createdAt' | 'up
   signature?: string
 }
 
+export type BenchmarkRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+export type BenchmarkRunItemStatus = BenchmarkRunStatus | 'skipped'
+
+export interface BenchmarkRunItem {
+  id: string
+  benchmarkRunId: string
+  position: number
+  createdAt: number
+  updatedAt: number
+  startedAt: number | null
+  completedAt: number | null
+  providerId: string
+  model: string
+  status: BenchmarkRunItemStatus
+  phase: string | null
+  testRunId: string | null
+  benchmarkEntryId: string | null
+  score: number | null
+  rank: number | null
+  durationMs: number | null
+  tokens: number | null
+  error: string | null
+}
+
+export interface BenchmarkRun {
+  id: string
+  createdAt: number
+  updatedAt: number
+  startedAt: number | null
+  completedAt: number | null
+  status: BenchmarkRunStatus
+  challengeId: string
+  challengeLabel: string
+  category: BenchmarkCategory
+  metric: string
+  source: string | null
+  config: Record<string, unknown>
+  parallelExecution: boolean
+  error: string | null
+  totalItems: number
+  completedItems: number
+  items: BenchmarkRunItem[]
+}
+
+export interface BenchmarkCreateRunInput {
+  id?: string
+  challengeId: string
+  challengeLabel: string
+  category: BenchmarkCategory
+  metric: string
+  source?: string | null
+  config?: Record<string, unknown>
+  parallelExecution?: boolean
+  items: Array<{
+    id?: string
+    providerId: string
+    model: string
+  }>
+}
+
+export interface BenchmarkUpdateRunItemInput {
+  runId: string
+  itemId: string
+  status?: BenchmarkRunItemStatus
+  phase?: string | null
+  testRunId?: string | null
+  benchmarkEntryId?: string | null
+  score?: number | null
+  rank?: number | null
+  durationMs?: number | null
+  tokens?: number | null
+  error?: string | null
+}
+
+export interface BenchmarkFinishRunInput {
+  runId: string
+  status: Extract<BenchmarkRunStatus, 'completed' | 'failed' | 'cancelled' | 'interrupted'>
+  error?: string | null
+}
+
 export interface BenchmarkApi {
   list(limit?: number): Promise<BenchmarkEntry[]>
   get(id: string): Promise<BenchmarkEntry | null>
   upsert(input: BenchmarkUpsertInput): Promise<BenchmarkEntry>
   exportForWeb(): Promise<{ ok: true; path: string; count: number } | { ok: false; error: string }>
+  createRun(input: BenchmarkCreateRunInput): Promise<BenchmarkRun>
+  updateRunItem(input: BenchmarkUpdateRunItemInput): Promise<BenchmarkRun>
+  finishRun(input: BenchmarkFinishRunInput): Promise<BenchmarkRun>
+  listRuns(limit?: number): Promise<BenchmarkRun[]>
 }
 
 // ---- evaluate + PDF reports (Phase 8) ----

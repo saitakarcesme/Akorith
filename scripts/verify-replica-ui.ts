@@ -84,6 +84,9 @@ const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const stylesCss = read('src/renderer/src/styles.css')
+const benchmark = read('src/renderer/src/components/BenchmarkExperience.tsx')
+const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
+const benchmarkCss = read('src/renderer/src/benchmark.css')
 
 check(/data-ui\s*=\s*['"]replica['"]/.test(app), "App opts into data-ui='replica'")
 
@@ -301,24 +304,37 @@ check(
 )
 
 check(
-  selectorBlocks(replicaCss, '.test-terminal-col').some((block) =>
-    /--text\s*:\s*#f2f2f2/.test(block) &&
-    /--text-faint\s*:\s*var\(--text-tertiary\)/.test(block) &&
-    /color-scheme\s*:\s*dark/.test(block)
-  ),
-  'Benchmark sandbox owns a complete readable dark token scope'
+  ['Select Models', 'Choose Benchmark', 'Configure', 'Run Benchmark'].every((label) => benchmark.includes(label)) &&
+    benchmark.includes("aria-current={isCurrent ? 'step' : undefined}"),
+  'Benchmark exposes the four-step accessible workflow'
 )
 check(
-  selectorBlocks(replicaCss, ".app[data-ui='replica'][data-theme='light'] .test-btn.is-stop").some((block) =>
-    /color\s*:\s*var\(--semantic-danger-text\)/.test(block)
-  ),
-  'light Benchmark Stop action uses readable semantic text'
+  benchmark.includes('Search models...') &&
+    benchmark.includes('Search benchmarks...') &&
+    benchmark.includes('Run queue') &&
+    benchmark.includes('Recent runs') &&
+    benchmark.includes('Score table'),
+  'Benchmark includes selection, queue, history and score surfaces'
 )
 check(
-  replicaCss.includes('.benchmark-comparison-table th:nth-child(3)') &&
-  replicaCss.includes('.benchmark-library-table th:nth-child(2)') &&
-  replicaCss.includes('.benchmark-library-table th:nth-child(4)'),
-  'narrow Benchmark tables remove low-priority columns'
+  benchmarkPage.includes('runBoundedBenchmarkQueue') &&
+    benchmarkPage.includes('window.api.benchmark.createRun') &&
+    benchmarkPage.includes('window.api.benchmark.finishRun') &&
+    benchmarkPage.includes('for (const requestId of activeRequestIds.current)'),
+  'Benchmark queue is bounded, persisted and fully cancellable'
+)
+check(
+  /--benchmark-bg\s*:\s*#090909/.test(benchmarkCss) &&
+    /--benchmark-panel-raised\s*:\s*#111/.test(benchmarkCss) &&
+    /--benchmark-radius-lg\s*:\s*8px/.test(benchmarkCss) &&
+    !/linear-gradient|radial-gradient/i.test(benchmarkCss),
+  'Benchmark uses neutral black surfaces, restrained radii and no gradients'
+)
+check(
+  benchmarkCss.includes('@container benchmark-experience (max-width: 980px)') &&
+    benchmarkCss.includes('@container benchmark-experience (max-width: 720px)') &&
+    benchmarkCss.includes('@container benchmark-experience (max-width: 520px)'),
+  'Benchmark has container-responsive desktop, tablet and narrow layouts'
 )
 
 check(
