@@ -65,12 +65,13 @@ export function buildResearchVisualEvidence(input: {
 }): ResearchVisualEvidence[] {
   if (input.sources.length === 0) return []
   const sourceById = new Map(input.sources.map((source) => [source.id, source]))
-  const visuals: ResearchVisualEvidence[] = []
   const quantitative = quantitativeChart(input.claims, sourceById, input.generatedAt)
-  visuals.push(quantitative ?? sourceQualityChart(input.sources, input.generatedAt))
-  visuals.push(evidenceTable(input.sources, input.generatedAt))
-  visuals.push(...sourceSnapshots(input.sources, input.generatedAt))
-  return visuals
+  // Publication outputs only receive a visual when verified claims contain at
+  // least two genuinely comparable measurements. Source-confidence charts,
+  // provenance tables, and retrieved-text snapshots remain derivable from the
+  // persisted evidence store, but they are editorial diagnostics rather than
+  // useful essay illustrations and therefore stay out of the main article.
+  return quantitative ? [quantitative] : []
 }
 
 export function researchVisualCitationNumbers(
@@ -343,7 +344,7 @@ function svgShell(width: number, height: number, visual: ResearchVisualEvidence,
   <text x="36" y="79" class="title">${escapeXml(visual.title)}</text>
   <text x="36" y="108" class="caption">${escapeXml(compactLabel(visual.caption, 132))}</text>
   ${content}
-  <text x="36" y="${height - 20}" class="caption">Provenance: ${visual.provenance.sourceIds.length} cited source${visual.provenance.sourceIds.length === 1 ? '' : 's'} · ${escapeXml(visual.provenance.method)}</text>
+  <text x="36" y="${height - 20}" class="caption">${visual.provenance.sourceIds.length} cited source${visual.provenance.sourceIds.length === 1 ? '' : 's'}</text>
 </svg>`
 }
 

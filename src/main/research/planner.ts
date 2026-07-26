@@ -12,8 +12,7 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
   logResearchEvent({ jobId, kind: 'planning_started', title: 'Building the evidence plan' })
   const prompt = buildResearchPlanningPrompt({
     request: job.prompt,
-    depth: RESEARCH_DEPTH_PROFILES[job.depth],
-    outputFormat: job.outputFormat
+    depth: RESEARCH_DEPTH_PROFILES[job.depth]
   })
   let plan: ResearchPlan
   try {
@@ -30,7 +29,7 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
     })
     plan = parseResearchPlan(response.text)
   } catch (error) {
-    plan = fallbackResearchPlan(job.title, job.prompt, job.outputFormat)
+    plan = fallbackResearchPlan(job.title, job.prompt)
     logResearchEvent({
       jobId,
       kind: 'warning',
@@ -64,12 +63,12 @@ export async function planResearchJob(jobId: string, signal?: AbortSignal): Prom
   return plan
 }
 
-function fallbackResearchPlan(title: string, request: string, format: string): ResearchPlan {
+function fallbackResearchPlan(title: string, request: string): ResearchPlan {
   const topic = request.replace(/\s+/g, ' ').trim().slice(0, 280)
   return {
     title: title || 'Autonomous research',
     thesis: `Establish an evidence-based answer to: ${topic}`,
-    deliverable: `A cited ${format.toUpperCase()} report that answers the request, distinguishes facts from commentary, and discloses inaccessible evidence.`,
+    deliverable: 'A publication-ready research essay that answers the request, distinguishes established facts from sourced perspectives, and carries every material claim into a stable bibliography.',
     sections: [
       {
         id: 'scope-and-definitions',

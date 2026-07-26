@@ -445,6 +445,7 @@ const projectLoop = Object.freeze({
 const research = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('research:list'),
   get: (id: string): Promise<unknown> => ipcRenderer.invoke('research:get', id),
+  essay: (id: string): Promise<unknown> => ipcRenderer.invoke('research:essay', id),
   poll: (id: string, version?: string): Promise<unknown> =>
     ipcRenderer.invoke('research:poll', { id, version }),
   create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:create', input),

@@ -15,10 +15,15 @@ import {
   readResearchMarkdown,
   readResearchPlan,
   safeResearchPath,
-  writeResearchPlan
+  writeResearchPlan,
+  writeResearchPublication
 } from './workspace'
 import { recordResearchModelUsage } from './usage'
 import { enqueueCompletedResearchDiscordDelivery } from './discord-delivery'
+import {
+  deduplicateResearchSources,
+  rankAndDeduplicateResearchClaims
+} from './document'
 
 export async function synthesizeResearchJob(
   jobId: string,
@@ -29,10 +34,18 @@ export async function synthesizeResearchJob(
   const plan = job.plan ?? readResearchPlan(job.workspaceDir)
   if (!plan) throw new Error('Research plan is missing.')
   updateResearchJob(job.id, { status: 'synthesizing', phase: 'synthesize', error: undefined })
-  logResearchEvent({ jobId, kind: 'synthesis_started', title: 'Writing the evidence-backed report' })
+  logResearchEvent({ jobId, kind: 'synthesis_started', title: 'Writing the publication-ready research essay' })
   const findings = readResearchMarkdown(job.workspaceDir, RESEARCH_FINDINGS_FILE)
-  const claims = listResearchClaims(job.id)
-  const sources = listResearchSources(job.id)
+  const persistedSources = listResearchSources(job.id)
+  const sourceDisplay = deduplicateResearchSources(persistedSources)
+  const claims = rankAndDeduplicateResearchClaims(listResearchClaims(job.id).map((claim) => ({
+    ...claim,
+    evidence: claim.evidence.map((evidence) => ({
+      ...evidence,
+      sourceId: sourceDisplay.redirects.get(evidence.sourceId) ?? evidence.sourceId
+    }))
+  })))
+  const sources = sourceDisplay.sources
   let report: string
   try {
     const response = await sendMetaPrompt(
@@ -52,7 +65,7 @@ export async function synthesizeResearchJob(
     report = sanitizeResearchReportCitations(response.text.trim(), sources.length)
     if (!/^#\s+\S/m.test(report)) report = `# ${plan.title}\n\n${report}`
   } catch (error) {
-    report = fallbackReport(plan, findings, sources.length, error)
+    report = fallbackReport(plan, claims, sources)
     logResearchEvent({
       jobId,
       kind: 'warning',
@@ -64,6 +77,13 @@ export async function synthesizeResearchJob(
   const partial = `${reportPath}.partial`
   writeFileSync(partial, `${report.trim()}\n`, 'utf8')
   renameSync(partial, reportPath)
+  writeResearchPublication(job.workspaceDir, {
+    version: 1,
+    jobId: job.id,
+    generatedAt: Date.now(),
+    reportMarkdown: `${report.trim()}\n`,
+    sourceIds: sources.map((source) => source.id)
+  })
   updateResearchJob(job.id, { summary: reportSummary(report) })
   const { exportResearchJob } = await import('./exporters')
   const artifact = await exportResearchJob(job.id, undefined, { trackLifecycle: true })
@@ -79,7 +99,7 @@ export async function synthesizeResearchJob(
     logResearchEvent({
       jobId,
       kind: 'completed',
-      title: 'Research completed with a validated deliverable',
+      title: 'Research essay completed with a validated publication',
       detail: artifact.path
     })
     enqueueCompletedResearchDiscordDelivery(job.id, artifact.id)
@@ -108,22 +128,70 @@ export async function synthesizeResearchJob(
 
 function fallbackReport(
   plan: ResearchPlan,
-  findings: string,
-  sourceCount: number,
-  error: unknown
+  claims: ReturnType<typeof listResearchClaims>,
+  sources: ReturnType<typeof listResearchSources>
 ): string {
+  const sourceNumber = new Map(sources.map((source, index) => [source.id, index + 1]))
+  const citedClaims = claims
+    .filter((claim) => claim.evidence.some((evidence) => sourceNumber.has(evidence.sourceId)))
+    .map((claim) => {
+      const citations = [...new Set(claim.evidence
+        .map((evidence) => sourceNumber.get(evidence.sourceId))
+        .filter((value): value is number => value !== undefined))]
+      return {
+        ...claim,
+        citation: citations.length > 0 ? ` [${citations.join(', ')}]` : ''
+      }
+    })
+  const abstract = citedClaims.slice(0, 2).map((claim) => `${claim.text}${claim.citation}`).join(' ')
+    || 'The available source record did not support a publication-ready conclusion.'
+  const sections = plan.sections.map((section) => {
+    const paragraphs = citedClaims
+      .filter((claim) => claim.sectionId === section.id)
+      .map((claim) => `${claim.text}${claim.citation}`)
+    return paragraphs.length > 0
+      ? `## ${section.title}\n\n${paragraphs.join('\n\n')}`
+      : ''
+  }).filter(Boolean)
+  const analyticalClaims = citedClaims.slice(0, 4)
+  const analysis = analyticalClaims.length > 0
+    ? analyticalClaims
+      .map((claim) => `${claim.text}${claim.citation}`)
+      .join(' ')
+    : 'The accessible record is too limited for a defensible comparative analysis.'
+  const disagreements = citedClaims
+    .filter((claim) =>
+      claim.status === 'conflicted'
+      || claim.evidence.some((evidence) => evidence.relation === 'contradicts')
+    )
+  const perspectives = disagreements.length > 0
+    ? `## Differing views\n\n${disagreements.map((claim) => `${claim.text}${claim.citation}`).join('\n\n')}`
+    : ''
+  const conclusion = citedClaims.length > 0
+    ? `The retained evidence supports the findings above within the scope of the cited sources. ${citedClaims.some((claim) => claim.status === 'conflicted') ? 'Where sources disagree, the disagreement remains unresolved rather than being averaged away.' : ''}`.trim()
+    : 'The available evidence is not yet sufficient for a defensible conclusion.'
+
   return `# ${plan.title}
 
-## Executive summary
+## Abstract
 
-Akorith preserved the evidence collected during this unattended research. The final editorial pass was unavailable, so this report keeps the cycle findings intact instead of inventing a polished conclusion.
+${abstract}
 
-${findings.trim() || 'No accessible evidence was collected.'}
+## Introduction
 
-## Limitations and open questions
+${plan.thesis}
 
-- ${sourceCount} unique accessible source${sourceCount === 1 ? '' : 's'} were recorded.
-- Final synthesis limitation: ${error instanceof Error ? error.message : String(error)}
+${sections.join('\n\n') || '## Findings\n\nThe accessible sources did not establish a sufficiently supported finding.'}
+
+## Analysis
+
+${analysis}
+
+${perspectives}
+
+## Conclusion
+
+${conclusion}
 `
 }
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ExcelJS from 'exceljs'
@@ -13,12 +13,14 @@ import {
   createDeterministicResearchDocument
 } from '../src/main/research/__tests__/fixture-matrix.ts'
 import { exportResearchDocx } from '../src/main/research/exporters/docx.ts'
+import { exportResearchHtml } from '../src/main/research/exporters/html.ts'
 import { exportResearchMarkdown } from '../src/main/research/exporters/markdown.ts'
 import { exportResearchPdf } from '../src/main/research/exporters/pdf.ts'
 import { exportResearchPptx } from '../src/main/research/exporters/pptx.ts'
 import { sanitizeSpreadsheetCell, exportResearchXlsx } from '../src/main/research/exporters/xlsx.ts'
 import { validateResearchArtifact } from '../src/main/research/exporters/validate.ts'
 import { assertPublicResearchUrl, isPublicIp } from '../src/main/research/network-policy.ts'
+import { sanitizeResearchReportCitations } from '../src/main/research/prompts/synthesis.ts'
 import {
   canonicalizeResearchUrl,
   containUntrustedSourceText,
@@ -45,6 +47,7 @@ async function main(): Promise<void> {
   console.log('Research core verifier')
   await verifyDepthProfiles()
   await verifyFixtureMatrix()
+  await verifyPublicationPolicy()
   await verifySourcePolicy()
   await verifyNetworkPolicy()
   await verifyExportValidators()
@@ -55,6 +58,19 @@ async function main(): Promise<void> {
     return
   }
   console.log('\nverify-research-core: ok')
+}
+
+async function verifyPublicationPolicy(): Promise<void> {
+  await check('publication citations normalize grouped endnotes and bounded ranges', () => {
+    assert.equal(
+      sanitizeResearchReportCitations('Supported [1; 3] and contextual [2-4].', 4),
+      'Supported [1, 3] and contextual [2, 3, 4].'
+    )
+    assert.equal(
+      sanitizeResearchReportCitations('Outside the retained ledger [3-5].', 4),
+      'Outside the retained ledger [citation unavailable].'
+    )
+  })
 }
 
 async function verifyDepthProfiles(): Promise<void> {
@@ -92,7 +108,7 @@ async function verifyDepthProfiles(): Promise<void> {
 }
 
 async function verifyFixtureMatrix(): Promise<void> {
-  await check('fixture manifest contains exactly 70 combinations', () => {
+  await check('fixture manifest contains exactly 84 combinations', () => {
     assert.equal(RESEARCH_CORE_FIXTURE_MATRIX.length, EXPECTED_RESEARCH_FIXTURE_COUNT)
     assert.equal(
       RESEARCH_CORE_FIXTURE_MATRIX.length,
@@ -107,7 +123,7 @@ async function verifyFixtureMatrix(): Promise<void> {
     assert.equal(ids.size, EXPECTED_RESEARCH_FIXTURE_COUNT)
     assert.equal(tuples.size, EXPECTED_RESEARCH_FIXTURE_COUNT)
   })
-  await check('every depth/provider pair covers all five outputs', () => {
+  await check('every depth/provider pair covers all six outputs', () => {
     for (const depth of TEST_RESEARCH_DEPTHS) {
       for (const provider of TEST_RESEARCH_PROVIDERS) {
         const formats = RESEARCH_CORE_FIXTURE_MATRIX
@@ -226,11 +242,75 @@ async function verifyExportValidators(): Promise<void> {
       const orphan = join(root, 'invalid-orphan.md')
       writeFileSync(
         orphan,
-        '# Report\n\n## Contents\n\n- [Executive summary](#executive-summary)\n\n<a id="executive-summary"></a>\n## Executive summary\n\nSummary [1](#source-1).\n\n<a id="sources"></a>\n## Sources\n'
+        [
+          '# Report',
+          '',
+          '## Contents',
+          '',
+          '- [Abstract](#abstract)',
+          '- [Introduction](#introduction)',
+          '- [Conclusion](#conclusion)',
+          '- [Bibliography](#bibliography)',
+          '',
+          '<a id="abstract"></a>',
+          '## Abstract',
+          '',
+          'Summary [1](#source-1).',
+          '',
+          '<a id="introduction"></a>',
+          '## Introduction',
+          '',
+          'Context.',
+          '',
+          '<a id="conclusion"></a>',
+          '## Conclusion',
+          '',
+          'Result.',
+          '',
+          '<a id="bibliography"></a>',
+          '## Bibliography',
+          ''
+        ].join('\n')
       )
       const orphanResult = await validateResearchArtifact('md', orphan)
       assert.equal(orphanResult.ok, false)
       assert.match(orphanResult.error ?? '', /orphan source reference/i)
+    })
+    await check('HTML reports are self-contained, essay-first, and script-free', async () => {
+      const fixture = RESEARCH_CORE_FIXTURE_MATRIX.find((candidate) => candidate.outputFormat === 'html')
+      assert.ok(fixture, 'HTML fixture is missing')
+      const workspace = join(root, 'valid-html-security')
+      mkdirSync(join(workspace, 'artifacts'), { recursive: true })
+      const path = await exportResearchHtml(workspace, createDeterministicResearchDocument(fixture))
+      const html = readFileSync(path, 'utf8')
+      assert.match(html, /<meta\b[^>]*http-equiv=["']Content-Security-Policy["']/i)
+      assert.match(html, /default-src\s+'none'/i)
+      assert.match(html, /base-uri\s+'none'/i)
+      assert.match(html, /form-action\s+'none'/i)
+      assert.match(html, /frame-ancestors\s+'none'/i)
+      assert.match(html, /<article\b/i)
+      assert.match(html, /<h1\b/i)
+      assert.match(html, />\s*Abstract\s*</i)
+      assert.match(html, />\s*Introduction\s*</i)
+      assert.match(html, />\s*Conclusion\s*</i)
+      assert.doesNotMatch(html, /<script\b/i)
+      assert.doesNotMatch(html, /<iframe\b|<object\b|<embed\b|<form\b/i)
+      assert.doesNotMatch(html, /\son[a-z]+\s*=/i)
+      assert.equal((await validateResearchArtifact('html', path)).ok, true)
+    })
+    await check('malformed or executable HTML reports are rejected', async () => {
+      const malformedHtml = join(root, 'invalid.html')
+      writeFileSync(malformedHtml, '<!doctype html><html><body><h1>Incomplete report</h1></body></html>')
+      assert.equal((await validateResearchArtifact('html', malformedHtml)).ok, false)
+
+      const executableHtml = join(root, 'invalid-script.html')
+      writeFileSync(
+        executableHtml,
+        `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'"></head><body><main id="main-content"><article><h1>Report</h1><section id="abstract"><h2>Abstract</h2><p>Summary.</p></section><section id="introduction"><h2>Introduction</h2><p>Context.</p></section><section id="conclusion"><h2>Conclusion</h2><p>Result.</p></section><section id="bibliography"><h2>Bibliography</h2></section><script>alert(1)</script></article></main></body></html>`
+      )
+      const executableResult = await validateResearchArtifact('html', executableHtml)
+      assert.equal(executableResult.ok, false)
+      assert.match(executableResult.error ?? '', /script|executable|unsafe|active content/i)
     })
     await check('malformed PDF, DOCX, and PPTX packages are rejected', async () => {
       const invalidPdf = join(root, 'invalid.pdf')
@@ -270,6 +350,7 @@ async function exportFixture(
   document: ReturnType<typeof createDeterministicResearchDocument>
 ): Promise<string> {
   if (format === 'md') return exportResearchMarkdown(workspace, document)
+  if (format === 'html') return exportResearchHtml(workspace, document)
   if (format === 'pdf') return exportResearchPdf(workspace, document)
   if (format === 'docx') return exportResearchDocx(workspace, document)
   if (format === 'xlsx') return exportResearchXlsx(workspace, document)

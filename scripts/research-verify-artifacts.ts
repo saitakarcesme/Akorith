@@ -23,9 +23,14 @@ import {
 } from '../src/main/research/document.ts'
 import { exportResearchDocx } from '../src/main/research/exporters/docx.ts'
 import { compactArtifactText, fitArtifactText } from '../src/main/research/exporters/design.ts'
+import { exportResearchHtml, renderResearchHtml } from '../src/main/research/exporters/html.ts'
 import { exportResearchMarkdown, renderResearchMarkdown } from '../src/main/research/exporters/markdown.ts'
 import { exportResearchPdf } from '../src/main/research/exporters/pdf.ts'
 import { exportResearchPptx } from '../src/main/research/exporters/pptx.ts'
+import {
+  publicationVisuals,
+  selectedPublicationSources
+} from '../src/main/research/exporters/publication.ts'
 import { resolveResearchPdfFontPaths } from '../src/main/research/exporters/pdf-fonts.ts'
 import { validateResearchArtifact } from '../src/main/research/exporters/validate.ts'
 import { exportResearchXlsx } from '../src/main/research/exporters/xlsx.ts'
@@ -66,9 +71,10 @@ async function main(): Promise<void> {
     verifyPdfFontResolution(root)
     verifyVisualEvidenceModel()
     verifyDisplayLedgerDeduplication()
-    verifyCompleteDocumentLedger()
+    verifyPublicationClaimBoundary()
     verifyUnicodeSafeTextCompaction()
     verifyMarkdownAnchorUniqueness()
+    verifyHtmlSafety()
     globalThis.fetch = async () => {
       throw new Error('Research exporters must not perform network requests.')
     }
@@ -101,7 +107,7 @@ async function main(): Promise<void> {
   }
 
   assert.equal(generated, EXPECTED_RESEARCH_FIXTURE_COUNT + TEST_RESEARCH_OUTPUTS.length)
-  console.log(`research artifact verifier passed (${generated} offline reports across five formats)${retainedRoot ? `; retained at ${root}` : ''}`)
+  console.log(`research artifact verifier passed (${generated} offline reports across six formats)${retainedRoot ? `; retained at ${root}` : ''}`)
 }
 
 function verifyCoverLayout(document: ResearchDocument): void {
@@ -192,7 +198,7 @@ function verifyDisplayLedgerDeduplication(): void {
   )
 }
 
-function verifyCompleteDocumentLedger(): void {
+function verifyPublicationClaimBoundary(): void {
   const fixture = RESEARCH_CORE_FIXTURE_MATRIX[0]
   const base = createDeterministicResearchDocument(fixture)
   const template = base.sections[0].claims[0]
@@ -248,14 +254,21 @@ function verifyCompleteDocumentLedger(): void {
     claims,
     sources: base.sources
   })
+  assert.equal(claims.length, 17, 'the raw evidence input must remain intact')
   assert.equal(
     document.sections.flatMap((section) => section.claims).length,
-    claims.length,
-    'document construction must expose every distinct claim without a per-section cap'
+    16,
+    'the public document must retain every claim attached to a published essay section'
   )
-  assert.ok(
+  assert.equal(
     document.sections.some((section) => section.claims.some((claim) => claim.id === 'complete-ledger-unassigned')),
-    'claims with an unknown provider section must remain visible'
+    false,
+    'an unassigned internal claim must not create an Additional evidence section in the publication'
+  )
+  assert.equal(
+    claims.some((claim) => claim.id === 'complete-ledger-unassigned'),
+    true,
+    'building a publication must not mutate or delete the underlying evidence input'
   )
 }
 
@@ -343,7 +356,7 @@ function verifyVisualEvidenceModel(): void {
   })
   assert.equal(visuals[0].kind, 'quantitative-chart', 'compatible cited measurements should create a chart')
   assert.equal(visuals[0].points?.length, 2)
-  assert.equal(visuals.filter((visual) => visual.kind === 'web-snapshot').length, 2)
+  assert.equal(visuals.length, 1, 'publication visuals must exclude operational charts, tables, and snapshots')
 
   const maliciousSvg = renderResearchVisualSvg({
     ...visuals[0],
@@ -356,9 +369,9 @@ function verifyVisualEvidenceModel(): void {
 }
 
 function verifyVisualProvenance(document: ResearchDocument): void {
-  assert.ok(document.visuals.length >= 3, 'each report should include a chart, evidence table, and source snapshot')
   const sourcesById = new Map(document.sources.map((source) => [source.id, source]))
   for (const visual of document.visuals) {
+    assert.equal(visual.kind, 'quantitative-chart', 'main publications may retain only meaningful quantitative visuals')
     assert.equal(visual.provenance.generatedAt, document.generatedAt)
     assert.ok(visual.provenance.sourceIds.length > 0, `${visual.id} must retain cited provenance`)
     visual.provenance.sourceIds.forEach((sourceId, index) => {
@@ -367,6 +380,34 @@ function verifyVisualProvenance(document: ResearchDocument): void {
       assert.equal(visual.provenance.sourceUrls[index], source.url)
     })
   }
+}
+
+function verifyHtmlSafety(): void {
+  const document = createDeterministicResearchDocument(RESEARCH_CORE_FIXTURE_MATRIX[0])
+  const groupedCitationDocument = {
+    ...document,
+    title: '<script>alert("title")</script>',
+    abstract: '<img src=x onerror=alert(1)> A safe abstract [1, 2].'
+  }
+  const html = renderResearchHtml(groupedCitationDocument)
+  assert.match(html, /^<!doctype html>/)
+  assert.match(html, /Content-Security-Policy/)
+  assert.match(html, /<main id="main-content"/)
+  assert.match(html, /id="abstract"/)
+  assert.match(html, /id="introduction"/)
+  assert.match(html, /id="conclusion"/)
+  assert.match(html, /id="bibliography"/)
+  assert.match(html, /href="#source-1"/)
+  assert.match(html, /href="#source-2"/)
+  assert.doesNotMatch(html, /<script\b/i)
+  assert.doesNotMatch(html, /<[^>]+\sonerror\s*=/i)
+  assert.match(html, /&lt;script&gt;/)
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/)
+  assert.deepEqual(
+    selectedPublicationSources(groupedCitationDocument, 2).map((source) => source.id),
+    document.sources.map((source) => source.id),
+    'grouped citations must select every referenced bibliography entry'
+  )
 }
 
 function verifyPdfFontResolution(root: string): void {
@@ -498,6 +539,7 @@ async function exportFixture(
   workspace: string,
   document: ResearchDocument
 ): Promise<string> {
+  if (format === 'html') return exportResearchHtml(workspace, document)
   if (format === 'md') return exportResearchMarkdown(workspace, document)
   if (format === 'pdf') return exportResearchPdf(workspace, document)
   if (format === 'docx') return exportResearchDocx(workspace, document)
@@ -511,31 +553,52 @@ async function verifyContainer(
   document: ResearchDocument
 ): Promise<void> {
   const bytes = readFileSync(path)
+  if (format === 'html') {
+    const html = bytes.toString('utf8')
+    assert.match(html, /^<!doctype html>/)
+    assert.match(html, /<html lang="[a-z]{2,3}(?:-[A-Z]{2})?"/)
+    assert.match(html, /Content-Security-Policy/)
+    assert.match(html, /<main id="main-content"/)
+    assert.match(html, /<article\b/)
+    assert.match(html, /id="abstract"/)
+    assert.match(html, /id="introduction"/)
+    assert.match(html, /id="conclusion"/)
+    assert.match(html, /id="bibliography"/)
+    assert.doesNotMatch(html, /<script\b/i)
+    assert.doesNotMatch(html, /<[^>]+\son[a-z]+\s*=/i)
+    assert.doesNotMatch(html, /\bEvidence ledger\b|\bVerification criteria\b/i)
+    return
+  }
   if (format === 'pdf') {
     assert.equal(bytes.subarray(0, 5).toString(), '%PDF-', 'PDF must use the PDF file signature')
     assert.match(bytes.toString('latin1'), /\/Type\s*\/Page\b/, 'PDF must contain at least one page object')
     const parsed = await pdfParse(bytes)
     const text = parsed.text.replace(/\s+/g, ' ')
-    assert.match(text, /Visual evidence/, 'PDF must include the visual-evidence section')
-    assert.match(text, /RETRIEVED TEXT SNAPSHOT/, 'PDF must label sanitized source snapshots honestly')
+    assert.match(text, /Abstract/)
+    assert.match(text, /Introduction/)
+    assert.match(text, /Conclusion/)
+    assert.match(text, /Bibliography/)
+    assert.doesNotMatch(text, /Evidence ledger|RETRIEVED TEXT SNAPSHOT|Verification criteria|Provenance:/i)
+    if (publicationVisuals(document).length > 0) assert.match(text, /Figures/)
     return
   }
   if (format === 'md') {
     const markdown = bytes.toString('utf8')
     assert.match(markdown, new RegExp(`^# ${escapeRegExp(document.title)}$`, 'm'))
-    assert.match(markdown, /^## Executive summary$/m)
-    assert.match(markdown, /^## Visual evidence$/m)
-    assert.match(markdown, /^## Sources$/m)
+    assert.match(markdown, /^## Abstract$/m)
+    assert.match(markdown, /^## Introduction$/m)
+    assert.match(markdown, /^## Conclusion$/m)
+    assert.match(markdown, /^## Bibliography$/m)
+    assert.doesNotMatch(markdown, /Evidence ledger|Verification criteria|Provenance:/i)
     const anchors = [...markdown.matchAll(/<a id="([^"]+)"><\/a>/g)].map((match) => match[1])
     assert.equal(new Set(anchors).size, anchors.length, 'Markdown must not emit duplicate explicit anchors')
     const assetDirectory = join(dirname(path), `${basename(path, extname(path))}-assets`)
-    for (const visual of document.visuals) {
+    for (const visual of publicationVisuals(document)) {
       const svgPath = join(assetDirectory, `${visual.id}.svg`)
       assert.equal(existsSync(svgPath), true, `Markdown must emit visual asset ${visual.id}`)
       assert.match(markdown, new RegExp(`${escapeRegExp(visual.id)}\\.svg`))
       const svg = readFileSync(svgPath, 'utf8')
       assert.match(svg, /role="img"/)
-      assert.match(svg, /Provenance:/)
     }
     return
   }
@@ -545,8 +608,11 @@ async function verifyContainer(
     assert.ok(zip.file('[Content_Types].xml'), 'DOCX must contain the package content-types manifest')
     const documentXml = await zip.file('word/document.xml')?.async('text')
     assert.ok(documentXml, 'DOCX must contain its Word document body')
-    assert.match(documentXml, /Visual evidence/, 'DOCX must include native visual evidence')
-    assert.match(documentXml, /Web evidence snapshot/, 'DOCX must include source snapshot cards')
+    assert.match(documentXml, /Abstract/)
+    assert.match(documentXml, /Introduction/)
+    assert.match(documentXml, /Conclusion/)
+    assert.match(documentXml, /Bibliography/)
+    assert.doesNotMatch(documentXml, /Evidence ledger|Web evidence snapshot|Verification criteria|Provenance:/i)
     return
   }
   if (format === 'pptx') {
@@ -555,7 +621,7 @@ async function verifyContainer(
     assert.ok(zip.file('ppt/theme/theme1.xml'), 'PPTX must contain its Akorith theme')
     const presentationXml = await zip.file('ppt/presentation.xml')!.async('text')
     const slideCount = [...presentationXml.matchAll(/<p:sldId\b/g)].length
-    assert.ok(slideCount >= 8, 'PPTX must deliver a complete narrative deck')
+    assert.ok(slideCount >= 5 && slideCount <= 12, 'PPTX must remain a bounded narrative projection')
     const slideXml = await Promise.all(Array.from({ length: slideCount }, (_, index) =>
       zip.file(`ppt/slides/slide${index + 1}.xml`)!.async('text')
     ))
@@ -563,30 +629,13 @@ async function verifyContainer(
     const deckTitleSize = Number(/name="Presentation title"[\s\S]*?<a:rPr\b[^>]*sz="(\d+)"/.exec(slideXml[0])?.[1] ?? 0)
     assert.ok(deckTitleSize >= 4_200, 'PPTX deck titles must stay at 42pt or larger')
     assert.match(joined, /name="Slide title"[\s\S]*?sz="3200"/, 'PPTX slide titles must stay at 32pt or larger')
-    assert.match(joined, /<a:tbl>[\s\S]*?<a:rPr\b[^>]*sz="1600"/, 'PPTX native table body text must stay at 16pt or larger')
     assert.doesNotMatch(joined, /<a:spAutoFit\s*\/>/, 'PPTX must not delegate layout to viewer-specific auto-fit')
-    assert.match(joined, /Executive takeaway/, 'PPTX must lead with an executive takeaway')
-    assert.match(joined, /Methodology &amp; limits/, 'PPTX must explain methodology and limitations')
-    assert.match(joined, /What the evidence supports/, 'PPTX must close with a supported conclusion')
-    assert.match(joined, /Sources/, 'PPTX must retain its source appendix')
-    assert.match(joined, /<a:tbl>/, 'PPTX evidence tables must remain native and editable')
+    assert.match(joined, /Abstract/, 'PPTX must summarize the canonical abstract')
+    assert.match(joined, /Introduction/, 'PPTX must establish the essay context')
+    assert.match(joined, /Conclusion/, 'PPTX must close with the canonical conclusion')
+    assert.match(joined, /Bibliography/, 'PPTX must retain a selected bibliography')
+    assert.doesNotMatch(joined, /EVIDENCE LEDGER|Methodology &amp; limits|Verification criteria|Web evidence snapshot/i)
     assert.match(joined, /Türkçe|Research fixture|longitudinal/, 'PPTX must retain readable Unicode XML text')
-    if (document.methodology.length > 4) {
-      assert.match(joined, /Method 5:/, 'PPTX must paginate methodology beyond the fourth item')
-      assert.match(joined, /Method 6:/, 'PPTX must retain the final methodology item')
-    }
-    if (document.verificationCriteria.length > 4) {
-      assert.match(joined, /Verification criterion 5:/, 'PPTX must paginate verification criteria beyond the fourth item')
-      assert.match(joined, /Verification criterion 6:/, 'PPTX must retain the final verification criterion')
-    }
-    for (const visual of document.visuals) {
-      if ((visual.points?.length ?? 0) > 6) {
-        assert.match(joined, new RegExp(`Data points 7-${visual.points!.length} of ${visual.points!.length}`))
-      }
-      if ((visual.rows?.length ?? 0) > 6) {
-        assert.match(joined, new RegExp(`Evidence rows 7-${visual.rows!.length} of ${visual.rows!.length}`))
-      }
-    }
     return
   }
   assert.ok(zip.file('xl/workbook.xml'), 'XLSX must contain a workbook manifest')

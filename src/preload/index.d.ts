@@ -1607,7 +1607,7 @@ export interface LocalRuntimeApi {
 
 // Evidence-backed autonomous Research.
 export type ResearchDepth = 'quick' | 'standard' | 'focused3h' | 'extended6h' | 'deep' | 'day' | 'continuous'
-export type ResearchOutputFormat = 'pdf' | 'md' | 'docx' | 'xlsx' | 'pptx'
+export type ResearchOutputFormat = 'pdf' | 'html' | 'md' | 'docx' | 'xlsx' | 'pptx'
 export type ResearchStatus =
   | 'draft' | 'planning' | 'researching' | 'verifying' | 'synthesizing'
   | 'exporting' | 'completed' | 'paused' | 'error' | 'archived'
@@ -1790,6 +1790,19 @@ export interface ResearchPollResponse {
   detail?: ResearchLiveDetail
 }
 
+export interface ResearchEssayPreview {
+  jobId: string
+  version: string
+  title: string
+  summary: string
+  markdown: string
+  citations: Array<{
+    number: number
+    sourceId: string
+    label: string
+  }>
+}
+
 export interface CreateResearchJobInput {
   prompt: string
   title?: string
@@ -1850,6 +1863,7 @@ export interface ResearchDiscordTestResult {
 export interface ResearchApi {
   list(): Promise<ResearchJob[]>
   get(id: string): Promise<ResearchJobDetail>
+  essay(id: string): Promise<ResearchEssayPreview | null>
   poll(id: string, version?: string): Promise<ResearchPollResponse>
   create(input: CreateResearchJobInput): Promise<ResearchJob>
   pause(id: string): Promise<ResearchJob | null>

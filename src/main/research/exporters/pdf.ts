@@ -9,6 +9,7 @@ import {
 import { researchArtifactPath } from '../workspace'
 import { RESEARCH_PDF_FONTS, registerResearchPdfFonts } from './pdf-fonts'
 import { normalizeArtifactText, RESEARCH_ARTIFACT_DESIGN, splitArtifactProse } from './design'
+import { publicationVisuals } from './publication'
 
 const require = createRequire(__filename)
 
@@ -84,12 +85,12 @@ export async function exportResearchPdf(
       bufferPages: true,
       tagged: true,
       displayTitle: true,
-      lang: inferPdfLanguage(`${document.title} ${document.subtitle} ${document.executiveSummary}`),
+      lang: inferPdfLanguage(`${document.title} ${document.abstract} ${document.introduction}`),
       info: {
         Title: document.title,
         Author: 'Akorith Research',
-        Subject: document.subtitle,
-        Keywords: 'research, evidence, sources, Akorith',
+        Subject: document.abstract,
+        Keywords: 'research, essay, bibliography, Akorith',
         Creator: 'Akorith',
         Producer: 'Akorith Research',
         CreationDate: generatedAt,
@@ -127,7 +128,7 @@ function renderCover(doc: PdfDoc, document: ResearchDocument, fonts: PdfFonts): 
   })
   const subtitleTop = titleTop + titleLayout.height + 28
   const metadataRuleY = height - 140
-  const subtitleLayout = fitPdfTextBlock(doc, document.subtitle, fonts.regular, {
+  const subtitleLayout = fitPdfTextBlock(doc, document.abstract, fonts.regular, {
     width: width - 112,
     maxHeight: Math.max(64, metadataRuleY - subtitleTop - 28),
     maxFontSize: 14,
@@ -135,7 +136,7 @@ function renderCover(doc: PdfDoc, document: ResearchDocument, fonts: PdfFonts): 
     maxLines: 10,
     lineHeight: 1.38
   })
-  const identityLayout = fitPdfTextBlock(doc, `${document.depthLabel.toUpperCase()} · ${document.modelLabel}`, fonts.regular, {
+  const identityLayout = fitPdfTextBlock(doc, document.requestedBy.toUpperCase(), fonts.regular, {
     width: width - 108,
     // The 16pt height is the effective one-line guard. `heightOfString`
     // includes font leading, so a literal maxLines=1 would reject every
@@ -234,56 +235,35 @@ function fitPdfTextBlock(
 
 function renderReport(doc: PdfDoc, document: ResearchDocument, fonts: PdfFonts): void {
   heading(doc, document.title, 25, fonts)
-  for (const briefParagraph of splitArtifactProse(document.subtitle)) {
-    paragraph(doc, briefParagraph, fonts)
-  }
-  meta(doc, `${document.depthLabel} research · ${document.providerLabel} · ${document.modelLabel}`, fonts)
   rule(doc)
-  heading(doc, 'Executive summary', 17, fonts)
-  for (const summaryParagraph of splitArtifactProse(document.executiveSummary)) {
-    paragraph(doc, summaryParagraph, fonts)
+  heading(doc, 'Abstract', 17, fonts)
+  for (const abstractParagraph of splitArtifactProse(document.abstract)) {
+    paragraph(doc, abstractParagraph, fonts)
   }
+  ensureSpace(doc, 110)
+  heading(doc, 'Introduction', 17, fonts)
+  renderMarkdownLikeBody(doc, document.introduction, fonts)
 
   for (const section of document.sections) {
     ensureSpace(doc, 110)
     heading(doc, section.title, 17, fonts)
     renderMarkdownLikeBody(doc, section.body, fonts)
-    if (section.claims.length > 0) {
-      ensureSpace(doc, 80)
-      doc.font(fonts.bold).fontSize(10).fillColor('#547266').text('EVIDENCE LEDGER', tagged(doc, 'H3'))
-      doc.moveDown(0.4)
-      for (const claim of section.claims) {
-        const refs = claim.evidence
-          .map((item) => document.sources.findIndex((source) => source.id === item.sourceId))
-          .filter((index) => index >= 0)
-          .map((index) => index + 1)
-          .join(', ')
-        bullet(doc, `${claim.text}${refs ? ` [${refs}]` : ' [unverified]'}`, fonts)
-      }
-    }
   }
 
-  if (document.visuals.length > 0) {
+  const visuals = publicationVisuals(document)
+  if (visuals.length > 0) {
     const usableHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom
-    ensureSpace(doc, Math.min(researchVisualRequiredHeight(document.visuals[0]) + 54, usableHeight))
-    heading(doc, 'Visual evidence', 17, fonts)
-    document.visuals.forEach((visual, index) => renderVisualEvidence(doc, document, visual, index, fonts))
+    ensureSpace(doc, Math.min(researchVisualRequiredHeight(visuals[0]) + 54, usableHeight))
+    heading(doc, 'Figures', 17, fonts)
+    visuals.forEach((visual, index) => renderVisualEvidence(doc, document, visual, index, fonts))
   }
 
-  if (document.methodology.length > 0 || document.verificationCriteria.length > 0) {
-    ensureSpace(doc, 110)
-    heading(doc, 'Methodology', 17, fonts)
-    for (const item of document.methodology) bullet(doc, item, fonts)
-    if (document.verificationCriteria.length > 0) {
-      ensureSpace(doc, 96)
-      doc.moveDown(0.5)
-      doc.font(fonts.bold).fontSize(11).fillColor('#202321').text('Verification criteria', tagged(doc, 'H3'))
-      for (const item of document.verificationCriteria) bullet(doc, item, fonts)
-    }
-  }
+  ensureSpace(doc, 110)
+  heading(doc, 'Conclusion', 17, fonts)
+  renderMarkdownLikeBody(doc, document.conclusion, fonts)
 
   ensureSpace(doc, 120)
-  heading(doc, 'Sources', 17, fonts)
+  heading(doc, 'Bibliography', 17, fonts)
   document.sources.forEach((source, index) => {
     ensureSpace(doc, 42)
     const left = doc.page.margins.left
@@ -354,13 +334,14 @@ function renderVisualEvidence(
     lineGap: 2
   }))
   doc.moveDown(0.25)
-  const sourceRefs = refs.length > 0 ? ` · sources ${refs.map((ref) => `[${ref}]`).join(', ')}` : ''
-  doc.font(fonts.regular).fontSize(7.5).fillColor('#7C837E').text(
-    `Provenance: ${visual.provenance.method}${sourceRefs} · generated ${new Date(visual.provenance.generatedAt).toISOString()}`,
-    left,
-    doc.y,
-    tagged(doc, 'P', { width: contentWidth(doc), lineGap: 2 })
-  )
+  if (refs.length > 0) {
+    doc.font(fonts.regular).fontSize(7.5).fillColor('#7C837E').text(
+      `Sources: ${refs.map((ref) => `[${ref}]`).join(', ')}`,
+      left,
+      doc.y,
+      tagged(doc, 'P', { width: contentWidth(doc), lineGap: 2 })
+    )
+  }
   doc.moveDown(1.2)
   doc.x = left
 }

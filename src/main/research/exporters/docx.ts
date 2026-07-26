@@ -31,6 +31,7 @@ import {
   RESEARCH_ARTIFACT_DESIGN,
   splitArtifactProse
 } from './design'
+import { publicationVisuals } from './publication'
 
 const PAGE_WIDTH = 11_906
 const PAGE_HEIGHT = 16_838
@@ -48,9 +49,9 @@ export async function exportResearchDocx(
     creator: 'Akorith Research',
     lastModifiedBy: 'Akorith Research',
     title: research.title,
-    subject: research.subtitle,
-    keywords: 'research, evidence, sources, Akorith',
-    description: research.subtitle,
+    subject: research.abstract,
+    keywords: 'research, essay, bibliography, Akorith',
+    description: research.abstract,
     styles: researchStyles(),
     sections: [{
       properties: {
@@ -99,8 +100,8 @@ export async function exportResearchDocx(
 
 function coverPage(research: ResearchDocument): Paragraph[] {
   const coverTitle = compactArtifactText(research.title, 155)
-  const coverSubtitle = compactArtifactText(research.subtitle, 320)
-  const coverWasShortened = coverTitle !== research.title || coverSubtitle !== research.subtitle
+  const coverSubtitle = compactArtifactText(research.abstract, 320)
+  const coverWasShortened = coverTitle !== research.title || coverSubtitle !== research.abstract
   return [
     new Paragraph({
       spacing: { before: 320, after: 1_100 },
@@ -131,7 +132,7 @@ function coverPage(research: ResearchDocument): Paragraph[] {
       })]
     })] : []),
     new Paragraph({ spacing: { before: 360, after: 180 }, children: [
-      new TextRun({ text: `${research.depthLabel.toUpperCase()}  ·  ${research.modelLabel}`, bold: true, size: 21, color: '35423C' })
+      new TextRun({ text: research.requestedBy.toUpperCase(), bold: true, size: 21, color: '35423C' })
     ] }),
     new Paragraph({ children: [
       new TextRun({
@@ -147,55 +148,25 @@ function coverPage(research: ResearchDocument): Paragraph[] {
 function reportBody(research: ResearchDocument): Array<Paragraph | Table> {
   const children: Array<Paragraph | Table> = [
     heading(research.title, HeadingLevel.TITLE),
-    new Paragraph({
-      spacing: { after: 380 },
-      children: [new TextRun({
-        text: `${research.depthLabel} research · ${research.providerLabel} · ${research.modelLabel}`,
-        italics: true,
-        color: '6B716D',
-        size: 20
-      })]
-    }),
-    heading('Executive summary', HeadingLevel.HEADING_1),
-    ...splitArtifactProse(research.executiveSummary).map(bodyParagraph)
+    heading('Abstract', HeadingLevel.HEADING_1),
+    ...splitArtifactProse(research.abstract).map(bodyParagraph),
+    heading('Introduction', HeadingLevel.HEADING_1),
+    ...markdownParagraphs(research.introduction)
   ]
   for (const section of research.sections) {
     children.push(heading(section.title, HeadingLevel.HEADING_1))
     children.push(...markdownParagraphs(section.body))
-    if (section.claims.length > 0) {
-      children.push(heading('Evidence ledger', HeadingLevel.HEADING_2))
-      for (const claim of section.claims) {
-        const refs = claim.evidence
-          .map((evidence) => research.sources.findIndex((source) => source.id === evidence.sourceId))
-          .filter((index) => index >= 0)
-          .map((index) => index + 1)
-          .join(', ')
-        children.push(new Paragraph({
-          bullet: { level: 0 },
-          spacing: { after: 100 },
-          children: [
-            new TextRun({ text: `${claim.status.toUpperCase()}: `, bold: true, color: statusColor(claim.status) }),
-            new TextRun(`${claim.text}${refs ? ` [${refs}]` : ' [no verified citation]'}`)
-          ]
-        }))
-      }
-    }
   }
-  if (research.visuals.length > 0) {
-    children.push(heading('Visual evidence', HeadingLevel.HEADING_1))
-    research.visuals.forEach((visual, index) => {
+  const visuals = publicationVisuals(research)
+  if (visuals.length > 0) {
+    children.push(heading('Figures', HeadingLevel.HEADING_1))
+    visuals.forEach((visual, index) => {
       children.push(...visualEvidenceBody(research, visual, index))
     })
   }
-  if (research.methodology.length > 0 || research.verificationCriteria.length > 0) {
-    children.push(heading('Methodology', HeadingLevel.HEADING_1))
-    for (const item of research.methodology) children.push(bulletParagraph(item))
-    if (research.verificationCriteria.length > 0) {
-      children.push(heading('Verification criteria', HeadingLevel.HEADING_2))
-      for (const item of research.verificationCriteria) children.push(bulletParagraph(item))
-    }
-  }
-  children.push(heading('Sources', HeadingLevel.HEADING_1))
+  children.push(heading('Conclusion', HeadingLevel.HEADING_1))
+  children.push(...markdownParagraphs(research.conclusion))
+  children.push(heading('Bibliography', HeadingLevel.HEADING_1))
   research.sources.forEach((source, index) => {
     const sourceName = source.publisher || safeHostname(source.url)
     children.push(new Paragraph({
@@ -243,14 +214,16 @@ function visualEvidenceBody(
     spacing: { before: 90, after: 70 },
     children: [new TextRun({ text: visual.caption, italics: true, size: 18, color: '68716B' })]
   }))
-  children.push(new Paragraph({
-    spacing: { after: 220 },
-    children: [new TextRun({
-      text: `Provenance: ${visual.provenance.method}${refs.length > 0 ? ` · sources ${refs.map((ref) => `[${ref}]`).join(', ')}` : ''}`,
-      size: 16,
-      color: '7B827D'
-    })]
-  }))
+  if (refs.length > 0) {
+    children.push(new Paragraph({
+      spacing: { after: 220 },
+      children: [new TextRun({
+        text: `Sources: ${refs.map((ref) => `[${ref}]`).join(', ')}`,
+        size: 16,
+        color: '7B827D'
+      })]
+    }))
+  }
   return children
 }
 

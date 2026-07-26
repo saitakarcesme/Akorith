@@ -27,8 +27,11 @@ export interface ResearchDocument {
   modelLabel: string
   methodology: string[]
   verificationCriteria: string[]
+  abstract: string
+  introduction: string
   executiveSummary: string
   sections: ResearchDocumentSection[]
+  conclusion: string
   sources: ResearchSource[]
   visuals: ResearchVisualEvidence[]
 }
@@ -39,9 +42,9 @@ export function buildResearchDocument(input: {
   reportMarkdown: string
   claims: ResearchClaim[]
   sources: ResearchSource[]
+  generatedAt?: number
 }): ResearchDocument {
   const parsed = splitMarkdownSections(input.reportMarkdown)
-  const planSections = input.plan?.sections ?? []
   const sourceDisplay = deduplicateResearchSources(input.sources)
   const displayClaims = rankAndDeduplicateResearchClaims(input.claims.map((claim) => ({
     ...claim,
@@ -50,54 +53,44 @@ export function buildResearchDocument(input: {
       sourceId: sourceDisplay.redirects.get(evidence.sourceId) ?? evidence.sourceId
     }))
   })))
-  const sectionIds = new Set<string>()
-  const sections: ResearchDocumentSection[] = []
-
-  for (const planned of planSections) {
-    sectionIds.add(planned.id)
-    const matched = parsed.find((section) => normalizeHeading(section.title) === normalizeHeading(planned.title))
-    sections.push({
-      id: planned.id,
-      title: planned.title,
-      body: matched?.body || planned.objective,
-      claims: displayClaims.filter((claim) => claim.sectionId === planned.id)
-    })
-  }
-  for (const section of parsed) {
-    if (isReservedReportSection(section.title)) continue
-    const id = normalizeHeading(section.title) || `section-${sections.length + 1}`
-    if (sectionIds.has(id) || sections.some((item) => normalizeHeading(item.title) === id)) continue
-    sections.push({
-      id,
-      title: section.title,
-      body: section.body,
-      claims: displayClaims.filter((claim) => claim.sectionId === id)
-    })
-  }
-  if (sections.length === 0) {
-    sections.push({ id: 'findings', title: 'Findings', body: input.reportMarkdown.trim(), claims: displayClaims })
-  } else {
-    // A provider can return a claim whose section id does not match the plan or
-    // a parsed Markdown heading. Keep those claims visible instead of silently
-    // dropping them from every exported format.
-    const assignedClaimIds = new Set(sections.flatMap((section) => section.claims.map((claim) => claim.id)))
-    const additionalClaims = displayClaims.filter((claim) => !assignedClaimIds.has(claim.id))
-    if (additionalClaims.length > 0) {
-      let id = 'additional-evidence'
-      let suffix = 2
-      while (sectionIds.has(id) || sections.some((section) => section.id === id)) id = `additional-evidence-${suffix++}`
-      sections.push({
+  const abstractSection = findReportSection(parsed, ['abstract', 'executive-summary', 'summary'])
+  const introductionSection = findReportSection(parsed, ['introduction', 'overview'])
+  const conclusionSection = findReportSection(parsed, ['conclusion', 'conclusions'])
+  const sections: ResearchDocumentSection[] = parsed
+    .filter((section) => !isReservedReportSection(section.title))
+    .map((section, index) => {
+      const id = normalizeHeading(section.title) || `section-${index + 1}`
+      const planned = input.plan?.sections.find((candidate) =>
+        candidate.id === id || normalizeHeading(candidate.title) === id
+      )
+      return {
         id,
-        title: 'Additional evidence',
-        body: 'Evidence that was not assigned to a report section by the research provider.',
-        claims: additionalClaims
-      })
-    }
+        title: section.title,
+        body: section.body,
+        claims: displayClaims.filter((claim) =>
+          claim.sectionId === id || (planned && claim.sectionId === planned.id)
+        )
+      }
+    })
+  if (sections.length === 0) {
+    const body = input.reportMarkdown
+      .replace(/^#\s+.*$/m, '')
+      .trim()
+    sections.push({ id: 'analysis', title: 'Analysis', body, claims: displayClaims })
   }
 
-  const generatedAt = Date.now()
+  const generatedAt = input.generatedAt ?? Date.now()
+  const abstract = abstractSection?.body
+    || input.job.summary
+    || firstUsefulParagraph(input.reportMarkdown)
+  const introduction = introductionSection?.body
+    || input.plan?.thesis
+    || abstract
+  const conclusion = conclusionSection?.body
+    || lastUsefulParagraph(input.reportMarkdown)
+    || abstract
   return {
-    title: input.plan?.title || input.job.title,
+    title: markdownTitle(input.reportMarkdown) || input.plan?.title || input.job.title,
     subtitle: input.plan?.thesis || input.job.prompt,
     requestedBy: 'Akorith Research',
     generatedAt,
@@ -106,8 +99,11 @@ export function buildResearchDocument(input: {
     modelLabel: input.job.model || 'Default model',
     methodology: input.plan?.sourceStrategy ?? [],
     verificationCriteria: input.plan?.verificationCriteria ?? [],
-    executiveSummary: input.job.summary || firstUsefulParagraph(input.reportMarkdown),
+    abstract,
+    introduction,
+    executiveSummary: abstract,
     sections,
+    conclusion,
     sources: sourceDisplay.sources,
     visuals: buildResearchVisualEvidence({
       claims: displayClaims,
@@ -118,9 +114,9 @@ export function buildResearchDocument(input: {
 }
 
 /**
- * Creates a complete canonical display ledger without mutating or deleting persisted
- * claims. Exactly equivalent claims from repeated autonomous cycles are merged,
- * their evidence is retained, and the strongest record wins deterministically.
+ * Builds the private editorial claim set without mutating or deleting persisted
+ * evidence. Equivalent claims from repeated autonomous cycles are merged, their
+ * source links are retained, and the strongest record wins deterministically.
  */
 export function rankAndDeduplicateResearchClaims(claims: ResearchClaim[]): ResearchClaim[] {
   const groups = new Map<string, ResearchClaim[]>()
@@ -169,7 +165,7 @@ export function deduplicateResearchSources(sources: ResearchSource[]): {
 } {
   const groups = new Map<string, ResearchSource[]>()
   for (const source of sources) {
-    const key = canonicalSourceKey(source)
+    const key = canonicalResearchSourceKey(source)
     const group = groups.get(key) ?? []
     group.push(source)
     groups.set(key, group)
@@ -194,7 +190,7 @@ export function splitMarkdownSections(markdown: string): Array<{ title: string; 
     body = []
   }
   for (const line of lines) {
-    const heading = /^(?:##|###)\s+(.+?)\s*$/.exec(line)
+    const heading = /^##\s+(.+?)\s*$/.exec(line)
     if (heading) {
       flush()
       currentTitle = heading[1].replace(/[*_`]/g, '').trim()
@@ -221,7 +217,33 @@ function normalizeHeading(value: string): string {
 }
 
 function isReservedReportSection(title: string): boolean {
-  return ['executive-summary', 'sources', 'methodology'].includes(normalizeHeading(title))
+  return [
+    'abstract',
+    'executive-summary',
+    'summary',
+    'introduction',
+    'overview',
+    'conclusion',
+    'conclusions',
+    'sources',
+    'references',
+    'bibliography',
+    'methodology',
+    'verification-criteria',
+    'evidence-ledger',
+    'research-log'
+  ].includes(normalizeHeading(title))
+}
+
+function findReportSection(
+  sections: Array<{ title: string; body: string }>,
+  names: string[]
+): { title: string; body: string } | undefined {
+  return sections.find((section) => names.includes(normalizeHeading(section.title)))
+}
+
+function markdownTitle(markdown: string): string {
+  return /^#\s+(.+?)\s*$/m.exec(markdown)?.[1]?.replace(/[*_`]/g, '').trim() ?? ''
 }
 
 function firstUsefulParagraph(markdown: string): string {
@@ -231,6 +253,16 @@ function firstUsefulParagraph(markdown: string): string {
     .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
     .find(Boolean)
   return paragraph ? Array.from(paragraph).slice(0, 2_000).join('') : 'Research completed.'
+}
+
+function lastUsefulParagraph(markdown: string): string {
+  const paragraphs = markdown
+    .replace(/^#{1,6}\s+.*$/gm, '')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const paragraph = paragraphs.at(-1)
+  return paragraph ? Array.from(paragraph).slice(0, 4_000).join('') : ''
 }
 
 function normalizedClaimText(value: string): string {
@@ -262,7 +294,7 @@ function claimStatusRank(status: ResearchClaim['status']): number {
   return 1
 }
 
-function canonicalSourceKey(source: ResearchSource): string {
+export function canonicalResearchSourceKey(source: ResearchSource): string {
   try {
     const url = new URL(source.url)
     url.hash = ''

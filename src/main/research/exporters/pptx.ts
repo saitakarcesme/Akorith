@@ -12,6 +12,7 @@ import {
   RESEARCH_ARTIFACT_DESIGN,
   splitArtifactProse
 } from './design'
+import { publicationVisuals, selectedPublicationSources } from './publication'
 
 const SLIDE_WIDTH = 12_192_000
 const SLIDE_HEIGHT = 6_858_000
@@ -99,7 +100,54 @@ export async function exportResearchPptx(
   return path
 }
 
+/**
+ * A presentation is a bounded projection of the canonical essay, not a second
+ * evidence ledger. It deliberately keeps one slide per selected article
+ * section, at most one meaningful chart, and one short bibliography.
+ */
 function buildSlides(research: ResearchDocument): SlideBuild[] {
+  const slides: SlideBuild[] = []
+  const usedTitles = new Set<string>()
+  let page = 1
+  const push = (title: string, body: string[]): void => {
+    let uniqueTitle = title
+    let suffix = 2
+    while (usedTitles.has(uniqueTitle.toLocaleLowerCase('en-US'))) uniqueTitle = `${title} · ${suffix++}`
+    usedTitles.add(uniqueTitle.toLocaleLowerCase('en-US'))
+    slides.push({ title: uniqueTitle, body: [...body, ...footer(page++, research)] })
+  }
+
+  push(research.title, titleSlide(research))
+  push('Abstract', essayTextSlide('01', 'Abstract', 'The article in brief.', research.abstract, true))
+  push('Introduction', essayTextSlide('02', 'Introduction', 'Context and central question.', research.introduction))
+
+  const sections = boundedEssaySections(research.sections, 6)
+  sections.forEach((section, index) => {
+    push(
+      section.title,
+      essayTextSlide(
+        String(index + 3).padStart(2, '0'),
+        section.title,
+        research.sections.length > sections.length
+          ? `Selected theme from ${research.sections.length} article sections.`
+          : 'A central theme from the research essay.',
+        section.body
+      )
+    )
+  })
+
+  const visual = publicationVisuals(research)[0]
+  if (visual?.points?.length) {
+    const points = visual.points.slice(0, 6)
+    push(visual.title, chartSlide(visual, points, 0, 1, visual.points.length))
+  }
+
+  push('Conclusion', essayTextSlide('END', 'Conclusion', 'What the research establishes.', research.conclusion, true))
+  push('Bibliography', sourcesSlide(selectedPublicationSources(research, 4), research.sources.length, 0))
+  return slides
+}
+
+function buildLegacySlides(research: ResearchDocument): SlideBuild[] {
   const slides: SlideBuild[] = []
   let page = 1
   const push = (title: string, body: string[]): void => {
@@ -273,6 +321,50 @@ function buildSlides(research: ResearchDocument): SlideBuild[] {
   return slides
 }
 
+function essayTextSlide(
+  index: string,
+  title: string,
+  subtitle: string,
+  body: string,
+  emphasized = false
+): string[] {
+  const paragraphs = proseParagraphs(body, 360).slice(0, 3)
+  const page = paginatePptxParagraphs(
+    paragraphs,
+    10.65,
+    2.82,
+    emphasized ? 25 : 22,
+    18,
+    false
+  )[0] ?? { values: ['No publication text was retained for this section.'], fontSize: 20 }
+  return [
+    ...slideHeader(index, compact(title, 72), subtitle),
+    roundedRectShape(10, 'Essay surface', 0.82, 2.02, 11.72, 3.9, COLORS.surface, COLORS.border, 0.8),
+    textShape(11, 'Essay section label', 1.16, 2.34, 10.6, 0.34, [
+      { text: 'RESEARCH ESSAY', size: 12, color: COLORS.mint, bold: true }
+    ], { tracking: 120 }),
+    textShape(12, 'Essay section text', 1.14, 2.95, 10.65, 2.82, page.values.map((paragraph) => ({
+      text: paragraph,
+      size: page.fontSize,
+      color: emphasized ? COLORS.text : COLORS.muted,
+      bold: emphasized,
+      after: 8
+    })), { description: `Essay summary for ${compact(title, 100)}` })
+  ]
+}
+
+function boundedEssaySections(
+  sections: ResearchDocument['sections'],
+  limit: number
+): ResearchDocument['sections'] {
+  if (sections.length <= limit) return sections
+  const indexes = new Set<number>()
+  for (let index = 0; index < limit; index += 1) {
+    indexes.add(Math.round(index * (sections.length - 1) / Math.max(1, limit - 1)))
+  }
+  return [...indexes].map((index) => sections[index])
+}
+
 function titleSlide(research: ResearchDocument): string[] {
   const titleY = 1.34
   const title = fitArtifactText(research.title, {
@@ -289,7 +381,7 @@ function titleSlide(research: ResearchDocument): string[] {
   const titleHeight = Math.max(1.0, title.lines.length * title.fontSize * 1.14 / 72 + 0.08)
   const subtitleY = titleY + titleHeight + 0.24
   const metadataY = 5.82
-  const subtitle = fitArtifactText(research.subtitle, {
+  const subtitle = fitArtifactText(research.abstract, {
     width: 10.25 * 72 * 0.82,
     maxHeight: Math.max(0.68, metadataY - subtitleY - 0.42) * 72,
     maxFontSize: 18,
@@ -319,12 +411,12 @@ function titleSlide(research: ResearchDocument): string[] {
       color: COLORS.muted,
       after: 0
     })), {
-      description: 'Research question or thesis',
+      description: 'Research abstract',
       wrap: 'none'
     }),
     textShape(6, 'Presentation metadata', 1.08, metadataY, 10.0, 0.42, [
       {
-        text: `${research.depthLabel.toUpperCase()}  ·  ${singleLine(research.modelLabel, 42, 14)}  ·  ${research.sources.length} sources  ·  ${formatDate(research.generatedAt)}`,
+        text: `${research.requestedBy.toUpperCase()}  ·  ${research.sources.length} sources  ·  ${formatDate(research.generatedAt)}`,
         size: 14,
         color: COLORS.dim
       }
@@ -650,7 +742,11 @@ function sourcesSlide(
     ])
     : [{ text: 'No external sources were retained for this research.', size: 19, color: COLORS.muted }]
   return [
-    ...slideHeader('SRC', pageIndex === 0 ? 'Sources' : `Sources · ${pageIndex + 1}`, `${total} sources retained in the canonical evidence ledger.`),
+    ...slideHeader(
+      'BIB',
+      pageIndex === 0 ? 'Bibliography' : `Bibliography · ${pageIndex + 1}`,
+      `Selected references · ${sources.length} shown from ${total} retained sources.`
+    ),
     textShape(10, 'Source list', 0.86, 1.98, 11.55, 4.05, lines)
   ]
 }
@@ -892,7 +988,7 @@ function themeXml(): string {
 
 function corePropertiesXml(research: ResearchDocument, language: string): string {
   const created = new Date(research.generatedAt).toISOString()
-  return xml(`<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${escapeXml(research.title)}</dc:title><dc:subject>${escapeXml(research.subtitle)}</dc:subject><dc:creator>Akorith Research</dc:creator><dc:language>${escapeXml(language)}</dc:language><cp:lastModifiedBy>Akorith Research</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified></cp:coreProperties>`)
+  return xml(`<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${escapeXml(research.title)}</dc:title><dc:subject>${escapeXml(research.abstract)}</dc:subject><dc:creator>Akorith Research</dc:creator><dc:language>${escapeXml(language)}</dc:language><cp:lastModifiedBy>Akorith Research</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified></cp:coreProperties>`)
 }
 
 function appPropertiesXml(slides: SlideBuild[]): string {
@@ -1108,11 +1204,10 @@ function formatPoint(value: number, unit: string): string {
 function inferPresentationLanguage(research: ResearchDocument): string {
   const sample = Array.from(normalizeArtifactText([
     research.title,
-    research.subtitle,
-    research.executiveSummary,
+    research.abstract,
+    research.introduction,
     ...research.sections.flatMap((section) => [section.title, section.body]),
-    ...research.methodology,
-    ...research.verificationCriteria
+    research.conclusion
   ].join(' '))).slice(0, 24_000).join('')
   const count = (pattern: RegExp): number => [...sample.matchAll(pattern)].length
   const turkish = count(/[çğıöşüİÇĞÖŞÜ]/gu)

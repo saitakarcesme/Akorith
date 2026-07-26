@@ -1,5 +1,5 @@
 import { unlinkSync } from 'fs'
-import { buildResearchDocument } from '../document'
+import { buildResearchDocument, canonicalResearchSourceKey } from '../document'
 import { writeResearchCover } from '../cover'
 import {
   getResearchJob,
@@ -10,15 +10,17 @@ import {
   recordResearchArtifact,
   updateResearchJob
 } from '../store'
-import type { ResearchArtifact, ResearchOutputFormat } from '../types'
+import type { ResearchArtifact, ResearchOutputFormat, ResearchSource } from '../types'
 import {
   RESEARCH_FINDINGS_FILE,
   RESEARCH_REPORT_FILE,
   readResearchMarkdown,
   readResearchPlan,
+  readResearchPublication,
   researchArtifactPath
 } from '../workspace'
 import { exportResearchDocx } from './docx'
+import { exportResearchHtml } from './html'
 import { exportResearchMarkdown } from './markdown'
 import { exportResearchPdf } from './pdf'
 import { exportResearchPptx } from './pptx'
@@ -56,14 +58,43 @@ async function exportResearchJobLocked(
   }
   logResearchEvent({ jobId, kind: 'export_started', title: `Creating ${format.toUpperCase()} deliverable` })
 
-  const report = readResearchMarkdown(job.workspaceDir, RESEARCH_REPORT_FILE)
+  const publication = readResearchPublication(job.workspaceDir)
+  const stablePublication = publication?.jobId === job.id ? publication : null
+  const report = stablePublication?.reportMarkdown
+    || readResearchMarkdown(job.workspaceDir, RESEARCH_REPORT_FILE)
     || readResearchMarkdown(job.workspaceDir, RESEARCH_FINDINGS_FILE)
+  const persistedSources = listResearchSources(job.id)
+  const sourcesById = new Map(persistedSources.map((source) => [source.id, source]))
+  const sources = stablePublication
+    ? stablePublication.sourceIds
+      .map((sourceId) => sourcesById.get(sourceId))
+      .filter((source): source is ResearchSource => Boolean(source))
+    : persistedSources
+  const publicationSourceIds = new Set(sources.map((source) => source.id))
+  const publicationSourceIdByKey = new Map(
+    sources.map((source) => [canonicalResearchSourceKey(source), source.id])
+  )
+  const claims = listResearchClaims(job.id)
+    .filter((claim) => !stablePublication || claim.createdAt <= stablePublication.generatedAt)
+    .map((claim) => ({
+      ...claim,
+      evidence: claim.evidence
+        .map((evidence) => {
+          const evidenceSource = sourcesById.get(evidence.sourceId)
+          const stableSourceId = stablePublication && evidenceSource
+            ? publicationSourceIdByKey.get(canonicalResearchSourceKey(evidenceSource))
+            : undefined
+          return { ...evidence, sourceId: stableSourceId ?? evidence.sourceId }
+        })
+        .filter((evidence) => publicationSourceIds.has(evidence.sourceId))
+    }))
   const document = buildResearchDocument({
     job,
     plan: job.plan ?? readResearchPlan(job.workspaceDir) ?? undefined,
     reportMarkdown: report,
-    claims: listResearchClaims(job.id),
-    sources: listResearchSources(job.id)
+    claims,
+    sources,
+    generatedAt: stablePublication?.generatedAt
   })
   const version = nextResearchArtifactVersion(job.id, format)
   const coverPath = writeResearchCover(job.workspaceDir, document)
@@ -107,6 +138,7 @@ async function exportByFormat(
   document: ReturnType<typeof buildResearchDocument>,
   outputPath: string
 ): Promise<string> {
+  if (format === 'html') return exportResearchHtml(workspaceDir, document, outputPath)
   if (format === 'md') return exportResearchMarkdown(workspaceDir, document, outputPath)
   if (format === 'pdf') return exportResearchPdf(workspaceDir, document, outputPath)
   if (format === 'docx') return exportResearchDocx(workspaceDir, document, outputPath)

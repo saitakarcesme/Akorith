@@ -51,8 +51,8 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
       <header className="research-library-header">
         <div>
           <span className="research-eyebrow">RESEARCH LIBRARY</span>
-          <h1>Reports built to keep</h1>
-          <p>Every investigation, source ledger, and validated output remains available here.</p>
+          <h1>Research essays built to keep</h1>
+          <p>Every finished essay stays readable and publishable, with its supporting evidence available when needed.</p>
         </div>
         <div className="research-library-filters" role="group" aria-label="Research library filter">
           {(['all', 'published', 'active'] as LibraryFilter[]).map((item) => (
@@ -105,7 +105,7 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
               </span>
               <span className="research-book-meta">
                 <strong>{job.plan?.title || job.title}</strong>
-                <small>{job.sourceCount} sources · {job.findingCount} findings</small>
+                <small>{job.outputFormat.toUpperCase()} · {job.sourceCount} cited sources</small>
                 <em>{formatDate(job.updatedAt)}</em>
               </span>
             </button>

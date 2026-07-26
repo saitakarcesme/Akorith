@@ -7,12 +7,17 @@ import {
   writeFileSync
 } from 'fs'
 import { basename, join, relative, resolve, sep } from 'path'
-import type { ResearchPlan, ResearchWorkspaceState } from './types'
+import type {
+  ResearchPlan,
+  ResearchPublicationSnapshot,
+  ResearchWorkspaceState
+} from './types'
 
 export const RESEARCH_PLAN_FILE = 'PLAN.json'
 export const RESEARCH_FINDINGS_FILE = 'FINDINGS.md'
 export const RESEARCH_SOURCES_FILE = 'SOURCES.json'
 export const RESEARCH_REPORT_FILE = 'REPORT.md'
+export const RESEARCH_PUBLICATION_FILE = 'PUBLICATION.json'
 export const RESEARCH_STATE_FILE = 'RESEARCH_STATE.json'
 
 export function researchRoot(): string {
@@ -75,6 +80,33 @@ export function readResearchPlan(workspaceDir: string): ResearchPlan | null {
 
 export function writeResearchPlan(workspaceDir: string, plan: ResearchPlan): void {
   writeJsonAtomic(safeResearchPath(workspaceDir, RESEARCH_PLAN_FILE), plan)
+}
+
+export function readResearchPublication(workspaceDir: string): ResearchPublicationSnapshot | null {
+  const publication = readJson<ResearchPublicationSnapshot>(
+    safeResearchPath(workspaceDir, RESEARCH_PUBLICATION_FILE)
+  )
+  if (
+    !publication
+    || publication.version !== 1
+    || !/^[\w-]{1,64}$/.test(publication.jobId)
+    || !Number.isFinite(publication.generatedAt)
+    || publication.generatedAt <= 0
+    || typeof publication.reportMarkdown !== 'string'
+    || publication.reportMarkdown.length > 5_000_000
+    || !Array.isArray(publication.sourceIds)
+    || publication.sourceIds.length > 10_000
+    || publication.sourceIds.some((sourceId) => typeof sourceId !== 'string' || !/^[\w-]{1,64}$/.test(sourceId))
+    || new Set(publication.sourceIds).size !== publication.sourceIds.length
+  ) return null
+  return publication
+}
+
+export function writeResearchPublication(
+  workspaceDir: string,
+  publication: ResearchPublicationSnapshot
+): void {
+  writeJsonAtomic(safeResearchPath(workspaceDir, RESEARCH_PUBLICATION_FILE), publication)
 }
 
 export function readResearchMarkdown(workspaceDir: string, fileName: string): string {

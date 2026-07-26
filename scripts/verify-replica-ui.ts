@@ -76,6 +76,8 @@ const chat = read('src/renderer/src/components/ChatPanel.tsx')
 const dashboard = read('src/renderer/src/components/Dashboard.tsx')
 const preview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
 const research = read('src/renderer/src/components/ResearchProgress.tsx')
+const researchEssay = read('src/renderer/src/components/ResearchEssay.tsx')
+const researchOperations = read('src/renderer/src/components/ResearchOperationalDetails.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
 const sidebar = read('src/renderer/src/components/Sidebar.tsx')
@@ -172,21 +174,28 @@ check(
   'empty-chat composer is centered before optional suggestions'
 )
 check(
-  research.includes('research-phase-scroll') &&
-  research.includes('<strong>{phase.label}</strong>') &&
+  researchOperations.includes('research-phase-scroll') &&
+  researchOperations.includes('<strong>{phase.label}</strong>') &&
   selectorBlocks(replicaCss, '.research-phase.is-active').some((block) =>
     !/(?:purple|gradient|animation)/i.test(block)
   ),
   'Research uses a compact neutral phase strip'
 )
 check(
-  research.includes('research-workbench-grid') &&
+  researchOperations.includes('research-workbench-grid') &&
   selectorBlocks(stylesCss, '.research-workbench-grid').some((block) =>
     /display\s*:\s*grid/.test(block) &&
     /auto-fit/.test(block) &&
     /gap\s*:\s*clamp\(/.test(block)
   ),
   'Evidence program and Research log share a responsive, spacious grid'
+)
+check(
+  research.includes('<ResearchEssay') &&
+  research.includes('collapsed={terminal}') &&
+  researchEssay.includes('Research essay') &&
+  researchEssay.includes('Bibliography'),
+  'Completed Research leads with the essay and keeps operational details collapsed'
 )
 check(
   dashboard.includes('gpuHistory') &&

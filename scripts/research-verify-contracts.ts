@@ -16,6 +16,7 @@ function matches(text: string, pattern: RegExp): string[] {
 const expectedChannels = [
   'research:list',
   'research:get',
+  'research:essay',
   'research:poll',
   'research:create',
   'research:pause',
@@ -38,6 +39,7 @@ const expectedChannels = [
 const expectedApiMethods = [
   'list',
   'get',
+  'essay',
   'poll',
   'create',
   'pause',
@@ -93,6 +95,16 @@ for (const identityMethod of ['openArtifact', 'revealArtifact', 'coverDataUrl', 
     `${identityMethod} must accept a managed identity rather than a renderer filesystem path`
   )
 }
+assert.match(
+  apiBlock,
+  /essay\(id: string\): Promise<ResearchEssayPreview \| null>/,
+  'essay preview must accept a managed research identity and return the typed publication contract'
+)
+assert.match(
+  ipcSource,
+  /ipcMain\.handle\('research:essay'[\s\S]*?requireId\(input, 'research job'\)/,
+  'essay preview IPC must validate a managed Research job ID'
+)
 
 assert.match(ipcSource, /requireId\(input, 'research artifact'\)/, 'artifact actions must validate managed artifact IDs')
 assert.match(ipcSource, /requireId\(input, 'research source'\)/, 'source actions must validate managed source IDs')

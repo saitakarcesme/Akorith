@@ -43,6 +43,7 @@ export interface ArtifactValidationResult {
 
 const MIME_TYPES: Record<ResearchOutputFormat, string> = {
   pdf: 'application/pdf',
+  html: 'text/html',
   md: 'text/markdown',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -60,6 +61,7 @@ export async function validateResearchArtifact(
     mimeType: MIME_TYPES[format]
   }
   try {
+    if (format === 'html') validateHtml(bytes.toString('utf8'))
     if (format === 'md') validateMarkdown(bytes.toString('utf8'))
     if (format === 'pdf') {
       const pageTexts: string[] = []
@@ -113,6 +115,47 @@ export async function validateResearchArtifact(
   }
 }
 
+function validateHtml(html: string): void {
+  if (!/^<!doctype html>/i.test(html.trimStart())) throw new Error('HTML publication has no doctype.')
+  if (!/<html\b[^>]*\blang="[a-z]{2,3}(?:-[A-Z]{2})?"/i.test(html)) {
+    throw new Error('HTML publication has no document language.')
+  }
+  if (!/<meta\s+charset="utf-8"\s*\/?>/i.test(html)) throw new Error('HTML publication is not declared as UTF-8.')
+  if (!/<meta\b[^>]*http-equiv="Content-Security-Policy"/i.test(html)) {
+    throw new Error('HTML publication has no Content Security Policy.')
+  }
+  const tags = [...html.matchAll(/<[^>]+>/g)].map((match) => match[0])
+  if (/<script\b/i.test(html) || tags.some((tag) => /\son[a-z]+\s*=/i.test(tag))) {
+    throw new Error('HTML publication contains executable script or event handlers.')
+  }
+  if (/<(?:iframe|object|embed|form)\b/i.test(html)) {
+    throw new Error('HTML publication contains an unsafe embedded element.')
+  }
+  for (const source of html.matchAll(/\bsrc="([^"]+)"/gi)) {
+    if (!source[1].startsWith('data:image/svg+xml;base64,')) {
+      throw new Error('HTML publication references a non-embedded asset.')
+    }
+  }
+  for (const required of [
+    /<main\b[^>]*id="main-content"/i,
+    /<article\b/i,
+    /id="abstract"/i,
+    /id="introduction"/i,
+    /id="conclusion"/i,
+    /id="bibliography"/i,
+    /<h1\b/i
+  ]) {
+    if (!required.test(html)) throw new Error('HTML publication is missing its accessible essay structure.')
+  }
+  if (/\bEvidence ledger\b/i.test(html) || /\bVerification criteria\b/i.test(html)) {
+    throw new Error('HTML publication exposes internal evidence operations.')
+  }
+  const sourceIds = new Set([...html.matchAll(/\bid="source-(\d+)"/g)].map((match) => match[1]))
+  for (const citation of html.matchAll(/\bhref="#source-(\d+)"/g)) {
+    if (!sourceIds.has(citation[1])) throw new Error(`HTML publication contains an orphan citation: ${citation[1]}.`)
+  }
+}
+
 /**
  * Validate PDF.js' rendered text geometry, not only extracted text. PDFKit can
  * produce a syntactically valid PDF while starting a block from a stale x
@@ -163,9 +206,14 @@ function validatePdfPageLayouts(pages: PdfPageLayout[]): void {
 
 function validateMarkdown(markdown: string): void {
   if (!/^#\s+\S/m.test(markdown)) throw new Error('Markdown report has no title.')
-  if (!/^##\s+Executive summary\s*$/im.test(markdown)) throw new Error('Markdown report has no executive summary.')
-  if (!/^##\s+Sources\s*$/im.test(markdown)) throw new Error('Markdown report has no Sources section.')
+  if (!/^##\s+Abstract\s*$/im.test(markdown)) throw new Error('Markdown publication has no abstract.')
+  if (!/^##\s+Introduction\s*$/im.test(markdown)) throw new Error('Markdown publication has no introduction.')
+  if (!/^##\s+Conclusion\s*$/im.test(markdown)) throw new Error('Markdown publication has no conclusion.')
+  if (!/^##\s+Bibliography\s*$/im.test(markdown)) throw new Error('Markdown publication has no bibliography.')
   if (!/^##\s+Contents\s*$/im.test(markdown)) throw new Error('Markdown report has no table of contents.')
+  if (/\bEvidence ledger\b/i.test(markdown) || /\bVerification criteria\b/i.test(markdown)) {
+    throw new Error('Markdown publication exposes internal evidence operations.')
+  }
   const refs = [...markdown.matchAll(/\[\d+\]\(#source-(\d+)\)/g)].map((match) => match[1])
   for (const ref of refs) {
     if (!markdown.includes(`<a id="source-${ref}"></a>`)) throw new Error(`Markdown contains an orphan source reference: ${ref}.`)

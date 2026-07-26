@@ -28,7 +28,7 @@ for (const depth of RESEARCH_DEPTHS) {
     }
   }
 }
-assert.equal(accepted, 70, 'all duration, output, and provider-class combinations must be accepted')
+assert.equal(accepted, 84, 'all duration, output, and provider-class combinations must be accepted')
 
 assert.equal(RESEARCH_DEPTH_PROFILES.quick.targetDurationMs, 10 * 60_000)
 assert.equal(RESEARCH_DEPTH_PROFILES.standard.targetDurationMs, 60 * 60_000)
@@ -54,7 +54,7 @@ for (const [label, input, pattern] of [
   ['provider shell syntax', { ...valid, providerId: 'claude;rm' }, /provider/],
   ['model shell syntax', { ...valid, model: 'model;rm -rf' }, /model/],
   ['invalid depth', { ...valid, depth: 'forever' }, /depth/],
-  ['invalid format', { ...valid, outputFormat: 'html' }, /format/]
+  ['invalid format', { ...valid, outputFormat: 'rtf' }, /format/]
 ] as const) {
   assert.throws(
     () => validateCreateResearchJobInput(input as CreateResearchJobInput),

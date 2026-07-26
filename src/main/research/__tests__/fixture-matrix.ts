@@ -34,7 +34,7 @@ export const TEST_RESEARCH_PROVIDERS = [
   }
 ] as const
 
-export const TEST_RESEARCH_OUTPUTS = ['pdf', 'md', 'docx', 'xlsx', 'pptx'] as const satisfies readonly ResearchOutputFormat[]
+export const TEST_RESEARCH_OUTPUTS = ['pdf', 'html', 'md', 'docx', 'xlsx', 'pptx'] as const satisfies readonly ResearchOutputFormat[]
 
 export interface ResearchFixtureCase {
   id: string
@@ -62,7 +62,7 @@ export const RESEARCH_CORE_FIXTURE_MATRIX: readonly ResearchFixtureCase[] = Obje
   )
 )
 
-export const EXPECTED_RESEARCH_FIXTURE_COUNT = 70
+export const EXPECTED_RESEARCH_FIXTURE_COUNT = 84
 
 export function createDeterministicResearchDocument(fixture: ResearchFixtureCase): ResearchDocument {
   const sources: ResearchSource[] = [
@@ -139,9 +139,11 @@ export function createDeterministicResearchDocument(fixture: ResearchFixtureCase
     ],
     verificationCriteria: [
       'The deliverable opens as its declared file type.',
-      'The report includes a title, executive summary, findings, methodology, and sources.',
+      'The publication includes a title, abstract, introduction, analysis, conclusion, and bibliography.',
       'Every cited claim resolves to an entry in the source ledger.'
     ],
+    abstract: 'This fixture demonstrates that Akorith can turn the same evidence-backed research record into each supported output format while retaining citations, source context, and a readable essay structure.',
+    introduction: 'Akorith separates private evidence operations from the finished publication so readers receive one coherent research narrative.',
     executiveSummary: 'This fixture demonstrates that Akorith can turn the same evidence-backed research record into each supported output format while retaining citations, source context, and a readable report structure.',
     sections: [
       {
@@ -157,6 +159,7 @@ export function createDeterministicResearchDocument(fixture: ResearchFixtureCase
         claims: [claims[1]]
       }
     ],
+    conclusion: 'The deterministic record supports one bounded conclusion: every public format can project the same canonical essay without exposing the private claim ledger.',
     sources,
     visuals: buildResearchVisualEvidence({ claims, sources, generatedAt: DETERMINISTIC_RESEARCH_NOW })
   }
@@ -190,6 +193,8 @@ export function createLayoutStressResearchDocument(): ResearchDocument {
     ...base,
     title: 'A longitudinal, multilingual, evidence-backed evaluation of autonomous research reliability, presentation quality, implementation constraints, and responsible decision boundaries across complex real-world operating environments',
     subtitle: `${repeatedParagraph} Türkçe karakterler de korunmalıdır: İstanbul, Çanakkale, Öğrenme, Şeffaflık ve Güvenilirlik.`,
+    abstract: `${repeatedParagraph} ${repeatedParagraph} ${repeatedParagraph}`,
+    introduction: `${repeatedParagraph} ${repeatedParagraph}`,
     executiveSummary: `${repeatedParagraph} ${repeatedParagraph} ${repeatedParagraph}`,
     sections: [
       {
@@ -209,6 +214,7 @@ export function createLayoutStressResearchDocument(): ResearchDocument {
         }))
       }
     ],
+    conclusion: `${repeatedParagraph} ${repeatedParagraph}`,
     sources,
     methodology: Array.from({ length: 6 }, (_, index) => `Method ${index + 1}: ${repeatedParagraph}`),
     verificationCriteria: Array.from({ length: 6 }, (_, index) => `Verification criterion ${index + 1}: ${repeatedParagraph}`),

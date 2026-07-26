@@ -14,7 +14,7 @@ export const RESEARCH_DEPTHS = [
 ] as const
 export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number]
 
-export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'md', 'docx', 'xlsx', 'pptx'] as const
+export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'html', 'md', 'docx', 'xlsx', 'pptx'] as const
 export type ResearchOutputFormat = (typeof RESEARCH_OUTPUT_FORMATS)[number]
 
 export const RESEARCH_STATUSES = [
@@ -264,6 +264,20 @@ export interface ResearchArtifact {
   pageCount?: number
   validationError?: string
   createdAt: number
+}
+
+/**
+ * Atomic editorial boundary between evidence operations and public
+ * deliverables. Every format renderer reads one coherent essay revision and
+ * the same ordered citation source ids. Continuous research can replace the
+ * snapshot only as a complete new publication revision.
+ */
+export interface ResearchPublicationSnapshot {
+  version: 1
+  jobId: string
+  generatedAt: number
+  reportMarkdown: string
+  sourceIds: string[]
 }
 
 export interface CreateResearchJobInput {

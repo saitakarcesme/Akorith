@@ -9,9 +9,10 @@ import { RESEARCH_DURATION_OPTIONS } from './researchDuration'
 
 const OUTPUTS: Array<{ id: ResearchOutputFormat; label: string }> = [
   { id: 'pdf', label: 'PDF' },
+  { id: 'html', label: 'Web page' },
   { id: 'md', label: 'Markdown' },
   { id: 'docx', label: 'DOCX' },
-  { id: 'xlsx', label: 'Excel' },
+  { id: 'xlsx', label: 'Evidence XLSX' },
   { id: 'pptx', label: 'PowerPoint' }
 ]
 
@@ -81,6 +82,7 @@ export default function ResearchComposer({
         <div className="research-composer-intro">
           <span className="research-eyebrow">AUTONOMOUS RESEARCH</span>
           <h1>What should Akorith investigate?</h1>
+          <p>Akorith verifies the evidence, then publishes one clean research essay across every selected format.</p>
         </div>
       )}
       <div className="research-composer-box">
@@ -94,7 +96,7 @@ export default function ResearchComposer({
               void submit()
             }
           }}
-          placeholder="Research a topic, compare evidence, monitor a field, or build a complete report…"
+          placeholder="Research a topic, compare evidence, or develop a publication-ready essay…"
           rows={compact ? 2 : 4}
           disabled={disabled || submitting}
         />
@@ -154,7 +156,7 @@ export default function ResearchComposer({
               </select>
             </label>
           </div>
-          <div className="research-output-options" role="group" aria-label="Output format">
+          <div className="research-output-options" role="group" aria-label="Publication format">
             {OUTPUTS.map((item) => (
               <button
                 key={item.id}

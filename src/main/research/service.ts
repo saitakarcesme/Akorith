@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { existsSync, readFileSync, rmSync } from 'fs'
 import { shell } from 'electron'
 import {
@@ -37,6 +37,9 @@ import type {
 import {
   initializeResearchWorkspace,
   isManagedResearchPath,
+  readResearchMarkdown,
+  readResearchPublication,
+  RESEARCH_REPORT_FILE,
   researchRoot
 } from './workspace'
 
@@ -64,6 +67,19 @@ export interface ResearchPollResponse {
   status: ResearchStatus
   running: boolean
   detail?: ResearchLiveDetail
+}
+
+export interface ResearchEssayPreview {
+  jobId: string
+  version: string
+  title: string
+  summary: string
+  markdown: string
+  citations: Array<{
+    number: number
+    sourceId: string
+    label: string
+  }>
 }
 
 export function createManagedResearchJob(input: CreateResearchJobInput): ResearchJob {
@@ -136,6 +152,48 @@ export function pollResearchJob(id: string, running: boolean, knownVersion?: str
       artifacts: listResearchArtifacts(job.id),
       running
     }
+  }
+}
+
+/**
+ * Read the canonical essay from Akorith's managed Research workspace without
+ * exposing a filesystem path to the renderer. Source numbering intentionally
+ * uses the same ordered source list supplied to the synthesis prompt.
+ */
+export function getResearchEssayPreview(id: string): ResearchEssayPreview | null {
+  const job = requireResearchJob(id)
+  if (job.status !== 'completed' && job.status !== 'archived') return null
+  if (!isManagedResearchPath(researchRoot(), job.workspaceDir)) {
+    throw new Error('Research workspace is not managed by Akorith.')
+  }
+  const publication = readResearchPublication(job.workspaceDir)
+  const stablePublication = publication?.jobId === job.id ? publication : null
+  const markdown = (
+    stablePublication?.reportMarkdown
+    || readResearchMarkdown(job.workspaceDir, RESEARCH_REPORT_FILE)
+  ).trim()
+  if (!markdown || /^#\s+Research report\s*$/i.test(markdown)) return null
+  const persistedSources = listResearchSources(job.id)
+  const sourcesById = new Map(persistedSources.map((source) => [source.id, source]))
+  const sources = stablePublication
+    ? stablePublication.sourceIds.map((sourceId) => sourcesById.get(sourceId)).filter((source): source is ResearchSource => Boolean(source))
+    : persistedSources
+  const revisionInput = stablePublication
+    ? `${stablePublication.generatedAt}\0${stablePublication.sourceIds.join('\0')}\0${markdown}`
+    : markdown
+  return {
+    jobId: job.id,
+    version: createHash('sha256').update(revisionInput).digest('hex').slice(0, 16),
+    title: /^#\s+(.+?)\s*$/m.exec(markdown)?.[1]?.replace(/[*_`]/g, '').trim()
+      || job.plan?.title
+      || job.title,
+    summary: job.summary || firstEssayParagraph(markdown),
+    markdown,
+    citations: sources.map((source, index) => ({
+      number: index + 1,
+      sourceId: source.id,
+      label: `${source.publisher || sourceHostname(source.url)}. ${source.title}`
+    }))
   }
 }
 
@@ -228,6 +286,23 @@ function requireResearchJob(id: string): ResearchJob {
   const job = getResearchJob(id)
   if (!job) throw new Error('Research job not found.')
   return job
+}
+
+function firstEssayParagraph(markdown: string): string {
+  return markdown
+    .replace(/^#{1,6}\s+.*$/gm, '')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .find(Boolean)
+    ?.slice(0, 2_000) || 'Research completed.'
+}
+
+function sourceHostname(value: string): string {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return 'Source'
+  }
 }
 
 function requireManagedArtifact(id: string): { job: ResearchJob; artifact: ResearchArtifact } {

@@ -12,6 +12,7 @@ import {
   archiveManagedResearchJob,
   createManagedResearchJob,
   deleteManagedResearchJob,
+  getResearchEssayPreview,
   getResearchJobDetail,
   listResearchLibrary,
   openResearchArtifact,
@@ -50,6 +51,11 @@ export function registerResearchIpc(): void {
       ? input.version
       : undefined
     return pollResearchJob(id, isResearchJobRunning(id), version)
+  })
+
+  ipcMain.handle('research:essay', async (_event, input: unknown) => {
+    await ensureDbReady()
+    return getResearchEssayPreview(requireId(input, 'research job'))
   })
 
   ipcMain.handle('research:create', async (_event, input: unknown) => {

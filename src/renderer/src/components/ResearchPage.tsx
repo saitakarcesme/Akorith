@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type {
   CreateResearchJobInput,
   ProviderInfo,
+  ResearchEssayPreview,
   ResearchJob,
   ResearchLiveDetail,
   ResearchOutputFormat
@@ -24,6 +25,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const [openTabIds, setOpenTabIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ResearchLiveDetail | null>(null)
+  const [essayPreviews, setEssayPreviews] = useState<Record<string, ResearchEssayPreview | null>>({})
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [covers, setCovers] = useState<Record<string, string | null>>({})
   const [loading, setLoading] = useState(true)
@@ -32,6 +34,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const actionPendingRef = useRef(false)
   const coversRef = useRef<Record<string, string | null>>({})
   const pendingCoverIdsRef = useRef(new Set<string>())
+  const pendingEssayKeysRef = useRef(new Set<string>())
   const detailRequestRef = useRef(0)
   const detailVersionsRef = useRef<Record<string, string>>({})
   const selectedRef = useRef<string | null>(null)
@@ -130,6 +133,31 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       if (timer) clearTimeout(timer)
     }
   }, [active, loadDetail, selectedId])
+
+  const selectedEssayKey = detail && selectedId === detail.job.id
+    ? `${detail.job.id}:${detail.job.revision}`
+    : null
+
+  useEffect(() => {
+    if (!active || !detail || detail.job.id !== selectedId) return
+    if (!['completed', 'archived'].includes(detail.job.status)) return
+    const key = `${detail.job.id}:${detail.job.revision}`
+    if (Object.prototype.hasOwnProperty.call(essayPreviews, key) || pendingEssayKeysRef.current.has(key)) return
+    let cancelled = false
+    pendingEssayKeysRef.current.add(key)
+    void window.api.research.essay(detail.job.id)
+      .then((essay) => {
+        if (!cancelled) setEssayPreviews((current) => ({ ...current, [key]: essay }))
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setEssayPreviews((current) => ({ ...current, [key]: null }))
+          setError(errorMessage(nextError))
+        }
+      })
+      .finally(() => pendingEssayKeysRef.current.delete(key))
+    return () => { cancelled = true }
+  }, [active, detail, essayPreviews, selectedId])
 
   const requestCovers = useCallback((ids: string[]): void => {
     if (!active) return
@@ -286,6 +314,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
           detail?.job.id === selectedId ? (
             <ResearchProgress
               detail={detail}
+              essay={selectedEssayKey ? essayPreviews[selectedEssayKey] : undefined}
               actionPending={actionPending}
               onPause={async () => { await runAction(() => window.api.research.pause(selectedId)) }}
               onResume={async () => { await runAction(() => window.api.research.resume(selectedId)) }}
