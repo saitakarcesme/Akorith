@@ -10,6 +10,7 @@ import { buildDigest } from '../digest'
 import {
   addMessage,
   getContextSummary,
+  getRunningWorkspaceGoalForPath,
   getSessionMessages,
   getSessionProjectContext,
   recordUsageEvent,
@@ -52,6 +53,10 @@ import {
   runWorkspaceBrowserAction,
   WORKSPACE_BROWSER_ACTION_INSTRUCTION
 } from '../workspace-actions'
+import {
+  acquireWorkspaceWriterLease,
+  type WorkspaceWriterLease
+} from '../workspace-writer-lease'
 import {
   attachmentPrompt,
   inlineTextAttachmentContext,
@@ -627,12 +632,43 @@ export function registerChatIpc(): void {
     // derived from the persisted session (never trusted from renderer input),
     // and also becomes the CLI working directory below.
     const workspaceContext = sessionId ? getSessionProjectContext(sessionId) : null
+    if (workspaceContext?.projectPath && args.intent !== 'plan') {
+      const activeGoal = getRunningWorkspaceGoalForPath(workspaceContext.projectPath)
+      if (activeGoal) {
+        return {
+          ok: false,
+          error: `A /loop goal is already editing this project. Pause it before starting another Workspace task: ${activeGoal.goal
+            .replace(/\s+/g, ' ')
+            .slice(0, 120)}`
+        }
+      }
+    }
+    let workspaceWriterLease: WorkspaceWriterLease | null = null
+    const releaseWorkspaceWriterLease = (): void => {
+      workspaceWriterLease?.release()
+      workspaceWriterLease = null
+    }
+    if (workspaceContext?.projectPath && args.intent !== 'plan') {
+      try {
+        workspaceWriterLease = acquireWorkspaceWriterLease(workspaceContext.projectPath, {
+          kind: 'workspace-chat',
+          id: args.requestId,
+          label: `Workspace request ${args.requestId}`
+        })
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
     let storedAttachments: StoredChatAttachment[] = []
     if (args.attachments?.length) {
-      if (!sessionId) return { ok: false, error: 'attachments require a persisted chat session' }
+      if (!sessionId) {
+        releaseWorkspaceWriterLease()
+        return { ok: false, error: 'attachments require a persisted chat session' }
+      }
       try {
         storedAttachments = await storeChatAttachments(sessionId, args.requestId, args.attachments)
       } catch (err) {
+        releaseWorkspaceWriterLease()
         return { ok: false, error: `Could not store attachments: ${err instanceof Error ? err.message : String(err)}` }
       }
     }
@@ -830,6 +866,7 @@ export function registerChatIpc(): void {
     } finally {
       if (requestTimeout) clearTimeout(requestTimeout)
       activeRequests.delete(args.requestId)
+      releaseWorkspaceWriterLease()
     }
   })
 

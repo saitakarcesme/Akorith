@@ -226,6 +226,15 @@ export interface MessageRow {
     endedAt?: number
     usage?: ChatUsage
     changes?: ChatSendResult['changes']
+    workspaceGoal?: {
+      bindingId: string
+      loopId: string
+      goal: string
+      status: WorkspaceGoalStatus
+      attempts: number
+      final: boolean
+      error?: string
+    }
   } | null
   createdAt: number
 }
@@ -290,7 +299,7 @@ export interface ProjectsApi {
 
 // ---- app startup snapshot / hydration ----
 
-export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
+export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'research' | 'plugins'
 
 export interface StartupSnapshotRequest {
   lastActiveProjectId?: string | null
@@ -1863,6 +1872,7 @@ export interface ResearchApi {
 // Phase 48: project-focused Loop.
 export type ProjectLoopMode = 'project_builder' | 'repo_grower' | 'github_loop' | 'maintenance'
 export type ProjectLoopStatus = 'active' | 'paused' | 'needs_review' | 'error' | 'completed' | 'archived'
+export type WorkspaceGoalStatus = 'running' | 'paused' | 'needs_review' | 'error' | 'completed'
 export type ProjectLoopAutonomy = 'manual' | 'assisted' | 'auto'
 export type ProjectLoopSafety = 'strict' | 'standard' | 'open'
 
@@ -1975,6 +1985,35 @@ export interface GoalRunResult {
   attempts: number
   lastRun?: RunCycleResult
   error?: string
+}
+
+export interface StartWorkspaceGoalInput {
+  requestId: string
+  sessionId: string
+  providerId: string
+  model?: string
+  prompt: string
+}
+
+export interface WorkspaceGoalSnapshot {
+  bindingId: string
+  loopId: string
+  sessionId: string
+  requestId: string
+  userMessageId: string
+  assistantMessageId: string
+  providerId: string
+  model?: string
+  workspacePath: string
+  goal: string
+  status: WorkspaceGoalStatus
+  attempts: number
+  final: boolean
+  error?: string
+  createdAt: number
+  updatedAt: number
+  completedAt?: number
+  loop: ProjectLoop
 }
 
 export interface CreateProjectLoopInput {
@@ -2221,6 +2260,10 @@ export interface ProjectLoopApi {
   runOnce(id: string): Promise<RunCycleResult>
   runGoal(id: string): Promise<GoalRunResult>
   pauseGoal(id: string): Promise<boolean>
+  startWorkspaceGoal(input: StartWorkspaceGoalInput): Promise<WorkspaceGoalSnapshot>
+  getWorkspaceGoal(id: string): Promise<WorkspaceGoalSnapshot | null>
+  pauseWorkspaceGoal(id: string): Promise<WorkspaceGoalSnapshot>
+  resumeWorkspaceGoal(id: string): Promise<WorkspaceGoalSnapshot>
   editGoal(id: string, goal: string): Promise<ProjectLoop | null>
   listRuns(id: string): Promise<ProjectLoopRun[]>
   listEvents(id: string): Promise<ProjectLoopEvent[]>

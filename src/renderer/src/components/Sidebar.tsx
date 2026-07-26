@@ -18,7 +18,6 @@ import {
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
-  LoopIcon,
   EditIcon,
   MoreIcon,
   PanelsIcon,
@@ -66,7 +65,6 @@ interface SidebarProps {
 // above Workspace instead (see below). Workspace stays project-scoped.
 const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { view: 'workspace', label: 'Workspace', icon: PanelsIcon },
-  { view: 'loops', label: 'Loop', icon: LoopIcon },
   { view: 'research', label: 'Research', icon: ResearchIcon },
   { view: 'test', label: 'Benchmark', icon: FlaskIcon },
   { view: 'plugins', label: 'Plugins', icon: PluginIcon }
@@ -74,7 +72,6 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
 
 const FEATURE_PRELOADERS: Partial<Record<AppView, () => Promise<unknown>>> = {
   dashboard: () => import('./Dashboard'),
-  loops: () => import('./ProjectLoopPage'),
   research: () => import('./ResearchPage'),
   test: () => import('./TestPage'),
   plugins: () => import('./Plugins')

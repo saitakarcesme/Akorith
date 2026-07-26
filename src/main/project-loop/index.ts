@@ -5,3 +5,7 @@ export * from './types'
 export { registerProjectLoopIpc } from './ipc'
 export { runOneCycle } from './runner'
 export { startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './scheduler'
+export {
+  resumeWorkspaceGoalsAtStartup,
+  shutdownWorkspaceGoals
+} from './workspace-goals'

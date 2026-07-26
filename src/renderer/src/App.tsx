@@ -17,14 +17,13 @@ import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } 
 const Dashboard = lazy(() => import('./components/Dashboard'))
 const Plugins = lazy(() => import('./components/Plugins'))
 const TestPage = lazy(() => import('./components/TestPage'))
-const ProjectLoopPage = lazy(() => import('./components/ProjectLoopPage'))
 const ResearchPage = lazy(() => import('./components/ResearchPage'))
 
 export type ChatMode = 'workspace' | 'general'
-export type AppView = ChatMode | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
+export type AppView = ChatMode | 'dashboard' | 'test' | 'research' | 'plugins'
 export type AppTheme = 'dark' | 'light'
 
-const PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'loops', 'research'])
+const PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'research'])
 
 function FeaturePageFallback({ label }: { label: string }): JSX.Element {
   return (
@@ -515,8 +514,14 @@ export default function App(): JSX.Element {
       const sessionById = new Map(snapshot.sessions.map((session) => [session.id, session]))
       const restoredProject = snapshot.restore.projectId ? projectById.get(snapshot.restore.projectId) ?? null : null
       const restoredSession = snapshot.restore.sessionId ? sessionById.get(snapshot.restore.sessionId) ?? null : null
+      // Older builds persisted the removed standalone Loop route. The main
+      // process sanitizes it, while this guard also protects against a stale
+      // snapshot arriving from an older preload contract.
+      const restoredView: AppView = (snapshot.restore.view as string) === 'loops'
+        ? 'workspace'
+        : snapshot.restore.view
 
-      if (snapshot.restore.view === 'general') {
+      if (restoredView === 'general') {
         setActiveProject(null)
         setView('general')
         setActiveSessionId(restoredSession?.id ?? null)
@@ -524,7 +529,7 @@ export default function App(): JSX.Element {
         return
       }
 
-      if (snapshot.restore.view === 'workspace') {
+      if (restoredView === 'workspace') {
         const project = restoredProject ?? snapshot.projects[0] ?? null
         const session = restoredSession ?? (project ? latestSessionFrom(snapshot.sessions, project.id) : null)
         setActiveProject(project)
@@ -535,7 +540,7 @@ export default function App(): JSX.Element {
       }
 
       setActiveProject(restoredProject)
-      setView(snapshot.restore.view)
+      setView(restoredView)
       setActiveSessionId(restoredSession?.id ?? null)
       if (restoredSession) {
         selectHistory(restoredSession.id, restoredSession.projectId ? 'workspace' : 'general', restoredSession.providerId)
@@ -682,11 +687,9 @@ export default function App(): JSX.Element {
           ? 'Dashboard'
           : view === 'test'
             ? 'Benchmark'
-            : view === 'loops'
-              ? 'Loop'
-              : view === 'research'
-                ? 'Research'
-                : 'Plugins'
+            : view === 'research'
+              ? 'Research'
+              : 'Plugins'
   const chromeScope =
     view === 'general'
       ? 'Model chat'
@@ -781,13 +784,6 @@ export default function App(): JSX.Element {
         <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
           <Suspense fallback={<FeaturePageFallback label="Loading Benchmark…" />}>
             <TestPage active={view === 'test'} activeProject={activeProject} />
-          </Suspense>
-        </div>
-      )}
-      {(view === 'loops' || mountedFeatureViews.has('loops')) && (
-        <div className="loops-page-wrap" style={{ display: view === 'loops' ? 'flex' : 'none' }}>
-          <Suspense fallback={<FeaturePageFallback label="Loading Loop…" />}>
-            <ProjectLoopPage active={view === 'loops'} activeProject={activeProject} />
           </Suspense>
         </div>
       )}

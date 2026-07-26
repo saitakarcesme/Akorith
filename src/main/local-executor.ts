@@ -61,6 +61,7 @@ export interface LocalExecutorAttemptResult {
   score: LocalExecutorScore
   errors: string[]
   rolledBack: boolean
+  rollbackFailed: boolean
   rollback: LocalExecutorRollbackEntry[]
 }
 
@@ -262,7 +263,15 @@ function applyValidatedFiles(files: ResolvedFileAction[]): { changedFiles: strin
   return { changedFiles, rollback }
 }
 
-export function rollbackLocalExecutorPatch(rollback: LocalExecutorRollbackEntry[]): void {
+export interface LocalExecutorRollbackResult {
+  ok: boolean
+  errors: string[]
+}
+
+export function rollbackLocalExecutorPatch(
+  rollback: LocalExecutorRollbackEntry[]
+): LocalExecutorRollbackResult {
+  const errors: string[] = []
   for (const entry of [...rollback].reverse()) {
     try {
       if (entry.existed) {
@@ -271,10 +280,13 @@ export function rollbackLocalExecutorPatch(rollback: LocalExecutorRollbackEntry[
       } else if (existsSync(entry.absolutePath)) {
         rmSync(entry.absolutePath)
       }
-    } catch {
-      // Best-effort rollback; caller records the original failed attempt.
+    } catch (error) {
+      errors.push(
+        `${entry.absolutePath}: ${error instanceof Error ? error.message : String(error)}`
+      )
     }
   }
+  return { ok: errors.length === 0, errors }
 }
 
 function commandPolicy(cmd: string): { allowed: boolean; reason: string } {
@@ -548,7 +560,7 @@ export async function executeLocalExecutorAttempt(args: {
       commandResults: [],
       goal: args.goal
     })
-    return { rawOutput: args.rawOutput, action: null, changedFiles: [], commandResults: [], score, errors, rolledBack: false, rollback: [] }
+    return { rawOutput: args.rawOutput, action: null, changedFiles: [], commandResults: [], score, errors, rolledBack: false, rollbackFailed: false, rollback: [] }
   }
 
   const validated = validateLocalExecutorAction(args.workspaceDir, parsed.action)
@@ -563,7 +575,7 @@ export async function executeLocalExecutorAttempt(args: {
       commandResults: [],
       goal: args.goal
     })
-    return { rawOutput: args.rawOutput, action: parsed.action, changedFiles: [], commandResults: [], score, errors, rolledBack: false, rollback: [] }
+    return { rawOutput: args.rawOutput, action: parsed.action, changedFiles: [], commandResults: [], score, errors, rolledBack: false, rollbackFailed: false, rollback: [] }
   }
 
   let rollback: LocalExecutorRollbackEntry[] = []
@@ -573,8 +585,9 @@ export async function executeLocalExecutorAttempt(args: {
     rollback = applied.rollback
     changedFiles = applied.changedFiles
   } catch (err) {
-    rollbackLocalExecutorPatch(rollback)
+    const rollbackResult = rollbackLocalExecutorPatch(rollback)
     errors.push(`Patch application failed: ${err instanceof Error ? err.message : String(err)}`)
+    if (!rollbackResult.ok) errors.push(`Rollback failed: ${rollbackResult.errors.join('; ')}`)
     const score = scoreAttempt({
       action: parsed.action,
       parseOk: true,
@@ -584,7 +597,17 @@ export async function executeLocalExecutorAttempt(args: {
       commandResults: [],
       goal: args.goal
     })
-    return { rawOutput: args.rawOutput, action: parsed.action, changedFiles, commandResults: [], score, errors, rolledBack: true, rollback }
+    return {
+      rawOutput: args.rawOutput,
+      action: parsed.action,
+      changedFiles,
+      commandResults: [],
+      score,
+      errors,
+      rolledBack: rollback.length > 0 && rollbackResult.ok,
+      rollbackFailed: !rollbackResult.ok,
+      rollback
+    }
   }
 
   const commands = dedupeCommands([
@@ -605,9 +628,22 @@ export async function executeLocalExecutorAttempt(args: {
     goal: args.goal
   })
   let rolledBack = false
+  let rollbackFailed = false
   if ((args.revertOnNoCommit ?? true) && !score.shouldCommit) {
-    rollbackLocalExecutorPatch(rollback)
-    rolledBack = rollback.length > 0
+    const rollbackResult = rollbackLocalExecutorPatch(rollback)
+    rolledBack = rollback.length > 0 && rollbackResult.ok
+    rollbackFailed = !rollbackResult.ok
+    if (rollbackFailed) errors.push(`Rollback failed: ${rollbackResult.errors.join('; ')}`)
   }
-  return { rawOutput: args.rawOutput, action: parsed.action, changedFiles, commandResults, score, errors, rolledBack, rollback }
+  return {
+    rawOutput: args.rawOutput,
+    action: parsed.action,
+    changedFiles,
+    commandResults,
+    score,
+    errors,
+    rolledBack,
+    rollbackFailed,
+    rollback
+  }
 }

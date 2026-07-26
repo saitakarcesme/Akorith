@@ -50,6 +50,39 @@ export interface ProjectLoop {
   roadmapSummary?: string
 }
 
+export type WorkspaceGoalStatus = 'running' | 'paused' | 'needs_review' | 'error' | 'completed'
+
+export interface StartWorkspaceGoalInput {
+  requestId: string
+  sessionId: string
+  providerId: string
+  model?: string
+  /** Original composer text. Main validates and removes only a terminal `/loop`. */
+  prompt: string
+}
+
+export interface WorkspaceGoalSnapshot {
+  bindingId: string
+  loopId: string
+  sessionId: string
+  requestId: string
+  userMessageId: string
+  assistantMessageId: string
+  providerId: string
+  model?: string
+  /** Canonical path locked when the goal was created. */
+  workspacePath: string
+  goal: string
+  status: WorkspaceGoalStatus
+  attempts: number
+  final: boolean
+  error?: string
+  createdAt: number
+  updatedAt: number
+  completedAt?: number
+  loop: ProjectLoop
+}
+
 export type ProjectLoopRunStatus = 'pending' | 'running' | 'success' | 'no_change' | 'failed' | 'rejected'
 
 export interface ProjectLoopRun {

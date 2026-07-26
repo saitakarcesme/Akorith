@@ -10,6 +10,9 @@ import { inspectProject, renderProjectContext } from './context'
 import { ensureRepo, commitAll, pushToOrigin, syncFromOrigin } from './git'
 import type { ProjectLoopRun } from './types'
 import { sendWorkspacePrompt } from '../providers/registry'
+import type { SendResult } from '../providers/types'
+import { lstatSync, readdirSync } from 'fs'
+import { join, relative } from 'path'
 
 // One safe Loop cycle. Linked GitHub clones synchronize and push only when the
 // loop was created with explicit GitHub sync and origin still matches exactly.
@@ -24,7 +27,71 @@ export interface RunCycleResult {
   error?: string
 }
 
-export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise<RunCycleResult> {
+export interface RunCycleOptions {
+  /**
+   * Workspace slash-goals operate in the user's existing folder. They never
+   * initialise git, stage broad pre-existing changes, commit, or push.
+   */
+  workspaceGoal?: boolean
+  onUsage?: (input: {
+    stage: 'execute'
+    runIndex: number
+    model: string
+    usage: SendResult['usage']
+  }) => void
+}
+
+const SNAPSHOT_SKIP = new Set(['.git', 'node_modules', 'dist', 'out', 'build', '.next', 'coverage', '.cache'])
+const SNAPSHOT_LIMIT = 2_000
+
+/** Metadata-only, bounded snapshot; it detects this cycle's files without
+ * reading content or confusing pre-existing dirty files with new work. */
+function workspaceFingerprint(root: string): Map<string, string> {
+  const result = new Map<string, string>()
+  const visit = (dir: string): void => {
+    if (result.size >= SNAPSHOT_LIMIT) return
+    let names: string[]
+    try {
+      names = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      if (result.size >= SNAPSHOT_LIMIT) break
+      if (SNAPSHOT_SKIP.has(name)) continue
+      const path = join(dir, name)
+      try {
+        const info = lstatSync(path)
+        if (info.isSymbolicLink()) continue
+        if (info.isDirectory()) {
+          visit(path)
+        } else if (info.isFile()) {
+          result.set(relative(root, path).replace(/\\/g, '/'), `${info.size}:${info.mtimeMs}`)
+        }
+      } catch {
+        // A file may disappear while the provider is working; the after
+        // snapshot still records that bounded deletion.
+      }
+    }
+  }
+  visit(root)
+  return result
+}
+
+function fingerprintChangeCount(before: Map<string, string>, after: Map<string, string>): number {
+  const paths = new Set([...before.keys(), ...after.keys()])
+  let changed = 0
+  for (const path of paths) {
+    if (before.get(path) !== after.get(path)) changed += 1
+  }
+  return changed
+}
+
+export async function runOneCycle(
+  loopId: string,
+  signal?: AbortSignal,
+  options: RunCycleOptions = {}
+): Promise<RunCycleResult> {
   const loop = getLoop(loopId)
   if (!loop) return { ok: false, run: null, committed: false, summary: '', error: 'loop not found' }
   if (loop.status === 'archived') {
@@ -54,7 +121,8 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     // Installed coding CLIs edit the project directly. Their protocol events are
     // normalized into the same durable Goal timeline used by the local executor.
     if (loop.localModelProvider !== 'local') {
-      await ensureRepo(loop.localPath)
+      if (!options.workspaceGoal) await ensureRepo(loop.localPath)
+      const beforeFiles = options.workspaceGoal ? workspaceFingerprint(loop.localPath) : null
       let commandsRun = 0
       const result = await sendWorkspacePrompt(
         loop.localModelProvider,
@@ -74,7 +142,36 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
           logEvent(loopId, kind, activity.label, activity.detail, run.id)
         }
       )
+      options.onUsage?.({
+        stage: 'execute',
+        runIndex: run.runIndex,
+        model: result.model,
+        usage: result.usage
+      })
       const summary = result.text.trim().split('\n').find(Boolean)?.slice(0, 240) || 'Workspace goal completed'
+      if (options.workspaceGoal) {
+        const detectedFiles = fingerprintChangeCount(beforeFiles!, workspaceFingerprint(loop.localPath))
+        const filesChanged = Math.max(result.changes?.files.length ?? 0, detectedFiles)
+        const finished = finishRun(run.id, {
+          status: filesChanged > 0 || commandsRun > 0 ? 'success' : 'no_change',
+          objective: chosen.objective,
+          summary,
+          filesChanged,
+          commandsRun,
+          testsRun: commandsRun,
+          commitsCreated: 0,
+          validationResult: `${commandsRun} command event(s); no automatic git commit`
+        })
+        recordLoopRunResult(loopId, 0)
+        logEvent(
+          loopId,
+          'run_succeeded',
+          `Run #${run.runIndex} completed without an Akorith-managed git checkpoint`,
+          'The Workspace /loop host path does not initialize, stage, commit, or push. The selected executor is also instructed not to change git history.',
+          run.id
+        )
+        return { ok: true, run: finished, committed: false, pushed: false, summary }
+      }
       const commit = await commitAll(loop.localPath, summary)
       if (!commit.ok || !commit.sha) {
         const noChange = commit.error === 'no changes to commit'
@@ -127,7 +224,7 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     }
 
     // 3) Ask the local model for a structured patch.
-    await ensureRepo(loop.localPath)
+    if (!options.workspaceGoal) await ensureRepo(loop.localPath)
     const prompt = buildLocalExecutorPrompt({
       goal: chosen.objective,
       workspaceContext: renderProjectContext(ctx),
@@ -135,6 +232,18 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
       validationCommands: ''
     })
     const raw = await sendLocal(prompt, { model: loop.localModel, signal })
+    if (raw.usage) {
+      options.onUsage?.({
+        stage: 'execute',
+        runIndex: run.runIndex,
+        model: raw.model,
+        usage: {
+          promptTokens: raw.usage.promptTokens,
+          completionTokens: raw.usage.completionTokens,
+          estimated: raw.usage.estimated
+        }
+      })
+    }
     if (!raw.ok) {
       logEvent(loopId, 'run_failed', 'Local model did not respond', raw.error, run.id)
       const failed = finishRun(run.id, { status: 'failed', objective: chosen.objective, error: raw.error })
@@ -149,6 +258,9 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
       workspaceDir: loop.localPath,
       rawOutput: raw.text,
       goal: chosen.objective,
+      // The local executor keeps a file-scoped rollback snapshot. Reverting a
+      // rejected cycle restores the exact pre-cycle contents, including any
+      // user edits, without staging or touching git history.
       revertOnNoCommit: true,
       signal
     })
@@ -156,6 +268,30 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     const filesChanged = attempt.changedFiles.length
     const commandsRun = attempt.commandResults.length
     const testsRun = attempt.commandResults.filter((c) => /test|pytest/.test(c.cmd)).length
+
+    if (attempt.rollbackFailed) {
+      const rollbackError =
+        attempt.errors.find((error) => error.startsWith('Rollback failed:')) ??
+        'Rollback failed before the workspace could be restored.'
+      logEvent(loopId, 'run_failed', 'Workspace rollback needs review', rollbackError, run.id)
+      const failed = finishRun(run.id, {
+        status: 'failed',
+        objective: chosen.objective,
+        summary: attempt.action?.summary ?? 'Workspace patch could not be restored safely.',
+        error: rollbackError,
+        filesChanged,
+        commandsRun,
+        testsRun
+      })
+      recordLoopRunResult(loopId, 0)
+      return {
+        ok: false,
+        run: failed,
+        committed: false,
+        summary: attempt.action?.summary ?? '',
+        error: `Workspace rollback failed: ${rollbackError}`
+      }
+    }
 
     if (!attempt.action) {
       logEvent(loopId, 'patch_rejected', 'Patch could not be parsed/validated', attempt.errors.join('; '), run.id)
@@ -173,6 +309,43 @@ export async function runOneCycle(loopId: string, signal?: AbortSignal): Promise
     }
 
     logEvent(loopId, 'patch_validated', `Score ${attempt.score.score} (${attempt.score.verdict})`, attempt.score.reasons.join('; '), run.id)
+
+    if (
+      options.workspaceGoal &&
+      attempt.action &&
+      attempt.score.shouldCommit &&
+      filesChanged > 0 &&
+      !attempt.rolledBack
+    ) {
+      logEvent(loopId, 'patch_applied', `Applied ${filesChanged} file(s)`, attempt.changedFiles.join(', '), run.id)
+      if (chosen.backlogItemId) setBacklogStatus(chosen.backlogItemId, 'done')
+      const finished = finishRun(run.id, {
+        status: 'success',
+        objective: chosen.objective,
+        summary: attempt.action.summary,
+        nextStep: attempt.action.expected_outcome,
+        filesChanged,
+        commandsRun,
+        testsRun,
+        commitsCreated: 0,
+        validationResult: `${attempt.score.verdict}; no automatic git commit`
+      })
+      recordLoopRunResult(loopId, 0)
+      logEvent(
+        loopId,
+        'run_succeeded',
+        `Run #${run.runIndex} completed without an Akorith-managed git checkpoint`,
+        'The Workspace /loop host path does not initialize, stage, commit, or push. The selected executor is also instructed not to change git history.',
+        run.id
+      )
+      return {
+        ok: true,
+        run: finished,
+        committed: false,
+        pushed: false,
+        summary: attempt.action.summary
+      }
+    }
 
     if (!attempt.score.shouldCommit || filesChanged === 0 || attempt.rolledBack) {
       logEvent(loopId, 'run_succeeded', 'No commit-worthy change this cycle', attempt.score.reasons.join('; '), run.id)

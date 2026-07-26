@@ -15,6 +15,7 @@ import {
 import { runOneCycle, type RunCycleResult } from './runner'
 import { getLoop, setLoopStatus, updateLoop } from './store'
 import { sendMetaPrompt } from '../providers/registry'
+import type { SendResult } from '../providers/types'
 
 export interface GoalRunResult {
   ok: boolean
@@ -24,7 +25,22 @@ export interface GoalRunResult {
   error?: string
 }
 
-async function understandGoal(loopId: string, signal: AbortSignal): Promise<GoalUnderstanding> {
+export interface GoalRunHooks {
+  /** Preserve the user's existing git state; do not initialize, stage, commit, or push. */
+  workspaceGoal?: boolean
+  onUsage?: (input: {
+    stage: 'understand' | 'execute' | 'review'
+    attempt: number
+    model: string
+    usage: SendResult['usage']
+  }) => void
+}
+
+async function understandGoal(
+  loopId: string,
+  signal: AbortSignal,
+  hooks: GoalRunHooks
+): Promise<GoalUnderstanding> {
   const loop = getLoop(loopId)
   if (!loop) return fallbackGoalUnderstanding('Complete the requested outcome.')
 
@@ -39,8 +55,15 @@ async function understandGoal(loopId: string, signal: AbortSignal): Promise<Goal
       loop.localModelProvider,
       loop.localModel,
       buildGoalUnderstandingPrompt(loop, context),
-      signal
+      signal,
+      { workingDirectory: loop.localPath, background: true }
     )
+    hooks.onUsage?.({
+      stage: 'understand',
+      attempt: 0,
+      model: response.model,
+      usage: response.usage
+    })
     understanding = parseGoalUnderstanding(response.text, loop.idea ?? loop.title)
   } catch (error) {
     if (signal.aborted) throw error
@@ -60,7 +83,8 @@ async function reviewProgress(
   understanding: GoalUnderstanding,
   lastRun: RunCycleResult,
   attempt: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  hooks: GoalRunHooks
 ): Promise<GoalProgressReview> {
   const loop = getLoop(loopId)
   const fallback = fallbackGoalReview(lastRun.run, attempt)
@@ -72,8 +96,15 @@ async function reviewProgress(
       loop.localModelProvider,
       loop.localModel,
       buildGoalReviewPrompt({ loop, understanding, run: lastRun.run, attempt, workspaceContext: context }),
-      signal
+      signal,
+      { workingDirectory: loop.localPath, background: true }
     )
+    hooks.onUsage?.({
+      stage: 'review',
+      attempt: lastRun.run?.runIndex ?? attempt,
+      model: response.model,
+      usage: response.usage
+    })
     return parseGoalProgressReview(response.text, lastRun.run, attempt)
   } catch (error) {
     if (signal.aborted) throw error
@@ -98,7 +129,12 @@ function queueNextObjective(loopId: string, review: GoalProgressReview, runId?: 
  * Replan. GitHub-linked Loops may push verified checkpoints, and a single
  * commit is never treated as completion by itself.
  */
-export async function runGoalToCompletion(loopId: string, signal: AbortSignal, maxAttempts = 12): Promise<GoalRunResult> {
+export async function runGoalToCompletion(
+  loopId: string,
+  signal: AbortSignal,
+  maxAttempts = 12,
+  hooks: GoalRunHooks = {}
+): Promise<GoalRunResult> {
   const loop = getLoop(loopId)
   if (!loop) return { ok: false, status: 'error', attempts: 0, error: 'goal not found' }
   setLoopStatus(loopId, 'active')
@@ -107,7 +143,7 @@ export async function runGoalToCompletion(loopId: string, signal: AbortSignal, m
 
   let understanding: GoalUnderstanding
   try {
-    understanding = await understandGoal(loopId, signal)
+    understanding = await understandGoal(loopId, signal, hooks)
   } catch (error) {
     if (signal.aborted) {
       setLoopStatus(loopId, 'paused')
@@ -130,14 +166,36 @@ export async function runGoalToCompletion(loopId: string, signal: AbortSignal, m
     }
 
     setLoopStatus(loopId, 'active')
-    lastRun = await runOneCycle(loopId, signal)
+    lastRun = await runOneCycle(loopId, signal, {
+      workspaceGoal: hooks.workspaceGoal,
+      onUsage: ({ runIndex, model, usage }) => hooks.onUsage?.({
+        stage: 'execute',
+        attempt: runIndex,
+        model,
+        usage
+      })
+    })
     if (signal.aborted) {
       setLoopStatus(loopId, 'paused')
       logEvent(loopId, 'paused', 'Goal paused by the user')
       return { ok: true, status: 'paused', attempts: attempt, lastRun }
     }
+    if (lastRun.error?.startsWith('Workspace rollback failed:')) {
+      const reason =
+        'Akorith could not prove that a rejected patch was fully restored. Review the workspace before resuming this Goal.'
+      setLoopStatus(loopId, 'needs_review')
+      updateLoop(loopId, { error: `${reason} ${lastRun.error}` })
+      logEvent(loopId, 'error', reason, lastRun.error, lastRun.run?.id)
+      return {
+        ok: false,
+        status: 'needs_review',
+        attempts: attempt,
+        lastRun,
+        error: `${reason} ${lastRun.error}`
+      }
+    }
 
-    const review = await reviewProgress(loopId, understanding, lastRun, attempt, signal)
+    const review = await reviewProgress(loopId, understanding, lastRun, attempt, signal, hooks)
     updateLoop(loopId, { memorySummary: JSON.stringify(review), error: lastRun.error })
     logEvent(
       loopId,

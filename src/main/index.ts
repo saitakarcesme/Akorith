@@ -11,7 +11,7 @@ import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
 import { registerBenchmarkIpc } from './benchmarks'
 import { registerEvaluateIpc } from './evaluate'
-import { registerMacroIpc, resumeActiveAutoLoopsAtStartup } from './macro'
+import { registerMacroIpc } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
 import { registerGitStatusIpc } from './git-status'
 import { registerProjectFilesIpc } from './project-files'
@@ -27,7 +27,12 @@ import { closeDb, ensureDbReady, registerDbIpc } from './db'
 import { prepareStartupUserData, registerStartupSnapshotIpc } from './startupSnapshot'
 import { registerBuildInfoIpc } from './build-info'
 import { registerLocalRuntimeIpc } from './local-runtime'
-import { registerProjectLoopIpc, startProjectLoopAutoScheduler, stopProjectLoopAutoScheduler } from './project-loop'
+import {
+  registerProjectLoopIpc,
+  resumeWorkspaceGoalsAtStartup,
+  shutdownWorkspaceGoals,
+  stopProjectLoopAutoScheduler
+} from './project-loop'
 import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
 import { registerGitHubActivityIpc } from './github-activity'
@@ -411,8 +416,7 @@ async function initializeStartupData(): Promise<void> {
     // Let startup-snapshot callers read the newly opened database before
     // schedulers inspect or resume background work on the same event loop.
     setTimeout(() => {
-      resumeActiveAutoLoopsAtStartup()
-      startProjectLoopAutoScheduler()
+      resumeWorkspaceGoalsAtStartup()
       startResearchScheduler()
     }, 0)
   } catch (err) {
@@ -480,8 +484,8 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   if (researchShutdownInProgress) return
   researchShutdownInProgress = true
-  void shutdownResearchScheduler()
-    .catch((error) => console.error('[research] Scheduler shutdown failed:', error))
+  void Promise.all([shutdownResearchScheduler(), shutdownWorkspaceGoals()])
+    .catch((error) => console.error('[shutdown] Background work shutdown failed:', error))
     .finally(() => {
       researchShutdownComplete = true
       app.quit()

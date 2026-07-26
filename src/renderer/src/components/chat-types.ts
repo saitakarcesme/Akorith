@@ -1,4 +1,14 @@
-import type { ChatActivity, ChatAttachment, ChatSendResult, ChatUsage } from '../../../preload/index.d'
+import type { ChatActivity, ChatAttachment, ChatSendResult, ChatUsage, WorkspaceGoalStatus } from '../../../preload/index.d'
+
+export interface WorkspaceGoalMessageMeta {
+  bindingId: string
+  loopId: string
+  goal: string
+  status: WorkspaceGoalStatus
+  attempts: number
+  final: boolean
+  error?: string
+}
 
 export interface ChatMessage {
   id: string
@@ -6,7 +16,13 @@ export interface ChatMessage {
   text: string
   status: 'streaming' | 'done' | 'error'
   attachments?: ChatAttachment[]
-  meta?: { provider: string; model: string; usage?: ChatUsage; changes?: ChatSendResult['changes'] }
+  meta?: {
+    provider: string
+    model: string
+    usage?: ChatUsage
+    changes?: ChatSendResult['changes']
+    workspaceGoal?: WorkspaceGoalMessageMeta
+  }
   activities?: ChatActivity[]
   startedAt?: number
   endedAt?: number

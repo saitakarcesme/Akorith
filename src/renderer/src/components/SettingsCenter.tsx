@@ -48,9 +48,6 @@ interface SettingsCenterProps {
   onClose: () => void
 }
 
-const LOOP_REMOTE = 'https://github.com/saitakarcesme/AkorithLoop.git'
-const LOOP_FOLDER = '~/Documents/AkorithLoop'
-
 function shortEndpointLabel(value: string): string {
   try {
     const url = new URL(value)
@@ -1628,7 +1625,7 @@ export default function SettingsCenter({
               <div className="settings-section-head">
                 <div>
                   <h2>Workflow</h2>
-                  <p>Terminal bridge, repo context, and Loop sync defaults.</p>
+                  <p>Terminal bridge and bounded repository context defaults.</p>
                 </div>
               </div>
               <div className="settings-toggle-row">
@@ -1733,17 +1730,6 @@ export default function SettingsCenter({
                 </div>
                 {discordNotice && <div className={`ollama-status is-${discordNotice.kind}`} role="status">{discordNotice.text}</div>}
               </div>
-
-              <div className="settings-readonly-grid">
-                <div>
-                  <span>Loop repository</span>
-                  <strong>{LOOP_REMOTE}</strong>
-                </div>
-                <div>
-                  <span>Loop folder</span>
-                  <strong>{LOOP_FOLDER}</strong>
-                </div>
-              </div>
             </section>
           )}
 
@@ -1838,8 +1824,8 @@ export default function SettingsCenter({
                   <strong>Temporary sandbox; source repositories stay read-only</strong>
                 </div>
                 <div>
-                  <span>Loop output</span>
-                  <strong>One folder per loop under AkorithLoop</strong>
+                  <span>Workspace /loop output</span>
+                  <strong>The active project only; no automatic clone, commit, or push</strong>
                 </div>
                 <div>
                   <span>Secrets</span>

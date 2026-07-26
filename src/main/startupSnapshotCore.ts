@@ -1,4 +1,4 @@
-export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'loops' | 'research' | 'plugins'
+export type StartupView = 'workspace' | 'general' | 'dashboard' | 'test' | 'research' | 'plugins'
 
 export interface StartupProjectLike {
   id: string
@@ -33,7 +33,7 @@ export interface StartupHydrationCounts {
 }
 
 const VALID_ID = /^[\w-]{1,64}$/
-const VALID_VIEWS = new Set<StartupView>(['workspace', 'general', 'dashboard', 'test', 'loops', 'research', 'plugins'])
+const VALID_VIEWS = new Set<StartupView>(['workspace', 'general', 'dashboard', 'test', 'research', 'plugins'])
 
 function cleanId(value: unknown): string | null {
   return typeof value === 'string' && VALID_ID.test(value) ? value : null

@@ -135,7 +135,7 @@ export default function Plugins(): JSX.Element {
         <header className="plugins-header codex-plugins-header">
           <div>
             <h1>Plugins</h1>
-            <p>{readyCount} local tools ready for Workspace and Loop</p>
+            <p>{readyCount} local tools ready for Workspace and durable /loop goals</p>
           </div>
           <button type="button" className="plugins-check-button" disabled={checking} onClick={() => void runChecks()}>
             {checking ? 'Checking…' : 'Check tools'}

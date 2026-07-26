@@ -1,4 +1,5 @@
 import {
+  cleanStartupView,
   countStartupRows,
   resolveStartupRestore,
   type StartupProjectLike,
@@ -66,5 +67,15 @@ const restoredResearch = resolveStartupRestore(projects, sessions, {
 })
 assert(restoredResearch.view === 'research', 'restores Research before stale chat state')
 assert(restoredResearch.projectId === null && restoredResearch.sessionId === null, 'Research owns its internal selection')
+
+assert(cleanStartupView('loops') === 'workspace', 'removed Loop route sanitizes to Workspace')
+const restoredRemovedLoop = resolveStartupRestore(projects, sessions, {
+  lastActiveProjectId: 'project-b',
+  lastActiveSessionId: 'chat-project-b',
+  lastView: 'loops'
+})
+assert(restoredRemovedLoop.view === 'workspace', 'stale saved Loop view falls back to Workspace')
+assert(restoredRemovedLoop.projectId === 'project-b', 'stale Loop view restores its project in Workspace')
+assert(restoredRemovedLoop.sessionId === 'chat-project-b', 'stale Loop view restores its chat in Workspace')
 
 console.log('startup hydration verifier passed')

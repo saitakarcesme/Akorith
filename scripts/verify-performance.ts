@@ -41,7 +41,6 @@ const researchSynthesize = read('src/main/research/synthesize.ts')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
 const projectPreview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
-const projectLoop = read('src/renderer/src/components/ProjectLoopPage.tsx')
 const testPage = read('src/renderer/src/components/TestPage.tsx')
 const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
 const researchPage = read('src/renderer/src/components/ResearchPage.tsx')
@@ -53,7 +52,7 @@ const database = read('src/main/db.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const productPolishCss = read('src/renderer/src/product-polish.css')
 
-for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ProjectLoopPage', 'ResearchPage']) {
+for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
   check(
     new RegExp(`const\\s+${escaped(component)}\\s*=\\s*lazy\\(\\(\\)\\s*=>\\s*import\\(`).test(app),
     `${component} is split out of the startup bundle`
@@ -65,11 +64,17 @@ for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ProjectLoopPage', 
 }
 
 check(
-  app.includes("PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'loops', 'research'])") &&
+  app.includes("PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'research'])") &&
     app.includes("view === 'test' || mountedFeatureViews.has('test')") &&
-    app.includes("view === 'loops' || mountedFeatureViews.has('loops')") &&
     app.includes("view === 'research' || mountedFeatureViews.has('research')"),
   'long-running feature pages mount on first visit and then preserve active work'
+)
+check(
+  !app.includes("const ProjectLoopPage = lazy") &&
+    !app.includes('loops-page-wrap') &&
+    !sidebar.includes("{ view: 'loops'") &&
+    !sidebar.includes("import('./ProjectLoopPage')"),
+  'standalone Loop route and navigation stay out of the renderer'
 )
 check(
   sidebar.includes('FEATURE_PRELOADERS') &&
@@ -188,12 +193,6 @@ check(
   'GPU samples do not rebuild both year-long activity heatmaps'
 )
 check(
-  projectLoop.includes('timer = window.setTimeout(() => void poll(), delay)') &&
-    !projectLoop.includes('window.setInterval(() =>') &&
-    projectLoop.includes('if (!active || providers) return'),
-  'Loop polling is single-flight and provider catalogs load only once'
-)
-check(
   testPage.includes("export { default } from './BenchmarkPage'") &&
     benchmarkPage.includes('if (!active || !providers.some(isLocalStarting)) return'),
   'hidden Benchmark stops local-provider retry polling'
@@ -207,10 +206,9 @@ check(
 )
 check(
   app.includes("active={view === 'workspace' || view === 'general'}") &&
-    projectLoop.includes('active={active}') &&
     projectPreview.includes('if (!active || !session') &&
     projectPreview.includes('if (document.hidden || pollingRef.current) return'),
-  'hidden Workspace/Loop previews stop capturePage polling'
+  'hidden Workspace previews stop capturePage polling'
 )
 check(
   replicaCss.includes('.chat-msg:not(.streaming)') &&

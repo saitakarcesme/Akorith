@@ -1151,10 +1151,13 @@ async function runLocalExecutorCycle(
 
   let status = attempt.score.shouldCommit ? 'validated' : attempt.score.verdict === 'attempt_failed' ? 'failed' : 'no_commit'
   let commitMessage: string | null = null
-  let commitError: string | null = null
+  let commitError: string | null = attempt.rollbackFailed
+    ? attempt.errors.find((error) => error.startsWith('Rollback failed:')) ?? 'workspace rollback failed'
+    : null
   let rolledBack = attempt.rolledBack
+  if (attempt.rollbackFailed) status = 'failed'
 
-  if (attempt.score.shouldCommit && session.autoCommit) {
+  if (!attempt.rollbackFailed && attempt.score.shouldCommit && session.autoCommit) {
     updateMacroSession(sessionId, {
       lastAttemptStatus: 'committing',
       lastValidationResult: localValidationSummary(attempt.commandResults)
@@ -1174,13 +1177,17 @@ async function runLocalExecutorCycle(
       status = 'no_commit'
       commitError = committed.reason ?? 'commit was skipped'
     }
-  } else if (attempt.score.shouldCommit && !session.autoCommit) {
+  } else if (!attempt.rollbackFailed && attempt.score.shouldCommit && !session.autoCommit) {
     commitError = 'auto-commit disabled'
   }
 
   if (status !== 'committed' && attempt.rollback.length > 0 && !rolledBack) {
-    rollbackLocalExecutorPatch(attempt.rollback)
-    rolledBack = true
+    const rollbackResult = rollbackLocalExecutorPatch(attempt.rollback)
+    rolledBack = rollbackResult.ok
+    if (!rollbackResult.ok) {
+      status = 'failed'
+      commitError = `workspace rollback failed: ${rollbackResult.errors.join('; ')}`
+    }
   }
 
   const summaryText = localAttemptResultText({ attempt, status, commitMessage, commitError, rolledBack })

@@ -415,6 +415,14 @@ const projectLoop = Object.freeze({
   runOnce: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:runOnce', id),
   runGoal: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:runGoal', id),
   pauseGoal: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:pauseGoal', id),
+  startWorkspaceGoal: (input: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:startWorkspaceGoal', input),
+  getWorkspaceGoal: (id: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:getWorkspaceGoal', id),
+  pauseWorkspaceGoal: (id: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:pauseWorkspaceGoal', id),
+  resumeWorkspaceGoal: (id: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectLoop:resumeWorkspaceGoal', id),
   editGoal: (id: string, goal: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:editGoal', id, goal),
   listRuns: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listRuns', id),
   listEvents: (id: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:listEvents', id),

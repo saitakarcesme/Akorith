@@ -3,6 +3,7 @@ import { formatModelLabel } from '../modelLabels'
 import { CopyIcon, FileIcon } from './icons'
 import ChatMarkdown from './ChatMarkdown'
 import WorkspaceActivity from './WorkspaceActivity'
+import WorkspaceLoopActivity from './WorkspaceLoopActivity'
 import type { ChatMessage } from './chat-types'
 
 function usageLine(message: ChatMessage): string {
@@ -82,13 +83,16 @@ function CompletionSummary({ message }: { message: ChatMessage }): JSX.Element |
 function ChatMessageView({
   message,
   isWorkspace,
+  active,
   projectName
 }: {
   message: ChatMessage
   isWorkspace: boolean
+  active: boolean
   projectName?: string
 }): JSX.Element {
   const [copied, setCopied] = useState(false)
+  const workspaceGoal = isWorkspace && message.role === 'assistant' ? message.meta?.workspaceGoal : undefined
   const activityOwnsError = message.status === 'error' && (message.activities ?? []).some((activity) => activity.status === 'error')
   const showAssistantText = message.status === 'streaming' ? Boolean(message.text) : !activityOwnsError
   const images = message.attachments?.filter((item) => item.kind === 'image' && item.dataBase64) ?? []
@@ -99,6 +103,14 @@ function ChatMessageView({
       window.setTimeout(() => setCopied(false), 1600)
     })
   }
+  if (workspaceGoal) {
+    return (
+      <article className={`chat-msg assistant workspace-loop-message ${workspaceGoal.status}`}>
+        <WorkspaceLoopActivity metadata={workspaceGoal} active={active} projectName={projectName} />
+      </article>
+    )
+  }
+
   return (
     <article className={`chat-msg ${message.role} ${message.status}`}>
       {images.length > 0 && <div className="chat-image-strip">{images.map((image) => <img key={image.id} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} loading="lazy" decoding="async" />)}</div>}

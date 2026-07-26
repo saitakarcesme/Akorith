@@ -112,9 +112,48 @@ async function main(): Promise<void> {
       revertOnNoCommit: false
     })
     assert.equal(failed.score.shouldCommit, false, 'failed validation must not commit')
-    if (!failed.score.shouldCommit) rollbackLocalExecutorPatch(failed.rollback)
+    if (!failed.score.shouldCommit) {
+      const rollback = rollbackLocalExecutorPatch(failed.rollback)
+      assert.equal(rollback.ok, true, 'manual rollback reports successful restoration')
+    }
     assert.equal(git(failedRepo, ['rev-parse', 'HEAD']), failedHead, 'failed validation leaves git HEAD unchanged')
     assert.equal(readFileSync(join(failedRepo, 'src', 'app.ts'), 'utf8'), 'export const value = 1\n', 'failed validation is rolled back')
+
+    const automaticRollbackRepo = await makeRepo()
+    dirs.push(automaticRollbackRepo)
+    await writeFile(join(automaticRollbackRepo, 'user.txt'), 'pre-existing user work\n', 'utf8')
+    const automaticRollback = await executeLocalExecutorAttempt({
+      workspaceDir: automaticRollbackRepo,
+      goal: 'Add a useful TypeScript helper.',
+      rawOutput: jsonAction({
+        files: [{ path: 'src/app.ts', operation: 'modify', content: 'export const value = 4\n' }],
+        commands: [{ cmd: 'node scripts/fail.js', reason: 'intentional failure' }]
+      }),
+      revertOnNoCommit: true
+    })
+    assert.equal(automaticRollback.score.shouldCommit, false)
+    assert.equal(automaticRollback.rolledBack, true, 'automatic rollback is confirmed before reporting success')
+    assert.equal(automaticRollback.rollbackFailed, false)
+    assert.equal(
+      readFileSync(join(automaticRollbackRepo, 'src', 'app.ts'), 'utf8'),
+      'export const value = 1\n',
+      'automatic rollback restores the exact pre-cycle file'
+    )
+    assert.equal(
+      readFileSync(join(automaticRollbackRepo, 'user.txt'), 'utf8'),
+      'pre-existing user work\n',
+      'automatic rollback preserves unrelated dirty work'
+    )
+
+    const rollbackFailureRepo = await makeRepo()
+    dirs.push(rollbackFailureRepo)
+    const blockedRollbackPath = join(rollbackFailureRepo, 'rollback-target')
+    await mkdir(blockedRollbackPath)
+    const rollbackFailure = rollbackLocalExecutorPatch([
+      { absolutePath: blockedRollbackPath, existed: true, content: 'cannot replace a directory with file content' }
+    ])
+    assert.equal(rollbackFailure.ok, false, 'rollback write failures are surfaced instead of reported as restored')
+    assert.ok(rollbackFailure.errors.length > 0)
 
     const noopRepo = await makeRepo()
     dirs.push(noopRepo)

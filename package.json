@@ -16,6 +16,8 @@
     "postinstall": "electron-rebuild -f -o better-sqlite3 && node scripts/fix-spawn-helper.js && node scripts/fix-dev-app-name.js",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "verify:workspace-loop": "tsx scripts/verify-workspace-loop.ts",
+    "verify:workspace-writer-lease": "tsx scripts/verify-workspace-writer-lease.ts",
+    "verify:workspace-skill-loop": "npm run verify:workspace-writer-lease && tsx scripts/verify-workspace-skill-loop.ts",
     "verify:local-executor": "node --experimental-strip-types scripts/verify-local-executor.ts",
     "verify:controller": "tsx scripts/verify-controller.ts",
     "verify:startup-hydration": "tsx scripts/verify-startup-hydration.ts",

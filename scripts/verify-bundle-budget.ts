@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
 const root = join(__dirname, '..')
@@ -40,13 +40,21 @@ within(bytes(join(root, 'out', 'main', 'index.js')), 950 * 1024, 'initial main-p
 within(bytes(join(root, 'out', 'preload', 'index.js')), 50 * 1024, 'preload bridge JavaScript')
 
 const eagerNames = [...initialScripts, ...initialStyles].map((path) => basename(path)).join('\n')
-for (const deferred of ['ChatMarkdown', 'ChatMessageView', 'SettingsCenter', 'Dashboard', 'Plugins', 'TestPage', 'ProjectLoopPage', 'ResearchPage']) {
+for (const deferred of ['ChatMarkdown', 'ChatMessageView', 'SettingsCenter', 'Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
   if (eagerNames.includes(deferred)) {
     failures.push(`${deferred} was referenced by the initial HTML`)
     console.error(`[fail] ${deferred} was referenced by the initial HTML`)
   } else {
     console.log(`[ok] ${deferred} remains deferred`)
   }
+}
+
+const emittedNames = readdirSync(rendererRoot, { recursive: true }).map(String)
+if (emittedNames.some((path) => path.includes('ProjectLoopPage'))) {
+  failures.push('removed standalone ProjectLoopPage was emitted')
+  console.error('[fail] removed standalone ProjectLoopPage was emitted')
+} else {
+  console.log('[ok] removed standalone ProjectLoopPage is absent from production output')
 }
 
 console.log(`[measure] initial assets: ${(initialJsBytes / 1024).toFixed(1)} KiB JS + ${(initialCssBytes / 1024).toFixed(1)} KiB CSS`)

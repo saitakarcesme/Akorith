@@ -22,6 +22,16 @@ import type { BacklogItemStatus, ProjectLoopStatus } from './types'
 import { runGoalToCompletion } from './goal'
 import { isRepo } from './git'
 import { cloneGitHubRepository } from './github'
+import { ensureDbReady } from '../db'
+import {
+  getWorkspaceGoal,
+  isWorkspaceGoal,
+  pauseWorkspaceGoal,
+  resumeWorkspaceGoal,
+  startWorkspaceGoal,
+  workspaceGoalRunningIds
+} from './workspace-goals'
+import type { StartWorkspaceGoalInput } from './types'
 
 const activeGoals = new Map<string, AbortController>()
 
@@ -30,7 +40,7 @@ const activeGoals = new Map<string, AbortController>()
 
 export function registerProjectLoopIpc(): void {
   ipcMain.handle('projectLoop:list', () => listLoops())
-  ipcMain.handle('projectLoop:runningIds', () => [...activeGoals.keys()])
+  ipcMain.handle('projectLoop:runningIds', () => [...new Set([...activeGoals.keys(), ...workspaceGoalRunningIds()])])
   ipcMain.handle('projectLoop:get', (_e, id: string) => getLoop(id))
 
   ipcMain.handle('projectLoop:create', (_e, input: CreateLoopInput) => {
@@ -51,24 +61,34 @@ export function registerProjectLoopIpc(): void {
   })
 
   ipcMain.handle('projectLoop:update', (_e, id: string, patch: Record<string, unknown>) => {
+    if (isWorkspaceGoal(id)) throw new Error('Workspace /loop goals use their dedicated pause and resume controls.')
     const loop = updateLoop(id, patch)
     if (loop?.autonomy === 'auto' && loop.status === 'active') kickProjectLoopAutoScheduler()
     return loop
   })
   ipcMain.handle('projectLoop:setStatus', (_e, id: string, status: ProjectLoopStatus) => {
+    if (isWorkspaceGoal(id)) throw new Error('Workspace /loop goals use their dedicated pause and resume controls.')
     const loop = setLoopStatus(id, status)
     if (loop?.autonomy === 'auto' && loop.status === 'active') kickProjectLoopAutoScheduler()
     return loop
   })
-  ipcMain.handle('projectLoop:archive', (_e, id: string) => archiveLoop(id))
+  ipcMain.handle('projectLoop:archive', (_e, id: string) => {
+    if (isWorkspaceGoal(id)) throw new Error('Workspace /loop goals remain attached to their project chat.')
+    return archiveLoop(id)
+  })
   ipcMain.handle('projectLoop:delete', (_e, id: string) => {
+    if (isWorkspaceGoal(id)) throw new Error('Workspace /loop goals remain attached to their project chat.')
     activeGoals.get(id)?.abort()
     deleteLoop(id)
     return true
   })
 
-  ipcMain.handle('projectLoop:runOnce', async (_e, id: string) => runOneCycle(id))
+  ipcMain.handle('projectLoop:runOnce', async (_e, id: string) => {
+    if (isWorkspaceGoal(id)) throw new Error('Use resumeWorkspaceGoal for a Workspace /loop goal.')
+    return runOneCycle(id)
+  })
   ipcMain.handle('projectLoop:runGoal', async (_e, id: string) => {
+    if (isWorkspaceGoal(id)) throw new Error('Use resumeWorkspaceGoal for a Workspace /loop goal.')
     if (activeGoals.has(id)) throw new Error('goal is already running')
     const controller = new AbortController()
     activeGoals.set(id, controller)
@@ -78,13 +98,37 @@ export function registerProjectLoopIpc(): void {
       activeGoals.delete(id)
     }
   })
-  ipcMain.handle('projectLoop:pauseGoal', (_e, id: string) => {
+  ipcMain.handle('projectLoop:pauseGoal', async (_e, id: string) => {
+    if (isWorkspaceGoal(id)) {
+      await pauseWorkspaceGoal(id)
+      return true
+    }
     activeGoals.get(id)?.abort()
     setLoopStatus(id, 'paused')
     logEvent(id, 'paused', 'Goal pause requested')
     return true
   })
+  ipcMain.handle('projectLoop:startWorkspaceGoal', async (_event, input: StartWorkspaceGoalInput) => {
+    await ensureDbReady()
+    return startWorkspaceGoal(input)
+  })
+  ipcMain.handle('projectLoop:getWorkspaceGoal', async (_event, loopId: string) => {
+    await ensureDbReady()
+    if (typeof loopId !== 'string' || loopId.length > 128) throw new Error('invalid workspace goal id')
+    return getWorkspaceGoal(loopId)
+  })
+  ipcMain.handle('projectLoop:pauseWorkspaceGoal', async (_event, loopId: string) => {
+    await ensureDbReady()
+    if (typeof loopId !== 'string' || loopId.length > 128) throw new Error('invalid workspace goal id')
+    return pauseWorkspaceGoal(loopId)
+  })
+  ipcMain.handle('projectLoop:resumeWorkspaceGoal', async (_event, loopId: string) => {
+    await ensureDbReady()
+    if (typeof loopId !== 'string' || loopId.length > 128) throw new Error('invalid workspace goal id')
+    return resumeWorkspaceGoal(loopId)
+  })
   ipcMain.handle('projectLoop:editGoal', (_e, id: string, goal: string) => {
+    if (isWorkspaceGoal(id)) throw new Error('Start a new /loop message to define a different workspace goal.')
     if (typeof goal !== 'string' || !goal.trim() || goal.length > 20_000) throw new Error('invalid goal')
     const clean = goal.trim()
     const loop = updateLoop(id, {

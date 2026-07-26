@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { ContextInfo, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import { normalizeStoredOpenCodeMessage } from '../../../shared/opencode-output'
 import type { ChatMode, HistorySelection } from '../App'
+import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHint } from '../workspaceLoopCommand'
 import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
 import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
@@ -103,6 +104,7 @@ export default function ChatPanel({
   const [mentionFiles, setMentionFiles] = useState<string[]>([])
   const [displayName] = useState(() => storageString('akorith.displayName', 'Ibrahim').trim() || 'Ibrahim')
   const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(null)
+  const [loopStarting, setLoopStarting] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
@@ -116,6 +118,7 @@ export default function ChatPanel({
   const tokenTimersRef = useRef<Record<string, number>>({})
   const historyHydrationRequestRef = useRef(0)
   const activeRef = useRef(active)
+  const loopStartingRef = useRef(false)
   activeRef.current = active
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
@@ -253,10 +256,20 @@ export default function ChatPanel({
         status: 'done',
         attachments: message.attachments,
         meta: message.role === 'assistant'
-          ? { provider: message.providerId, model: message.model ?? 'default', usage: message.metadata?.usage, changes: message.metadata?.changes }
+          ? {
+              provider: message.providerId,
+              model: message.model ?? 'default',
+              usage: message.metadata?.usage,
+              changes: message.metadata?.changes,
+              workspaceGoal: message.metadata?.workspaceGoal
+            }
           : undefined,
-        startedAt: message.role === 'assistant' ? message.metadata?.startedAt : undefined,
-        endedAt: message.role === 'assistant' ? message.metadata?.endedAt : undefined
+        startedAt: message.role === 'assistant'
+          ? message.metadata?.startedAt ?? (message.metadata?.workspaceGoal ? message.createdAt : undefined)
+          : undefined,
+        endedAt: message.role === 'assistant'
+          ? message.metadata?.endedAt ?? (message.metadata?.workspaceGoal?.final ? message.createdAt : undefined)
+          : undefined
       }))
       sessionMessagesRef.current[data.session.id] = loaded
       publishMessages(loaded)
@@ -469,7 +482,93 @@ export default function ChatPanel({
     setMentionQuery(null)
   }
 
+  const startWorkspaceLoopGoal = async (prompt: string, goal: string): Promise<void> => {
+    if (loopStartingRef.current) return
+    if (attachments.length > 0) {
+      showToast('Remove attachments before starting /loop. Project files remain available in the workspace.')
+      return
+    }
+    if (!hasProject || !activeProject?.path) {
+      showToast('Open a project before starting /loop.')
+      return
+    }
+    if (!selected?.available.ok) {
+      showToast('Select an available workspace model before starting /loop.')
+      return
+    }
+    if (!selected.kind.includes('executor')) {
+      showToast(`${selected.label} cannot edit a workspace. Select an executor model for /loop.`)
+      return
+    }
+    const currentSessionId = activeSessionRef.current
+    if (currentSessionId && activeRequests[currentSessionId]) {
+      showToast('Wait for the current response before starting /loop.')
+      return
+    }
+
+    loopStartingRef.current = true
+    setLoopStarting(true)
+    try {
+      const sessionId = await ensureSession(goal, selected.id)
+      const snapshot = await window.api.projectLoop.startWorkspaceGoal({
+        requestId: newId(),
+        sessionId,
+        providerId: selected.id,
+        model: model || undefined,
+        prompt
+      })
+      setSessionMessages(sessionId, (current) => [
+        ...current,
+        {
+          id: snapshot.userMessageId,
+          role: 'user',
+          text: snapshot.goal,
+          status: 'done'
+        },
+        {
+          id: snapshot.assistantMessageId,
+          role: 'assistant',
+          text: '',
+          status: snapshot.status === 'running' ? 'streaming' : 'done',
+          startedAt: snapshot.createdAt,
+          endedAt: snapshot.completedAt,
+          meta: {
+            provider: snapshot.providerId,
+            model: snapshot.model ?? 'default',
+            workspaceGoal: {
+              bindingId: snapshot.bindingId,
+              loopId: snapshot.loopId,
+              goal: snapshot.goal,
+              status: snapshot.status,
+              attempts: snapshot.attempts,
+              final: snapshot.final,
+              error: snapshot.error
+            }
+          }
+        }
+      ])
+      clearComposerTurn()
+      setIntent('execute')
+      onHistoryChange()
+      void refreshContext(sessionId)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error))
+    } finally {
+      loopStartingRef.current = false
+      setLoopStarting(false)
+    }
+  }
+
   const sendOrQueue = (): void => {
+    const loopCommand = isWorkspace ? parseWorkspaceLoopCommand(draft) : { kind: 'none' as const }
+    if (loopCommand.kind === 'invalid') {
+      showToast(loopCommand.reason)
+      return
+    }
+    if (loopCommand.kind === 'command') {
+      void startWorkspaceLoopGoal(draft, loopCommand.goal)
+      return
+    }
     const turn = makeTurn()
     if (!turn) return
     const sessionId = activeSessionRef.current
@@ -534,7 +633,7 @@ export default function ChatPanel({
     if (!isWorkspace) return null
     let runIndex = -1
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role === 'assistant' && messages[index].startedAt) {
+      if (messages[index].role === 'assistant' && messages[index].startedAt && !messages[index].meta?.workspaceGoal) {
         runIndex = index
         break
       }
@@ -576,7 +675,9 @@ export default function ChatPanel({
   const busyRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
   const currentQueue = activeSessionId ? queuedTurnsRef.current[activeSessionId] ?? [] : []
   void queueVersion
-  const canSubmit = Boolean(draft.trim() && selected?.available.ok && (!isWorkspace || hasProject))
+  const loopHint = isWorkspace && hasProject ? workspaceLoopHint(draft) : null
+  const parsedLoopHint = loopHint === 'armed' ? parseWorkspaceLoopCommand(draft) : null
+  const canSubmit = Boolean(draft.trim() && selected?.available.ok && (!isWorkspace || hasProject) && !loopStarting)
   const contextCount = contextInfo?.totalMessages ?? 0
   const memoryLabel = contextCount > 0 ? `Memory: ${contextCount} messages` : hasProject ? 'Project memory on' : 'Session memory on'
   const quickActions = hasProject
@@ -632,6 +733,32 @@ export default function ChatPanel({
           </div>
         </div>
       </div>
+      {loopHint && (
+        <div className={`workspace-loop-command-hint is-${loopHint}`} role={loopHint === 'armed' ? 'status' : undefined}>
+          {loopHint === 'suggest' ? (
+            <button
+              type="button"
+              onClick={() => {
+                updateDraft(insertWorkspaceLoopCommand(draft))
+                window.setTimeout(() => composerInputRef.current?.focus(), 0)
+              }}
+            >
+              <code>/loop</code>
+              <span>Keep working until the complete project goal is verified.</span>
+              <small>Insert</small>
+            </button>
+          ) : (
+            <>
+              <code>/loop</code>
+              <span>{parsedLoopHint?.kind === 'command'
+                ? 'Akorith will keep cycling and withhold the final result until this goal is verified.'
+                : parsedLoopHint?.kind === 'invalid'
+                  ? parsedLoopHint.reason
+                  : 'Add /loop after a concrete project task.'}</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="context-bar"><span className="context-chip"><span className="context-dot" />{memoryLabel}</span>{hasProject && <span className="context-hint">Type @ to add a project file</span>}{activeSessionId && hasConversation && <button type="button" disabled={Boolean(busyRequestId)} className={`context-clear ${confirmingClear ? 'is-confirm' : ''}`} onClick={() => void clearContext()}>{confirmingClear ? 'Reset context?' : 'Reset context'}</button>}</div>
     </div>
   )
@@ -683,7 +810,7 @@ export default function ChatPanel({
           </div>
         </div>
       )
-          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
+          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} active={active} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
       {toast && <div className="bridge-toast ok">{toast}</div>}
     </main>
   )

@@ -74,7 +74,6 @@ function hasHiddenMountedWrapper(
 const app = read('src/renderer/src/App.tsx')
 const chat = read('src/renderer/src/components/ChatPanel.tsx')
 const dashboard = read('src/renderer/src/components/Dashboard.tsx')
-const loop = read('src/renderer/src/components/ProjectLoopPage.tsx')
 const preview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
 const research = read('src/renderer/src/components/ResearchProgress.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
@@ -84,6 +83,7 @@ const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const stylesCss = read('src/renderer/src/styles.css')
+const productPolishCss = read('src/renderer/src/product-polish.css')
 const benchmark = read('src/renderer/src/components/BenchmarkExperience.tsx')
 const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
 const benchmarkCss = read('src/renderer/src/benchmark.css')
@@ -214,11 +214,18 @@ check(
   'derived Workspace workflow reflects the actual request, file and validation command'
 )
 check(
-  loop.includes('loop-v3-goalbar') &&
-  loop.includes('loop-v3-workspace') &&
-  loop.includes('loop-v3-cycle') &&
-  loop.includes('loop-v3-activity'),
-  'Loop uses the compact goal bar, cycle rail and activity stream'
+  !app.includes("const ProjectLoopPage = lazy") &&
+  !app.includes('loops-page-wrap') &&
+  !sidebar.includes("{ view: 'loops'") &&
+  !sidebar.includes("import('./ProjectLoopPage')"),
+  'standalone Loop route, page and sidebar navigation are removed'
+)
+const cssWithoutCurrentLoopFeatures = `${stylesCss}\n${productPolishCss}\n${replicaCss}`
+  .replace(/\.workspace-loop-/g, '.workspace-goal-')
+  .replace(/\.loop-checkbox\b/g, '.agent-checkbox')
+check(
+  !/\.loops?(?:-|\b)/.test(cssWithoutCurrentLoopFeatures),
+  'standalone Loop selectors are absent from the production CSS sources'
 )
 check(
   preview.includes('hideWhenUnavailable') &&
@@ -259,6 +266,15 @@ check(
   composerFocusBlocks.every((block) => !/(?:--blue|#339cff)/i.test(block)),
   'composer focus treatment has no blue border'
 )
+const finalComposerBox = selectorBlocks(replicaCss, '.composer-box').at(-1) ?? ''
+const finalComposerFocus = selectorBlocks(replicaCss, '.composer-box:focus-within').at(-1) ?? ''
+check(
+  /border\s*:\s*0\s*!important/.test(finalComposerBox) &&
+  /box-shadow\s*:\s*none\s*!important/.test(finalComposerBox) &&
+  /border\s*:\s*0\s*!important/.test(finalComposerFocus) &&
+  /box-shadow\s*:\s*none\s*!important/.test(finalComposerFocus),
+  'composer has no resting or focus border ring'
+)
 check(
   selectorBlocks(replicaCss, '.chat-msg.user').some((block) =>
     /color\s*:\s*var\(--bubble-user-text\)/.test(block)
@@ -282,25 +298,6 @@ check(
     /overflow-y\s*:\s*auto/.test(block)
   ),
   'Research keeps its toolbar and tabs outside the scrolling content'
-)
-
-check(
-  selectorBlocks(replicaCss, '.loop-outcome').some((block) =>
-    /background\s*:\s*color-mix\(/.test(block)
-  ) &&
-  selectorBlocks(replicaCss, '.loop-outcome').every((block) => !/#0b0e0c/i.test(block)),
-  'Loop outcome uses theme-aware surfaces'
-)
-check(
-  selectorBlocks(replicaCss, '.loop-focus-composer').some((block) =>
-    /background\s*:\s*linear-gradient\([^;]*var\(--surface\)/.test(block)
-  ) &&
-  selectorBlocks(replicaCss, '.loop-focus-composer').every((block) => !/rgb\(9\s+9\s+9/i.test(block)),
-  'Loop sticky composer follows the active theme'
-)
-check(
-  loop.includes('aria-current={selected') && loop.includes('title={`${loop.title}'),
-  'Loop goal switcher exposes selected state and full truncated titles'
 )
 
 check(
@@ -377,15 +374,6 @@ check(
     'TestPage'
   ),
   'Test remains mounted and is hidden with display:none'
-)
-check(
-  hasHiddenMountedWrapper(
-    app,
-    'loops-page-wrap',
-    /view\s*===\s*['"]loops['"]/,
-    'ProjectLoopPage'
-  ),
-  'Loop remains mounted and is hidden with display:none'
 )
 check(
   hasHiddenMountedWrapper(

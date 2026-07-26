@@ -1,12 +1,13 @@
 # Loopex / Akorith — agent guide
 
-Loopex is the current repository/package name. **Akorith** is the visible product name
-introduced in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
+**Akorith** is the current repository, package, and visible product name; **Loopex** remains only as
+a historical name and in the retained `loopex.db` / `loopex.config.json` filenames. Akorith was
+introduced as the visible name in Phase 9.1. It is an Electron + TypeScript + React desktop workspace that orchestrates coding
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 72
-(the replica workspace shell and responsive UI integration).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 73
+(the durable Workspace `/loop` skill).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -28,7 +29,8 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 **27 Local Executor Loop** · 28–56 product, UI, update, agent, and concurrent-loop phases
 (see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** ·
 **69 Autonomous Research** · **70 Research Presentation + unified usage + sidebar alignment** ·
-**71 launch-safe macOS releases** · **72 replica workspace UI** — all done.
+**71 launch-safe macOS releases** · **72 replica workspace UI** ·
+**73 Workspace `/loop` skill** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -1863,9 +1865,11 @@ desktop widths), inset `#181818` app surface with a 10 px top-left corner, 46 px
 dark/light token families. Keep `styles.css` and `product-polish.css` for feature-level layouts;
 `replica-ui.css` must remain the last stylesheet import.
 
-This phase is a visual integration, not a renderer rewrite. `App.tsx` remains the state controller,
-the frozen preload API remains the only capability boundary, and Chat, Benchmark, Loop, and Research
-remain mounted while hidden so requests, timers, queues, and durable jobs survive navigation.
+This phase was a visual integration, not a renderer rewrite. `App.tsx` remains the state controller
+and the frozen preload API remains the only capability boundary. At Phase 72, Chat, Benchmark, Loop,
+and Research remained mounted while hidden. Phase 73 supersedes the Loop part of that statement:
+there is no standalone Loop mount or route; Workspace remains mounted, while Benchmark and Research
+preserve their long-running state after first use.
 Workspace suggestion cards only prepare real prompts. The feature banner is the real permissioned
 `ProjectPreviewPanel`, and every navigation row, project action, model picker, Settings field, and
 domain page continues to use its existing IPC and persistence path.
@@ -1881,6 +1885,54 @@ Verification: `npm run typecheck`, `npm run build`, `npm run verify:replica-ui`,
 `npm run verify:ui-zoom`, the relevant Workspace/Goal/Loop/Research/Plugins/update regression
 scripts, plus real Electron screenshots and overflow/keyboard checks at 1440×900, 960×600,
 640×800, and 390×780.
+
+### Phase 73: Workspace `/loop` Skill
+
+Phase 73 removes the standalone Loop product surface without deleting the durable Goal engine.
+`AppView`, `Sidebar`, feature preloaders, and startup restoration no longer expose `loops`;
+`ProjectLoopPage.tsx` and `LoopPipeline.tsx` are removed. A stale persisted `akorith.lastView =
+loops` is sanitized to Workspace. Historical Phase 20–72 Loop records below remain architecture
+history, not current navigation.
+
+**Activation contract.** `/loop` is available only in a persisted project Workspace. The user writes
+an ordinary concrete task and makes `/loop` the final token; matching is case-insensitive and allows
+trailing whitespace. Empty goals are rejected. Embedded occurrences and command-looking text inside
+quotes, Markdown blockquotes, inline code, or unfinished fenced code remain ordinary content. The
+renderer rejects attachments before starting the goal and clears the composer only after the durable
+start succeeds. Normal messages continue through `chat:send`; the command branch uses only
+`projectLoop:startWorkspaceGoal`.
+
+**Durability and completion.** `workspace_goal_bindings` links the Goal loop to its persisted
+session, idempotent request id, user/assistant messages, provider/model, canonical project path,
+goal, state, attempts, errors, and timestamps. The bound assistant message is a live status record,
+not an early final answer. Its metadata sets `final=true` only for `completed`, after the
+Understand → Plan → Execute → Analyze → Replan review reports `goalMet` with sufficient confidence
+and inspectable evidence. `paused`, `needs_review`, and `error` preserve progress and expose Resume;
+they never masquerade as completion.
+
+**Lifecycle and isolation.** Pause aborts the active provider call and checkpoints the Goal. Resume
+revalidates the session's canonical project path before relaunching. On startup, Akorith reconciles
+interrupted `project_loop_runs` rows and resumes bindings durably marked `running`; shutdown aborts
+in-flight calls only after preserving them as recoverable. A partial unique index permits only one
+running Workspace Goal per canonical project path. Normal Workspace execute requests and `/loop`
+start/resume/recovery paths share one synchronous canonical-path writer lease for their full provider
+lifetime, so neither check-then-act direction can admit two writers.
+
+**Usage and Git safety.** The shared `usage_events` ledger stores one visible Workspace Goal request
+(`request_count=1`) plus idempotent token/cost rows for understand, execute, and review stages
+(`request_count=0`). Workspace `/loop` locks `pushEnabled=false` and invokes Goal cycles with
+`workspaceGoal=true`: it may edit files and run validation, but Akorith's host path never initializes
+Git, stages files, commits, or pushes, and every executor is explicitly instructed to leave Git
+history unchanged. Local-model rollback is file-scoped and must confirm that rejected changes were
+restored; a rollback failure moves the Goal to `needs_review`.
+
+Relevant implementation: `src/renderer/src/workspaceLoopCommand.ts`,
+`ChatPanel.tsx`, `WorkspaceLoopActivity.tsx`, `src/main/project-loop/workspace-goals.ts`,
+`src/main/workspace-writer-lease.ts`, `goal.ts`, `runner.ts`, and
+`workspace_goal_bindings` in `db.ts`. Verify with
+`npm run verify:workspace-skill-loop`, `npm run verify:goal-cycle`,
+`npm run verify:project-loop`, `npm run verify:startup-hydration`, `npm run typecheck`, and
+`npm run build`.
 
 ## Conventions
 

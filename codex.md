@@ -6,14 +6,15 @@ unavailable. `AGENTS.md` is the deep architecture/spec reference; this file is t
 
 ## What Loopex / Akorith is
 
-Loopex is the current repo/package name. **Akorith** is the visible product name introduced in
-Phase 9.1; full package identity cleanup remains Phase 10. It is an Electron + TypeScript + React
+**Akorith** is the current repository, package, and visible product name. **Loopex** remains only as
+a historical name and in the retained `loopex.db` / `loopex.config.json` filenames. Akorith was
+introduced as the visible product name in Phase 9.1. It is an Electron + TypeScript + React
 desktop workspace that orchestrates coding agents **without any API keys**. The center planning
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 72:
-Replica Workspace UI**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 73:
+Workspace `/loop` Skill**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -367,6 +368,10 @@ Replica Workspace UI**.
       titlebar, 266/248 px sidebar, inset surface, grouped Settings, home/composer geometry,
       native-style menus, command palette, exact dark/light tokens, and 720/676/540/400 px
       responsive behavior.
+- [x] **Phase 73** - Workspace `/loop` Skill. The standalone Loop route is retired. A concrete
+      project task ending with the exact `/loop` suffix creates a durable, recoverable Goal in its
+      Workspace chat; only evidence-backed completion is final, usage is recorded, conflicting
+      Workspace sends are blocked, and automatic Git init/stage/commit/push is disabled.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -862,8 +867,11 @@ local model, attempts, validated changes, commits, last validation, and last com
   10 px inset surface corner, 736 px home/composer measure, grouped Settings, and the shared
   dark/light replica token families.
 - This is a visual integration only. Keep `App.tsx` as controller, keep the preload bridge frozen,
-  and keep Chat, Benchmark, Loop, and Research mounted while hidden. Suggestion cards prepare real
-  prompts; the feature banner remains the real permissioned Computer Use panel.
+  and preserve the existing functional surfaces. At Phase 72, Chat, Benchmark, Loop, and Research
+  remained mounted while hidden; Phase 73 supersedes the Loop portion. There is now no standalone
+  Loop mount or route. Workspace remains mounted, and Benchmark/Research retain long-running state.
+  Suggestion cards prepare real prompts; the feature banner remains the real permissioned Computer
+  Use panel.
 - At 720 px and below the sidebar becomes a scrim-backed sheet. Responsive collapse is separate
   from the persisted desktop choice, and the 360 px minimum window reaches the 400 px layout.
   No feature page may create document-level horizontal overflow.
@@ -873,6 +881,33 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Verify with typecheck/build, `verify:replica-ui`, `verify:ui-zoom`, domain regression scripts,
   and real Electron geometry/keyboard/overflow screenshots at 1440×900, 960×600, 640×800, and
   390×780.
+
+## Phase 73 - Workspace `/loop` Skill
+
+- The standalone Loop sidebar item, route, lazy page, persistent mount, `ProjectLoopPage`, and
+  `LoopPipeline` are gone. The durable Goal backend remains. Startup treats a stale saved `loops`
+  view as Workspace.
+- In a project Workspace, a concrete message activates the skill only when `/loop` is its exact
+  final token (case-insensitive, optional trailing whitespace). Empty goals fail. Embedded,
+  quoted, blockquoted, inline-code, and unfinished fenced-code occurrences do not activate it;
+  attachments are rejected before the composer is cleared.
+- `workspace_goal_bindings` durably joins the idempotent request, session, user/assistant messages,
+  provider/model, canonical project path, Goal loop, state, attempts, errors, and timestamps. The
+  assistant card is final only when an evidence-backed Understand → Plan → Execute → Analyze →
+  Replan review reaches `completed`. Paused, `needs_review`, and error states remain nonfinal and
+  resumable.
+- Running Goals recover after restart. Startup reconciles interrupted run rows; shutdown
+  checkpoints in-flight work. The canonical project path is revalidated on resume. Only one Goal
+  may run per project, and normal Workspace execute plus `/loop` lifecycle paths share one
+  synchronous canonical-path main-process writer lease for their full provider lifetime.
+- Usage accounting writes one visible request row plus idempotent token/cost rows for the
+  understand, execute, and review stages. Workspace `/loop` disables automatic Git initialization,
+  staging, commits, and pushes in Akorith's host path and instructs every executor to leave history
+  unchanged; it can edit files and validate them without taking ownership of the user's working
+  tree. Rejected Local patches are finalised only after rollback succeeds.
+- Canonical verification: `npm run verify:workspace-skill-loop`,
+  `npm run verify:goal-cycle`, `npm run verify:project-loop`,
+  `npm run verify:startup-hydration`, `npm run typecheck`, and `npm run build`.
 
 ## Rule: keep the docs current
 

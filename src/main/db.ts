@@ -10,7 +10,7 @@ import { app, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'crypto'
 import { createRequire } from 'module'
 import { basename, isAbsolute, join, resolve, sep } from 'path'
-import { mkdirSync, statSync } from 'fs'
+import { mkdirSync, realpathSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 import { publicChatAttachments, removeSessionAttachments } from './chat-attachments'
@@ -27,7 +27,7 @@ const MAX_PROJECT_META = 48
 const SAFE_PROJECT_DIR_NAME = /^[^/\\:*?"<>|\0\r\n]{1,120}$/
 // Bump whenever initDb adds or changes a table, column, index, or backfill.
 // The version is written only after every idempotent migration succeeds.
-const DB_SCHEMA_VERSION = 2
+const DB_SCHEMA_VERSION = 3
 
 interface StoredGeneratedFile {
   path: string
@@ -422,6 +422,40 @@ export function initDb(): void {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_project_loop_memories_loop ON project_loop_memories(loop_id, importance);
+
+    -- Workspace /loop goals bind the durable Goal engine to one persisted
+    -- project chat. The canonical workspace path is locked at creation so a
+    -- resumed task can never silently continue in a different directory.
+    CREATE TABLE IF NOT EXISTS workspace_goal_bindings (
+      id                   TEXT PRIMARY KEY,
+      loop_id              TEXT NOT NULL UNIQUE REFERENCES project_loops(id) ON DELETE CASCADE,
+      session_id           TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      request_id           TEXT NOT NULL UNIQUE,
+      user_message_id      TEXT REFERENCES messages(id) ON DELETE SET NULL,
+      assistant_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+      provider_id          TEXT NOT NULL,
+      model                TEXT,
+      workspace_path       TEXT NOT NULL,
+      goal                 TEXT NOT NULL,
+      state                TEXT NOT NULL DEFAULT 'running',
+      attempts             INTEGER NOT NULL DEFAULT 0,
+      error                TEXT,
+      created_at           INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL,
+      completed_at         INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_workspace_goal_session
+      ON workspace_goal_bindings(session_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_workspace_goal_state
+      ON workspace_goal_bindings(state, updated_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_goal_running_path
+      ON workspace_goal_bindings(workspace_path)
+      WHERE state = 'running';
+    CREATE TRIGGER IF NOT EXISTS cleanup_workspace_goal_loop
+      AFTER DELETE ON workspace_goal_bindings
+      BEGIN
+        DELETE FROM project_loops WHERE id = OLD.loop_id;
+      END;
 
     -- Research: durable, long-running investigations and their deliverables.
     CREATE TABLE IF NOT EXISTS research_jobs (
@@ -913,6 +947,16 @@ export interface StoredMessageMetadata {
     deletions: number
     truncated: boolean
   }
+  /** Durable Workspace `/loop` status. `final` is true only after evidence-backed completion. */
+  workspaceGoal?: {
+    bindingId: string
+    loopId: string
+    goal: string
+    status: 'running' | 'paused' | 'needs_review' | 'error' | 'completed'
+    attempts: number
+    final: boolean
+    error?: string
+  }
 }
 
 export interface StoredMessageAttachment {
@@ -992,6 +1036,22 @@ export function sessionExists(sessionId: string): boolean {
   return Boolean(must().prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId))
 }
 
+function runningWorkspaceGoalIdsForSession(sessionId: string): string[] {
+  return (
+    must()
+      .prepare("SELECT loop_id FROM workspace_goal_bindings WHERE session_id = ? AND state = 'running'")
+      .all(sessionId) as { loop_id: string }[]
+  ).map((row) => row.loop_id)
+}
+
+async function pauseWorkspaceGoals(loopIds: string[]): Promise<void> {
+  if (loopIds.length === 0) return
+  // Dynamic import avoids making the DB foundation depend on project-loop at
+  // module initialization time while still draining writers before deletion.
+  const { pauseWorkspaceGoal } = await import('./project-loop/workspace-goals')
+  for (const loopId of loopIds) await pauseWorkspaceGoal(loopId)
+}
+
 export function addMessage(
   sessionId: string,
   role: 'user' | 'assistant',
@@ -1000,13 +1060,35 @@ export function addMessage(
   model?: string,
   attachments: StoredMessageAttachment[] = [],
   metadata?: StoredMessageMetadata
-): void {
+): string {
   const now = Date.now()
   const d = must()
+  const id = randomUUID()
   d.prepare(
     'INSERT INTO messages (id, session_id, role, content, provider_id, model, attachments, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(randomUUID(), sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, metadata ? JSON.stringify(metadata) : null, now)
+  ).run(id, sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, metadata ? JSON.stringify(metadata) : null, now)
   d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId)
+  return id
+}
+
+/** Update one persisted assistant status card without appending a second final response. */
+export function updateMessage(
+  messageId: string,
+  content: string,
+  metadata?: StoredMessageMetadata
+): boolean {
+  const d = must()
+  const result = d
+    .prepare('UPDATE messages SET content = ?, metadata = ? WHERE id = ? AND role = ?')
+    .run(content, metadata ? JSON.stringify(metadata) : null, messageId, 'assistant')
+  if (result.changes > 0) {
+    d.prepare(
+      `UPDATE sessions
+       SET updated_at = ?
+       WHERE id = (SELECT session_id FROM messages WHERE id = ?)`
+    ).run(Date.now(), messageId)
+  }
+  return result.changes > 0
 }
 
 // ---- Phase 14.2 conversation memory helpers ----
@@ -1235,6 +1317,28 @@ export function getSessionProjectContext(sessionId: string): { projectName: stri
   }
 }
 
+/** Prevent an ordinary Workspace execute turn from racing a durable `/loop`
+ * writer. Planning turns remain read-only and are allowed concurrently. */
+export function getRunningWorkspaceGoalForPath(
+  projectPath: string
+): { loopId: string; goal: string } | null {
+  let canonical: string
+  try {
+    canonical = realpathSync.native(resolve(projectPath))
+  } catch {
+    return null
+  }
+  const rows = must()
+    .prepare("SELECT loop_id, workspace_path, goal FROM workspace_goal_bindings WHERE state = 'running'")
+    .all() as Array<{ loop_id: string; workspace_path: string; goal: string }>
+  const owner = rows.find((row) =>
+    process.platform === 'win32'
+      ? row.workspace_path.toLowerCase() === canonical.toLowerCase()
+      : row.workspace_path === canonical
+  )
+  return owner ? { loopId: owner.loop_id, goal: owner.goal } : null
+}
+
 function findProjectByPath(path: string): ProjectRow | null {
   const row = must().prepare('SELECT * FROM projects WHERE path = ? ORDER BY updated_at DESC LIMIT 1').get(path) as
     | Record<string, unknown>
@@ -1293,6 +1397,16 @@ export function deleteProject(projectId: string): boolean {
   if (!VALID_ID.test(projectId)) return false
   const d = must()
   if (!d.prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId)) return false
+  const activeGoal = d
+    .prepare(
+      `SELECT 1
+       FROM workspace_goal_bindings w
+       JOIN sessions s ON s.id = w.session_id
+       WHERE s.project_id = ? AND w.state = 'running'
+       LIMIT 1`
+    )
+    .get(projectId)
+  if (activeGoal) return false
   const tx = d.transaction((id: string) => {
     // Remove this project's workspace chats first so they do not linger as
     // orphaned general chats (the FK is ON DELETE SET NULL). Messages cascade.
@@ -2671,6 +2785,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('history:delete', async (_event, args: { sessionId: string }) => {
     await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
+    await pauseWorkspaceGoals(runningWorkspaceGoalIdsForSession(args.sessionId))
     must().prepare('DELETE FROM sessions WHERE id = ?').run(args.sessionId) // messages cascade
     await removeSessionAttachments(args.sessionId)
     return true
@@ -2681,6 +2796,10 @@ export function registerDbIpc(): void {
     await ensureDbReady()
     if (typeof args?.sessionId !== 'string' || !VALID_ID.test(args.sessionId)) return false
     if (!sessionExists(args.sessionId)) return false
+    await pauseWorkspaceGoals(runningWorkspaceGoalIdsForSession(args.sessionId))
+    // Resetting a completed/paused chat removes its attached Goal ledgers too;
+    // the cleanup trigger deletes the corresponding project_loops row.
+    must().prepare('DELETE FROM workspace_goal_bindings WHERE session_id = ?').run(args.sessionId)
     clearSessionMessages(args.sessionId)
     await removeSessionAttachments(args.sessionId)
     return true
@@ -2798,6 +2917,15 @@ export function registerDbIpc(): void {
   ipcMain.handle('projects:delete', async (_event, args: { projectId: string }) => {
     await ensureDbReady()
     if (typeof args?.projectId !== 'string' || !VALID_ID.test(args.projectId)) return false
+    const running = must()
+      .prepare(
+        `SELECT w.loop_id
+         FROM workspace_goal_bindings w
+         JOIN sessions s ON s.id = w.session_id
+         WHERE s.project_id = ? AND w.state = 'running'`
+      )
+      .all(args.projectId) as { loop_id: string }[]
+    await pauseWorkspaceGoals(running.map((row) => row.loop_id))
     return deleteProject(args.projectId)
   })
 
