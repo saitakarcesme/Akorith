@@ -17,15 +17,15 @@
   --surface: #090909;
   --surface-soft: #0d0d0d;
   --surface-card: #111;
-  --surface-control: #151515;
+  --surface-control: #111;
   --surface-hover: #ffffff0a;
   --surface-hover-strong: #ffffff10;
   --surface-active: #ffffff15;
   --surface-selected: #ffffff12;
   --surface-selected-hover: #ffffff18;
   --focus-neutral: #bdbdbd;
-  --elevated: #131313f7;
-  --elevated-opaque: #151515;
+  --elevated: #111111f7;
+  --elevated-opaque: #111;
   --text: #f2f2f2;
   --text-secondary: #a3a3a3;
   --text-tertiary: #6f6f6f;
@@ -317,7 +317,8 @@ body {
   padding: 5px;
   color: var(--text);
   background: var(--elevated-opaque);
-  border-radius: 12px;
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
   box-shadow: var(--replica-shadow-menu);
 }
 
@@ -384,9 +385,11 @@ body {
   left: var(--chrome-sidebar-width, var(--sidebar-width));
   min-width: 0;
   overflow: hidden;
+  border-top: 1px solid var(--replica-border-subtle);
+  border-left: 1px solid var(--replica-border-subtle);
   border-top-left-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 0 0 0.5px var(--border-heavy);
+  box-shadow: none;
   transition: left 140ms ease;
 }
 
@@ -1296,7 +1299,8 @@ body {
   overflow: hidden;
   color: var(--text);
   background: var(--elevated-opaque);
-  border-radius: 14px;
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
   box-shadow: var(--replica-shadow-menu);
 }
 
@@ -1672,8 +1676,8 @@ body {
 .app[data-ui='replica'] .modal-card {
   color: var(--text);
   background: var(--elevated-opaque);
-  border: 0.5px solid var(--border-heavy);
-  border-radius: 16px;
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
   box-shadow: var(--replica-shadow-menu);
 }
 
@@ -2175,6 +2179,29 @@ body {
   background: var(--surface-control) !important;
   border: 0 !important;
   box-shadow: none !important;
+}
+
+.app[data-ui='replica'] .composer-notice {
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.app[data-ui='replica'] .composer-notice.is-error {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 32%, var(--replica-border-subtle));
+}
+
+.app[data-ui='replica'] .composer-notice.is-success {
+  color: var(--green);
 }
 
 .app[data-ui='replica'] .composer-input {

@@ -36,6 +36,12 @@ const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
 
+interface ComposerNotice {
+  id: string
+  message: string
+  tone: 'error' | 'success'
+}
+
 function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -97,7 +103,7 @@ export default function ChatPanel({
   const [suggestion, setSuggestion] = useState<RouterSuggestion | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<ComposerNotice | null>(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
   const [queueVersion, setQueueVersion] = useState(0)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -111,6 +117,7 @@ export default function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerInputRef = useRef<HTMLTextAreaElement>(null)
   const activeSessionRef = useRef<string | null>(null)
+  const activeSessionProviderRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({})
   const queuedTurnsRef = useRef<Record<string, QueuedTurn[]>>({})
@@ -227,6 +234,7 @@ export default function ChatPanel({
       publishMessages([])
       setActiveSessionId(null)
       activeSessionRef.current = null
+      activeSessionProviderRef.current = null
       onActiveSession(null)
       setContextInfo(null)
       if (historySel.providerId) setProviderId(historySel.providerId)
@@ -237,6 +245,7 @@ export default function ChatPanel({
       publishMessages(cached)
       setActiveSessionId(historySel.sessionId)
       activeSessionRef.current = historySel.sessionId
+      activeSessionProviderRef.current = historySel.providerId ?? null
       onActiveSession(historySel.sessionId)
       return
     }
@@ -275,6 +284,7 @@ export default function ChatPanel({
       publishMessages(loaded)
       setActiveSessionId(data.session.id)
       activeSessionRef.current = data.session.id
+      activeSessionProviderRef.current = data.session.providerId
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
       void refreshContext(data.session.id)
@@ -303,9 +313,10 @@ export default function ChatPanel({
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [activeProject, hasProject, mentionQuery])
 
-  const showToast = (message: string): void => {
-    setToast(message)
-    window.setTimeout(() => setToast((current) => current === message ? null : current), 2200)
+  const showToast = (message: string, tone: ComposerNotice['tone'] = 'error'): void => {
+    const notice = { id: newId(), message, tone }
+    setToast(notice)
+    window.setTimeout(() => setToast((current) => current?.id === notice.id ? null : current), 3200)
   }
 
   const addFiles = useCallback(async (input: FileList | File[]): Promise<void> => {
@@ -361,10 +372,20 @@ export default function ChatPanel({
   }
 
   const ensureSession = async (prompt: string, turnProviderId: string): Promise<string> => {
-    if (activeSessionRef.current) return activeSessionRef.current
+    if (
+      activeSessionRef.current &&
+      activeSessionProviderRef.current === turnProviderId
+    ) return activeSessionRef.current
+
+    if (activeSessionRef.current) {
+      sessionMessagesRef.current[activeSessionRef.current] = messagesRef.current
+    }
     const session = await window.api.history.create(turnProviderId, prompt.replace(/\s+/g, ' ').slice(0, 64), hasProject ? activeProject!.id : null)
+    publishMessages([])
+    setContextInfo(null)
     setActiveSessionId(session.id)
     activeSessionRef.current = session.id
+    activeSessionProviderRef.current = turnProviderId
     onActiveSession(session.id)
     onHistoryChange()
     return session.id
@@ -577,7 +598,7 @@ export default function ChatPanel({
     if (busy && sessionId) {
       queuedTurnsRef.current[sessionId] = [...(queuedTurnsRef.current[sessionId] ?? []), turn]
       setQueueVersion((version) => version + 1)
-      showToast('Follow-up queued')
+      showToast('Follow-up queued', 'success')
       return
     }
     void executeTurn(turn)
@@ -704,6 +725,15 @@ export default function ChatPanel({
       )}
       {suggestion && <div className="router-suggestion"><div className="router-suggestion-head"><span className={`tier-badge tier-${suggestion.tier}`}>{suggestion.rank} · {suggestion.tier}</span><span className="router-target">→ {suggestion.providerLabel}{suggestion.model ? ` · ${suggestion.model}` : ''}</span></div><div className="router-reason">{suggestion.reason}</div><div className="router-actions"><button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>Use model</button><button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>Dismiss</button></div></div>}
       {currentQueue.length > 0 && <div className="composer-queue"><QueueIcon size={14} /><span>{currentQueue.length} follow-up{currentQueue.length === 1 ? '' : 's'} queued</span><button type="button" onClick={() => { queuedTurnsRef.current[activeSessionId!] = []; setQueueVersion((version) => version + 1) }}>Clear</button></div>}
+      {toast && (
+        <div
+          className={`composer-notice is-${toast.tone}`}
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+          aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
+        >
+          {toast.message}
+        </div>
+      )}
       <div className={`composer-box ${intent === 'plan' ? 'is-plan' : ''}`}>
         {attachments.length > 0 && <div className="composer-attachments">{attachments.map((item) => <div className={`composer-attachment is-${item.kind}`} key={item.id}>{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <FileIcon size={15} />}<span>{item.name}</span><small>{Math.max(1, Math.round(item.size / 1024))} KB</small><button type="button" aria-label={`Remove ${item.name}`} onClick={() => removeAttachment(item.id)}>×</button></div>)}</div>}
         {mentionQuery !== null && mentionFiles.length > 0 && <div className="composer-mention-pop" role="listbox"><div className="composer-mention-head">Project files</div>{mentionFiles.map((path) => <button type="button" role="option" key={path} onClick={() => insertMention(path)}><FileIcon size={13} /><span>{path}</span></button>)}</div>}
@@ -811,7 +841,6 @@ export default function ChatPanel({
         </div>
       )
           : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} active={active} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
-      {toast && <div className="bridge-toast ok">{toast}</div>}
     </main>
   )
 }

@@ -5067,32 +5067,6 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.bridge-toast {
-  position: absolute;
-  bottom: 150px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 6px 14px;
-  font-size: 12px;
-  border-radius: 4px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.bridge-toast.ok {
-  color: var(--success);
-  background: rgba(134, 185, 154, 0.12);
-  border: 1px solid rgba(134, 185, 154, 0.32);
-}
-
-.bridge-toast.error {
-  color: var(--danger);
-  background: rgba(215, 130, 130, 0.12);
-  border: 1px solid rgba(215, 130, 130, 0.32);
-}
-
 .chat-notice {
   flex: 0 0 auto;
   padding: 8px 14px;

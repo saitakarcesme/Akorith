@@ -94,6 +94,7 @@ check(
 )
 
 const startWorkspaceLoopGoal = constFunction(chat, 'startWorkspaceLoopGoal')
+const ensureSession = constFunction(chat, 'ensureSession')
 const attachmentGuard = startWorkspaceLoopGoal.indexOf('attachments.length')
 const startCall = startWorkspaceLoopGoal.indexOf('window.api.projectLoop.startWorkspaceGoal')
 const clearComposer = startWorkspaceLoopGoal.indexOf('clearComposerTurn()')
@@ -106,6 +107,12 @@ check(
 check(
   startCall >= 0 && !startWorkspaceLoopGoal.includes('window.api.chat.send'),
   '/loop uses the durable Workspace goal API instead of normal chat send'
+)
+check(
+  chat.includes('activeSessionProviderRef') &&
+    ensureSession.includes('activeSessionProviderRef.current === turnProviderId') &&
+    ensureSession.includes('window.api.history.create(turnProviderId'),
+  'changing providers starts a matching provider-bound session before /loop dispatch'
 )
 
 const metadataFor = workspaceGoals.slice(

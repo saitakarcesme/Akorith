@@ -119,7 +119,8 @@ const colorTokens: Array<{ names: string[]; values: string[]; label: string }> =
   { names: ['--surface', '--replica-surface'], values: ['#090909'], label: 'surface' },
   { names: ['--surface-soft', '--replica-surface-soft'], values: ['#0d0d0d'], label: 'soft surface' },
   { names: ['--surface-card', '--replica-surface-card'], values: ['#111', '#111111'], label: 'card surface' },
-  { names: ['--surface-control', '--replica-surface-control'], values: ['#151515'], label: 'control surface' },
+  { names: ['--surface-control', '--replica-surface-control'], values: ['#111', '#111111'], label: 'control surface' },
+  { names: ['--elevated-opaque'], values: ['#111', '#111111'], label: 'elevated surface' },
   { names: ['--text', '--replica-text'], values: ['#f2f2f2'], label: 'primary text' },
   { names: ['--text-secondary', '--replica-text-secondary'], values: ['#a3a3a3'], label: 'secondary text' },
   { names: ['--replica-border-default'], values: ['#ffffff18'], label: 'border' },
@@ -152,6 +153,16 @@ check(
     /overflow-y\s*:\s*hidden/.test(block)
   ),
   'Workspace composer grows with content to a bounded 192px height'
+)
+check(
+  chat.includes('className={`composer-notice is-${toast.tone}`}') &&
+  chat.indexOf('className={`composer-notice is-${toast.tone}`}') < chat.indexOf('<div className={`composer-box') &&
+  !chat.includes('bridge-toast') &&
+  selectorBlocks(replicaCss, '.composer-notice').some((block) =>
+    /white-space\s*:\s*normal/.test(block) &&
+    !/position\s*:\s*absolute/.test(block)
+  ),
+  'composer notices stay in document flow instead of overlapping typed text'
 )
 check(
   /position\s*:\s*relative[\s\S]{0,240}place-items\s*:\s*center/.test(
