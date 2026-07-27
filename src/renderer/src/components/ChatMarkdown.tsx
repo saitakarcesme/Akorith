@@ -3,6 +3,8 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CopyIcon } from './icons'
 
+const REMARK_PLUGINS = [remarkGfm]
+
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }): JSX.Element {
   const [copied, setCopied] = useState(false)
   const content = String(children ?? '').replace(/\n$/, '')
@@ -45,7 +47,7 @@ const components: Components = {
 }
 
 function ChatMarkdown({ text }: { text: string }): JSX.Element {
-  return <div className="chat-prose"><ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{text}</ReactMarkdown></div>
+  return <div className="chat-prose"><ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>{text}</ReactMarkdown></div>
 }
 
 export default memo(ChatMarkdown)

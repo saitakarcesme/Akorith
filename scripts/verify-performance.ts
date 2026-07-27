@@ -1,10 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { buildWorkspaceFileTree } from '../src/renderer/src/workspaceFileTree'
 import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
 
 const root = join(__dirname, '..')
 const failures: string[] = []
+let passed = 0
 
 function read(relativePath: string): string {
   const absolutePath = join(root, relativePath)
@@ -17,6 +19,7 @@ function read(relativePath: string): string {
 
 function check(value: unknown, label: string): void {
   if (value) {
+    passed += 1
     console.log(`[ok] ${label}`)
     return
   }
@@ -51,6 +54,10 @@ const pluginManager = read('src/main/plugins/manager.ts')
 const database = read('src/main/db.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const productPolishCss = read('src/renderer/src/product-polish.css')
+const workspaceTools = read('src/renderer/src/components/WorkspaceToolsPanel.tsx')
+const workspaceFilesPanel = read('src/renderer/src/components/WorkspaceFilesPanel.tsx')
+const workspaceFileTree = read('src/renderer/src/workspaceFileTree.ts')
+const bottomWorkbench = read('src/renderer/src/components/BottomWorkbench.tsx')
 
 for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
   check(
@@ -62,6 +69,22 @@ for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
     `${component} has no eager renderer import`
   )
 }
+check(
+  app.includes("const WorkspaceToolsPanel = lazy(() => import('./components/WorkspaceToolsPanel'))") &&
+    !/import\s+WorkspaceToolsPanel\s+from/.test(app),
+  'Workspace tools and terminal dependencies stay out of the initial renderer chunk'
+)
+check(
+  ['BottomWorkbench', 'ProjectPreviewPanel', 'TerminalPane', 'WorkspaceFilesPanel'].every((component) =>
+    new RegExp(`const\\s+${component}\\s*=\\s*lazy\\(`).test(workspaceTools)
+  ) &&
+    workspaceTools.includes('<Suspense fallback={<ToolPaneFallback'),
+  'each heavy Workspace tool loads only when its tab is opened'
+)
+check(
+  app.includes('startTransition(() => setView(nextView))'),
+  'heavy section navigation commits as a non-blocking React transition'
+)
 
 check(
   app.includes("PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'research'])") &&
@@ -105,6 +128,15 @@ check(
   tokenListener.includes('window.setTimeout') && !tokenListener.includes('requestAnimationFrame'),
   'streaming tokens are batched instead of reparsing Markdown every display frame'
 )
+check(
+  chat.includes('FINAL_RESPONSE_REVEAL_STEPS = 9') &&
+    chat.includes('revealFinalResponse') &&
+    chat.includes('revealGenerationRef.current[requestId] !== generation') &&
+    chat.includes('activeSessionRef.current !== sessionId') &&
+    chat.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
+    chat.includes('document.hidden'),
+  'non-streaming CLI results use a bounded cancellable reveal scoped to the active session'
+)
 const sessionMessageUpdater = chat.slice(chat.indexOf('const setSessionMessages'), chat.indexOf('const loadProviders'))
 check(
   sessionMessageUpdater.includes('if (activeRef.current) setMessages(next)') &&
@@ -115,6 +147,14 @@ check(
   chat.includes('historyHydrationRequestRef') &&
     chat.includes('requestNonce !== historyHydrationRequestRef.current'),
   'stale history hydration cannot overwrite a newer chat selection'
+)
+check(
+  chat.includes('if (activeSessionRef.current === sessionId) setContextInfo(next)') &&
+    chat.includes('workspaceContext: turn.workspace') &&
+    chat.includes('activeSessionProjectRef.current === projectId') &&
+    chat.includes('projectId: activeProject.id') &&
+    chat.includes('projectPath: activeProject.path'),
+  'queued turns and async context refreshes stay bound to their originating project and session'
 )
 const resizeComposerStart = chat.indexOf('const resizeComposer')
 const composerResize = chat.slice(resizeComposerStart, chat.indexOf('useLayoutEffect', resizeComposerStart))
@@ -137,7 +177,8 @@ check(
 )
 check(
   workspaceActivity.includes('export default memo(WorkspaceActivity)') &&
-    workspaceStepDock.includes('export default memo(WorkspaceStepDock)'),
+    workspaceStepDock.includes('export default memo(WorkspaceStepDock)') &&
+    workspaceActivity.includes('NARRATIVE_REVEAL_STEPS = 10'),
   'stable Workspace progress displays skip unrelated chat renders'
 )
 
@@ -207,8 +248,29 @@ check(
 check(
   app.includes("active={view === 'workspace' || view === 'general'}") &&
     projectPreview.includes('if (!active || !session') &&
-    projectPreview.includes('if (document.hidden || pollingRef.current) return'),
-  'hidden Workspace previews stop capturePage polling'
+    projectPreview.includes('if (document.hidden || pollingRef.current || viewportBusyRef.current)') &&
+    projectPreview.includes('timer = window.setTimeout(() => void refresh(), interval)') &&
+    !projectPreview.includes('window.setInterval'),
+  'Workspace preview polling pauses while hidden and never overlaps captures'
+)
+check(
+  projectPreview.includes('BROWSER_CAPTURE_INTERVAL_MS = 1_200') &&
+    projectPreview.includes('COMPUTER_CAPTURE_INTERVAL_MS = 550') &&
+    projectPreview.includes('STARTUP_STATUS_INTERVAL_MS = 1_600'),
+  'Browser and Computer Use apply workload-specific adaptive capture intervals'
+)
+check(
+  workspaceFilesPanel.includes('window.setTimeout(() => setSettledQuery(query), 160)') &&
+    workspaceFileTree.includes('const nodesByPath = new Map') &&
+    !workspaceFileTree.includes('.children.find('),
+  'Files debounces IPC search and builds large directory trees with indexed lookups'
+)
+check(
+  bottomWorkbench.includes('DIFF_ROW_PAGE_SIZE = 600') &&
+    bottomWorkbench.includes('diffRows.slice(0, visibleDiffRowCount)') &&
+    bottomWorkbench.includes('startTransition(() => {') &&
+    bottomWorkbench.includes('className="workbench-load-more"'),
+  'Review renders large diffs in non-blocking bounded pages'
 )
 check(
   replicaCss.includes('.chat-msg:not(.streaming)') &&
@@ -224,8 +286,10 @@ check(
 check(
   database.includes('DB_SCHEMA_VERSION') &&
     database.includes("pragma('user_version', { simple: true })") &&
-    database.includes('if (currentSchemaVersion >= DB_SCHEMA_VERSION) return'),
-  'completed SQLite migrations skip repeated schema probes and backfills'
+    /if \(currentSchemaVersion >= DB_SCHEMA_VERSION\) \{\s*recoverInterruptedChatTurns\(nextDb\)\s*return\s*\}/.test(database) &&
+    database.includes(`WHERE m.role = 'assistant'`) &&
+    database.includes(`m.metadata LIKE '%"chatLifecycle"%'`),
+  'completed SQLite migrations skip schema probes while running only the bounded chat recovery pass'
 )
 check(
   sidebar.includes('if (startupSnapshot && historyVersion === 0) return') &&
@@ -260,9 +324,23 @@ check(derivedCount > 0, 'workflow benchmark exercised real derived steps')
 check(benchmarkElapsedMs < 2_000, '20,000 workflow derivations stay below the 2 s regression ceiling')
 console.log(`[measure] workflow derivation: ${benchmarkElapsedMs.toFixed(1)} ms / 20,000 iterations`)
 
+const fileTreeFixture = Array.from(
+  { length: 15_000 },
+  (_, index) => `packages/feature-${index % 200}/module-${index % 50}/file-${index}.tsx`
+)
+const fileTreeStartedAt = performance.now()
+const fileTreeIndex = buildWorkspaceFileTree(fileTreeFixture)
+const fileTreeElapsedMs = performance.now() - fileTreeStartedAt
+check(
+  fileTreeIndex.tree.length > 0 && fileTreeIndex.directories.size > 0,
+  'file-tree benchmark exercised a deep project index'
+)
+check(fileTreeElapsedMs < 2_000, '15,000 project paths index below the 2 s regression ceiling')
+console.log(`[measure] file-tree index: ${fileTreeElapsedMs.toFixed(1)} ms / 15,000 paths`)
+
 if (failures.length > 0) {
   console.error(`\nPerformance verification failed (${failures.length} check${failures.length === 1 ? '' : 's'}).`)
   process.exit(1)
 }
 
-console.log('\nPerformance verification passed.')
+console.log(`\nPerformance verification passed. PERFORMANCE_CHECKS=${passed}`)

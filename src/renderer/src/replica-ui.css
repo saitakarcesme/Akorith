@@ -13,26 +13,32 @@
   --sidebar-width: 266px;
   --replica-sidebar-width: 266px;
   --content-max: 768px;
-  --bg-under: #000;
-  --surface: #090909;
-  --surface-soft: #0d0d0d;
-  --surface-card: #111;
-  --surface-control: #111;
+  --bg-under: #1b1d20;
+  --surface: #24272b;
+  --surface-soft: #282c31;
+  --surface-card: #2d3136;
+  --surface-control: #343940;
   --surface-hover: #ffffff0a;
-  --surface-hover-strong: #ffffff10;
-  --surface-active: #ffffff15;
-  --surface-selected: #ffffff12;
-  --surface-selected-hover: #ffffff18;
-  --focus-neutral: #bdbdbd;
-  --elevated: #111111f7;
-  --elevated-opaque: #111;
-  --text: #f2f2f2;
-  --text-secondary: #a3a3a3;
-  --text-tertiary: #6f6f6f;
-  --text-quaternary: #555;
-  --replica-border-subtle: #ffffff0d;
-  --replica-border-default: #ffffff18;
-  --replica-border-strong: #ffffff24;
+  --surface-hover-strong: #ffffff12;
+  --surface-active: #ffffff18;
+  --surface-selected: #ffffff14;
+  --surface-selected-hover: #ffffff1c;
+  --focus-neutral: #c8ccd1;
+  --elevated: #30343af7;
+  --elevated-opaque: #30343a;
+  --text: #f3f4f6;
+  --text-secondary: #c1c5cb;
+  --text-tertiary: #9298a1;
+  --text-quaternary: #737a84;
+  --replica-border-subtle: #ffffff10;
+  --replica-border-default: #ffffff1c;
+  --replica-border-strong: #ffffff2b;
+  --tool-rail: #202328;
+  --viewport-bg: #202328;
+  --terminal-bg: #202328;
+  --terminal-text: #f0f2f4;
+  --terminal-cursor: #ffffff;
+  --terminal-selection: #7aa2c755;
   --border: var(--replica-border-default);
   --border-heavy: var(--replica-border-strong);
   --border-light: var(--replica-border-subtle);
@@ -51,7 +57,7 @@
   --radius-card: 8px;
   --radius-control: 6px;
   --radius-panel: 8px;
-  --radius-composer: 8px;
+  --radius-composer: 16px;
   --replica-font-ui: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   --replica-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --replica-shadow-menu:
@@ -90,7 +96,7 @@ body {
   --bg-chat: var(--surface);
   --bg-chat-raised: var(--surface-card);
   --bg-composer: var(--surface-control);
-  --text: #f2f2f2;
+  --text: #f3f4f6;
   --text-dim: var(--text-secondary);
   --text-faint: var(--text-tertiary);
   --border: var(--replica-border-default);
@@ -111,30 +117,37 @@ body {
   isolation: isolate;
   color: var(--text);
   background: var(--bg-under);
+  color-scheme: dark;
   font-family: var(--replica-font-ui);
 }
 
 .app[data-ui='replica'][data-theme='light'] {
-  --bg-under: #f9f9f9;
-  --surface: #fff;
-  --surface-soft: #f9f9f9;
-  --surface-card: #fff;
-  --surface-control: #ededed;
-  --surface-hover: #1a1c1f0a;
-  --surface-hover-strong: #1a1c1f12;
-  --surface-active: #1a1c1f1a;
-  --surface-selected: #1a1c1f12;
-  --surface-selected-hover: #1a1c1f18;
-  --focus-neutral: #1a1c1f80;
-  --elevated: #fffffff5;
-  --elevated-opaque: #fff;
-  --text: #1a1c1f;
-  --text-secondary: #50545a;
-  --text-tertiary: #646a72;
-  --text-quaternary: #70767e;
-  --replica-border-subtle: #1a1c1f14;
-  --replica-border-default: #1a1c1f26;
-  --replica-border-strong: #1a1c1f3a;
+  --bg-under: #d8dce1;
+  --surface: #e7e9ec;
+  --surface-soft: #e1e4e8;
+  --surface-card: #eef0f2;
+  --surface-control: #dfe3e7;
+  --surface-hover: #20242a0a;
+  --surface-hover-strong: #20242a12;
+  --surface-active: #20242a18;
+  --surface-selected: #20242a12;
+  --surface-selected-hover: #20242a1a;
+  --focus-neutral: #20242a80;
+  --elevated: #f2f3f5f5;
+  --elevated-opaque: #f2f3f5;
+  --text: #20242a;
+  --text-secondary: #4f565f;
+  --text-tertiary: #68717c;
+  --text-quaternary: #7b8490;
+  --replica-border-subtle: #20242a14;
+  --replica-border-default: #20242a24;
+  --replica-border-strong: #20242a36;
+  --tool-rail: #d6dbe0;
+  --viewport-bg: #f1f2f4;
+  --terminal-bg: #f1f2f4;
+  --terminal-text: #20242a;
+  --terminal-cursor: #20242a;
+  --terminal-selection: #3979b536;
   --semantic-success-text: #21704b;
   --semantic-danger-text: #9f3632;
   --semantic-warning-text: #795d0b;
@@ -145,9 +158,9 @@ body {
   --white-button-text: #fff;
   --bg: var(--surface);
   --bg-panel: var(--surface-card);
-  --bg-raised: #ededed;
+  --bg-raised: var(--surface-control);
   --bg-soft: var(--surface-soft);
-  --bg-input: #ededed99;
+  --bg-input: color-mix(in srgb, var(--surface-control) 85%, transparent);
   --bg-chat: var(--surface);
   --bg-chat-raised: var(--surface-card);
   --bg-composer: var(--surface-control);
@@ -395,7 +408,9 @@ body {
 
 .app[data-ui='replica'] .app-surface-toolbar {
   position: absolute;
-  z-index: 40;
+  /* Keep the single workspace-tools toggle clickable when the responsive
+     tool canvas becomes a full-surface overlay at <= 1100px. */
+  z-index: 50;
   top: 0;
   right: 0;
   left: 0;
@@ -2797,7 +2812,7 @@ body {
   margin: 6px auto 0;
   padding: 7px 10px;
   color: var(--text-secondary);
-  background: #090909;
+  background: var(--surface-card);
   border: 1px solid var(--replica-border-subtle);
   border-radius: var(--radius);
   font-size: 11.5px;
@@ -2847,7 +2862,7 @@ body {
   width: 100%;
   overflow: hidden;
   color: var(--text);
-  background: #090909;
+  background: var(--surface-card);
   border: 1px solid var(--replica-border-subtle);
   border-radius: var(--radius-lg);
 }
@@ -2891,7 +2906,7 @@ body {
   min-height: 28px;
   padding: 0 10px;
   color: var(--text-secondary);
-  background: #0e0e0e;
+  background: var(--surface-control);
   border: 1px solid var(--replica-border-default);
   border-radius: var(--radius-sm);
   font-size: 11px;
@@ -2899,7 +2914,7 @@ body {
 
 .app[data-ui='replica'] .workspace-loop-head > button:hover:not(:disabled) {
   color: var(--text);
-  background: #111;
+  background: var(--surface-hover-strong);
   border-color: var(--replica-border-strong);
 }
 
@@ -3009,7 +3024,7 @@ body {
 .app[data-ui='replica'] .workspace-loop-final {
   padding: 14px 16px 15px;
   color: var(--text-secondary);
-  background: #0c0c0c;
+  background: var(--surface-soft);
   border-top: 1px solid var(--replica-border-subtle);
 }
 
@@ -3062,12 +3077,1249 @@ body {
 /* Keep the shared chat composer borderless after all feature-specific rules. */
 .app[data-ui='replica'] .composer-box {
   border: 0 !important;
+  border-radius: var(--radius-composer) !important;
   box-shadow: none !important;
 }
 
 .app[data-ui='replica'] .composer-box:focus-within {
   border: 0 !important;
   box-shadow: none !important;
+}
+
+.app[data-ui='replica'] .composer-dock {
+  border-top: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Workspace tool canvas: Codex-like narrow transcript + large project surface. */
+.app[data-ui='replica'] .workspace.has-workspace-tools {
+  flex-direction: row;
+}
+
+.app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+  flex: 0 1 520px;
+  width: clamp(360px, 34%, 560px);
+  min-width: 340px;
+  border-right: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workspace-tools {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 430px;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workspace-tools-header {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--replica-border-subtle);
+  background: var(--bg-under);
+}
+
+.app[data-ui='replica'] .workspace-tools-header > span,
+.app[data-ui='replica'] .workspace-tools-header > small {
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+}
+
+.app[data-ui='replica'] .workspace-tools-header > small {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tools-header > strong {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.app[data-ui='replica'] .workspace-tools-home,
+.app[data-ui='replica'] .workspace-tools-close {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: var(--text-secondary);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 11px;
+}
+
+.app[data-ui='replica'] .workspace-tools-home:hover,
+.app[data-ui='replica'] .workspace-tools-close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .workspace-tools-spacer { flex: 1; }
+.app[data-ui='replica'] .workspace-tools-close { width: 28px; justify-content: center; padding: 0; }
+
+.app[data-ui='replica'] .workspace-tools-body {
+  position: absolute;
+  inset: 40px 0 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(540px, calc(100% - 40px));
+  transform: translate(-50%, -50%);
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 3px 18px;
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher-copy strong { font-size: 13px; font-weight: 620; }
+.app[data-ui='replica'] .workspace-tools-launcher-copy span { color: var(--text-tertiary); font-size: 11px; line-height: 1.5; }
+.app[data-ui='replica'] .workspace-tools-cards { display: flex; flex-direction: column; gap: 6px; }
+
+.app[data-ui='replica'] .workspace-tools-cards > button {
+  display: grid;
+  min-height: 50px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  color: var(--text);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: 8px;
+  background: var(--surface-card);
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button:hover {
+  border-color: var(--border-heavy);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.app[data-ui='replica'] .workspace-tools-cards strong { font-size: 11px; font-weight: 600; }
+.app[data-ui='replica'] .workspace-tools-cards small { overflow: hidden; color: var(--text-tertiary); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.app[data-ui='replica'] .workspace-tools-cards kbd { color: var(--text-tertiary); border: 0; background: var(--surface-active); font: 9px/1.6 var(--font-ui); }
+
+.app[data-ui='replica'] .workspace-tools-rail {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: 52px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 5px;
+  border-right: 1px solid var(--replica-border-subtle);
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button {
+  display: flex;
+  min-height: 42px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 3px;
+  color: var(--text-tertiary);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button span { font-size: 8px; }
+.app[data-ui='replica'] .workspace-tools-rail button:hover,
+.app[data-ui='replica'] .workspace-tools-rail button.is-active { color: var(--text); background: var(--surface-active); }
+
+.app[data-ui='replica'] .workspace-tools-body:not(.is-home) > :not(.workspace-tools-rail) {
+  position: absolute;
+  inset: 0 0 0 52px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.app[data-ui='replica'] .workspace-terminal-shell { padding: 8px; background: var(--surface-soft); }
+.app[data-ui='replica'] .workspace-terminal-shell .terminal-pane { width: 100%; height: 100%; border: 1px solid var(--replica-border-subtle); border-radius: 8px; overflow: hidden; }
+
+.app[data-ui='replica'] .workbench.is-embedded {
+  min-height: 0;
+  height: auto;
+  border-top: 0;
+  background: var(--surface);
+  animation: none;
+}
+
+.app[data-ui='replica'] .workbench.is-embedded .workbench-review { height: calc(100% - 42px); }
+.app[data-ui='replica'] .workbench.is-embedded .workbench-files { min-width: 190px; }
+
+.app[data-ui='replica'] .project-preview.is-workspace {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-bar {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding-inline: 12px;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 12px;
+  border-top: 1px solid var(--replica-border-subtle);
+  overflow: auto;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame {
+  min-height: 240px;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--viewport-bg);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame img {
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 230px);
+  object-fit: contain;
+}
+
+.app[data-ui='replica'] .project-preview-frame.is-readonly { cursor: default; }
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-loading { min-height: 260px; flex: 1; }
+
+.app[data-ui='replica'] .workspace-files-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(190px, 26%) minmax(0, 1fr);
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-file-tree {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--replica-border-subtle);
+  background: var(--surface-card);
+}
+
+.app[data-ui='replica'] .workspace-file-search {
+  display: flex;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin: 8px;
+  padding: 0 8px;
+  color: var(--text-tertiary);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: 7px;
+  background: var(--surface-control);
+}
+
+.app[data-ui='replica'] .workspace-file-search input {
+  min-width: 0;
+  flex: 1;
+  color: var(--text);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .workspace-file-tree-head {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--replica-border-subtle);
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .workspace-file-tree-head small { color: var(--text-tertiary); font-size: 8.5px; }
+.app[data-ui='replica'] .workspace-file-tree-body { min-height: 0; flex: 1; overflow: auto; padding: 4px; }
+
+.app[data-ui='replica'] .workspace-tree-row {
+  display: flex;
+  width: 100%;
+  min-height: 27px;
+  align-items: center;
+  gap: 5px;
+  padding-block: 0;
+  padding-right: 6px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workspace-tree-row:hover,
+.app[data-ui='replica'] .workspace-tree-row.is-active { color: var(--text); background: var(--surface-active); }
+.app[data-ui='replica'] .workspace-tree-row > span:last-child { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.app[data-ui='replica'] .workspace-tree-spacer { width: 12px; flex: 0 0 12px; }
+
+.app[data-ui='replica'] .workspace-code-review {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--viewport-bg);
+}
+
+.app[data-ui='replica'] .workspace-code-review > header {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid var(--replica-border-subtle);
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-code-review > header > div { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.app[data-ui='replica'] .workspace-code-review > header strong { overflow: hidden; font: 10px/1 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.app[data-ui='replica'] .workspace-code-review > header small { color: var(--orange); font-size: 8px; }
+.app[data-ui='replica'] .workspace-code-review > header button {
+  display: inline-flex;
+  min-height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: var(--text);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: 7px;
+  background: var(--surface-card);
+  font-size: 9.5px;
+}
+
+.app[data-ui='replica'] .workspace-code-review > header button:hover { background: var(--surface-hover); }
+.app[data-ui='replica'] .workspace-code-review > header button:disabled { opacity: .4; }
+.app[data-ui='replica'] .workspace-code-review pre { min-height: 0; flex: 1; margin: 0; padding: 15px 18px 30px; overflow: auto; color: var(--terminal-text); font: 11px/1.65 var(--font-mono); tab-size: 2; white-space: pre; }
+.app[data-ui='replica'] .workspace-tool-empty { display: grid; min-height: 0; flex: 1; place-items: center; padding: 20px; color: var(--text-tertiary); font-size: 10.5px; text-align: center; }
+.app[data-ui='replica'] .workspace-tool-empty.is-error { color: var(--red); }
+
+.app[data-ui='replica'] .workspace-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workspace-duration:hover { color: var(--text); }
+.app[data-ui='replica'] .workspace-duration > span { font-size: 16px; line-height: 10px; }
+
+@media (max-width: 1100px) {
+  .app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+    flex-basis: 390px;
+    width: 390px;
+    min-width: 330px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools { min-width: 360px; }
+  .app[data-ui='replica'] .workspace-files-panel { grid-template-columns: 190px minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .app[data-ui='replica'] .workspace-tools {
+    position: absolute;
+    z-index: 40;
+    inset: 0;
+    min-width: 0;
+  }
+}
+
+/* Integrated project tools: persistent rail, resizable canvas, and shared neutral surfaces. */
+.app[data-ui='replica'] .workspace.has-workspace-tools {
+  display: flex;
+  min-width: 0;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+  width: auto;
+  min-width: 360px;
+  flex: 1 1 auto;
+  background: var(--surface);
+  border-right: 0;
+}
+
+.app[data-ui='replica'] .app-surface:has(.workspace-tools.is-open) .app-surface-toolbar {
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workspace-tools {
+  position: relative;
+  z-index: 20;
+  width: var(--workspace-tools-width);
+  min-width: 0;
+  max-width: min(980px, calc(100% - 360px));
+  flex: 0 0 var(--workspace-tools-width);
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface-soft);
+  border-left: 1px solid var(--replica-border-subtle);
+  transition:
+    width 150ms cubic-bezier(.2, .8, .2, 1),
+    flex-basis 150ms cubic-bezier(.2, .8, .2, 1),
+    background-color 150ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools.is-collapsed {
+  width: 56px;
+  max-width: 56px;
+  flex-basis: 56px;
+  background: var(--tool-rail);
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer {
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  touch-action: none;
+  cursor: col-resize;
+  outline: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--replica-border-subtle);
+  content: '';
+  transition: width 120ms ease, background 120ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer:hover::after,
+.app[data-ui='replica'] .workspace-tools-resizer:focus-visible::after {
+  width: 2px;
+  background: var(--focus-neutral);
+}
+
+.app[data-ui='replica'] .workspace-tools-rail {
+  position: absolute;
+  z-index: 8;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: 116px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 7px;
+  overflow: hidden;
+  background: var(--tool-rail);
+  border-right: 1px solid var(--replica-border-subtle);
+  transition: width 150ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.app[data-ui='replica'] .workspace-tools.is-collapsed .workspace-tools-rail {
+  width: 55px;
+  padding-inline: 7px;
+  border-right: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0 9px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button > svg {
+  flex: 0 0 auto;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 540;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button:hover {
+  color: var(--text);
+  background: var(--surface-hover-strong);
+  border-color: var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button:focus-visible {
+  outline: 1px solid var(--focus-neutral);
+  outline-offset: -1px;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button.is-active {
+  color: var(--text);
+  background: var(--surface-active);
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .workspace-tools-rail button.is-active::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: -1px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  content: '';
+}
+
+.app[data-ui='replica'] .workspace-tools.is-collapsed .workspace-tools-rail button {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools.is-collapsed .workspace-tools-rail button span {
+  display: none;
+}
+
+.app[data-ui='replica'] .workspace-tools-rail-rule {
+  height: 1px;
+  flex: 0 0 auto;
+  margin: 2px 5px;
+  background: var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workspace-tools-rail-spacer {
+  min-height: 8px;
+  flex: 1;
+}
+
+.app[data-ui='replica'] .workspace-tools-shell {
+  position: absolute;
+  inset: 0 0 0 116px;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 1;
+  background: var(--surface-soft);
+  transition: opacity 140ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools.is-collapsed .workspace-tools-shell {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools-header {
+  position: absolute;
+  z-index: 5;
+  inset: 0 0 auto;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 14px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workspace-tools-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.app[data-ui='replica'] .workspace-tools-heading strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.app[data-ui='replica'] .workspace-tools-heading span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tools-header > small {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tools-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workspace-tools-close:hover {
+  color: var(--text);
+  border-color: var(--replica-border-subtle);
+  background: var(--surface-hover-strong);
+}
+
+.app[data-ui='replica'] .workspace-tools-body {
+  position: absolute;
+  inset: 56px 0 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workspace-tool-pane {
+  position: absolute;
+  inset: 0;
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app[data-ui='replica'] .workspace-tool-pane.is-active {
+  display: flex;
+}
+
+.app[data-ui='replica'] .workspace-tool-pane.is-home {
+  display: none;
+}
+
+.app[data-ui='replica'] .workspace-tool-pane.is-home.is-active {
+  display: block;
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100% - 40px));
+  transform: translate(-50%, -50%);
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher-copy {
+  gap: 6px;
+  margin: 0 3px 18px;
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher-copy strong {
+  font-size: 14px;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards {
+  gap: 7px;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button {
+  min-height: 52px;
+  border-color: var(--replica-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button:hover {
+  background: var(--surface-hover-strong);
+  border-color: var(--replica-border-strong);
+  transform: translateY(-1px);
+}
+
+.app[data-ui='replica'] .workspace-terminal-shell {
+  width: 100%;
+  min-height: 0;
+  padding: 10px;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workspace-terminal-shell .terminal-pane {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--terminal-bg);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
+}
+
+.app[data-ui='replica'] .workbench.is-embedded {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workbench.is-embedded .workbench-review {
+  height: calc(100% - 48px);
+}
+
+.app[data-ui='replica'] .workbench-tabs {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workbench-tab-group {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  gap: 7px;
+}
+
+.app[data-ui='replica'] .workbench-tab {
+  position: relative;
+  display: inline-flex;
+  height: 100%;
+  align-items: center;
+  padding: 0 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app[data-ui='replica'] .workbench-tab.is-active {
+  color: var(--text);
+}
+
+.app[data-ui='replica'] .workbench-tab.is-active::after {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  left: 2px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--text);
+  content: '';
+}
+
+.app[data-ui='replica'] .workbench-branch {
+  max-width: 130px;
+  overflow: hidden;
+  padding: 3px 6px;
+  color: var(--text-secondary);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  font: 9px/1 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workbench-spacer {
+  flex: 1;
+}
+
+.app[data-ui='replica'] .workbench-toolbar-summary {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workbench-action,
+.app[data-ui='replica'] .workbench-close,
+.app[data-ui='replica'] .workbench-diff-head button,
+.app[data-ui='replica'] .workspace-tool-empty-state button,
+.app[data-ui='replica'] .workbench-empty-state button,
+.app[data-ui='replica'] .project-preview-empty button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  font-size: 9.5px;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.app[data-ui='replica'] .workbench-action:hover:not(:disabled),
+.app[data-ui='replica'] .workbench-close:hover:not(:disabled),
+.app[data-ui='replica'] .workbench-diff-head button:hover:not(:disabled),
+.app[data-ui='replica'] .workspace-tool-empty-state button:hover:not(:disabled),
+.app[data-ui='replica'] .workbench-empty-state button:hover:not(:disabled),
+.app[data-ui='replica'] .project-preview-empty button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--replica-border-strong);
+  background: var(--surface-hover-strong);
+}
+
+.app[data-ui='replica'] .workbench-action:disabled,
+.app[data-ui='replica'] .workbench-close:disabled,
+.app[data-ui='replica'] .workbench-diff-head button:disabled,
+.app[data-ui='replica'] .workspace-tool-empty-state button:disabled,
+.app[data-ui='replica'] .project-preview-empty button:disabled {
+  cursor: default;
+  opacity: .42;
+}
+
+.app[data-ui='replica'] .workbench-close {
+  width: 30px;
+  padding: 0;
+}
+
+.app[data-ui='replica'] .workbench-review {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: var(--workbench-files-width) 6px minmax(0, 1fr);
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workbench-files {
+  min-width: 0;
+  background: var(--surface-card);
+  border-right: 0;
+}
+
+.app[data-ui='replica'] .workbench-files-head {
+  min-height: 38px;
+  align-items: center;
+  padding: 0 9px;
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workbench-file-list {
+  padding: 4px 5px 8px;
+}
+
+.app[data-ui='replica'] .workbench-file {
+  display: grid;
+  width: 100%;
+  min-height: 34px;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workbench-file:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .workbench-file.is-active {
+  color: var(--text);
+  background: var(--surface-selected);
+  border-color: var(--replica-border-default);
+}
+
+.app[data-ui='replica'] .workbench-file-status {
+  color: var(--text-tertiary);
+  font: 8.5px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-file-name {
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .workbench-file-counts {
+  display: inline-flex;
+  gap: 4px;
+  font: 8.5px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-file-counts b {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.app[data-ui='replica'] .workbench-file-counts i {
+  color: var(--red);
+  font-style: normal;
+}
+
+.app[data-ui='replica'] .workbench-file em {
+  color: var(--green);
+  font: normal 8px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-files-resizer {
+  position: relative;
+  z-index: 2;
+  touch-action: none;
+  cursor: col-resize;
+  outline: 0;
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workbench-files-resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--replica-border-subtle);
+  content: '';
+  transition: width 120ms ease, background 120ms ease;
+}
+
+.app[data-ui='replica'] .workbench-files-resizer:hover::after,
+.app[data-ui='replica'] .workbench-files-resizer:focus-visible::after {
+  width: 2px;
+  background: var(--focus-neutral);
+}
+
+.app[data-ui='replica'] .workbench-diff {
+  min-width: 0;
+  background: var(--viewport-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-head {
+  min-height: 44px;
+  padding: 0 10px 0 12px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workbench-diff-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.app[data-ui='replica'] .workbench-diff-title strong {
+  min-width: 0;
+  overflow: hidden;
+  font: 10px/1 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workbench-diff-title > span {
+  color: var(--text-tertiary);
+  font-size: 8.5px;
+}
+
+.app[data-ui='replica'] .workbench-diff-head button.is-primary {
+  color: var(--on-accent);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.app[data-ui='replica'] .workbench-diff-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: var(--viewport-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-lines {
+  width: 100%;
+  min-width: 720px;
+  max-width: 1180px;
+  padding-block: 10px 24px;
+}
+
+.app[data-ui='replica'] .workbench-diff-line {
+  display: grid;
+  min-width: 720px;
+  grid-template-columns: 44px 44px minmax(540px, 1fr);
+  color: var(--text-secondary);
+  font: 10.5px/1.58 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-line-number {
+  display: block;
+  padding-right: 9px;
+  color: var(--text-quaternary);
+  background: color-mix(in srgb, var(--viewport-bg) 94%, var(--surface-control) 6%);
+  border-right: 1px solid var(--replica-border-subtle);
+  text-align: right;
+  user-select: none;
+}
+
+.app[data-ui='replica'] .workbench-diff-line code {
+  display: block;
+  padding: 0 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-addition {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-deletion {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-hunk {
+  color: var(--text);
+  background: color-mix(in srgb, var(--blue) 13%, transparent);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-meta {
+  color: var(--text-tertiary);
+}
+
+.app[data-ui='replica'] .workbench-empty-state,
+.app[data-ui='replica'] .workspace-tool-empty-state,
+.app[data-ui='replica'] .project-preview-empty {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.app[data-ui='replica'] .workbench-empty-icon,
+.app[data-ui='replica'] .workspace-tool-empty-state > span,
+.app[data-ui='replica'] .project-preview-empty-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--text-secondary);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.app[data-ui='replica'] .workbench-empty-state strong,
+.app[data-ui='replica'] .workspace-tool-empty-state strong,
+.app[data-ui='replica'] .project-preview-empty strong {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 620;
+}
+
+.app[data-ui='replica'] .workbench-empty-state p,
+.app[data-ui='replica'] .workspace-tool-empty-state p,
+.app[data-ui='replica'] .project-preview-empty p {
+  max-width: 390px;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.app[data-ui='replica'] .workbench-empty-state.is-error,
+.app[data-ui='replica'] .workspace-tool-empty-state.is-error {
+  color: var(--red);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace {
+  width: 100%;
+  min-height: 0;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-bar {
+  min-height: 48px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-stage {
+  padding: 10px;
+  background: var(--surface-soft);
+  border-top: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame {
+  min-height: 240px;
+  background: var(--viewport-bg);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-loading {
+  min-height: 260px;
+  flex: 1;
+  color: var(--text-tertiary);
+  background: var(--viewport-bg);
+  border: 1px solid var(--replica-border-default);
+  border-radius: var(--radius-lg);
+}
+
+.app[data-ui='replica'] .workspace-files-panel {
+  width: 100%;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workspace-file-tree {
+  background: var(--surface-card);
+}
+
+.app[data-ui='replica'] .workspace-file-search {
+  min-height: 32px;
+  border-color: var(--replica-border-default);
+  background: var(--surface-control);
+}
+
+.app[data-ui='replica'] .workspace-code-review {
+  background: var(--viewport-bg);
+}
+
+.app[data-ui='replica'] .workspace-code-review > header {
+  min-height: 44px;
+  background: var(--surface-soft);
+}
+
+.app[data-ui='replica'] .workspace-code-review > header button {
+  min-height: 30px;
+  border-color: var(--replica-border-default);
+  background: var(--surface-card);
+}
+
+.app[data-ui='replica'] .workspace-code-review pre {
+  width: min(100%, 1180px);
+  color: var(--terminal-text);
+  background: var(--viewport-bg);
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.app[data-ui='replica'] .test-terminal-col {
+  --bg-raised: var(--surface-control);
+  --text-dim: var(--text-secondary);
+  --border-soft: var(--replica-border-subtle);
+  color: var(--text);
+  background: var(--surface-soft);
+  color-scheme: inherit;
+}
+
+.app[data-ui='replica'] .agent-drawer {
+  background: var(--surface-soft);
+  border-left-color: var(--replica-border-default);
+}
+
+@media (max-width: 1120px) {
+  .app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+    min-width: 320px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools {
+    max-width: calc(100% - 320px);
+  }
+
+  .app[data-ui='replica'] .workbench-toolbar-summary {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .app[data-ui='replica'] .workspace-tools.is-open {
+    position: absolute;
+    z-index: 40;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .app[data-ui='replica'] .workspace-tools.is-collapsed {
+    position: absolute;
+    z-index: 12;
+    inset: 0 0 0 auto;
+    width: 56px;
+    max-width: 56px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools-resizer {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .workbench-review {
+    grid-template-columns: minmax(170px, 34%) 6px minmax(0, 1fr);
+  }
+
+  .app[data-ui='replica'] .workspace-files-panel {
+    grid-template-columns: minmax(170px, 34%) minmax(0, 1fr);
+  }
 }
 
 @media (max-height: 720px) and (min-width: 677px) {
@@ -3082,6 +4334,907 @@ body {
   }
 }
 
+/* Workspace tools v2: one shared canvas, no secondary rail, tabs only after a tool opens. */
+.app[data-ui='replica'] {
+  --diff-context-bg: var(--viewport-bg);
+  --diff-context-gutter: #272b30;
+  --diff-add-bg: #2ea04324;
+  --diff-add-gutter: #2ea0433d;
+  --diff-delete-bg: #f8514924;
+  --diff-delete-gutter: #f851493d;
+  --diff-hunk-bg: #388bfd24;
+  --diff-hunk-gutter: #388bfd3d;
+}
+
+.app[data-ui='replica'][data-theme='light'] {
+  --diff-context-bg: #f6f8fa;
+  --diff-context-gutter: #eef1f4;
+  --diff-add-bg: #dafbe1;
+  --diff-add-gutter: #aceebb;
+  --diff-delete-bg: #ffebe9;
+  --diff-delete-gutter: #ffcecb;
+  --diff-hunk-bg: #ddf4ff;
+  --diff-hunk-gutter: #b6e3ff;
+}
+
+.app[data-ui='replica'] .workspace.has-workspace-tools {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+  width: auto;
+  min-width: 340px;
+  flex: 1 1 auto;
+  background: var(--surface);
+  border-right: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools {
+  position: relative;
+  width: var(--workspace-tools-width);
+  min-width: 0;
+  max-width: min(980px, 62%);
+  min-height: 0;
+  flex: 0 0 var(--workspace-tools-width);
+  overflow: hidden;
+  visibility: visible;
+  opacity: 1;
+  color: var(--text);
+  background: var(--surface);
+  border-top: 1px solid var(--replica-border-subtle);
+  border-left: 1px solid var(--replica-border-subtle);
+  border-top-left-radius: 10px;
+  transition:
+    width 150ms cubic-bezier(.2, .8, .2, 1),
+    max-width 150ms cubic-bezier(.2, .8, .2, 1),
+    flex-basis 150ms cubic-bezier(.2, .8, .2, 1),
+    opacity 120ms ease,
+    visibility 0s linear;
+}
+
+.app[data-ui='replica'] .workspace-tools.is-closed {
+  width: 0;
+  max-width: 0;
+  flex-basis: 0;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  border-top: 0;
+  border-left: 0;
+  transition:
+    width 150ms cubic-bezier(.2, .8, .2, 1),
+    max-width 150ms cubic-bezier(.2, .8, .2, 1),
+    flex-basis 150ms cubic-bezier(.2, .8, .2, 1),
+    opacity 100ms ease,
+    visibility 0s linear 150ms;
+}
+
+.app[data-ui='replica'] .workspace-tools .workspace-tools-rail,
+.app[data-ui='replica'] .workspace-tools .workspace-tools-header {
+  display: none;
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  touch-action: none;
+  cursor: col-resize;
+  outline: 0;
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer::after {
+  display: none;
+  content: none;
+}
+
+.app[data-ui='replica'] .workspace-tools-resizer:hover::after,
+.app[data-ui='replica'] .workspace-tools-resizer:focus-visible::after {
+  display: none;
+}
+
+.app[data-ui='replica'] .workspace-tool-tabs {
+  position: absolute;
+  z-index: 20;
+  inset: 0 0 auto;
+  display: flex;
+  height: 34px;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 42px 0 7px;
+  overflow: hidden;
+  background: var(--surface);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workspace-tool-loading {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-list {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab {
+  position: relative;
+  display: flex;
+  min-width: 124px;
+  max-width: 190px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  color: var(--text-tertiary);
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab::after {
+  position: absolute;
+  right: 5px;
+  bottom: 0;
+  left: 5px;
+  height: 1px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: '';
+}
+
+.app[data-ui='replica'] .workspace-tool-tab:hover {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .workspace-tool-tab.is-active {
+  color: var(--text);
+  background: var(--surface-hover-strong);
+}
+
+.app[data-ui='replica'] .workspace-tool-tab.is-active::after {
+  background: var(--text);
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-select {
+  display: inline-flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 10px;
+  overflow: hidden;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-select svg {
+  flex: 0 0 auto;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-select span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-close {
+  display: inline-grid;
+  width: 26px;
+  height: 100%;
+  flex: 0 0 26px;
+  place-items: center;
+  padding: 0;
+  color: var(--text-tertiary);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-close {
+  margin-left: 0;
+  opacity: .46;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab:hover .workspace-tool-tab-close,
+.app[data-ui='replica'] .workspace-tool-tab.is-active .workspace-tool-tab-close {
+  opacity: .8;
+}
+
+.app[data-ui='replica'] .workspace-tool-tab-close:hover,
+.app[data-ui='replica'] .workspace-tool-tab-close:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover-strong);
+  opacity: 1;
+}
+
+.app[data-ui='replica'] .workspace-tools-content {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-tools-content.has-tabs {
+  inset: 34px 0 0;
+}
+
+.app[data-ui='replica'] .workspace-tools-launcher {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  width: auto;
+  place-items: center;
+  padding: 28px;
+  transform: none;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-tools-cards {
+  display: flex;
+  width: min(540px, 100%);
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button {
+  display: grid;
+  width: 100%;
+  min-height: 40px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--replica-border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  text-align: left;
+  transform: none;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button:hover {
+  color: var(--text);
+  border-color: var(--replica-border-default);
+  background: var(--surface-hover-strong);
+  transform: none;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button svg {
+  color: var(--text-tertiary);
+}
+
+.app[data-ui='replica'] .workspace-tools-cards > button:hover svg {
+  color: var(--text-secondary);
+}
+
+.app[data-ui='replica'] .workspace-tools-cards strong {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10.5px;
+  font-weight: 530;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tools-cards kbd {
+  padding: 1px 6px;
+  color: var(--text-tertiary);
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-active);
+  font: 8.5px/1.55 var(--font-ui);
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workspace-tool-pane {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-tool-pane.is-active {
+  z-index: 2;
+  display: flex;
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.app[data-ui='replica'] .workspace-terminal-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workspace-terminal-shell .terminal-pane {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace,
+.app[data-ui='replica'] .workspace-files-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-bar {
+  display: flex;
+  height: 36px;
+  min-height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .project-preview-address {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-tertiary);
+}
+
+.app[data-ui='replica'] .project-preview-address > svg,
+.app[data-ui='replica'] .project-preview-address > .project-preview-dot {
+  flex: 0 0 auto;
+}
+
+.app[data-ui='replica'] .project-preview-address-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.app[data-ui='replica'] .project-preview-address-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font: 9.5px/1.2 var(--font-mono);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .project-preview-address-copy small {
+  flex: 0 0 auto;
+  color: var(--text-quaternary);
+  font-size: 8.5px;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-actions button {
+  width: 26px;
+  height: 26px;
+  border-color: transparent;
+  border-radius: 6px;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-stage {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #101317;
+  border-top: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-display {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: #101317;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame,
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-loading {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  aspect-ratio: auto;
+  background: #101317;
+  border: 0;
+  border-radius: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 0;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  object-fit: fill;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace.is-readonly .project-preview-frame {
+  cursor: default;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-type {
+  flex: 0 0 auto;
+  margin: 8px;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-empty {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* Review is a single GitHub-like unified-diff surface with compact changed-file tabs. */
+.app[data-ui='replica'] .workbench.is-embedded {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 0;
+}
+
+.app[data-ui='replica'] .workbench-tabs {
+  display: flex;
+  height: 36px;
+  min-height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workbench-tab {
+  font-size: 10.5px;
+}
+
+.app[data-ui='replica'] .workbench-branch {
+  max-width: 150px;
+  padding: 2px 6px;
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workbench-toolbar-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font: 9px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-toolbar-summary b,
+.app[data-ui='replica'] .workbench-selected-counts b {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.app[data-ui='replica'] .workbench-toolbar-summary i,
+.app[data-ui='replica'] .workbench-selected-counts i {
+  color: var(--red);
+  font-style: normal;
+}
+
+.app[data-ui='replica'] .workbench-action,
+.app[data-ui='replica'] .workbench-diff-head button {
+  min-height: 28px;
+  padding: 0 8px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.app[data-ui='replica'] .workbench-review,
+.app[data-ui='replica'] .workbench.is-embedded .workbench-review {
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workbench-file-tabs {
+  display: flex;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  flex: 0 0 34px;
+  align-items: stretch;
+  padding: 0 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--replica-border-subtle);
+  scrollbar-width: thin;
+  scrollbar-color: var(--replica-border-default) transparent;
+}
+
+.app[data-ui='replica'] .workbench-file-tab {
+  position: relative;
+  display: grid;
+  min-width: 150px;
+  max-width: 260px;
+  flex: 0 1 220px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: var(--text-tertiary);
+  border: 0;
+  border-right: 1px solid var(--replica-border-subtle);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workbench-file-tab::after {
+  position: absolute;
+  right: 7px;
+  bottom: 0;
+  left: 7px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: '';
+}
+
+.app[data-ui='replica'] .workbench-file-tab:hover {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.app[data-ui='replica'] .workbench-file-tab.is-active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.app[data-ui='replica'] .workbench-file-tab.is-active::after {
+  background: var(--text);
+}
+
+.app[data-ui='replica'] .workbench-file-tab .workbench-file-status {
+  color: var(--text-tertiary);
+  font: 8px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-file-tab .workbench-file-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workbench-file-tab .workbench-file-name svg {
+  flex: 0 0 auto;
+}
+
+.app[data-ui='replica'] .workbench-file-tab .workbench-file-counts,
+.app[data-ui='replica'] .workbench-selected-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 8.5px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+.app[data-ui='replica'] .workbench-file-tab em {
+  color: var(--green);
+  font: normal 7px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-diff {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--diff-context-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-head {
+  display: flex;
+  height: 38px;
+  min-height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--replica-border-subtle);
+}
+
+.app[data-ui='replica'] .workbench-diff-head > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.app[data-ui='replica'] .workbench-diff-title {
+  flex: 1 1 auto;
+}
+
+.app[data-ui='replica'] .workbench-diff-title strong {
+  color: var(--text);
+  font: 9.5px/1 var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-diff-title > span {
+  font-size: 8.5px;
+}
+
+.app[data-ui='replica'] .workbench-diff-head button.is-primary {
+  color: var(--on-accent);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.app[data-ui='replica'] .workbench-inline-error {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--surface));
+  border-bottom: 1px solid var(--replica-border-subtle);
+  font-size: 9.5px;
+}
+
+.app[data-ui='replica'] .workbench-diff-scroll {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  background: var(--diff-context-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-lines {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  padding: 8px 0 24px;
+}
+
+.app[data-ui='replica'] .workbench-load-more {
+  position: sticky;
+  left: 50%;
+  display: flex;
+  width: fit-content;
+  min-height: 30px;
+  margin: 0 auto 18px;
+  padding: 0 12px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--replica-border);
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.app[data-ui='replica'] .workbench-load-more:hover {
+  color: var(--text);
+  background: var(--surface-control-hover);
+}
+
+.app[data-ui='replica'] .workbench-load-more small {
+  color: var(--text-quaternary);
+  font-size: 8.5px;
+}
+
+.app[data-ui='replica'] .workbench-diff-line {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  min-height: 20px;
+  grid-template-columns: 48px 48px 22px minmax(max-content, 1fr);
+  color: var(--text-secondary);
+  background: var(--diff-context-bg);
+  font: 10.5px/20px var(--font-mono);
+}
+
+.app[data-ui='replica'] .workbench-line-number,
+.app[data-ui='replica'] .workbench-line-marker {
+  position: sticky;
+  z-index: 3;
+  display: block;
+  height: 20px;
+  color: var(--text-quaternary);
+  background: var(--diff-context-gutter);
+  user-select: none;
+}
+
+.app[data-ui='replica'] .workbench-line-number {
+  padding: 0 8px 0 5px;
+  border-right: 1px solid var(--replica-border-subtle);
+  text-align: right;
+}
+
+.app[data-ui='replica'] .workbench-line-number.is-old {
+  left: 0;
+}
+
+.app[data-ui='replica'] .workbench-line-number.is-new {
+  left: 48px;
+}
+
+.app[data-ui='replica'] .workbench-line-marker {
+  left: 96px;
+  padding-left: 7px;
+  border-right: 1px solid var(--replica-border-subtle);
+  text-align: left;
+}
+
+.app[data-ui='replica'] .workbench-diff-line code {
+  display: block;
+  min-width: max-content;
+  padding: 0 24px 0 8px;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-addition {
+  background: var(--diff-add-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-addition .workbench-line-number,
+.app[data-ui='replica'] .workbench-diff-line.is-addition .workbench-line-marker {
+  background: var(--diff-add-gutter);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-deletion {
+  background: var(--diff-delete-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-deletion .workbench-line-number,
+.app[data-ui='replica'] .workbench-diff-line.is-deletion .workbench-line-marker {
+  background: var(--diff-delete-gutter);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-hunk {
+  color: var(--text);
+  background: var(--diff-hunk-bg);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-hunk .workbench-line-number,
+.app[data-ui='replica'] .workbench-diff-line.is-hunk .workbench-line-marker {
+  background: var(--diff-hunk-gutter);
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-hunk .workbench-line-marker {
+  color: transparent;
+}
+
+.app[data-ui='replica'] .workbench-diff-line.is-meta {
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 1100px) {
+  .app[data-ui='replica'] .workspace.has-workspace-tools > .chat-panel {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .app[data-ui='replica'] .app-surface:has(.workspace-tools.is-open) .app-surface-toolbar-left {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .workspace-tools.is-open {
+    position: absolute;
+    z-index: 40;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+    visibility: visible;
+    opacity: 1;
+    border-top: 1px solid var(--replica-border-subtle);
+    border-left: 1px solid var(--replica-border-subtle);
+    border-top-left-radius: 10px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools.is-closed {
+    position: absolute;
+    z-index: 40;
+    inset: 0 0 0 auto;
+    width: 0;
+    max-width: 0;
+    flex-basis: 0;
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  .app[data-ui='replica'] .workspace-tools-resizer {
+    display: none;
+  }
+
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app[data-ui='replica'] *,
   .app[data-ui='replica'] *::before,
@@ -3090,5 +5243,174 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Responsive contract: every mounted page releases intrinsic width. */
+.app[data-ui='replica'] :is(
+  .app-view-stage,.chat-panel,.workbench.is-embedded,.workspace-terminal-shell,
+  .project-preview.is-workspace .project-preview-display,
+  .project-preview.is-workspace .project-preview-type,.workspace-files-panel,
+  .research-page-wrap,.benchmark-experience,.plugins-page,.settings-page-inner,
+  .profile-dashboard
+) {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.app[data-ui='replica'] :is(.test-page-wrap,.research-page-wrap) {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-type {
+  width: auto;
+  max-width: calc(100% - 16px);
+}
+
+.app[data-ui='replica'] .project-preview.is-workspace .project-preview-type input {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .app[data-ui='replica'] :is(.workspace,.chat-panel,.workspace-tools.is-open,.composer-box) {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .app[data-ui='replica'] .chat-messages-col {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .app[data-ui='replica'] .composer-dock {
+    padding: 8px 12px 10px !important;
+  }
+
+  .app[data-ui='replica'] :is(.composer-controls-left,.composer-submit-group) {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .app[data-ui='replica'] .workspace-tool-tab {
+    min-width: 116px;
+    max-width: 164px;
+  }
+
+  .app[data-ui='replica'] .workspace-files-panel {
+    grid-template-columns: minmax(150px,31%) minmax(0,1fr);
+  }
+
+  .app[data-ui='replica'] :is(.research-composer,.research-progress,.research-library) {
+    width: min(100% - 24px,860px);
+  }
+
+  .app[data-ui='replica'] .research-phase-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .app[data-ui='replica'] .research-phase-rail {
+    min-width: 520px;
+  }
+
+  .app[data-ui='replica'] .settings-page .settings-layout {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .app[data-ui='replica'] .settings-page .settings-tabs {
+    min-height: 42px;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+  }
+
+  .app[data-ui='replica'] .settings-tab-group {
+    display: contents;
+  }
+
+  .app[data-ui='replica'] .settings-tab-group h4 {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .settings-tab {
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 540px) {
+  .app[data-ui='replica'] .composer-dock {
+    padding: 7px 8px 8px !important;
+  }
+
+  .app[data-ui='replica'] .context-hint,
+  .app[data-ui='replica'] .workspace-tools-cards kbd,
+  .app[data-ui='replica'] :is(.workbench-branch,.workbench-toolbar-summary) {
+    display: none;
+  }
+
+  .app[data-ui='replica'] .workspace-tool-tab {
+    min-width: 108px;
+    max-width: 142px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools-launcher {
+    place-items: center stretch;
+    padding: 12px;
+  }
+
+  .app[data-ui='replica'] .workspace-files-panel {
+    grid-template-columns: minmax(0,1fr);
+    grid-template-rows: minmax(126px,36%) minmax(0,1fr);
+  }
+
+  .app[data-ui='replica'] .workspace-file-tree {
+    border-right: 0;
+    border-bottom: 1px solid var(--replica-border-subtle);
+  }
+
+}
+
+@media (max-height: 640px) {
+  .app[data-ui='replica'] .workspace-tools-launcher {
+    place-items: start center;
+    overflow-y: auto;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .app[data-ui='replica'] .composer-dock {
+    padding-top: 6px !important;
+    padding-bottom: 7px !important;
+  }
+
+  .app[data-ui='replica'] .research-composer {
+    min-height: auto;
+    justify-content: flex-start;
+    padding-top: 20px;
+    padding-bottom: 32px;
+  }
+}
+
+@media (max-height: 520px) {
+  .app[data-ui='replica'] .workspace-tool-tabs {
+    height: 32px;
+  }
+
+  .app[data-ui='replica'] .workspace-tools-content.has-tabs {
+    inset: 32px 0 0;
+  }
+
+  .app[data-ui='replica'] :is(.project-preview.is-workspace .project-preview-bar,.workbench-tabs) {
+    height: 32px;
+    min-height: 32px;
+    flex-basis: 32px;
   }
 }

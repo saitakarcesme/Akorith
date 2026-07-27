@@ -111,7 +111,7 @@ check(
 check(
   chat.includes('activeSessionProviderRef') &&
     ensureSession.includes('activeSessionProviderRef.current === turnProviderId') &&
-    ensureSession.includes('window.api.history.create(turnProviderId'),
+    /window\.api\.history\.create\(\s*turnProviderId/.test(ensureSession),
   'changing providers starts a matching provider-bound session before /loop dispatch'
 )
 

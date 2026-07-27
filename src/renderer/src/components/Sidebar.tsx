@@ -272,16 +272,28 @@ export default function Sidebar({
   }, [searchOpen])
 
   useEffect(() => {
+    let resizeFrame: number | null = null
     const syncResponsiveSidebar = (): void => {
-      const mobile = window.innerWidth <= 720
-      setViewportWidth(window.innerWidth)
+      const nextWidth = window.innerWidth
+      const mobile = nextWidth <= 720
+      setViewportWidth((current) => current === nextWidth ? current : nextWidth)
       if (mobile === responsiveMobileRef.current) return
       responsiveMobileRef.current = mobile
       setSidebarPeeking(false)
       setSidebarCollapsed(mobile ? true : storageBoolean('akorith.sidebarCollapsed', false))
     }
-    window.addEventListener('resize', syncResponsiveSidebar)
-    return () => window.removeEventListener('resize', syncResponsiveSidebar)
+    const scheduleResponsiveSidebar = (): void => {
+      if (resizeFrame !== null) return
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        syncResponsiveSidebar()
+      })
+    }
+    window.addEventListener('resize', scheduleResponsiveSidebar)
+    return () => {
+      window.removeEventListener('resize', scheduleResponsiveSidebar)
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
+    }
   }, [])
 
   useEffect(() => {

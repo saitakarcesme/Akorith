@@ -23,6 +23,8 @@ export interface RunCliResult {
   stderr: string
 }
 
+const resolvedExecutableCache = new Map<string, string>()
+
 /**
  * Resolve GUI-launched provider CLIs deterministically. Electron can inherit
  * Codex/ChatGPT helper directories ahead of the user's shell PATH; spawning a
@@ -32,6 +34,9 @@ export interface RunCliResult {
  */
 export function resolveCliExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string {
   if (process.platform === 'win32' || isAbsolute(command) || command.includes(sep)) return command
+  const cacheKey = `${command}\0${env.PATH ?? ''}`
+  const cached = resolvedExecutableCache.get(cacheKey)
+  if (cached) return cached
 
   const home = homedir()
   const preferredDirectories = [
@@ -50,6 +55,7 @@ export function resolveCliExecutable(command: string, env: NodeJS.ProcessEnv = p
     if (!existsSync(candidate)) continue
     try {
       accessSync(candidate, constants.X_OK)
+      resolvedExecutableCache.set(cacheKey, candidate)
       return candidate
     } catch {
       // Continue to the next candidate when a file exists but is not executable.
@@ -70,12 +76,13 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
     const child = spawn(executable, args, {
       shell: process.platform === 'win32',
       windowsHide: true,
+      detached: process.platform !== 'win32',
       cwd: options.cwd,
       env: childEnv
     })
 
-    let stdout = ''
-    let stderr = ''
+    const stdoutChunks: string[] = []
+    const stderrChunks: string[] = []
     let lineBuffer = ''
     let settled = false
 
@@ -91,12 +98,21 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       if (child.pid === undefined) return
       if (process.platform === 'win32') {
         // shell:true means child is a cmd.exe wrapper — kill the whole tree.
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
+        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore'
+        })
+        killer.once('error', () => {})
+        killer.unref()
       } else {
         try {
-          child.kill('SIGKILL')
+          process.kill(-child.pid, 'SIGKILL')
         } catch {
-          // already gone
+          try {
+            child.kill('SIGKILL')
+          } catch {
+            // already gone
+          }
         }
       }
     }
@@ -120,8 +136,9 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
     }
 
     child.stdout.on('data', (chunk: Buffer) => {
+      if (settled) return
       const text = chunk.toString('utf8')
-      stdout += text
+      stdoutChunks.push(text)
       if (options.onStdoutLine) {
         lineBuffer += text
         const lines = lineBuffer.split(/\r?\n/)
@@ -132,13 +149,17 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       }
     })
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8')
+      if (!settled) stderrChunks.push(chunk.toString('utf8'))
     })
 
     child.on('error', (err) => finish(() => reject(err)))
     child.on('close', (code) => {
       if (options.onStdoutLine && lineBuffer.trim()) options.onStdoutLine(lineBuffer)
-      finish(() => resolve({ code, stdout, stderr }))
+      finish(() => resolve({
+        code,
+        stdout: stdoutChunks.join(''),
+        stderr: stderrChunks.join('')
+      }))
     })
 
     if (options.stdin !== undefined) {

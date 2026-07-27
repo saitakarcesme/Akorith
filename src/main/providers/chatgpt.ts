@@ -9,6 +9,7 @@ import type {
   Provider,
   ProviderAvailability,
   ProviderConfigEntry,
+  ProviderDiscovery,
   SendOptions,
   SendResult
 } from './types'
@@ -51,6 +52,33 @@ export class ChatGPTProvider implements Provider {
     } catch {
       return this.models
     }
+  }
+
+  async discover(): Promise<ProviderDiscovery> {
+    if (!this.useCatalog) {
+      const available = await this.isAvailable()
+      return { available, models: available.ok ? this.models : [] }
+    }
+    try {
+      // `codex debug models` proves both executable availability and returns
+      // the catalog, avoiding a preceding `codex --version` process.
+      const res = await runCli('codex', ['debug', 'models'], { timeoutMs: 20_000 })
+      if (res.code === 0) {
+        const catalog = JSON.parse(res.stdout) as { models?: { slug?: unknown; visibility?: unknown }[] }
+        const slugs = (catalog.models ?? [])
+          .filter((model) => model.visibility !== 'hidden')
+          .map((model) => model.slug)
+          .filter((slug): slug is string => typeof slug === 'string' && slug.trim().length > 0)
+        return {
+          available: { ok: true },
+          models: [...new Set(['default', ...slugs])]
+        }
+      }
+    } catch {
+      // Older CLIs may not expose the catalog; retain the compatibility path.
+    }
+    const available = await this.isAvailable()
+    return { available, models: available.ok ? this.models : [] }
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {

@@ -13,12 +13,11 @@ export interface GitChangeFile {
   status: string
   path: string
   staged: boolean
-}
-
-export interface GitChangeSummaryFile extends GitChangeFile {
   additions: number
   deletions: number
 }
+
+export interface GitChangeSummaryFile extends GitChangeFile {}
 
 export interface GitChangeSummary {
   files: GitChangeSummaryFile[]
@@ -36,6 +35,9 @@ const GIT_TIMEOUT_MS = 4_000
 const MAX_BUFFER = 512 * 1024
 const MAX_FILES = 200
 const MAX_DIFF_CHARS = 220_000
+// Git for Windows understands the DOS device name, while Node's `os.devNull`
+// resolves to `\\.\nul`, which `git diff --no-index` rejects as a path.
+const GIT_EMPTY_FILE = process.platform === 'win32' ? 'NUL' : devNull
 
 function runGit(cwd: string, args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
@@ -57,19 +59,55 @@ function isManagedPath(path: string): boolean {
 }
 
 function parsePorcelain(stdout: string): { files: GitChangeFile[]; truncated: boolean } {
-  const lines = stdout.split('\n').filter((line) => line.length > 0)
+  const records = stdout.split('\0')
   const files: GitChangeFile[] = []
-  for (const line of lines) {
+  let recordCount = 0
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index]
+    if (!record) continue
+    recordCount += 1
     if (files.length >= MAX_FILES) break
-    // Porcelain v1: XY<space>path  (path may be "old -> new" for renames)
-    const status = line.slice(0, 2).trim() || '?'
-    const rawPath = line.slice(3).trim()
-    // Porcelain v1 renders renames as "old -> new". Changes actions operate on
-    // the destination path, never on the presentation string.
-    const path = rawPath.includes(' -> ') ? rawPath.slice(rawPath.lastIndexOf(' -> ') + 4) : rawPath
-    if (path) files.push({ status, path, staged: line[0] !== ' ' && line[0] !== '?' })
+    // `--porcelain=v1 -z` keeps filenames literal. Rename/copy records put
+    // the destination first and the origin in the following NUL field.
+    const xy = record.slice(0, 2)
+    const status = xy.trim() || '?'
+    const path = record.slice(3)
+    if (/[RC]/.test(xy)) index += 1
+    if (path) {
+      files.push({
+        status,
+        path,
+        staged: xy[0] !== ' ' && xy[0] !== '?',
+        additions: 0,
+        deletions: 0
+      })
+    }
   }
-  return { files, truncated: lines.length > files.length }
+  return { files, truncated: recordCount > files.length }
+}
+
+function parseNumstat(stdout: string): Map<string, { additions: number; deletions: number }> {
+  const counts = new Map<string, { additions: number; deletions: number }>()
+  for (const record of stdout.split('\0')) {
+    if (!record) continue
+    const match = /^([^\t]+)\t([^\t]+)\t([\s\S]+)$/.exec(record)
+    if (!match) continue
+    const [, rawAdditions, rawDeletions, filePath] = match
+    const previous = counts.get(filePath) ?? { additions: 0, deletions: 0 }
+    counts.set(filePath, {
+      additions: previous.additions + (Number.isFinite(Number(rawAdditions)) ? Number(rawAdditions) : 0),
+      deletions: previous.deletions + (Number.isFinite(Number(rawDeletions)) ? Number(rawDeletions) : 0)
+    })
+  }
+  return counts
+}
+
+function boundedDiff(stdout: string): string {
+  if (stdout.length <= MAX_DIFF_CHARS) return stdout
+  const slice = stdout.slice(0, MAX_DIFF_CHARS)
+  const boundary = slice.lastIndexOf('\n')
+  const completeLines = boundary > 0 ? slice.slice(0, boundary) : slice
+  return `${completeLines}\n[Akorith] Diff truncated to ${MAX_DIFF_CHARS.toLocaleString('en-US')} characters.\n`
 }
 
 function safeFile(root: string, filePath: string): string | null {
@@ -99,33 +137,23 @@ export async function summarizeGitChanges(path: string): Promise<GitChangeSummar
   if (!inside.ok || inside.stdout.trim() !== 'true') return null
 
   const [statusResult, headNumstat] = await Promise.all([
-    runGit(path, ['status', '--porcelain']),
-    runGit(path, ['diff', 'HEAD', '--numstat', '--no-renames'])
+    runGit(path, ['status', '--porcelain=v1', '-z']),
+    runGit(path, ['diff', 'HEAD', '--numstat', '-z', '--no-renames'])
   ])
   let numstatOutput = headNumstat.stdout
   if (!headNumstat.ok) {
     const [cached, working] = await Promise.all([
-      runGit(path, ['diff', '--cached', '--numstat', '--no-renames']),
-      runGit(path, ['diff', '--numstat', '--no-renames'])
+      runGit(path, ['diff', '--cached', '--numstat', '-z', '--no-renames']),
+      runGit(path, ['diff', '--numstat', '-z', '--no-renames'])
     ])
     numstatOutput = `${cached.stdout}${working.stdout}`
   }
   const parsed = parsePorcelain(statusResult.stdout)
-  const counts = new Map<string, { additions: number; deletions: number }>()
-  for (const line of numstatOutput.split('\n')) {
-    const [rawAdditions, rawDeletions, ...pathParts] = line.split('\t')
-    const filePath = pathParts.join('\t')
-    if (!filePath) continue
-    const previous = counts.get(filePath) ?? { additions: 0, deletions: 0 }
-    counts.set(filePath, {
-      additions: previous.additions + (Number.isFinite(Number(rawAdditions)) ? Number(rawAdditions) : 0),
-      deletions: previous.deletions + (Number.isFinite(Number(rawDeletions)) ? Number(rawDeletions) : 0)
-    })
-  }
+  const counts = parseNumstat(numstatOutput)
 
   const files = await Promise.all(parsed.files.map(async (file): Promise<GitChangeSummaryFile> => {
     const tracked = counts.get(file.path)
-    const additions = tracked?.additions ?? (file.status === '?' ? await untrackedLineCount(path, file.path) : 0)
+    const additions = tracked?.additions ?? (file.status.includes('?') ? await untrackedLineCount(path, file.path) : 0)
     return { ...file, additions, deletions: tracked?.deletions ?? 0 }
   }))
   return {
@@ -154,11 +182,11 @@ export function changedSince(
 
 async function gitDiff(path: string, filePath: string): Promise<{ ok: true; diff: string } | { ok: false; error: string }> {
   if (!isManagedPath(path) || !safeFile(path, filePath)) return { ok: false, error: 'Invalid project file.' }
-  const status = await runGit(path, ['status', '--porcelain', '--', filePath])
+  const status = await runGit(path, ['status', '--porcelain=v1', '-z', '--', filePath])
   const code = status.stdout.slice(0, 2)
   let result
   if (code === '??') {
-    result = await runGit(path, ['diff', '--no-index', '--no-color', '--unified=3', '--', devNull, filePath])
+    result = await runGit(path, ['diff', '--no-index', '--no-color', '--unified=3', '--', GIT_EMPTY_FILE, filePath])
   } else {
     result = await runGit(path, ['diff', 'HEAD', '--no-ext-diff', '--no-color', '--unified=3', '--', filePath])
     if (!result.stdout && !result.ok) {
@@ -169,7 +197,7 @@ async function gitDiff(path: string, filePath: string): Promise<{ ok: true; diff
       result = { ok: cached.ok || working.ok, stdout: `${cached.stdout}${working.stdout}`, stderr: `${cached.stderr}${working.stderr}` }
     }
   }
-  const diff = result.stdout.slice(0, MAX_DIFF_CHARS)
+  const diff = boundedDiff(result.stdout)
   return diff || result.ok ? { ok: true, diff } : { ok: false, error: result.stderr.trim().slice(-500) || 'Could not read diff.' }
 }
 
@@ -193,19 +221,37 @@ async function gitStatus(path: string): Promise<GitStatusResult> {
   if (!inside.ok || inside.stdout.trim() !== 'true') {
     return { ok: true, isRepo: false }
   }
-  const [branchRes, statusRes, statRes] = await Promise.all([
+  const [branchRes, statusRes, statRes, headNumstat] = await Promise.all([
     runGit(path, ['rev-parse', '--abbrev-ref', 'HEAD']),
-    runGit(path, ['status', '--porcelain']),
-    runGit(path, ['diff', '--stat', '--no-color'])
+    runGit(path, ['status', '--porcelain=v1', '-z']),
+    runGit(path, ['diff', '--stat', '--no-color']),
+    runGit(path, ['diff', 'HEAD', '--numstat', '-z', '--no-renames'])
   ])
-  const { files, truncated } = parsePorcelain(statusRes.stdout)
+  const parsed = parsePorcelain(statusRes.stdout)
+  let numstatOutput = headNumstat.stdout
+  if (!headNumstat.ok) {
+    const [cached, working] = await Promise.all([
+      runGit(path, ['diff', '--cached', '--numstat', '-z', '--no-renames']),
+      runGit(path, ['diff', '--numstat', '-z', '--no-renames'])
+    ])
+    numstatOutput = `${cached.stdout}${working.stdout}`
+  }
+  const counts = parseNumstat(numstatOutput)
+  const files = await Promise.all(parsed.files.map(async (file): Promise<GitChangeFile> => {
+    const tracked = counts.get(file.path)
+    return {
+      ...file,
+      additions: tracked?.additions ?? (file.status.includes('?') ? await untrackedLineCount(path, file.path) : 0),
+      deletions: tracked?.deletions ?? 0
+    }
+  }))
   const stat = statRes.stdout.split('\n').slice(0, 60).join('\n').trim()
   return {
     ok: true,
     isRepo: true,
     branch: branchRes.stdout.trim() || 'HEAD',
     files,
-    truncated,
+    truncated: parsed.truncated,
     stat,
     clean: files.length === 0
   }

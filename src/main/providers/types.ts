@@ -6,6 +6,7 @@ export type ProviderKind = 'chat' | 'executor'
 
 export type ProviderActivityKind = 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
 export type ProviderActivityStatus = 'running' | 'complete' | 'error'
+export type ProviderActivitySurface = 'review' | 'terminal' | 'browser' | 'computer' | 'files'
 
 /** A provider-neutral progress event. Raw CLI protocol envelopes never cross IPC. */
 export interface ProviderActivity {
@@ -13,11 +14,18 @@ export interface ProviderActivity {
   label: string
   detail?: string
   status?: ProviderActivityStatus
+  /** Optional machine-readable workspace surface. Renderers never infer this from prose labels. */
+  surface?: ProviderActivitySurface
 }
 
 export interface ProviderAvailability {
   ok: boolean
   reason?: string
+}
+
+export interface ProviderDiscovery {
+  available: ProviderAvailability
+  models: string[]
 }
 
 export interface SendResult {
@@ -108,6 +116,11 @@ export interface Provider {
   kind: ProviderKind[]
   isAvailable(): Promise<ProviderAvailability>
   listModels(): Promise<string[]>
+  /**
+   * Optional combined availability/model probe. CLI providers use one process
+   * on the successful path instead of spawning once for each question.
+   */
+  discover?(force?: boolean): Promise<ProviderDiscovery>
   send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult>
 }
 

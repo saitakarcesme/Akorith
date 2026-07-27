@@ -145,6 +145,82 @@
 .workspace-activity-copy { min-width: 0; overflow-wrap: anywhere; }
 .workspace-activity-copy strong { display: block; color: inherit; font-size: 12px; font-weight: 560; }
 .workspace-activity-copy p { max-width: 620px; margin: 3px 0 4px; color: var(--text-faint); font-size: 11.5px; line-height: 1.55; }
+.workspace-activity-narrative {
+  padding: 16px 0 8px;
+}
+.workspace-activity-headlines {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.workspace-activity-headlines:empty { display: none; }
+.workspace-activity-headline {
+  display: flex;
+  min-width: 0;
+  min-height: 20px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12.25px;
+  line-height: 1.4;
+}
+.workspace-activity-headline i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
+.workspace-activity-headline strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 590;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-activity-headline.is-plan,
+.workspace-activity-headline.is-reasoning {
+  color: color-mix(in srgb, var(--ak-purple) 78%, var(--text) 22%);
+}
+.workspace-activity-headline.is-file,
+.workspace-activity-headline.is-command,
+.workspace-activity-headline.is-status {
+  color: color-mix(in srgb, var(--ak-green-bright) 76%, var(--text) 24%);
+}
+.workspace-activity-headline.is-warning,
+.workspace-activity-headline.is-error {
+  color: var(--danger);
+}
+.workspace-activity-headline.is-running strong {
+  color: transparent;
+  background: linear-gradient(90deg, var(--ak-green-bright), var(--text), color-mix(in srgb, var(--ak-purple) 72%, white 28%), var(--ak-green-bright));
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: akorith-text-flow 2.6s linear infinite, workspace-label-breathe 1.7s ease-in-out infinite;
+}
+.workspace-activity-headlines:not(:empty) + p { margin-top: 13px; }
+.workspace-activity-narrative p {
+  max-width: 700px;
+  min-block-size: calc(1.68em * 5);
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 91%, transparent);
+  font-size: 12.5px;
+  line-height: 1.68;
+  overflow-wrap: anywhere;
+}
+.workspace-activity-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
 .workspace-step-dock { width: 100%; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: 0 0 8px; }
 .workspace-step {
   display: inline-flex;
@@ -213,6 +289,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-step-dock.is-active .workspace-step i { animation: none; }
+  .workspace-activity-headline.is-running strong { animation: none; }
 }
 
 /* ==========================================================================

@@ -9,6 +9,7 @@ import type {
   Provider,
   ProviderAvailability,
   ProviderConfigEntry,
+  ProviderDiscovery,
   SendOptions,
   SendResult
 } from './types'
@@ -19,6 +20,7 @@ const OLLAMA_START_TIMEOUT_MS = 20_000
 const OLLAMA_START_RETRY_MS = 30_000
 const LAN_PROBE_TIMEOUT_MS = 350
 const LAN_PROBE_CONCURRENCY = 32
+const MODEL_CACHE_MS = 60_000
 
 let startedOllamaServe = false
 let lastOllamaStartAttemptAt = 0
@@ -137,6 +139,7 @@ export class LocalProvider implements Provider {
   private readonly lanDiscovery: boolean
   private readonly ollamaHost?: string
   private reachableBaseUrl: string | null = null
+  private modelCache: { baseUrl: string; capturedAt: number; models: string[] } | null = null
 
   constructor(entry: ProviderConfigEntry) {
     this.baseUrl = cleanBaseUrl(entry.baseUrl)
@@ -147,17 +150,23 @@ export class LocalProvider implements Provider {
   }
 
   private baseUrls(): string[] {
-    return this.baseUrl === DEFAULT_BASE_URL ? [this.baseUrl, LOOPBACK_FALLBACK] : [this.baseUrl]
+    const configured = this.baseUrl === DEFAULT_BASE_URL ? [this.baseUrl, LOOPBACK_FALLBACK] : [this.baseUrl]
+    return [...new Set([...(this.reachableBaseUrl ? [this.reachableBaseUrl] : []), ...configured])]
   }
 
-  private async probeTags(timeoutMs: number): Promise<{ baseUrl: string; response: Response }> {
+  private async probeTags(timeoutMs: number): Promise<{ baseUrl: string; models: string[] }> {
     let lastError: unknown
     for (const baseUrl of this.baseUrls()) {
       try {
         const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
         if (res.ok) {
           this.reachableBaseUrl = baseUrl
-          return { baseUrl, response: res }
+          const body = (await res.json()) as { models?: { name?: string }[] }
+          const models = (body.models ?? [])
+            .map((model) => model.name)
+            .filter((name): name is string => typeof name === 'string')
+          this.modelCache = { baseUrl, capturedAt: Date.now(), models }
+          return { baseUrl, models }
         }
         lastError = new Error(`Ollama responded with HTTP ${res.status} at ${baseUrl}`)
       } catch (err) {
@@ -180,6 +189,11 @@ export class LocalProvider implements Provider {
           if (res.ok) {
             found = baseUrl
             this.reachableBaseUrl = baseUrl
+            const body = (await res.json()) as { models?: { name?: string }[] }
+            const models = (body.models ?? [])
+              .map((model) => model.name)
+              .filter((name): name is string => typeof name === 'string')
+            this.modelCache = { baseUrl, capturedAt: Date.now(), models }
             return
           }
         } catch {
@@ -246,14 +260,6 @@ export class LocalProvider implements Provider {
     throw lastError ?? new Error('Ollama did not become reachable after auto-start')
   }
 
-  private async fetchTags(timeoutMs: number): Promise<Response> {
-    if (this.reachableBaseUrl) {
-      const res = await fetch(`${this.reachableBaseUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
-      if (res.ok) return res
-    }
-    return (await this.probeTags(timeoutMs)).response
-  }
-
   async isAvailable(): Promise<ProviderAvailability> {
     try {
       await this.ensureReachable(2_000, true)
@@ -288,10 +294,22 @@ export class LocalProvider implements Provider {
   }
 
   async listModels(): Promise<string[]> {
+    if (this.modelCache && Date.now() - this.modelCache.capturedAt < MODEL_CACHE_MS) {
+      return this.modelCache.models
+    }
     await this.ensureReachable(5_000, true)
-    const res = await this.fetchTags(5_000)
-    const body = (await res.json()) as { models?: { name?: string }[] }
-    return (body.models ?? []).map((m) => m.name).filter((n): n is string => typeof n === 'string')
+    return this.modelCache?.models ?? []
+  }
+
+  async discover(force = false): Promise<ProviderDiscovery> {
+    if (!force && this.modelCache && Date.now() - this.modelCache.capturedAt < MODEL_CACHE_MS) {
+      return { available: { ok: true }, models: this.modelCache.models }
+    }
+    const available = await this.isAvailable()
+    return {
+      available,
+      models: available.ok ? this.modelCache?.models ?? [] : []
+    }
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {

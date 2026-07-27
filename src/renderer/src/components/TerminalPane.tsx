@@ -17,9 +17,9 @@ interface TerminalPaneProps {
   /** PTY session id ("t1", "t2") — routes IPC streams to this pane only. */
   id: string
   title: string
-  identity: 'olympus' | 'atlantis' | 'gaia'
+  identity: 'olympus' | 'atlantis' | 'gaia' | 'terminal'
   cwd: string
-  commandKind: Extract<PtyCommandKind, 'codex' | 'claude' | 'opencode'>
+  commandKind: Extract<PtyCommandKind, 'shell' | 'codex' | 'claude' | 'opencode'>
   /** Bubble status/role up so the chat can show "Codex ready" without the
    *  terminal being visible (the pane keeps running inside the hidden drawer). */
   onStatus?: (info: AgentStatusInfo) => void
@@ -36,6 +36,23 @@ const ROLES: { id: TerminalRole; label: string }[] = [
   { id: 'codex', label: 'Codex' },
   { id: 'opencode', label: 'OpenCode' }
 ]
+
+function terminalTheme(host: HTMLElement): {
+  background: string
+  foreground: string
+  cursor: string
+  selectionBackground: string
+} {
+  const styles = window.getComputedStyle(host)
+  const token = (name: string, fallback: string): string =>
+    styles.getPropertyValue(name).trim() || fallback
+  return {
+    background: token('--terminal-bg', '#22252a'),
+    foreground: token('--terminal-text', '#f1f3f5'),
+    cursor: token('--terminal-cursor', '#f1f3f5'),
+    selectionBackground: token('--terminal-selection', 'rgba(241, 243, 245, 0.24)')
+  }
+}
 
 export default function TerminalPane({
   id,
@@ -96,12 +113,7 @@ export default function TerminalPane({
       fontFamily: "'Cascadia Mono', Consolas, 'Courier New', monospace",
       fontSize: 13,
       lineHeight: 1.2,
-      theme: {
-        background: '#0d0d0d',
-        foreground: '#ffffff',
-        cursor: '#ffffff',
-        selectionBackground: 'rgba(255, 255, 255, 0.22)'
-      }
+      theme: terminalTheme(host)
     })
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
@@ -175,6 +187,13 @@ export default function TerminalPane({
       }
     })
     resizeObserver.observe(host)
+    const themeRoot = host.closest('.app')
+    const themeObserver = new MutationObserver(() => {
+      terminal.options.theme = terminalTheme(host)
+    })
+    if (themeRoot) {
+      themeObserver.observe(themeRoot, { attributes: true, attributeFilter: ['data-theme'] })
+    }
 
     return () => {
       // Phase 13.3: detach only — never kill on unmount. The session keeps running
@@ -183,6 +202,7 @@ export default function TerminalPane({
       // app quit kills everything via will-quit.
       disposed = true
       resizeObserver.disconnect()
+      themeObserver.disconnect()
       inputSub.dispose()
       resizeSub.dispose()
       offData()
@@ -195,7 +215,7 @@ export default function TerminalPane({
 
   const statusLabel =
     status === 'connecting' ? 'Starting...' : status === 'live' ? 'Live' : `Exited (${exitCode ?? '?'})`
-  const IdentityIcon = identity === 'olympus' ? MountainIcon : identity === 'gaia' ? GlobeIcon : WaveIcon
+  const IdentityIcon = identity === 'olympus' ? MountainIcon : identity === 'atlantis' ? WaveIcon : GlobeIcon
 
   return (
     <section className={`terminal-pane ${collapsed ? 'is-collapsed' : ''}`}>

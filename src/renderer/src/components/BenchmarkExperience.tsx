@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from 'react'
+import { memo, useDeferredValue, useMemo, useState, type ReactNode } from 'react'
 
 export type BenchmarkQueueStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type BenchmarkResultStatus = 'completed' | 'failed' | 'cancelled'
@@ -157,6 +157,13 @@ function acceptFiniteNumber(value: string, onAccept: (numberValue: number) => vo
   if (Number.isFinite(numberValue)) onAccept(numberValue)
 }
 
+const BENCHMARK_STEPS = [
+  { number: 1, label: 'Select Models' },
+  { number: 2, label: 'Choose Benchmark' },
+  { number: 3, label: 'Configure' },
+  { number: 4, label: 'Run Benchmark' }
+]
+
 export const BenchmarkExperience = memo(function BenchmarkExperience({
   modelGroups,
   selectedModelKeys,
@@ -179,6 +186,8 @@ export const BenchmarkExperience = memo(function BenchmarkExperience({
 }: BenchmarkExperienceProps): JSX.Element {
   const [modelSearch, setModelSearch] = useState('')
   const [challengeSearch, setChallengeSearch] = useState('')
+  const deferredModelSearch = useDeferredValue(modelSearch)
+  const deferredChallengeSearch = useDeferredValue(challengeSearch)
 
   const selectedKeySet = useMemo(() => new Set(selectedModelKeys), [selectedModelKeys])
   const allModels = useMemo(
@@ -194,31 +203,41 @@ export const BenchmarkExperience = memo(function BenchmarkExperience({
       ),
     [modelGroups]
   )
+  const modelsByKey = useMemo(() => new Map(allModels.map((model) => [model.key, model])), [allModels])
   const selectedModels = useMemo(
-    () => selectedModelKeys.map((key) => allModels.find((model) => model.key === key)).filter((model) => model != null),
-    [allModels, selectedModelKeys]
+    () => selectedModelKeys.map((key) => modelsByKey.get(key)).filter((model) => model != null),
+    [modelsByKey, selectedModelKeys]
+  )
+  const modelSearchIndex = useMemo(
+    () => new Map(allModels.map((model) => [
+      model.key,
+      `${model.providerLabel} ${model.label}`.toLocaleLowerCase()
+    ])),
+    [allModels]
   )
   const visibleModelGroups = useMemo(() => {
-    const query = modelSearch.trim().toLocaleLowerCase()
+    const query = deferredModelSearch.trim().toLocaleLowerCase()
     if (!query) return modelGroups
     return modelGroups
       .map((group) => ({
         ...group,
-        models: group.models.filter((model) =>
-          `${group.label} ${model.label}`.toLocaleLowerCase().includes(query)
-        )
+        models: group.models.filter((model) => modelSearchIndex.get(model.key)?.includes(query))
       }))
       .filter((group) => group.models.length > 0)
-  }, [modelGroups, modelSearch])
-  const visibleChallenges = useMemo(() => {
-    const query = challengeSearch.trim().toLocaleLowerCase()
-    if (!query) return challenges
-    return challenges.filter((challenge) =>
+  }, [deferredModelSearch, modelGroups, modelSearchIndex])
+  const challengeSearchIndex = useMemo(
+    () => new Map(challenges.map((challenge) => [
+      challenge.id,
       `${challenge.label} ${challenge.category} ${challenge.description} ${challenge.metricLabel}`
         .toLocaleLowerCase()
-        .includes(query)
-    )
-  }, [challengeSearch, challenges])
+    ])),
+    [challenges]
+  )
+  const visibleChallenges = useMemo(() => {
+    const query = deferredChallengeSearch.trim().toLocaleLowerCase()
+    if (!query) return challenges
+    return challenges.filter((challenge) => challengeSearchIndex.get(challenge.id)?.includes(query))
+  }, [challengeSearchIndex, challenges, deferredChallengeSearch])
   const selectedChallenge = useMemo(
     () => challenges.find((challenge) => challenge.id === selectedChallengeId) ?? null,
     [challenges, selectedChallengeId]
@@ -234,22 +253,26 @@ export const BenchmarkExperience = memo(function BenchmarkExperience({
     [results]
   )
 
-  const settledQueueCount = queue.filter((item) =>
-    item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled'
-  ).length
+  const queueState = useMemo(() => {
+    let settledCount = 0
+    let activeItem: BenchmarkQueueItemViewModel | null = null
+    for (const item of queue) {
+      if (item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled') {
+        settledCount += 1
+      } else if (item.status === 'running' && activeItem === null) {
+        activeItem = item
+      }
+    }
+    return { settledCount, activeItem }
+  }, [queue])
+  const settledQueueCount = queueState.settledCount
   const queueTotal = queue.length > 0 ? queue.length : selectedModels.length
-  const activeQueueItem = queue.find((item) => item.status === 'running') ?? null
+  const activeQueueItem = queueState.activeItem
   const setupReady = selectedModels.length > 0 && selectedChallenge != null
   const startDisabled = running || !setupReady || Boolean(validationMessage)
   const viewState = running ? 'running' : results.length > 0 ? 'completed' : setupReady ? 'ready' : 'idle'
   const activeStep =
     selectedModels.length === 0 ? 1 : selectedChallenge == null ? 2 : validationMessage ? 3 : 4
-  const stepItems = [
-    { number: 1, label: 'Select Models' },
-    { number: 2, label: 'Choose Benchmark' },
-    { number: 3, label: 'Configure' },
-    { number: 4, label: 'Run Benchmark' }
-  ]
   const selectedModelSummary =
     selectedModels.length === 0
       ? 'No models selected'
@@ -300,7 +323,7 @@ export const BenchmarkExperience = memo(function BenchmarkExperience({
 
         <nav className="benchmark-experience__stepper-scroll" aria-label="Benchmark workflow">
           <ol className="benchmark-experience__stepper">
-            {stepItems.map((step) => {
+            {BENCHMARK_STEPS.map((step) => {
               const isCurrent = step.number === activeStep
               const isComplete = step.number < activeStep || (viewState === 'completed' && step.number === 4)
               return (

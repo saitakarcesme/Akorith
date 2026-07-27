@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   normalizeOpenCodeActivityEvent,
   normalizeStoredOpenCodeMessage,
@@ -97,6 +99,19 @@ assert.equal(
   normalizeOpenCodeActivityEvent({ type: 'step_start', part: { type: 'step-start' } }),
   null,
   'generic OpenCode step envelopes must not become repetitive user-facing activity'
+)
+
+const providerSource = readFileSync(join(__dirname, '..', 'src', 'main', 'providers', 'opencode.ts'), 'utf8')
+const sendSource = providerSource.slice(providerSource.indexOf('async send('))
+assert.match(
+  sendSource,
+  /runCli\('opencode',\s*args,\s*\{[\s\S]{0,600}?stdin:\s*workspacePrompt/,
+  'OpenCode must receive the complete multiline prompt over stdin'
+)
+assert.doesNotMatch(
+  sendSource,
+  /args\.push\(workspacePrompt\)/,
+  'OpenCode prompts must never travel through Windows shell argv'
 )
 
 console.log('verify-opencode-output: ok')

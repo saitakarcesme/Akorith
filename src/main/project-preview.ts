@@ -12,6 +12,12 @@ const SCRIPT_PRIORITY = ['dev', 'start', 'serve', 'preview'] as const
 const STATIC_SCRIPT = 'static'
 const MAX_LOG_LINES = 160
 const MAX_CAPTURE_WIDTH = 1440
+const DEFAULT_VIEWPORT_WIDTH = 1120
+const DEFAULT_VIEWPORT_HEIGHT = 720
+const MIN_VIEWPORT_WIDTH = 320
+const MIN_VIEWPORT_HEIGHT = 240
+const MAX_VIEWPORT_WIDTH = 1920
+const MAX_VIEWPORT_HEIGHT = 1200
 const PREVIEW_READY_TIMEOUT_MS = 8_000
 const PREVIEW_READY_POLL_MS = 100
 const STATIC_MIME_TYPES = new Map<string, string>([
@@ -72,13 +78,52 @@ interface PreviewSession extends ProjectPreviewStatus {
   process: ChildProcess | null
   staticServer: HttpServer | null
   previewWindow: BrowserWindow | null
+  viewportWidth: number
+  viewportHeight: number
+  renderQueue: Promise<void>
 }
 
 const sessions = new Map<string, PreviewSession>()
 
 function publicStatus(session: PreviewSession): ProjectPreviewStatus {
-  const { process: _process, staticServer: _staticServer, previewWindow: _previewWindow, ...status } = session
+  const {
+    process: _process,
+    staticServer: _staticServer,
+    previewWindow: _previewWindow,
+    viewportWidth: _viewportWidth,
+    viewportHeight: _viewportHeight,
+    renderQueue: _renderQueue,
+    ...status
+  } = session
   return { ...status, logs: [...status.logs] }
+}
+
+function queuePreviewOperation<T>(session: PreviewSession, operation: () => Promise<T>): Promise<T> {
+  const result = session.renderQueue.catch(() => undefined).then(operation)
+  session.renderQueue = result.then(() => undefined, () => undefined)
+  return result
+}
+
+function viewportDimension(value: unknown, minimum: number, maximum: number, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Invalid preview viewport ${label}.`)
+  return Math.max(minimum, Math.min(maximum, Math.round(value)))
+}
+
+async function settlePreviewLayout(previewWindow: BrowserWindow): Promise<void> {
+  if (previewWindow.isDestroyed() || previewWindow.webContents.isDestroyed()) return
+  await new Promise<void>((resolveSettled) => {
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolveSettled()
+    }
+    const timeout = setTimeout(finish, 120)
+    void previewWindow.webContents
+      .executeJavaScript('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))', true)
+      .then(finish, finish)
+  })
 }
 
 function isLoopbackUrl(value: string): boolean {
@@ -283,8 +328,17 @@ async function startStaticServer(root: string): Promise<{ server: HttpServer; ur
 }
 
 function commandFor(manager: NonNullable<ProjectPreviewInspection['packageManager']>, script: string): { command: string; args: string[] } {
-  if (manager === 'npm') return { command: 'npm', args: ['run', script] }
-  return { command: manager, args: [script] }
+  const runnerArgs = manager === 'npm' ? ['run', script] : [script]
+  if (process.platform === 'win32') {
+    // npm/pnpm/yarn are command shims on Windows. Node 22's shell:false spawn
+    // cannot execute those shims directly (`npm` => ENOENT, `npm.cmd` =>
+    // EINVAL), while cmd.exe resolves the fixed allowlisted runner correctly.
+    return {
+      command: process.env.ComSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c', manager, ...runnerArgs]
+    }
+  }
+  return { command: manager, args: runnerArgs }
 }
 
 function addLog(session: PreviewSession, chunk: unknown): void {
@@ -300,8 +354,9 @@ function addLog(session: PreviewSession, chunk: unknown): void {
 function createPreviewWindow(session: PreviewSession): BrowserWindow {
   const previewWindow = new BrowserWindow({
     show: false,
-    width: 1120,
-    height: 720,
+    width: session.viewportWidth,
+    height: session.viewportHeight,
+    useContentSize: true,
     webPreferences: {
       offscreen: true,
       nodeIntegration: false,
@@ -381,7 +436,10 @@ export async function startProjectPreview(input: unknown): Promise<ProjectPrevie
       logs: ['Serving index.html on a private loopback preview.'],
       process: null,
       staticServer: runtime.server,
-      previewWindow: null
+      previewWindow: null,
+      viewportWidth: DEFAULT_VIEWPORT_WIDTH,
+      viewportHeight: DEFAULT_VIEWPORT_HEIGHT,
+      renderQueue: Promise.resolve()
     }
     sessions.set(session.id, session)
     runtime.server.once('error', (error) => {
@@ -403,6 +461,7 @@ export async function startProjectPreview(input: unknown): Promise<ProjectPrevie
     cwd: inspection.projectPath,
     env: { ...process.env, PORT: String(port), BROWSER: 'none', HOST: '127.0.0.1' },
     shell: false,
+    windowsHide: true,
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe']
   })
@@ -417,7 +476,10 @@ export async function startProjectPreview(input: unknown): Promise<ProjectPrevie
     logs: [],
     process: child,
     staticServer: null,
-    previewWindow: null
+    previewWindow: null,
+    viewportWidth: DEFAULT_VIEWPORT_WIDTH,
+    viewportHeight: DEFAULT_VIEWPORT_HEIGHT,
+    renderQueue: Promise.resolve()
   }
   sessions.set(session.id, session)
   child.stdout?.on('data', (chunk) => addLog(session, chunk))
@@ -537,15 +599,43 @@ export async function openWorkspacePreview(
   return { ...opened, url: opened.url }
 }
 
+export async function setProjectPreviewViewport(
+  id: unknown,
+  width: unknown,
+  height: unknown
+): Promise<ProjectPreviewStatus> {
+  const session = requireSession(id)
+  session.viewportWidth = viewportDimension(width, MIN_VIEWPORT_WIDTH, MAX_VIEWPORT_WIDTH, 'width')
+  session.viewportHeight = viewportDimension(height, MIN_VIEWPORT_HEIGHT, MAX_VIEWPORT_HEIGHT, 'height')
+
+  await queuePreviewOperation(session, async () => {
+    const previewWindow = session.previewWindow
+    if (!previewWindow || previewWindow.isDestroyed() || previewWindow.webContents.isDestroyed()) return
+    const targetWidth = session.viewportWidth
+    const targetHeight = session.viewportHeight
+    const [currentWidth, currentHeight] = previewWindow.getContentSize()
+    if (currentWidth !== targetWidth || currentHeight !== targetHeight) {
+      previewWindow.setContentSize(targetWidth, targetHeight, false)
+    }
+    await settlePreviewLayout(previewWindow)
+  })
+
+  return publicStatus(session)
+}
+
 async function captureProject(id: unknown): Promise<{ status: ProjectPreviewStatus; dataUrl: string | null; width: number; height: number }> {
   const session = requireSession(id)
-  const previewWindow = session.previewWindow
-  if (!previewWindow || previewWindow.isDestroyed() || session.state === 'error') return { status: publicStatus(session), dataUrl: null, width: 0, height: 0 }
-  const bounds = previewWindow.getContentBounds()
-  const scale = Math.min(1, MAX_CAPTURE_WIDTH / Math.max(1, bounds.width))
-  const image = await previewWindow.webContents.capturePage()
-  const resized = scale < 1 ? image.resize({ width: Math.round(bounds.width * scale) }) : image
-  return { status: publicStatus(session), dataUrl: resized.toDataURL(), width: bounds.width, height: bounds.height }
+  return queuePreviewOperation(session, async () => {
+    const previewWindow = session.previewWindow
+    if (!previewWindow || previewWindow.isDestroyed() || previewWindow.webContents.isDestroyed() || session.state === 'error') {
+      return { status: publicStatus(session), dataUrl: null, width: 0, height: 0 }
+    }
+    const [width, height] = previewWindow.getContentSize()
+    const scale = Math.min(1, MAX_CAPTURE_WIDTH / Math.max(1, width))
+    const image = await previewWindow.webContents.capturePage()
+    const resized = scale < 1 ? image.resize({ width: Math.round(width * scale) }) : image
+    return { status: publicStatus(session), dataUrl: resized.toDataURL(), width, height }
+  })
 }
 
 export async function stopProjectPreview(id: unknown): Promise<ProjectPreviewStatus> {
@@ -582,6 +672,8 @@ export function registerProjectPreviewIpc(): void {
   ipcMain.handle('projectPreview:start', (_event, input: unknown) => startProjectPreview(input))
   ipcMain.handle('projectPreview:status', (_event, id: unknown) => publicStatus(requireSession(id)))
   ipcMain.handle('projectPreview:active', (_event, path: unknown) => activeProjectPreview(path))
+  ipcMain.handle('projectPreview:setViewport', (_event, id: unknown, width: unknown, height: unknown) =>
+    setProjectPreviewViewport(id, width, height))
   ipcMain.handle('projectPreview:capture', (_event, id: unknown) => captureProject(id))
   ipcMain.handle('projectPreview:stop', (_event, id: unknown) => stopProjectPreview(id))
   ipcMain.handle('projectPreview:open', (_event, id: unknown) => openProjectPreview(id))
@@ -596,8 +688,9 @@ export function registerProjectPreviewIpc(): void {
     const previewWindow = session.previewWindow
     if (!previewWindow || previewWindow.isDestroyed()) throw new Error('Live preview is not ready.')
     if ((args.type === 'move' || args.type === 'click') && Number.isFinite(args.x) && Number.isFinite(args.y)) {
-      const x = Math.max(0, Math.round(Number(args.x)))
-      const y = Math.max(0, Math.round(Number(args.y)))
+      const [width, height] = previewWindow.getContentSize()
+      const x = Math.min(Math.max(0, width - 1), Math.max(0, Math.round(Number(args.x))))
+      const y = Math.min(Math.max(0, height - 1), Math.max(0, Math.round(Number(args.y))))
       previewWindow.webContents.sendInputEvent({ type: 'mouseMove', x, y })
       if (args.type === 'move') return true
       previewWindow.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, x, y })

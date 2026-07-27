@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ContextInfo, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
-import { normalizeStoredOpenCodeMessage } from '../../../shared/opencode-output'
 import type { ChatMode, HistorySelection } from '../App'
 import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHint } from '../workspaceLoopCommand'
 import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
@@ -9,7 +8,8 @@ import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
 import WorkspaceStepDock from './WorkspaceStepDock'
-import { ProjectPreviewPanel } from './ProjectPreviewPanel'
+import type { WorkspaceToolId } from './WorkspaceToolsPanel'
+import { hydrateStoredChatMessages } from './chat-history'
 
 const loadChatMessageView = () => import('./ChatMessageView')
 const ChatMessageView = lazy(loadChatMessageView)
@@ -25,6 +25,13 @@ interface ChatPanelProps {
   onActiveSession: (sessionId: string | null) => void
   pendingSessions?: Set<string>
   onPendingChange?: (sessionId: string, pending: boolean) => void
+  onWorkspaceToolRequest?: (request: {
+    projectId: string
+    sessionId: string
+    requestId: string
+    tool: WorkspaceToolId
+    reason: 'activity' | 'changes'
+  }) => void
 }
 
 const MAX_ATTACHMENTS = 8
@@ -32,6 +39,8 @@ const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024
 const MAX_TOTAL_ATTACHMENT_BYTES = 40 * 1024 * 1024
 const MAX_COMPOSER_HEIGHT = 192
 const TOKEN_RENDER_INTERVAL_MS = 100
+const FINAL_RESPONSE_REVEAL_INTERVAL_MS = 55
+const FINAL_RESPONSE_REVEAL_STEPS = 9
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
@@ -86,7 +95,8 @@ export default function ChatPanel({
   onHistoryChange,
   onActiveSession,
   pendingSessions,
-  onPendingChange
+  onPendingChange,
+  onWorkspaceToolRequest
 }: ChatPanelProps): JSX.Element {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [providerId, setProviderId] = useState('')
@@ -118,17 +128,26 @@ export default function ChatPanel({
   const composerInputRef = useRef<HTMLTextAreaElement>(null)
   const activeSessionRef = useRef<string | null>(null)
   const activeSessionProviderRef = useRef<string | null>(null)
+  const activeSessionProjectRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({})
   const queuedTurnsRef = useRef<Record<string, QueuedTurn[]>>({})
   const tokenBuffersRef = useRef<Record<string, string>>({})
   const tokenTimersRef = useRef<Record<string, number>>({})
+  const revealGenerationRef = useRef<Record<string, number>>({})
   const historyHydrationRequestRef = useRef(0)
   const activeRef = useRef(active)
   const loopStartingRef = useRef(false)
   activeRef.current = active
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
+
+  useEffect(() => () => {
+    activeRef.current = false
+    for (const requestId of Object.keys(revealGenerationRef.current)) {
+      revealGenerationRef.current[requestId] += 1
+    }
+  }, [])
 
   const resizeComposer = useCallback((): void => {
     const input = composerInputRef.current
@@ -148,6 +167,26 @@ export default function ChatPanel({
     window.addEventListener('resize', resizeComposer)
     return () => window.removeEventListener('resize', resizeComposer)
   }, [resizeComposer])
+
+  useEffect(() => {
+    if (!isWorkspace) return
+    const requestFileEdit = (event: Event): void => {
+      const path = (event as CustomEvent<{ path?: unknown }>).detail?.path
+      if (typeof path !== 'string' || !path.trim()) return
+      setIntent('execute')
+      setDraft(`Please edit @${path}.\n\nRequested change: `)
+      window.requestAnimationFrame(() => {
+        resizeComposer()
+        composerInputRef.current?.focus()
+        composerInputRef.current?.setSelectionRange(
+          composerInputRef.current.value.length,
+          composerInputRef.current.value.length
+        )
+      })
+    }
+    window.addEventListener('akorith:request-file-edit', requestFileEdit)
+    return () => window.removeEventListener('akorith:request-file-edit', requestFileEdit)
+  }, [isWorkspace, resizeComposer])
 
   // Plan is a workspace-only capability. A user who leaves a planned project
   // turn for General Chat must never carry the hidden read-only intent into a
@@ -201,8 +240,16 @@ export default function ChatPanel({
   }, [])
 
   const refreshContext = useCallback(async (sessionId: string | null): Promise<void> => {
-    if (!sessionId) { setContextInfo(null); return }
-    try { setContextInfo(await window.api.chat.contextInfo(sessionId)) } catch { setContextInfo(null) }
+    if (!sessionId) {
+      if (!activeSessionRef.current) setContextInfo(null)
+      return
+    }
+    try {
+      const next = await window.api.chat.contextInfo(sessionId)
+      if (activeSessionRef.current === sessionId) setContextInfo(next)
+    } catch {
+      if (activeSessionRef.current === sessionId) setContextInfo(null)
+    }
   }, [])
 
   useEffect(() => {
@@ -235,6 +282,7 @@ export default function ChatPanel({
       setActiveSessionId(null)
       activeSessionRef.current = null
       activeSessionProviderRef.current = null
+      activeSessionProjectRef.current = null
       onActiveSession(null)
       setContextInfo(null)
       if (historySel.providerId) setProviderId(historySel.providerId)
@@ -246,6 +294,7 @@ export default function ChatPanel({
       setActiveSessionId(historySel.sessionId)
       activeSessionRef.current = historySel.sessionId
       activeSessionProviderRef.current = historySel.providerId ?? null
+      activeSessionProjectRef.current = isWorkspace ? activeProject?.id ?? null : null
       onActiveSession(historySel.sessionId)
       return
     }
@@ -256,35 +305,13 @@ export default function ChatPanel({
         !data ||
         selectedSessionId !== data.session.id
       ) return
-      const loaded: ChatMessage[] = data.messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        text: message.role === 'assistant' && message.providerId === 'opencode'
-          ? normalizeStoredOpenCodeMessage(message.content)
-          : message.content,
-        status: 'done',
-        attachments: message.attachments,
-        meta: message.role === 'assistant'
-          ? {
-              provider: message.providerId,
-              model: message.model ?? 'default',
-              usage: message.metadata?.usage,
-              changes: message.metadata?.changes,
-              workspaceGoal: message.metadata?.workspaceGoal
-            }
-          : undefined,
-        startedAt: message.role === 'assistant'
-          ? message.metadata?.startedAt ?? (message.metadata?.workspaceGoal ? message.createdAt : undefined)
-          : undefined,
-        endedAt: message.role === 'assistant'
-          ? message.metadata?.endedAt ?? (message.metadata?.workspaceGoal?.final ? message.createdAt : undefined)
-          : undefined
-      }))
+      const loaded = hydrateStoredChatMessages(data.messages, isWorkspace)
       sessionMessagesRef.current[data.session.id] = loaded
       publishMessages(loaded)
       setActiveSessionId(data.session.id)
       activeSessionRef.current = data.session.id
       activeSessionProviderRef.current = data.session.providerId
+      activeSessionProjectRef.current = data.session.projectId
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
       void refreshContext(data.session.id)
@@ -371,21 +398,31 @@ export default function ChatPanel({
     })
   }
 
-  const ensureSession = async (prompt: string, turnProviderId: string): Promise<string> => {
+  const ensureSession = async (
+    prompt: string,
+    turnProviderId: string,
+    projectId: string | null
+  ): Promise<string> => {
     if (
       activeSessionRef.current &&
-      activeSessionProviderRef.current === turnProviderId
+      activeSessionProviderRef.current === turnProviderId &&
+      activeSessionProjectRef.current === projectId
     ) return activeSessionRef.current
 
     if (activeSessionRef.current) {
       sessionMessagesRef.current[activeSessionRef.current] = messagesRef.current
     }
-    const session = await window.api.history.create(turnProviderId, prompt.replace(/\s+/g, ' ').slice(0, 64), hasProject ? activeProject!.id : null)
+    const session = await window.api.history.create(
+      turnProviderId,
+      prompt.replace(/\s+/g, ' ').slice(0, 64),
+      projectId
+    )
     publishMessages([])
     setContextInfo(null)
     setActiveSessionId(session.id)
     activeSessionRef.current = session.id
     activeSessionProviderRef.current = turnProviderId
+    activeSessionProjectRef.current = projectId
     onActiveSession(session.id)
     onHistoryChange()
     return session.id
@@ -401,11 +438,75 @@ export default function ChatPanel({
       : message))
   }, [setSessionMessages])
 
+  const revealFinalResponse = useCallback(async (
+    requestId: string,
+    sessionId: string,
+    assistantId: string,
+    finalText: string
+  ): Promise<void> => {
+    const currentText = (sessionMessagesRef.current[sessionId] ?? [])
+      .find((message) => message.id === assistantId)?.text ?? ''
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (
+      !activeRef.current ||
+      activeSessionRef.current !== sessionId ||
+      document.hidden ||
+      reducedMotion ||
+      currentText === finalText ||
+      !finalText.startsWith(currentText)
+    ) {
+      if (currentText !== finalText) {
+        setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
+          ? { ...message, text: finalText }
+          : message))
+      }
+      return
+    }
+
+    const remaining = finalText.length - currentText.length
+    const step = Math.max(24, Math.ceil(remaining / FINAL_RESPONSE_REVEAL_STEPS))
+    const generation = revealGenerationRef.current[requestId] ?? 0
+    let cursor = currentText.length
+    while (cursor < finalText.length) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, FINAL_RESPONSE_REVEAL_INTERVAL_MS))
+      if (
+        revealGenerationRef.current[requestId] !== generation ||
+        activeSessionRef.current !== sessionId
+      ) {
+        return
+      }
+      if (!activeRef.current || document.hidden) {
+        cursor = finalText.length
+      } else {
+        cursor = Math.min(finalText.length, cursor + step)
+      }
+      const text = finalText.slice(0, cursor)
+      setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
+        ? { ...message, text }
+        : message))
+    }
+  }, [setSessionMessages])
+
   const executeTurnRef = useRef<(turn: QueuedTurn, requestedSessionId?: string | null) => Promise<void>>(async () => {})
   const executeTurn = useCallback(async (turn: QueuedTurn, requestedSessionId?: string | null): Promise<void> => {
-    const sessionId = requestedSessionId ?? await ensureSession(turn.prompt, turn.providerId)
+    const sessionId = requestedSessionId ?? await ensureSession(
+      turn.prompt,
+      turn.providerId,
+      turn.workspace?.projectId ?? null
+    )
     const requestId = newId()
     const assistantId = newId()
+    revealGenerationRef.current[requestId] = 0
+    const requestedTools = new Set<WorkspaceToolId>()
+    const requestWorkspaceTool = (tool: WorkspaceToolId, reason: 'activity' | 'changes'): void => {
+      if (
+        !turn.workspace ||
+        activeSessionRef.current !== sessionId ||
+        (reason === 'activity' && requestedTools.has(tool))
+      ) return
+      requestedTools.add(tool)
+      onWorkspaceToolRequest?.({ projectId: turn.workspace.projectId, sessionId, requestId, tool, reason })
+    }
     setActiveRequests((current) => ({ ...current, [sessionId]: requestId }))
     onPendingChange?.(sessionId, true)
     const startedAt = Date.now()
@@ -422,7 +523,7 @@ export default function ChatPanel({
     setSessionMessages(sessionId, (current) => [
       ...current,
       { id: newId(), role: 'user', text: turn.prompt, status: 'done', attachments: visibleAttachments, intent: turn.intent },
-      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: isWorkspace ? [] : undefined, startedAt, intent: turn.intent }
+      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: turn.mode === 'workspace' ? [] : undefined, taskPrompt: turn.prompt, startedAt, intent: turn.intent }
     ])
     const offToken = window.api.chat.onToken(requestId, (token) => {
       tokenBuffersRef.current[requestId] = `${tokenBuffersRef.current[requestId] ?? ''}${token}`
@@ -433,8 +534,17 @@ export default function ChatPanel({
         )
       }
     })
-    const offActivity = isWorkspace
+    const offActivity = turn.mode === 'workspace'
       ? window.api.chat.onActivity(requestId, (activity) => {
+          if (
+            activity.surface === 'review' ||
+            activity.surface === 'terminal' ||
+            activity.surface === 'browser' ||
+            activity.surface === 'computer' ||
+            activity.surface === 'files'
+          ) {
+            requestWorkspaceTool(activity.surface, 'activity')
+          }
           setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
             ? { ...message, activities: [...(message.activities ?? []), activity].slice(-30) }
             : message))
@@ -447,8 +557,10 @@ export default function ChatPanel({
         model: turn.model || undefined,
         prompt: turn.prompt,
         sessionId,
-        includeDigest: hasProject && digestEnabled,
-        workspaceContext: hasProject ? { projectName: activeProject!.name, projectPath: activeProject!.path! } : undefined,
+        includeDigest: Boolean(turn.workspace) && digestEnabled,
+        workspaceContext: turn.workspace
+          ? { projectName: turn.workspace.projectName, projectPath: turn.workspace.projectPath }
+          : undefined,
         attachments: publicAttachments,
         intent: turn.intent
       })
@@ -457,16 +569,24 @@ export default function ChatPanel({
       turn.attachments.length = 0
       publicAttachments = []
       const response = await responsePromise
+      const completedAt = Date.now()
       const timer = tokenTimersRef.current[requestId]
       if (timer !== undefined) window.clearTimeout(timer)
       delete tokenBuffersRef.current[requestId]
       delete tokenTimersRef.current[requestId]
-      setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
-        ? response.ok
-          ? { ...message, text: response.result.text, status: 'done', endedAt: Date.now(), meta: { provider: turn.providerId, model: response.result.model, usage: response.result.usage, changes: response.result.changes } }
-          : { ...message, text: response.error, status: 'error', endedAt: Date.now() }
-        : message))
-      if (response.ok) { onHistoryChange(); void refreshContext(sessionId) }
+      if (response.ok) {
+        await revealFinalResponse(requestId, sessionId, assistantId, response.result.text)
+        setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
+          ? { ...message, text: response.result.text, status: 'done', endedAt: completedAt, meta: { provider: turn.providerId, model: response.result.model, usage: response.result.usage, changes: response.result.changes } }
+          : message))
+        if (response.result.changes?.files.length) requestWorkspaceTool('review', 'changes')
+        onHistoryChange()
+        void refreshContext(sessionId)
+      } else {
+        setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
+          ? { ...message, text: response.error, status: 'error', endedAt: completedAt }
+          : message))
+      }
     } catch (error) {
       setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
         ? { ...message, text: error instanceof Error ? error.message : String(error), status: 'error', endedAt: Date.now() }
@@ -477,6 +597,7 @@ export default function ChatPanel({
       const timer = tokenTimersRef.current[requestId]
       if (timer !== undefined) window.clearTimeout(timer)
       flushToken(requestId, sessionId, assistantId)
+      delete revealGenerationRef.current[requestId]
       setActiveRequests((current) => {
         if (current[sessionId] !== requestId) return current
         const next = { ...current }; delete next[sessionId]; return next
@@ -486,13 +607,28 @@ export default function ChatPanel({
       setQueueVersion((version) => version + 1)
       if (next) window.setTimeout(() => { void executeTurnRef.current(next, sessionId) }, 0)
     }
-  }, [activeProject, digestEnabled, flushToken, hasProject, isWorkspace, onHistoryChange, onPendingChange, refreshContext, setSessionMessages])
+  }, [digestEnabled, flushToken, onHistoryChange, onPendingChange, onWorkspaceToolRequest, refreshContext, revealFinalResponse, setSessionMessages])
   executeTurnRef.current = executeTurn
 
   const makeTurn = (): QueuedTurn | null => {
     const prompt = draft.trim()
     if (!prompt || !selected?.available.ok || (isWorkspace && !hasProject)) return null
-    return { id: newId(), prompt, providerId, model, attachments: attachments.map((item) => ({ ...item })), intent }
+    return {
+      id: newId(),
+      prompt,
+      providerId,
+      model,
+      attachments: attachments.map((item) => ({ ...item })),
+      intent,
+      mode,
+      workspace: hasProject && activeProject?.path
+        ? {
+            projectId: activeProject.id,
+            projectName: activeProject.name,
+            projectPath: activeProject.path
+          }
+        : null
+    }
   }
 
   const clearComposerTurn = (): void => {
@@ -530,7 +666,7 @@ export default function ChatPanel({
     loopStartingRef.current = true
     setLoopStarting(true)
     try {
-      const sessionId = await ensureSession(goal, selected.id)
+      const sessionId = await ensureSession(goal, selected.id, activeProject!.id)
       const snapshot = await window.api.projectLoop.startWorkspaceGoal({
         requestId: newId(),
         sessionId,
@@ -606,7 +742,10 @@ export default function ChatPanel({
 
   const cancel = (): void => {
     const requestId = activeSessionRef.current ? activeRequests[activeSessionRef.current] : undefined
-    if (requestId) window.api.chat.cancel(requestId)
+    if (requestId) {
+      revealGenerationRef.current[requestId] = (revealGenerationRef.current[requestId] ?? 0) + 1
+      window.api.chat.cancel(requestId)
+    }
   }
 
   const clearContext = async (): Promise<void> => {
@@ -712,17 +851,6 @@ export default function ChatPanel({
 
   const composer = (
     <div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }}>
-      {hasConversation && hasProject && activeProject?.path && (
-        <div className="replica-feature-banner">
-          <ProjectPreviewPanel
-            projectPath={activeProject.path}
-            projectName={activeProject.name}
-            active={active}
-            hideWhenUnavailable
-            refreshKey={latestWorkspaceRun?.endedAt ?? latestWorkspaceRun?.startedAt}
-          />
-        </div>
-      )}
       {suggestion && <div className="router-suggestion"><div className="router-suggestion-head"><span className={`tier-badge tier-${suggestion.tier}`}>{suggestion.rank} · {suggestion.tier}</span><span className="router-target">→ {suggestion.providerLabel}{suggestion.model ? ` · ${suggestion.model}` : ''}</span></div><div className="router-reason">{suggestion.reason}</div><div className="router-actions"><button type="button" className="router-accept" disabled={!suggestion.available} onClick={acceptSuggestion}>Use model</button><button type="button" className="router-ignore" onClick={() => setSuggestion(null)}>Dismiss</button></div></div>}
       {currentQueue.length > 0 && <div className="composer-queue"><QueueIcon size={14} /><span>{currentQueue.length} follow-up{currentQueue.length === 1 ? '' : 's'} queued</span><button type="button" onClick={() => { queuedTurnsRef.current[activeSessionId!] = []; setQueueVersion((version) => version + 1) }}>Clear</button></div>}
       {toast && (

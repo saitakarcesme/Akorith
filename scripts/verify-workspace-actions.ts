@@ -174,6 +174,31 @@ async function verify(): Promise<void> {
     /sendWorkspacePrompt[\s\S]*?completeWorkspaceBrowserAction/,
     'headless Workspace and Loop execution must share the browser action broker'
   )
+  assert.match(
+    registrySource,
+    /activity\.surface\s*\?\?\s*\(activity\.kind\s*===\s*['"]file['"]\s*\?\s*['"]files['"]/,
+    'structured file activity must target the Files workspace tool'
+  )
+  assert.match(
+    registrySource,
+    /Opening the project preview[\s\S]{0,180}surface:\s*['"]browser['"]/,
+    'trusted preview actions must target the Browser workspace tool'
+  )
+
+  const previewMainSource = readFileSync(
+    new URL('../src/main/project-preview.ts', import.meta.url),
+    'utf8'
+  )
+  assert.match(
+    previewMainSource,
+    /process\.env\.ComSpec \|\| ['"]cmd\.exe['"][\s\S]{0,120}args:\s*\[['"]\/d['"], ['"]\/s['"], ['"]\/c['"], manager, \.\.\.runnerArgs\]/,
+    'Windows preview runners must resolve npm command shims through the trusted command interpreter'
+  )
+  assert.match(
+    previewMainSource,
+    /shell:\s*false,[\s\S]{0,80}windowsHide:\s*true/,
+    'Windows preview runners must not open a visible terminal window'
+  )
 
   const previewPanelSource = readFileSync(
     new URL('../src/renderer/src/components/ProjectPreviewPanel.tsx', import.meta.url),

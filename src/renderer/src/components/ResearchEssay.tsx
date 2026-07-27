@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ResearchEssayPreview } from '../../../preload/index.d'
+
+const REMARK_PLUGINS = [remarkGfm]
 
 interface ResearchEssayProps {
   essay: ResearchEssayPreview
@@ -9,7 +11,7 @@ interface ResearchEssayProps {
   onOpenSource: (id: string) => Promise<void>
 }
 
-export default function ResearchEssay({
+function ResearchEssay({
   essay,
   actionPending = false,
   onOpenSource
@@ -54,7 +56,7 @@ export default function ResearchEssay({
     <section className="research-essay" aria-label="Research essay">
       {!hasSummarySection && <p className="research-essay-summary">{essay.summary}</p>}
       <div className="research-essay-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{markdown}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>{markdown}</ReactMarkdown>
       </div>
       <section className="research-essay-bibliography" aria-labelledby={`research-bibliography-${essay.jobId}`}>
         <h2 id={`research-bibliography-${essay.jobId}`}>Bibliography</h2>
@@ -80,6 +82,8 @@ export default function ResearchEssay({
     </section>
   )
 }
+
+export default memo(ResearchEssay)
 
 function stripLeadingTitle(markdown: string): string {
   return markdown.replace(/^\s*#\s+.+?(?:\r?\n)+/, '').trim()

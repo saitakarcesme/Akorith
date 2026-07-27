@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { formatModelLabel } from '../modelLabels'
 import { CopyIcon, FileIcon } from './icons'
 import ChatMarkdown from './ChatMarkdown'
@@ -95,8 +95,15 @@ function ChatMessageView({
   const workspaceGoal = isWorkspace && message.role === 'assistant' ? message.meta?.workspaceGoal : undefined
   const activityOwnsError = message.status === 'error' && (message.activities ?? []).some((activity) => activity.status === 'error')
   const showAssistantText = message.status === 'streaming' ? Boolean(message.text) : !activityOwnsError
-  const images = message.attachments?.filter((item) => item.kind === 'image' && item.dataBase64) ?? []
-  const files = message.attachments?.filter((item) => item.kind !== 'image') ?? []
+  const { images, files } = useMemo(() => {
+    const nextImages: NonNullable<ChatMessage['attachments']> = []
+    const nextFiles: NonNullable<ChatMessage['attachments']> = []
+    for (const attachment of message.attachments ?? []) {
+      if (attachment.kind === 'image' && attachment.dataBase64) nextImages.push(attachment)
+      else if (attachment.kind !== 'image') nextFiles.push(attachment)
+    }
+    return { images: nextImages, files: nextFiles }
+  }, [message.attachments])
   const copy = (): void => {
     void navigator.clipboard.writeText(message.text).then(() => {
       setCopied(true)
@@ -124,6 +131,7 @@ function ChatMessageView({
           active={message.status === 'streaming'}
           failed={message.status === 'error'}
           projectName={projectName}
+          taskPrompt={message.taskPrompt}
         />
       )}
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'

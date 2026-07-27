@@ -1,15 +1,15 @@
 .benchmark-experience {
-  --benchmark-bg: #090909;
-  --benchmark-panel: #0c0c0c;
-  --benchmark-panel-raised: #111;
-  --benchmark-control: #0e0e0e;
-  --benchmark-hover: #141414;
-  --benchmark-border-subtle: #181818;
-  --benchmark-border: #232323;
-  --benchmark-border-strong: #333;
-  --benchmark-text: #ededed;
-  --benchmark-text-muted: #a0a0a0;
-  --benchmark-text-faint: #686868;
+  --benchmark-bg: var(--surface);
+  --benchmark-panel: var(--surface-soft);
+  --benchmark-panel-raised: var(--surface-card);
+  --benchmark-control: var(--surface-control);
+  --benchmark-hover: var(--surface-hover-strong);
+  --benchmark-border-subtle: var(--replica-border-subtle);
+  --benchmark-border: var(--replica-border-default);
+  --benchmark-border-strong: var(--replica-border-strong);
+  --benchmark-text: var(--text);
+  --benchmark-text-muted: var(--text-secondary);
+  --benchmark-text-faint: var(--text-tertiary);
   --benchmark-radius-sm: 4px;
   --benchmark-radius: 6px;
   --benchmark-radius-lg: 8px;
@@ -21,7 +21,7 @@
   overflow-y: auto;
   color: var(--benchmark-text);
   background: var(--benchmark-bg);
-  color-scheme: dark;
+  color-scheme: inherit;
   container: benchmark-experience / inline-size;
   font-family: var(--replica-font-ui, "Segoe UI Variable", "Segoe UI", sans-serif);
   font-size: 12px;
@@ -226,8 +226,8 @@
 }
 
 .benchmark-experience__title {
-  color: #ededed;
-  -webkit-text-fill-color: #ededed;
+  color: var(--benchmark-text);
+  -webkit-text-fill-color: var(--benchmark-text);
   font-size: 18px;
   font-weight: 620;
   letter-spacing: -0.02em;
@@ -698,7 +698,7 @@
   appearance: none;
   border: 1px solid var(--benchmark-border);
   border-radius: 8px;
-  background: #161616;
+  background: var(--benchmark-control);
   cursor: pointer;
 }
 
@@ -943,11 +943,11 @@
   appearance: none;
   border: 0;
   border-radius: 2px;
-  background: #1b1b1b;
+  background: var(--benchmark-control);
 }
 
 .benchmark-experience__live-progress progress::-webkit-progress-bar {
-  background: #1b1b1b;
+  background: var(--benchmark-control);
 }
 
 .benchmark-experience__live-progress progress::-webkit-progress-value {

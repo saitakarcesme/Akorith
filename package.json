@@ -59,6 +59,7 @@
     "verify:goal-cycle": "tsx scripts/verify-goal-cycle.ts",
     "verify:companions": "tsx scripts/verify-companions.ts",
     "verify:agents": "tsx scripts/verify-agents.ts",
+    "verify:chat-lifecycle": "tsx scripts/verify-chat-lifecycle.ts",
     "verify:opencode-output": "tsx scripts/verify-opencode-output.ts",
     "verify:workspace-actions": "tsx scripts/verify-workspace-actions.ts",
     "verify:plugin-tools": "tsx scripts/verify-plugin-tools.ts",

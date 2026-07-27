@@ -8,6 +8,7 @@ import type {
   ResearchLiveDetail,
   ResearchOutputFormat
 } from '../../../preload/index.d'
+import { useDocumentVisible } from '../documentVisibility'
 import { CloseIcon, PlusIcon } from './icons'
 import ResearchComposer from './ResearchComposer'
 import ResearchLibrary from './ResearchLibrary'
@@ -19,7 +20,39 @@ interface ResearchPageProps {
 
 type ResearchSurface = 'workspace' | 'library'
 
+const ACTIVE_RESEARCH_STATUSES = new Set<ResearchJob['status']>([
+  'draft',
+  'planning',
+  'researching',
+  'verifying',
+  'synthesizing',
+  'exporting'
+])
+const AUTO_OPEN_RESEARCH_STATUSES = new Set<ResearchJob['status']>([
+  ...ACTIVE_RESEARCH_STATUSES,
+  'paused'
+])
+
+function sameResearchJobs(current: ResearchJob[], next: ResearchJob[]): boolean {
+  if (current.length !== next.length) return false
+  for (let index = 0; index < current.length; index += 1) {
+    const left = current[index]
+    const right = next[index]
+    if (
+      left.id !== right.id ||
+      left.updatedAt !== right.updatedAt ||
+      left.revision !== right.revision ||
+      left.status !== right.status ||
+      left.sourceCount !== right.sourceCount ||
+      left.artifactPath !== right.artifactPath ||
+      left.coverPath !== right.coverPath
+    ) return false
+  }
+  return true
+}
+
 export default function ResearchPage({ active }: ResearchPageProps): JSX.Element {
+  const documentVisible = useDocumentVisible()
   const [surface, setSurface] = useState<ResearchSurface>('workspace')
   const [jobs, setJobs] = useState<ResearchJob[]>([])
   const [openTabIds, setOpenTabIds] = useState<string[]>([])
@@ -38,19 +71,25 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   const detailRequestRef = useRef(0)
   const detailVersionsRef = useRef<Record<string, string>>({})
   const selectedRef = useRef<string | null>(null)
+  const jobsLoadedRef = useRef(false)
   selectedRef.current = selectedId
   coversRef.current = covers
 
   const loadJobs = useCallback(async (preserveSelection = true): Promise<ResearchJob[]> => {
     const next = await window.api.research.list()
-    setJobs(next)
+    setJobs((current) => sameResearchJobs(current, next) ? current : next)
     setOpenTabIds((current) => {
-      const available = new Set(next.map((job) => job.id))
+      const available = new Set<string>()
+      const activeIds: string[] = []
+      for (const job of next) {
+        available.add(job.id)
+        if (AUTO_OPEN_RESEARCH_STATUSES.has(job.status)) activeIds.push(job.id)
+      }
       const retained = current.filter((id) => available.has(id))
-      const active = next
-        .filter((job) => !['completed', 'error', 'archived'].includes(job.status))
-        .map((job) => job.id)
-      return Array.from(new Set([...active, ...retained]))
+      const merged = Array.from(new Set([...activeIds, ...retained]))
+      return merged.length === current.length && merged.every((id, index) => id === current[index])
+        ? current
+        : merged
     })
     setSelectedId((current) => {
       if (!preserveSelection) return null
@@ -72,30 +111,35 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
   }, [])
 
   useEffect(() => {
-    if (!active || providers) return
+    if (!active || !documentVisible || providers) return
     let cancelled = false
     void window.api.chat.listProviders()
       .then((next) => { if (!cancelled) setProviders(next) })
       .catch((nextError) => { if (!cancelled) setError(errorMessage(nextError)) })
     return () => { cancelled = true }
-  }, [active, providers])
+  }, [active, documentVisible, providers])
 
   useEffect(() => {
-    if (!active) return
+    if (!active || !documentVisible) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
-    setLoading(true)
+    if (!jobsLoadedRef.current) setLoading(true)
     const refresh = async (): Promise<void> => {
+      let nextDelay = 10_000
       try {
-        await loadJobs()
-        if (!cancelled) setLoading(false)
+        const next = await loadJobs()
+        nextDelay = next.some((job) => ACTIVE_RESEARCH_STATUSES.has(job.status)) ? 5_000 : 30_000
+        if (!cancelled) {
+          jobsLoadedRef.current = true
+          setLoading(false)
+        }
       } catch (nextError) {
         if (!cancelled) {
           setLoading(false)
           setError(errorMessage(nextError))
         }
       } finally {
-        if (!cancelled) timer = setTimeout(() => void refresh(), 5_000)
+        if (!cancelled) timer = setTimeout(() => void refresh(), nextDelay)
       }
     }
     void refresh()
@@ -103,13 +147,14 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [active, loadJobs])
+  }, [active, documentVisible, loadJobs])
 
   useEffect(() => {
     if (!active || !selectedId) {
       setDetail(null)
       return
     }
+    if (!documentVisible) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
     let firstLoad = true
@@ -118,8 +163,13 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
         const next = await loadDetail(selectedId, firstLoad)
         firstLoad = false
         if (cancelled) return
-        const activeStatus = next.running || !['completed', 'paused', 'archived'].includes(next.status)
-        timer = setTimeout(() => void poll(), activeStatus ? 1_500 : 6_000)
+        const activeStatus = next.running || ACTIVE_RESEARCH_STATUSES.has(next.status)
+        const nextDelay = activeStatus
+          ? 1_500
+          : next.status === 'completed' || next.status === 'archived'
+            ? 30_000
+            : 6_000
+        timer = setTimeout(() => void poll(), nextDelay)
       } catch (nextError) {
         if (!cancelled) {
           setError(errorMessage(nextError))
@@ -132,14 +182,14 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [active, loadDetail, selectedId])
+  }, [active, documentVisible, loadDetail, selectedId])
 
   const selectedEssayKey = detail && selectedId === detail.job.id
     ? `${detail.job.id}:${detail.job.revision}`
     : null
 
   useEffect(() => {
-    if (!active || !detail || detail.job.id !== selectedId) return
+    if (!active || !documentVisible || !detail || detail.job.id !== selectedId) return
     if (!['completed', 'archived'].includes(detail.job.status)) return
     const key = `${detail.job.id}:${detail.job.revision}`
     if (Object.prototype.hasOwnProperty.call(essayPreviews, key) || pendingEssayKeysRef.current.has(key)) return
@@ -157,7 +207,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       })
       .finally(() => pendingEssayKeysRef.current.delete(key))
     return () => { cancelled = true }
-  }, [active, detail, essayPreviews, selectedId])
+  }, [active, detail, documentVisible, essayPreviews, selectedId])
 
   const requestCovers = useCallback((ids: string[]): void => {
     if (!active) return
@@ -187,12 +237,17 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     () => jobs.filter((job) => !['completed', 'paused', 'error', 'archived'].includes(job.status)).length,
     [jobs]
   )
-  const openJobs = useMemo(
-    () => openTabIds.map((id) => jobs.find((job) => job.id === id)).filter((job): job is ResearchJob => Boolean(job)),
-    [jobs, openTabIds]
-  )
+  const jobsById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs])
+  const openJobs = useMemo(() => {
+    const result: ResearchJob[] = []
+    for (const id of openTabIds) {
+      const job = jobsById.get(id)
+      if (job) result.push(job)
+    }
+    return result
+  }, [jobsById, openTabIds])
 
-  async function runAction(action: () => Promise<unknown>): Promise<boolean> {
+  const runAction = useCallback(async (action: () => Promise<unknown>): Promise<boolean> => {
     if (actionPendingRef.current) return false
     actionPendingRef.current = true
     setActionPending(true)
@@ -211,9 +266,9 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       actionPendingRef.current = false
       setActionPending(false)
     }
-  }
+  }, [loadDetail, loadJobs])
 
-  async function createResearch(input: CreateResearchJobInput): Promise<boolean> {
+  const createResearch = useCallback(async (input: CreateResearchJobInput): Promise<boolean> => {
     return runAction(async () => {
       const job = await window.api.research.create(input)
       selectedRef.current = job.id
@@ -221,13 +276,40 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
       setSelectedId(job.id)
       setSurface('workspace')
     })
-  }
+  }, [runAction])
 
-  function openJob(id: string): void {
+  const openJob = useCallback((id: string): void => {
     setOpenTabIds((current) => current.includes(id) ? current : [...current, id])
     setSelectedId(id)
     setSurface('workspace')
-  }
+  }, [])
+
+  const pauseSelected = useCallback(async (): Promise<void> => {
+    const id = selectedRef.current
+    if (id) await runAction(() => window.api.research.pause(id))
+  }, [runAction])
+
+  const resumeSelected = useCallback(async (): Promise<void> => {
+    const id = selectedRef.current
+    if (id) await runAction(() => window.api.research.resume(id))
+  }, [runAction])
+
+  const exportSelected = useCallback(async (format: ResearchOutputFormat): Promise<void> => {
+    const id = selectedRef.current
+    if (id) await runAction(() => window.api.research.export(id, format))
+  }, [runAction])
+
+  const openArtifact = useCallback(async (id: string): Promise<void> => {
+    await runAction(() => window.api.research.openArtifact(id))
+  }, [runAction])
+
+  const revealArtifact = useCallback(async (id: string): Promise<void> => {
+    await runAction(() => window.api.research.revealArtifact(id))
+  }, [runAction])
+
+  const openSource = useCallback(async (id: string): Promise<void> => {
+    await runAction(() => window.api.research.openSource(id))
+  }, [runAction])
 
   function closeTab(id: string): void {
     const index = openTabIds.indexOf(id)
@@ -316,12 +398,12 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
               detail={detail}
               essay={selectedEssayKey ? essayPreviews[selectedEssayKey] : undefined}
               actionPending={actionPending}
-              onPause={async () => { await runAction(() => window.api.research.pause(selectedId)) }}
-              onResume={async () => { await runAction(() => window.api.research.resume(selectedId)) }}
-              onExport={async (format: ResearchOutputFormat) => { await runAction(() => window.api.research.export(selectedId, format)) }}
-              onOpenArtifact={async (id) => { await runAction(() => window.api.research.openArtifact(id)) }}
-              onRevealArtifact={async (id) => { await runAction(() => window.api.research.revealArtifact(id)) }}
-              onOpenSource={async (id) => { await runAction(() => window.api.research.openSource(id)) }}
+              onPause={pauseSelected}
+              onResume={resumeSelected}
+              onExport={exportSelected}
+              onOpenArtifact={openArtifact}
+              onRevealArtifact={revealArtifact}
+              onOpenSource={openSource}
             />
           ) : (
             <div className="research-page-loading" role="status"><i aria-hidden="true" /><span>Loading research…</span></div>

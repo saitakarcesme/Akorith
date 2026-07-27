@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type {
   ResearchEssayPreview,
   ResearchLiveDetail,
@@ -39,7 +40,7 @@ interface ResearchProgressProps {
   onOpenSource: (id: string) => Promise<void>
 }
 
-export default function ResearchProgress({
+function ResearchProgress({
   detail,
   essay,
   actionPending = false,
@@ -132,6 +133,8 @@ export default function ResearchProgress({
     </article>
   )
 }
+
+export default memo(ResearchProgress)
 
 function statusLabel(status: ResearchStatus): string {
   return status.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase())

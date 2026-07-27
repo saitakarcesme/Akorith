@@ -1,5 +1,7 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatActivity } from '../../../preload/index.d'
+import { useDocumentVisible } from '../documentVisibility'
+import { buildWorkspaceActivityNarrative } from '../workspaceActivityNarrative'
 
 interface WorkspaceActivityProps {
   activities: ChatActivity[]
@@ -8,7 +10,11 @@ interface WorkspaceActivityProps {
   active: boolean
   failed?: boolean
   projectName?: string
+  taskPrompt?: string
 }
+
+const NARRATIVE_REVEAL_INTERVAL_MS = 45
+const NARRATIVE_REVEAL_STEPS = 10
 
 function elapsedLabel(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
@@ -19,43 +25,58 @@ function elapsedLabel(ms: number): string {
   return minutes > 0 ? `${minutes}m ${rest}s` : `${rest}s`
 }
 
-function detailSentence(item: ChatActivity): string {
-  const detail = item.detail?.replace(/\s+/g, ' ').trim()
-  if (!detail || detail === item.label.trim()) return ''
-  const bounded = detail.length > 180 ? `${detail.slice(0, 179).trimEnd()}…` : detail
-  return /[.!?…]$/.test(bounded) ? bounded : `${bounded}.`
+function sharedPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length)
+  let index = 0
+  while (index < limit && left[index] === right[index]) index += 1
+  return index
 }
 
-function activityExplanation(item: ChatActivity, projectName: string): string {
-  const detail = detailSentence(item)
-  if (item.status === 'error' || item.kind === 'warning') {
-    return detail
-      ? `The CLI could not complete this action in ${projectName}: ${detail}`
-      : `The CLI could not complete this action in ${projectName}. The project remains available for review or retry.`
-  }
-  if (item.kind === 'command') {
-    return item.status === 'complete'
-      ? `The command finished in ${projectName}.${detail ? ` Last reported output: ${detail}` : ' Its result is available to the model for verification.'}`
-      : `The CLI is running this command in ${projectName}.${detail ? ` Current output: ${detail}` : ''}`
-  }
-  if (item.kind === 'file') {
-    return item.status === 'complete'
-      ? `The CLI finished this file action in ${projectName}. The actual file contents or edit result are now available for its next decision.${detail ? ` ${detail}` : ''}`
-      : `The CLI is performing this file action inside ${projectName}.${detail ? ` ${detail}` : ''}`
-  }
-  if (item.kind === 'reasoning' || item.kind === 'plan') {
-    return detail || detailSentence({ ...item, detail: item.label }) || `The selected model is deciding the next concrete action from the current state of ${projectName}.`
-  }
-  if (/session started/i.test(item.label)) {
-    return `The selected CLI is connected to ${projectName} and has received the project-scoped request.`
-  }
-  if (/starting the selected model|preparing|starting/i.test(item.label)) {
-    return `Akorith started the selected CLI in ${projectName} and is waiting for its first concrete tool action.`
-  }
-  if (/finished|complete/i.test(item.label) || item.status === 'complete') {
-    return detail || `This CLI action finished in ${projectName}.`
-  }
-  return detail || `The CLI reported this live action while working in ${projectName}.`
+function activityHeadline(item: ChatActivity): string {
+  if (item.kind === 'reasoning') return 'Reasoning about the next action'
+  if (item.kind === 'plan') return 'Updating the plan'
+  if (item.label === 'Starting the selected model') return 'Starting the selected CLI'
+  return item.label
+}
+
+function ProgressiveNarrative({ text, animate }: { text: string; animate: boolean }): JSX.Element {
+  const [visible, setVisible] = useState(animate ? '' : text)
+  const visibleRef = useRef(visible)
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!animate || reducedMotion || document.hidden) {
+      visibleRef.current = text
+      setVisible(text)
+      return
+    }
+
+    const current = visibleRef.current
+    const start = text.startsWith(current) ? current.length : sharedPrefixLength(current, text)
+    const initial = text.slice(0, start)
+    visibleRef.current = initial
+    setVisible(initial)
+    if (start >= text.length) return
+
+    const step = Math.max(12, Math.ceil((text.length - start) / NARRATIVE_REVEAL_STEPS))
+    let cursor = start
+    const timer = window.setInterval(() => {
+      if (document.hidden) {
+        visibleRef.current = text
+        setVisible(text)
+        window.clearInterval(timer)
+        return
+      }
+      cursor = Math.min(text.length, cursor + step)
+      const next = text.slice(0, cursor)
+      visibleRef.current = next
+      setVisible(next)
+      if (cursor >= text.length) window.clearInterval(timer)
+    }, NARRATIVE_REVEAL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [animate, text])
+
+  return <>{visible}</>
 }
 
 function WorkspaceActivity({
@@ -64,31 +85,42 @@ function WorkspaceActivity({
   endedAt,
   active,
   failed = false,
-  projectName = 'the selected project'
+  projectName = 'the selected project',
+  taskPrompt
 }: WorkspaceActivityProps): JSX.Element {
+  const documentVisible = useDocumentVisible()
   const [now, setNow] = useState(Date.now())
+  const [collapsed, setCollapsed] = useState(!active)
 
   useEffect(() => {
-    if (!active) return
+    if (!active || !documentVisible) return
+    setNow(Date.now())
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
+  }, [active, documentVisible])
+
+  useEffect(() => {
+    setCollapsed(!active)
   }, [active])
 
-  const visible = useMemo(() => {
-    const compact: ChatActivity[] = []
-    for (const item of activities) {
-      if (/^(workspace task complete|project step finished)$/i.test(item.label.trim())) continue
-      const key = `${item.kind}:${item.label.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}`
-      const existing = compact.findIndex((candidate) =>
-        `${candidate.kind}:${candidate.label.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}` === key
-      )
-      const displayItem = !active && !failed && item.status === 'running'
-        ? { ...item, status: 'complete' as const }
-        : item
-      if (existing >= 0) compact[existing] = displayItem
-      else compact.push(displayItem)
+  const narrative = useMemo(() => buildWorkspaceActivityNarrative({
+    activities,
+    projectName,
+    taskPrompt,
+    active,
+    failed
+  }), [active, activities, failed, projectName, taskPrompt])
+  const headlines = useMemo(() => {
+    const latest = new Map<string, ChatActivity>()
+    for (const activity of activities) {
+      if (/^(workspace task complete|project step finished)$/i.test(activity.label.trim())) continue
+      const key = `${activity.kind}:${activity.label.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}`
+      latest.delete(key)
+      latest.set(key, !active && !failed && activity.status === 'running'
+        ? { ...activity, status: 'complete' }
+        : activity)
     }
-    return compact.slice(-8)
+    return [...latest.values()].slice(-4)
   }, [active, activities, failed])
   const recordedEnd = useMemo(
     () => activities.reduce((latest, item) => Math.max(latest, item.timestamp), startedAt),
@@ -100,35 +132,49 @@ function WorkspaceActivity({
     : failed
       ? `Stopped after ${elapsedLabel(elapsedUntil - startedAt)}`
       : `Worked for ${elapsedLabel(elapsedUntil - startedAt)}`
+  const latestActivity = activities.at(-1)
+  const liveAnnouncement = latestActivity
+    ? `${latestActivity.label}${latestActivity.detail ? `. ${latestActivity.detail}` : ''}`
+    : active
+      ? `Akorith started working in ${projectName}.`
+      : statusText
 
   return (
-    <section className={`workspace-activity ${active ? 'is-active' : failed ? 'is-failed' : 'is-complete'}`} aria-live="polite">
-      <div className="workspace-duration">{statusText}</div>
-      <div className="workspace-activity-rule" />
-      <div className="workspace-activity-list">
-        {visible.map((item) => (
-          <div className={`workspace-activity-row is-${item.kind} is-${item.status ?? 'running'}`} key={`${item.timestamp}-${item.kind}-${item.label}`}>
-            <div className="workspace-activity-copy">
-              <strong>{item.kind === 'reasoning'
-                ? 'Reasoning about the next action'
-                : item.kind === 'plan'
-                  ? 'Updating the plan'
-                  : item.label === 'Starting the selected model'
-                    ? 'Starting the selected CLI'
-                    : item.label}</strong>
-              <p>{activityExplanation(item, projectName)}</p>
-            </div>
+    <section className={`workspace-activity ${active ? 'is-active' : failed ? 'is-failed' : 'is-complete'}`}>
+      <button
+        type="button"
+        className="workspace-duration"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((value) => !value)}
+      >
+        {statusText}<span aria-hidden="true">{collapsed ? '›' : '⌄'}</span>
+      </button>
+      {!collapsed && <div className="workspace-activity-rule" />}
+      {!collapsed && (
+        <div className="workspace-activity-narrative">
+          <div className="workspace-activity-headlines" aria-label="Current CLI activity">
+            {headlines.map((item) => (
+              <div
+                className={`workspace-activity-headline is-${item.kind} is-${item.status ?? 'running'}`}
+                key={`${item.timestamp}-${item.kind}-${item.label}`}
+              >
+                <i aria-hidden="true" />
+                <strong>{activityHeadline(item)}</strong>
+              </div>
+            ))}
+            {headlines.length === 0 && active && (
+              <div className="workspace-activity-headline is-status is-running">
+                <i aria-hidden="true" />
+                <strong>Starting the selected CLI</strong>
+              </div>
+            )}
           </div>
-        ))}
-        {visible.length === 0 && active && (
-          <div className="workspace-activity-row is-status is-running">
-            <div className="workspace-activity-copy">
-              <strong>Waiting for the first CLI action…</strong>
-              <p>The request is running in {projectName}. Concrete file, command, and reasoning events will appear here as the CLI reports them.</p>
-            </div>
-          </div>
-        )}
-      </div>
+          <p><ProgressiveNarrative text={narrative} animate={active} /></p>
+          <span className="workspace-activity-sr" role="status" aria-live="polite" aria-atomic="true">
+            {liveAnnouncement}
+          </span>
+        </div>
+      )}
     </section>
   )
 }

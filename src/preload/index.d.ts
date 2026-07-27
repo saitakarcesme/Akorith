@@ -1,6 +1,8 @@
 // Shape of the preload bridge as seen from the renderer.
 // Extended in lockstep with src/preload/index.ts.
 
+import type { ChatLifecycleMetadata } from '../shared/chat-lifecycle'
+
 export interface PtyCreateOptions {
   cols: number
   rows: number
@@ -95,6 +97,7 @@ export interface ChatActivity {
   label: string
   detail?: string
   status?: 'running' | 'complete' | 'error'
+  surface?: 'review' | 'terminal' | 'browser' | 'computer' | 'files'
   timestamp: number
 }
 
@@ -224,6 +227,7 @@ export interface MessageRow {
   metadata: {
     startedAt?: number
     endedAt?: number
+    chatLifecycle?: ChatLifecycleMetadata
     usage?: ChatUsage
     changes?: ChatSendResult['changes']
     workspaceGoal?: {
@@ -280,6 +284,11 @@ export interface ProjectsApi {
   list(): Promise<ProjectRow[]>
   /** Bounded, project-scoped file index used by the Workspace @ mention picker. */
   files(projectId: string, query?: string): Promise<string[]>
+  /** Bounded, read-only text file used by the in-app Files reviewer. */
+  readFile(projectId: string, filePath: string): Promise<
+    | { ok: true; path: string; content: string; bytes: number; truncated: boolean }
+    | { ok: false; error: string }
+  >
   create(args: ProjectCreateRequest): Promise<ProjectRow>
   openFolder(projectId?: string | null): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
   createFolder(args: {
@@ -2326,6 +2335,7 @@ export interface ProjectPreviewApi {
   start(projectPath: string, script?: string): Promise<ProjectPreviewStatus>
   active(projectPath: string): Promise<ProjectPreviewStatus | null>
   status(id: string): Promise<ProjectPreviewStatus>
+  setViewport(id: string, width: number, height: number): Promise<ProjectPreviewStatus>
   capture(id: string): Promise<ProjectPreviewCapture>
   stop(id: string): Promise<ProjectPreviewStatus>
   open(id: string): Promise<boolean>
@@ -2373,6 +2383,8 @@ export interface GitChangeFile {
   status: string
   path: string
   staged: boolean
+  additions: number
+  deletions: number
 }
 
 export type GitStatusResult =

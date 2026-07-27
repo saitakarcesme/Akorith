@@ -2,7 +2,7 @@
 // Lives in Electron's userData dir; created with defaults on first run.
 
 import { app } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { ProviderConfigEntry } from './providers/types'
 
@@ -361,21 +361,66 @@ export function configPath(): string {
   return join(app.getPath('userData'), 'loopex.config.json')
 }
 
+interface ConfigFileCache {
+  file: string
+  signature: string
+  value: LoopexConfig
+}
+
+let configFileCache: ConfigFileCache | null = null
+
+function configFileSignature(file: string): string | null {
+  try {
+    const info = statSync(file)
+    return `${info.mtimeMs}:${info.ctimeMs}:${info.size}`
+  } catch {
+    return null
+  }
+}
+
+function persistConfig(config: LoopexConfig, file = configPath()): void {
+  writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8')
+  configFileCache = {
+    file,
+    signature: configFileSignature(file) ?? `written:${Date.now()}`,
+    value: withConfigDefaults(config)
+  }
+}
+
 export function loadConfig(): LoopexConfig {
   const file = configPath()
   if (!existsSync(file)) {
-    writeFileSync(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n', 'utf8')
-    return DEFAULT_CONFIG
+    const defaults = withConfigDefaults({
+      ...DEFAULT_CONFIG,
+      providers: { ...DEFAULT_CONFIG.providers }
+    })
+    persistConfig(defaults, file)
+    return defaults
+  }
+  const signature = configFileSignature(file)
+  if (
+    signature &&
+    configFileCache?.file === file &&
+    configFileCache.signature === signature
+  ) {
+    return configFileCache.value
   }
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as LoopexConfig
     if (!parsed || typeof parsed.providers !== 'object' || parsed.providers === null) {
       throw new Error('missing "providers" object')
     }
-    return withConfigDefaults(parsed)
+    const value = withConfigDefaults(parsed)
+    if (signature) configFileCache = { file, signature, value }
+    return value
   } catch (err) {
     console.error(`[config] invalid ${file} — falling back to defaults:`, err)
-    return DEFAULT_CONFIG
+    const value = withConfigDefaults({
+      ...DEFAULT_CONFIG,
+      providers: { ...DEFAULT_CONFIG.providers }
+    })
+    if (signature) configFileCache = { file, signature, value }
+    return value
   }
 }
 
@@ -447,7 +492,7 @@ export function setControllerSettings(patch: Partial<ControllerSettings>): Contr
         : {})
   }
   config.controller = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
@@ -476,7 +521,7 @@ export function setPluginSettings(patch: Partial<PluginSettings>): PluginSetting
         : {})
   }
   config.plugins = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
@@ -515,7 +560,7 @@ export function setTelemetrySettings(patch: Partial<TelemetrySettings>): Telemet
   const current = getTelemetrySettings()
   const profiles = patch.profiles === undefined ? current.profiles : sanitizeTelemetryProfiles(patch.profiles)
   config.telemetry = { profiles }
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return { profiles }
 }
 
@@ -552,7 +597,7 @@ export function setUsageLimitConfig(patch: Partial<UsageLimitConfig>): UsageLimi
     ...(pick('notes', 400) ? { notes: pick('notes', 400) } : {})
   }
   config.usageLimits = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
@@ -586,14 +631,14 @@ export function setResearchDiscordConfig(
     ...(ciphertext ? { webhookUrlCiphertext: ciphertext } : {})
   }
   config.researchDiscord = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
 export function setBridgeAutoEnter(autoEnter: boolean): BridgeSettings {
   const config = loadConfig()
   config.bridge = { ...config.bridge, autoEnter }
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return { autoEnter }
 }
 
@@ -642,7 +687,7 @@ export function setLocalProviderSettings(patch: Partial<LocalProviderSettings>):
   if (!ollamaHost) delete config.providers.local.ollamaHost
   if (!remoteProfiles || !remoteProfiles.length) delete config.providers.local.remoteProfiles
   if (!lastSuccessfulBaseUrl) delete config.providers.local.lastSuccessfulBaseUrl
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
@@ -656,7 +701,7 @@ export function setTheme(theme: AppTheme): AppTheme {
   const next: AppTheme = theme === 'light' ? 'light' : 'dark'
   const config = loadConfig()
   config.theme = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return next
 }
 
@@ -686,7 +731,7 @@ export function getDigestSettings(): DigestSettings {
 function writeDigest(patch: Partial<DigestSettings>): DigestSettings {
   const config = loadConfig()
   config.digest = { ...config.digest, ...patch }
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return getDigestSettings()
 }
 
@@ -729,7 +774,7 @@ export function getIsaScoreSettings(): IsaScoreSettings {
 export function setTestSourceRepo(sourceRepo: string): TestLabSettings {
   const config = loadConfig()
   config.test = { ...config.test, sourceRepo }
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return getTestSettings()
 }
 
@@ -753,6 +798,6 @@ export function setTestSettings(patch: Partial<TestLabSettings>): TestLabSetting
         : current.defaultProviderId
   }
   config.test = next
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8')
+  persistConfig(config)
   return getTestSettings()
 }

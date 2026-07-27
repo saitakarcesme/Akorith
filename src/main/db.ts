@@ -14,6 +14,11 @@ import { mkdirSync, realpathSync, statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { MacroExecutorType, MacroMode, MacroStatus } from './loops/types'
 import { publicChatAttachments, removeSessionAttachments } from './chat-attachments'
+import {
+  CHAT_RUNNING_RESPONSE,
+  interruptedChatResponse,
+  type ChatLifecycleMetadata
+} from '../shared/chat-lifecycle'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -39,6 +44,46 @@ export function dbPath(): string {
   return join(app.getPath('userData'), 'loopex.db')
 }
 
+function recoverInterruptedChatTurns(target: Database.Database): void {
+  const rows = target.prepare(
+    `SELECT m.id, m.metadata, s.project_id
+     FROM messages m
+     JOIN sessions s ON s.id = m.session_id
+     WHERE m.role = 'assistant'
+       AND m.metadata LIKE '%"chatLifecycle"%'`
+  ).all() as Array<{ id: string; metadata: string; project_id: string | null }>
+  if (rows.length === 0) return
+
+  const now = Date.now()
+  const update = target.prepare(
+    'UPDATE messages SET content = ?, metadata = ? WHERE id = ? AND role = ?'
+  )
+  const recover = target.transaction(() => {
+    for (const row of rows) {
+      try {
+        const metadata = JSON.parse(row.metadata) as StoredMessageMetadata
+        if (metadata?.chatLifecycle?.state !== 'running') continue
+        update.run(
+          interruptedChatResponse(Boolean(row.project_id)),
+          JSON.stringify({
+            ...metadata,
+            endedAt: now,
+            chatLifecycle: {
+              ...metadata.chatLifecycle,
+              state: 'interrupted'
+            }
+          } satisfies StoredMessageMetadata),
+          row.id,
+          'assistant'
+        )
+      } catch {
+        // Ignore malformed historical metadata. It must never block startup.
+      }
+    }
+  })
+  recover()
+}
+
 export function initDb(): void {
   if (db) return
   const Database = require('better-sqlite3') as typeof import('better-sqlite3')
@@ -48,7 +93,10 @@ export function initDb(): void {
     nextDb.pragma('journal_mode = WAL')
     nextDb.pragma('foreign_keys = ON')
     const currentSchemaVersion = Number(nextDb.pragma('user_version', { simple: true }))
-    if (currentSchemaVersion >= DB_SCHEMA_VERSION) return
+    if (currentSchemaVersion >= DB_SCHEMA_VERSION) {
+      recoverInterruptedChatTurns(nextDb)
+      return
+    }
     nextDb.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id          TEXT PRIMARY KEY,
@@ -851,6 +899,7 @@ export function initDb(): void {
   ensureColumn('macro_sessions', 'last_validation_result', 'TEXT')
   ensureColumn('macro_sessions', 'last_commit_message', 'TEXT')
   nextDb.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
+  recoverInterruptedChatTurns(nextDb)
   } catch (err) {
     nextDb.close()
     db = null
@@ -931,6 +980,8 @@ export interface MessageRow {
 export interface StoredMessageMetadata {
   startedAt?: number
   endedAt?: number
+  /** Durable lifecycle for a normal chat provider turn. */
+  chatLifecycle?: ChatLifecycleMetadata
   usage?: {
     promptTokens?: number
     completionTokens?: number
@@ -1069,6 +1120,99 @@ export function addMessage(
   ).run(id, sessionId, role, content, providerId, model ?? null, attachments.length ? JSON.stringify(attachments) : null, metadata ? JSON.stringify(metadata) : null, now)
   d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId)
   return id
+}
+
+export interface BeginChatTurnInput {
+  sessionId: string
+  prompt: string
+  providerId: string
+  model?: string
+  requestId: string
+  startedAt: number
+  attachments?: StoredMessageAttachment[]
+}
+
+/**
+ * Persist the visible user request and its assistant placeholder as one unit.
+ * A crash can therefore leave a recoverable assistant row, never a lone user
+ * request caused by a half-written chat turn.
+ */
+export function beginChatTurn(input: BeginChatTurnInput): {
+  userMessageId: string
+  assistantMessageId: string
+} {
+  const d = must()
+  const userMessageId = randomUUID()
+  const assistantMessageId = randomUUID()
+  const attachments = input.attachments ?? []
+  const assistantMetadata: StoredMessageMetadata = {
+    startedAt: input.startedAt,
+    chatLifecycle: {
+      requestId: input.requestId,
+      state: 'running'
+    }
+  }
+  const insert = d.prepare(
+    'INSERT INTO messages (id, session_id, role, content, provider_id, model, attachments, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+  const write = d.transaction(() => {
+    insert.run(
+      userMessageId,
+      input.sessionId,
+      'user',
+      input.prompt,
+      input.providerId,
+      input.model ?? null,
+      attachments.length ? JSON.stringify(attachments) : null,
+      null,
+      input.startedAt
+    )
+    insert.run(
+      assistantMessageId,
+      input.sessionId,
+      'assistant',
+      CHAT_RUNNING_RESPONSE,
+      input.providerId,
+      input.model ?? null,
+      null,
+      JSON.stringify(assistantMetadata),
+      input.startedAt
+    )
+    d.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(input.startedAt, input.sessionId)
+  })
+  write()
+  return { userMessageId, assistantMessageId }
+}
+
+/** Finish the same durable assistant row created by beginChatTurn. */
+export function updateChatTurnAssistant(
+  messageId: string,
+  content: string,
+  providerId: string,
+  model: string | undefined,
+  metadata: StoredMessageMetadata
+): boolean {
+  const d = must()
+  const result = d
+    .prepare(
+      'UPDATE messages SET content = ?, provider_id = ?, model = ?, metadata = ? WHERE id = ? AND role = ?'
+    )
+    .run(
+      content,
+      providerId,
+      model ?? null,
+      JSON.stringify(metadata),
+      messageId,
+      'assistant'
+    )
+  if (result.changes > 0) {
+    d.prepare(
+      `UPDATE sessions
+       SET updated_at = ?
+       WHERE id = (SELECT session_id FROM messages WHERE id = ?)`
+    ).run(Date.now(), messageId)
+  }
+  return result.changes > 0
 }
 
 /** Update one persisted assistant status card without appending a second final response. */

@@ -8,6 +8,7 @@ import type {
   Provider,
   ProviderAvailability,
   ProviderConfigEntry,
+  ProviderDiscovery,
   SendOptions,
   SendResult
 } from './types'
@@ -115,6 +116,32 @@ export class OpenCodeProvider implements Provider {
     }
   }
 
+  async discover(): Promise<ProviderDiscovery> {
+    if (!this.useCatalog) {
+      const available = await this.isAvailable()
+      return { available, models: available.ok ? this.models : [] }
+    }
+    try {
+      // The catalog command also proves the CLI can start. On the successful
+      // path this replaces the old `--version` + `models` process waterfall.
+      const res = await runCli('opencode', ['models'], { timeoutMs: 20_000 })
+      if (res.code === 0) {
+        const models = stripAnsi(res.stdout)
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => /^[\w.-]+\/[\w.:/-]+$/.test(line))
+        return {
+          available: { ok: true },
+          models: [...new Set(['default', ...models])]
+        }
+      }
+    } catch {
+      // Older CLIs retain the --version/default-model compatibility path.
+    }
+    const available = await this.isAvailable()
+    return { available, models: available.ok ? this.models : [] }
+  }
+
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
     const args = ['run', '--format', 'json']
     if (opts.workingDirectory) {
@@ -133,10 +160,15 @@ export class OpenCodeProvider implements Provider {
         ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
         : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested app start or preview after this turn, so treat that as a concrete action but do not start a long-lived server, run an app-opening shell command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
-    args.push(workspacePrompt)
     let streamedText = ''
 
     const res = await runCli('opencode', args, {
+      // Keep the complete prompt off argv. On Windows `runCli` resolves npm
+      // shims through cmd.exe; multiline argv is truncated at the first blank
+      // line there, which used to discard the actual user task after Akorith's
+      // workspace instruction. OpenCode's run command natively appends piped
+      // stdin to its message, preserving newlines and shell metacharacters.
+      stdin: workspacePrompt,
       signal: opts.signal,
       timeoutMs: 600_000,
       cwd: opts.workingDirectory ?? homedir(),

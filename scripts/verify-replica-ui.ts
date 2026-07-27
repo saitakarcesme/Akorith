@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseDiffRows } from '../src/renderer/src/components/BottomWorkbench'
+import { mapPreviewPoint } from '../src/renderer/src/components/ProjectPreviewPanel'
+import { buildWorkspaceActivityNarrative } from '../src/renderer/src/workspaceActivityNarrative'
 import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
 
 const root = join(__dirname, '..')
@@ -47,9 +50,25 @@ function selectorBlocks(css: string, selectorFragment: string): string[] {
   return blocks
 }
 
+function highestZIndex(blocks: string[]): number {
+  return blocks.reduce((highest, block) => {
+    const values = [...block.matchAll(/z-index\s*:\s*(-?\d+)/gi)]
+      .map((match) => Number(match[1]))
+      .filter(Number.isFinite)
+    return Math.max(highest, ...values)
+  }, Number.NEGATIVE_INFINITY)
+}
+
 function hasBreakpoint(css: string, width: number): boolean {
   return new RegExp(
     `@media\\s*\\(\\s*max-width\\s*:\\s*${width}px\\s*\\)`,
+    'i'
+  ).test(css)
+}
+
+function hasHeightBreakpoint(css: string, height: number): boolean {
+  return new RegExp(
+    `@media\\s*\\(\\s*max-height\\s*:\\s*${height}px\\s*\\)`,
     'i'
   ).test(css)
 }
@@ -60,7 +79,9 @@ function hasHiddenMountedWrapper(
   condition: RegExp,
   componentName: string
 ): boolean {
-  const classIndex = app.indexOf(`className="${className}"`)
+  const literalIndex = app.indexOf(`className="${className}"`)
+  const templateMatch = new RegExp(`className=\\{\\\`${escapeRegex(className)}(?:\\s|\\\`)`).exec(app)
+  const classIndex = literalIndex >= 0 ? literalIndex : templateMatch?.index ?? -1
   if (classIndex < 0) return false
   const window = app.slice(classIndex, classIndex + 1_800)
   return (
@@ -80,6 +101,9 @@ const researchEssay = read('src/renderer/src/components/ResearchEssay.tsx')
 const researchOperations = read('src/renderer/src/components/ResearchOperationalDetails.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
+const workspaceTools = read('src/renderer/src/components/WorkspaceToolsPanel.tsx')
+const workspaceFiles = read('src/renderer/src/components/WorkspaceFilesPanel.tsx')
+const bottomWorkbench = read('src/renderer/src/components/BottomWorkbench.tsx')
 const sidebar = read('src/renderer/src/components/Sidebar.tsx')
 const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
@@ -117,15 +141,15 @@ check(
 )
 
 const colorTokens: Array<{ names: string[]; values: string[]; label: string }> = [
-  { names: ['--bg-under', '--replica-bg-under'], values: ['#000', '#000000'], label: 'underlay' },
-  { names: ['--surface', '--replica-surface'], values: ['#090909'], label: 'surface' },
-  { names: ['--surface-soft', '--replica-surface-soft'], values: ['#0d0d0d'], label: 'soft surface' },
-  { names: ['--surface-card', '--replica-surface-card'], values: ['#111', '#111111'], label: 'card surface' },
-  { names: ['--surface-control', '--replica-surface-control'], values: ['#111', '#111111'], label: 'control surface' },
-  { names: ['--elevated-opaque'], values: ['#111', '#111111'], label: 'elevated surface' },
-  { names: ['--text', '--replica-text'], values: ['#f2f2f2'], label: 'primary text' },
-  { names: ['--text-secondary', '--replica-text-secondary'], values: ['#a3a3a3'], label: 'secondary text' },
-  { names: ['--replica-border-default'], values: ['#ffffff18'], label: 'border' },
+  { names: ['--bg-under', '--replica-bg-under'], values: ['#1b1d20'], label: 'charcoal underlay' },
+  { names: ['--surface', '--replica-surface'], values: ['#24272b'], label: 'neutral surface' },
+  { names: ['--surface-soft', '--replica-surface-soft'], values: ['#282c31'], label: 'soft neutral surface' },
+  { names: ['--surface-card', '--replica-surface-card'], values: ['#2d3136'], label: 'card surface' },
+  { names: ['--surface-control', '--replica-surface-control'], values: ['#343940'], label: 'control surface' },
+  { names: ['--elevated-opaque'], values: ['#30343a'], label: 'elevated surface' },
+  { names: ['--text', '--replica-text'], values: ['#f3f4f6'], label: 'primary text' },
+  { names: ['--text-secondary', '--replica-text-secondary'], values: ['#c1c5cb'], label: 'secondary text' },
+  { names: ['--replica-border-default'], values: ['#ffffff1c'], label: 'border' },
   { names: ['--blue', '--replica-blue'], values: ['#339cff'], label: 'blue accent' },
   { names: ['--green', '--replica-green'], values: ['#34d17b'], label: 'green accent' },
   { names: ['--orange', '--replica-orange'], values: ['#ff5c00'], label: 'orange accent' },
@@ -139,10 +163,270 @@ for (const token of colorTokens) {
     `replica ${token.label} color token is present`
   )
 }
+check(
+  /\.app\[data-ui='replica'\]\[data-theme='light'\][^{]*\{[\s\S]*?--bg-under\s*:\s*#d8dce1[\s\S]*?--surface\s*:\s*#e7e9ec[\s\S]*?--text\s*:\s*#20242a/.test(replicaCss),
+  'light theme uses a medium-gray surface system with dark readable text'
+)
+check(
+  /--terminal-bg\s*:\s*#202328/.test(replicaCss) &&
+    /--terminal-bg\s*:\s*#f1f2f4/.test(replicaCss),
+  'terminal colors are explicitly readable in both dark and light themes'
+)
 
 check(!chat.includes('replica-app-symbol'), 'chat omits the redundant single-app symbol')
 check(chat.includes('replica-suggestion-grid'), 'chat includes the replica suggestion grid')
-check(chat.includes('replica-feature-banner'), 'chat includes the replica feature banner')
+check(
+  app.includes('<WorkspaceToolsPanel') &&
+  workspaceTools.includes('<ProjectPreviewPanel') &&
+  workspaceTools.includes('<WorkspaceFilesPanel') &&
+  workspaceTools.includes('<TerminalPane'),
+  'Workspace mounts the Browser, Computer Use, Files, Review, and Terminal tool canvas'
+)
+check(
+  workspaceTools.includes('akorith.workspaceToolsWidth') &&
+    workspaceTools.includes('workspace-tools-resizer') &&
+    workspaceTools.includes('is-closed') &&
+    !workspaceTools.includes('workspace-tools-rail') &&
+    !workspaceTools.includes('workspace-tools-close'),
+  'Workspace tools close to zero width and have no duplicate rail or panel-close controls'
+)
+check(
+  workspaceTools.includes('const [openTabs, setOpenTabs]') &&
+    workspaceTools.includes('const [mountedTools, setMountedTools]') &&
+    workspaceTools.includes('handledRequestRef') &&
+    workspaceTools.includes('workspace-tool-tabs') &&
+    !workspaceTools.includes('workspace-tool-tab-add') &&
+    workspaceTools.includes('workspace-tools-launcher') &&
+    workspaceTools.includes('Choose a workspace tool') &&
+    !workspaceTools.includes('pickerOpen') &&
+    workspaceTools.includes('workspace-tool-pane') &&
+    workspaceTools.includes("mountedTools.has('review')") &&
+    workspaceTools.includes("mountedTools.has('files')"),
+  'Workspace tools use a centered launcher, horizontal tabs, and preserved mounted tool context'
+)
+check(
+  bottomWorkbench.includes('workbench-file-tabs') &&
+    bottomWorkbench.includes('workbench-line-marker') &&
+    bottomWorkbench.includes('workbench-diff-line') &&
+    bottomWorkbench.includes('workbench-line-number') &&
+    bottomWorkbench.includes('file.additions') &&
+    bottomWorkbench.includes('file.deletions'),
+  'Review provides compact file tabs and a numbered old/new/marker/code diff'
+)
+check(
+  app.includes('onWorkspaceToolRequest={requestWorkspaceTool}') &&
+    app.includes('requestedTool={workspaceToolRequest}') &&
+    app.includes('activeSessionIdRef.current !== request.sessionId') &&
+    chat.includes('activity.surface') &&
+    chat.includes('activeSessionRef.current !== sessionId') &&
+    chat.includes("requestWorkspaceTool('review', 'changes')") &&
+    /activity\.kind\s*===\s*['"]file['"]\s*\?\s*['"]files['"]/.test(read('src/main/providers/registry.ts')),
+  'structured file activity and completed change evidence open the relevant tool without label parsing'
+)
+check(
+  (app.match(/aria-label="Toggle workspace tools"/g) ?? []).length === 1 &&
+    app.includes("const showChromeWorkbench = view === 'workspace' && Boolean(activeProject?.path)") &&
+    app.includes('const workspaceToolsVisible = showChromeWorkbench && workbenchOpen') &&
+    app.includes('if (!activeProject?.path) return') &&
+    !app.includes('workspaceHasToolTabs') &&
+    !app.includes("tool: 'files'") &&
+    !app.includes('aria-label="Toggle sidebar panel"'),
+  'the persistent surface toolbar control opens the neutral tool launcher'
+)
+check(
+  highestZIndex(selectorBlocks(replicaCss, '.app-surface-toolbar')) >
+    highestZIndex(selectorBlocks(replicaCss, '.workspace-tools.is-open')),
+  'workspace tool toggle remains clickable above the narrow full-surface tool overlay'
+)
+check(
+  selectorBlocks(
+    replicaCss,
+    '.app-surface:has(.workspace-tools.is-open) .app-surface-toolbar-left'
+  ).some((block) => /display\s*:\s*none/.test(block)),
+  'narrow full-surface tools hide the project label instead of overlapping the tool tabs'
+)
+const closedToolPanel = selectorBlocks(replicaCss, '.workspace-tools.is-closed').at(-1) ?? ''
+const finalDiffCode = selectorBlocks(replicaCss, '.workbench-diff-line code').at(-1) ?? ''
+check(
+  /width\s*:\s*0/.test(closedToolPanel) &&
+    /flex-basis\s*:\s*0/.test(closedToolPanel) &&
+    /visibility\s*:\s*hidden/.test(closedToolPanel),
+  'closed workspace tools leave no rail or reserved layout width'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-tools-resizer').some((block) =>
+    /top\s*:\s*0/.test(block) &&
+    /bottom\s*:\s*0/.test(block) &&
+    /cursor\s*:\s*col-resize/.test(block)
+  ) &&
+    selectorBlocks(replicaCss, '.workspace-tools-resizer::after').some((block) =>
+      /display\s*:\s*none/.test(block) &&
+      /content\s*:\s*none/.test(block)
+    ),
+  'workspace tool resize target stays full-height without a hover rail'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-tool-tabs').some((block) =>
+    /height\s*:\s*34px/.test(block) &&
+    /inset\s*:\s*0\s+0\s+auto/.test(block)
+  ) &&
+    selectorBlocks(replicaCss, '.workspace-tool-tab-list').some((block) =>
+      /overflow-x\s*:\s*auto/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.workspace-tool-tab').some((block) =>
+      /min-width\s*:\s*124px/.test(block) &&
+      /flex\s*:\s*0\s+0\s+auto/.test(block)
+    ),
+  'workspace tools use a thin horizontal tab strip with readable tab widths'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-tools-content.has-tabs').some((block) =>
+    /inset\s*:\s*34px\s+0\s+0/.test(block)
+  ),
+  'workspace tool content begins immediately below the thin tab strip'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-tools').some((block) =>
+    /border-top-left-radius\s*:\s*10px/.test(block) &&
+    /border-top\s*:\s*1px/.test(block) &&
+    /border-left\s*:\s*1px/.test(block)
+  ),
+  'open workspace tools form a rounded sibling surface'
+)
+check(
+  /white-space\s*:\s*pre/.test(finalDiffCode) &&
+    /overflow-wrap\s*:\s*normal/.test(finalDiffCode) &&
+    selectorBlocks(replicaCss, '.workbench-diff-line').some((block) =>
+      /grid-template-columns\s*:\s*48px\s+48px\s+22px/.test(block)
+    ),
+  'Review keeps GitHub-style non-wrapping code with separate old, new and marker gutters'
+)
+check(
+  workspaceTools.includes('tabIndex={selected ? 0 : -1}') &&
+    workspaceTools.includes('navigateTabs(event, tool)') &&
+    workspaceTools.includes('className="workspace-tool-tab-select"') &&
+    workspaceTools.includes('className="workspace-tool-tab-close"') &&
+    workspaceTools.includes('aria-label={`Close ${item.label}`}') &&
+    !workspaceTools.includes('Delete to close') &&
+    bottomWorkbench.includes('navigateFileTabs(event, index)') &&
+    bottomWorkbench.includes('tabIndex={selectedPath === file.path ? 0 : -1}'),
+  'tool tabs have separate accessible close buttons and roving keyboard focus'
+)
+check(
+  app.includes("key={activeProject?.id ?? 'no-project'}") &&
+    workspaceTools.includes('mounted.delete(tool)'),
+  'project changes remount tool resources and closing a tab releases its mounted surface'
+)
+check(
+  workspaceTools.includes('refreshKey={refreshKey}') &&
+    /\[open,\s*load,\s*refreshKey\]/.test(bottomWorkbench) &&
+    chat.includes("reason === 'activity' && requestedTools.has(tool)"),
+  'final change evidence refreshes an already-open Review tab'
+)
+check(
+  preview.includes('project-preview-address') &&
+    preview.includes('workspaceVariant') &&
+    preview.includes('mapPreviewPoint') &&
+    preview.includes('project-preview-display') &&
+    preview.includes('new ResizeObserver(scheduleResize)') &&
+    preview.includes('window.api.projectPreview.setViewport') &&
+    preview.includes('frameImageRef.current?.getBoundingClientRect()') &&
+    /!workspaceVariant\s*&&\s*<p>/.test(preview) &&
+    selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-stage').some((block) =>
+      /padding\s*:\s*0/.test(block) && /overflow\s*:\s*hidden/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-display').some((block) =>
+      /display\s*:\s*flex/.test(block) && /flex\s*:\s*1\s+1\s+auto/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-frame img').some((block) =>
+      /object-fit\s*:\s*fill/.test(block) && /height\s*:\s*100%/.test(block)
+    ),
+  'Browser uses compact address chrome and a real responsive viewport that fills the tool surface'
+)
+check(
+  workspaceActivity.includes('ProgressiveNarrative') &&
+  workspaceActivity.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
+    workspaceActivity.includes('liveAnnouncement') &&
+    workspaceActivity.includes('workspace-activity-headlines') &&
+    workspaceActivity.includes('workspace-activity-sr') &&
+    stylesCss.includes('.workspace-activity-headline.is-plan') &&
+    stylesCss.includes('.workspace-activity-headline.is-file') &&
+    /min-block-size\s*:\s*calc\(1\.68em\s*\*\s*5\)/.test(stylesCss),
+  'Workspace activity restores purple and green live headings above the progressive narrative'
+)
+
+const mappedCenter = mapPreviewPoint(
+  { left: 0, top: 0, width: 100, height: 100 },
+  { width: 200, height: 100 },
+  50,
+  50,
+  'fill'
+)
+check(
+  mappedCenter?.x === 100 &&
+    mappedCenter.y === 50 &&
+    mapPreviewPoint(
+      { left: 0, top: 0, width: 100, height: 100 },
+      { width: 200, height: 100 },
+      50,
+      10,
+      'fill'
+    )?.y === 10 &&
+    mapPreviewPoint(
+      { left: 0, top: 0, width: 100, height: 100 },
+      { width: 200, height: 100 },
+      100,
+      50,
+      'fill'
+    ) === null,
+  'Computer Use pointer mapping targets the full responsive viewport without letterboxing'
+)
+
+const activityNarrative = buildWorkspaceActivityNarrative({
+  projectName: 'Akorith',
+  taskPrompt: 'Create an index.html snake game',
+  active: true,
+  failed: false,
+  activities: [
+    { kind: 'file', label: 'Writing index.html', status: 'complete', timestamp: 1 },
+    { kind: 'command', label: 'npm run check', detail: 'Passed', status: 'complete', timestamp: 2 }
+  ]
+})
+check(
+  activityNarrative.includes('Create an index.html snake game') &&
+    activityNarrative.includes('Writing index.html') &&
+    activityNarrative.includes('npm run check') &&
+    activityNarrative.includes('Passed'),
+  'Workspace narrative stays task-aware and uses concrete provider evidence'
+)
+
+const parsedDiff = parseDiffRows([
+  'diff --git a/example.ts b/example.ts',
+  'index 1111111..2222222 100644',
+  '--- a/example.ts',
+  '+++ b/example.ts',
+  '@@ -4,2 +4,2 @@',
+  '---source beginning with dashes',
+  '+++source beginning with pluses',
+  ' context',
+  '\\ No newline at end of file',
+  ''
+].join('\n'))
+check(
+  parsedDiff.length === 5 &&
+    parsedDiff[1]?.kind === 'deletion' &&
+    parsedDiff[1]?.content === '--source beginning with dashes' &&
+    parsedDiff[2]?.kind === 'addition' &&
+    parsedDiff[2]?.content === '++source beginning with pluses' &&
+    parsedDiff[3]?.oldLine === 5 &&
+    parsedDiff[3]?.newLine === 5,
+  'unified diff parsing keeps source prefixes and ignores the trailing separator row'
+)
+check(
+  workspaceFiles.includes('window.api.projects.readFile') &&
+  workspaceFiles.includes('akorith:request-file-edit'),
+  'Files tool reads project-scoped code and prepares explicit edit requests'
+)
 check(!chat.includes('replica-composer-context'), 'chat omits the redundant static composer context strip')
 check(!sidebar.includes('direction="down"'), 'Akorith brand omits the single-app dropdown chevron')
 check(chat.includes('Ask Akorith anything…'), 'general composer uses finished Akorith placeholder copy')
@@ -206,8 +490,8 @@ check(
 )
 check(
   !workspaceActivity.includes('workspace-activity-icon') &&
-  selectorBlocks(stylesCss, '.workspace-activity-row').some((block) => /display\s*:\s*block/.test(block)),
-  'Workspace activity prose starts flush without leading status icons'
+    selectorBlocks(stylesCss, '.workspace-activity-headline i').some((block) => /width\s*:\s*6px/.test(block)),
+  'Workspace activity headings use compact status dots instead of large leading icons'
 )
 check(
   !workspaceStepDock.includes('const STEPS') &&
@@ -286,14 +570,22 @@ check(
   composerFocusBlocks.every((block) => !/(?:--blue|#339cff)/i.test(block)),
   'composer focus treatment has no blue border'
 )
-const finalComposerBox = selectorBlocks(replicaCss, '.composer-box').at(-1) ?? ''
+const finalComposerBox = selectorBlocks(replicaCss, '.composer-box')
+  .filter((block) => /border-radius\s*:/.test(block))
+  .at(-1) ?? ''
 const finalComposerFocus = selectorBlocks(replicaCss, '.composer-box:focus-within').at(-1) ?? ''
+const finalComposerDock = selectorBlocks(replicaCss, '.composer-dock')
+  .filter((block) => /border-top\s*:/.test(block))
+  .at(-1) ?? ''
 check(
   /border\s*:\s*0\s*!important/.test(finalComposerBox) &&
+  /border-radius\s*:\s*var\(--radius-composer\)\s*!important/.test(finalComposerBox) &&
   /box-shadow\s*:\s*none\s*!important/.test(finalComposerBox) &&
   /border\s*:\s*0\s*!important/.test(finalComposerFocus) &&
-  /box-shadow\s*:\s*none\s*!important/.test(finalComposerFocus),
-  'composer has no resting or focus border ring'
+  /box-shadow\s*:\s*none\s*!important/.test(finalComposerFocus) &&
+  /border-top\s*:\s*0\s*!important/.test(finalComposerDock) &&
+  hasToken(replicaCss, ['--radius-composer'], ['16px']),
+  'composer uses a 16px borderless surface with no top separator'
 )
 check(
   selectorBlocks(replicaCss, '.chat-msg.user').some((block) =>
@@ -341,11 +633,11 @@ check(
   'Benchmark queue is bounded, persisted and fully cancellable'
 )
 check(
-  /--benchmark-bg\s*:\s*#090909/.test(benchmarkCss) &&
-    /--benchmark-panel-raised\s*:\s*#111/.test(benchmarkCss) &&
+  /--benchmark-bg\s*:\s*var\(--surface\)/.test(benchmarkCss) &&
+    /--benchmark-panel-raised\s*:\s*var\(--surface-card\)/.test(benchmarkCss) &&
     /--benchmark-radius-lg\s*:\s*8px/.test(benchmarkCss) &&
     !/linear-gradient|radial-gradient/i.test(benchmarkCss),
-  'Benchmark uses neutral black surfaces, restrained radii and no gradients'
+  'Benchmark inherits the neutral theme surfaces, restrained radii and no gradients'
 )
 check(
   benchmarkCss.includes('@container benchmark-experience (max-width: 980px)') &&
@@ -369,6 +661,61 @@ check(
 for (const width of [720, 540, 400]) {
   check(hasBreakpoint(replicaCss, width), `replica CSS includes the ${width}px mobile breakpoint`)
 }
+
+const responsiveWidths = [400, 540, 720, 900, 1100, 1366, 1920] as const
+const responsiveHeights = [520, 640] as const
+const responsiveSurfaces = [
+  { area: 'App shell', selector: '.app-view-stage' },
+  { area: 'Workspace chat + composer', selector: '.chat-panel' },
+  { area: 'Review', selector: '.workbench.is-embedded' },
+  { area: 'Terminal', selector: '.workspace-terminal-shell' },
+  { area: 'Browser', selector: '.project-preview.is-workspace .project-preview-display' },
+  { area: 'Computer Use', selector: '.project-preview.is-workspace .project-preview-type' },
+  { area: 'Files', selector: '.workspace-files-panel' },
+  { area: 'Research', selector: '.research-page-wrap' },
+  { area: 'Benchmark', selector: '.benchmark-experience' },
+  { area: 'Plugins', selector: '.plugins-page' },
+  { area: 'Settings', selector: '.settings-page-inner' },
+  { area: 'Dashboard', selector: '.profile-dashboard' }
+] as const
+const responsiveCss = `${replicaCss}\n${stylesCss}\n${benchmarkCss}`
+
+function hasIntrinsicWidthRelease(selector: string): boolean {
+  return selectorBlocks(responsiveCss, selector).some((block) =>
+    /(?:min-width\s*:\s*0|max-width\s*:\s*(?:100%|calc\()|width\s*:\s*100%|overflow(?:-x)?\s*:\s*(?:hidden|auto))/.test(block)
+  )
+}
+
+let responsiveTestCount = 0
+for (const width of responsiveWidths) {
+  const widthContract =
+    width > 1100 ||
+    hasBreakpoint(replicaCss, width) ||
+    (width === 1100 && hasBreakpoint(replicaCss, 1100))
+
+  for (const surface of responsiveSurfaces) {
+    responsiveTestCount += 1
+    check(
+      widthContract && hasIntrinsicWidthRelease(surface.selector),
+      `responsive ${width}px · ${surface.area} releases intrinsic width and owns overflow`
+    )
+  }
+}
+
+for (const height of responsiveHeights) {
+  for (const surface of responsiveSurfaces) {
+    responsiveTestCount += 1
+    check(
+      hasHeightBreakpoint(replicaCss, height) && hasIntrinsicWidthRelease(surface.selector),
+      `responsive short ${height}px · ${surface.area} remains bounded`
+    )
+  }
+}
+
+check(
+  responsiveTestCount === 108,
+  'responsive matrix executes 108 viewport-and-surface contract tests'
+)
 
 const mainWindowSource = main.slice(main.indexOf('const mainWindow = new BrowserWindow'))
 const mainMinWidth = Number(mainWindowSource.match(/\bminWidth\s*:\s*(\d+)/)?.[1])
@@ -410,4 +757,7 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
+console.log(
+  `\n[responsive-summary] ${responsiveTestCount} responsive tests · widths ${responsiveWidths.join(', ')}px · short heights ${responsiveHeights.join(', ')}px · areas: ${responsiveSurfaces.map((surface) => surface.area).join(', ')}`
+)
 console.log('\nReplica UI verification passed.')

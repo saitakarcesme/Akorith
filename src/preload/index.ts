@@ -67,6 +67,7 @@ interface ChatActivityPayload {
   label: string
   detail?: string
   status?: 'running' | 'complete' | 'error'
+  surface?: 'review' | 'terminal' | 'browser' | 'computer' | 'files'
   timestamp: number
 }
 
@@ -156,6 +157,8 @@ const history = Object.freeze({
 const projects = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
   files: (projectId: string, query?: string): Promise<unknown> => ipcRenderer.invoke('projects:files', { projectId, query }),
+  readFile: (projectId: string, filePath: string): Promise<unknown> =>
+    ipcRenderer.invoke('projects:readFile', { projectId, filePath }),
   create: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:create', args),
   openFolder: (projectId?: string | null): Promise<unknown> =>
     ipcRenderer.invoke('projects:openFolder', { projectId }),
@@ -474,6 +477,8 @@ const projectPreview = Object.freeze({
   start: (projectPath: string, script?: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:start', { projectPath, script }),
   active: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:active', projectPath),
   status: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:status', id),
+  setViewport: (id: string, width: number, height: number): Promise<unknown> =>
+    ipcRenderer.invoke('projectPreview:setViewport', id, width, height),
   capture: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:capture', id),
   stop: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:stop', id),
   open: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:open', id),

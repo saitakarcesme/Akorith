@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   lazy,
+  startTransition,
   Suspense,
   useCallback,
   useEffect,
@@ -9,15 +10,19 @@ import {
   useState
 } from 'react'
 import Sidebar from './components/Sidebar'
-import BottomWorkbench from './components/BottomWorkbench'
 import ChatPanel from './components/ChatPanel'
 import { ChevronIcon, PanelsIcon } from './components/icons'
+import type {
+  WorkspaceToolId,
+  WorkspaceToolRequest
+} from './components/WorkspaceToolsPanel'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 const Dashboard = lazy(() => import('./components/Dashboard'))
 const Plugins = lazy(() => import('./components/Plugins'))
 const TestPage = lazy(() => import('./components/TestPage'))
 const ResearchPage = lazy(() => import('./components/ResearchPage'))
+const WorkspaceToolsPanel = lazy(() => import('./components/WorkspaceToolsPanel'))
 
 export type ChatMode = 'workspace' | 'general'
 export type AppView = ChatMode | 'dashboard' | 'test' | 'research' | 'plugins'
@@ -305,25 +310,18 @@ function SurfaceToolbar({
         {scope && <span>{scope}</span>}
       </div>
       <div className="app-surface-toolbar-right">
-        <button
-          type="button"
-          className={showWorkbench && workbenchOpen ? 'is-active' : ''}
-          aria-label="Toggle bottom panel"
-          aria-pressed={showWorkbench ? workbenchOpen : undefined}
-          title={showWorkbench ? 'Toggle project changes' : 'Bottom panel'}
-          disabled={!showWorkbench}
-          onClick={onToggleWorkbench}
-        >
-          <span className="replica-panel-glyph replica-panel-bottom-glyph" />
-        </button>
-        <button
-          type="button"
-          aria-label="Toggle sidebar panel"
-          title="Toggle sidebar"
-          onClick={() => window.dispatchEvent(new Event('akorith:toggle-sidebar'))}
-        >
-          <span className="replica-panel-glyph replica-panel-right-glyph" />
-        </button>
+        {showWorkbench && (
+          <button
+            type="button"
+            className={workbenchOpen ? 'is-active' : ''}
+            aria-label="Toggle workspace tools"
+            aria-pressed={workbenchOpen}
+            title="Toggle workspace tools"
+            onClick={onToggleWorkbench}
+          >
+            <PanelsIcon size={15} />
+          </button>
+        )}
       </div>
     </header>
   )
@@ -364,10 +362,18 @@ export default function App(): JSX.Element {
   const [startupError, setStartupError] = useState<string | null>(null)
   const [startupRetry, setStartupRetry] = useState(0)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const activeSessionIdRef = useRef<string | null>(null)
+  const updateActiveSessionId = useCallback((sessionId: string | null): void => {
+    activeSessionIdRef.current = sessionId
+    setActiveSessionId(sessionId)
+  }, [])
   const [activeProject, setActiveProject] = useState<ProjectRow | null>(null)
   const [historySel, setHistorySel] = useState<HistorySelection | null>(null)
-  // Phase 33.17: the bottom workbench (Changes / Runtime / Missions) panel.
-  const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const [workbenchOpen, setWorkbenchOpen] = useState(() => {
+    try { return localStorage.getItem('akorith.workspaceToolsOpen') === 'true' } catch { return false }
+  })
+  const [workspaceToolRequest, setWorkspaceToolRequest] = useState<WorkspaceToolRequest | null>(null)
+  const [toolAutoOpenBlocked, setToolAutoOpenBlocked] = useState(false)
   const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)
   const [navBackStack, setNavBackStack] = useState<AppView[]>([])
   const [navForwardStack, setNavForwardStack] = useState<AppView[]>([])
@@ -386,6 +392,47 @@ export default function App(): JSX.Element {
       else next.delete(sessionId)
       return next
     })
+  }, [])
+
+  useEffect(() => {
+    if (pendingSessions.size === 0) setToolAutoOpenBlocked(false)
+  }, [pendingSessions.size])
+
+  const requestWorkspaceTool = useCallback((request: {
+    projectId: string
+    sessionId: string
+    requestId: string
+    tool: WorkspaceToolId
+    reason: 'activity' | 'changes'
+  }): void => {
+    if (
+      toolAutoOpenBlocked ||
+      view !== 'workspace' ||
+      activeProject?.id !== request.projectId ||
+      activeSessionIdRef.current !== request.sessionId
+    ) return
+    setWorkbenchOpen(true)
+    setWorkspaceToolRequest((current) => ({
+      projectId: request.projectId,
+      tool: request.tool,
+      nonce: (current?.nonce ?? 0) + 1
+    }))
+  }, [activeProject?.id, toolAutoOpenBlocked, view])
+
+  const toggleWorkspaceTools = useCallback((): void => {
+    if (!activeProject?.path) return
+    if (workbenchOpen) {
+      if (pendingSessions.size > 0) setToolAutoOpenBlocked(true)
+      setWorkbenchOpen(false)
+      return
+    }
+    setToolAutoOpenBlocked(false)
+    setWorkbenchOpen(true)
+  }, [activeProject?.path, pendingSessions.size, workbenchOpen])
+
+  const openWorkspaceTools = useCallback((): void => {
+    setToolAutoOpenBlocked(false)
+    setWorkbenchOpen(true)
   }, [])
 
   useEffect(() => {
@@ -451,19 +498,19 @@ export default function App(): JSX.Element {
       setView('workspace')
       if (!project?.id) {
         selectHistory(null, 'workspace')
-        setActiveSessionId(null)
+        updateActiveSessionId(null)
         return
       }
       try {
         const session = await latestSession(project.id)
         selectHistory(session?.id ?? null, 'workspace', session?.providerId)
-        if (!session) setActiveSessionId(null)
+        if (!session) updateActiveSessionId(null)
       } catch {
         selectHistory(null, 'workspace')
-        setActiveSessionId(null)
+        updateActiveSessionId(null)
       }
     },
-    [latestSession, selectHistory]
+    [latestSession, selectHistory, updateActiveSessionId]
   )
 
   const openGeneralChat = useCallback(
@@ -471,19 +518,19 @@ export default function App(): JSX.Element {
       setView('general')
       if (providerId) {
         selectHistory(null, 'general', providerId)
-        setActiveSessionId(null)
+        updateActiveSessionId(null)
         return
       }
       try {
         const session = await latestSession(null)
         selectHistory(session?.id ?? null, 'general', session?.providerId)
-        if (!session) setActiveSessionId(null)
+        if (!session) updateActiveSessionId(null)
       } catch {
         selectHistory(null, 'general')
-        setActiveSessionId(null)
+        updateActiveSessionId(null)
       }
     },
-    [latestSession, selectHistory]
+    [latestSession, selectHistory, updateActiveSessionId]
   )
 
   // Phase 14.1: the sidebar "New chat" action — always opens a FRESH general chat
@@ -491,8 +538,8 @@ export default function App(): JSX.Element {
   const startNewGeneralChat = useCallback((): void => {
     setView('general')
     selectHistory(null, 'general')
-    setActiveSessionId(null)
-  }, [selectHistory])
+    updateActiveSessionId(null)
+  }, [selectHistory, updateActiveSessionId])
 
   // Phase 33.6: start a FRESH chat inside a specific project (multiple chats per
   // project). Keeps the project active so its agents/cwd stay bound, but opens an
@@ -503,9 +550,9 @@ export default function App(): JSX.Element {
       setActiveProject(project)
       setView('workspace')
       selectHistory(null, 'workspace')
-      setActiveSessionId(null)
+      updateActiveSessionId(null)
     },
-    [selectHistory]
+    [selectHistory, updateActiveSessionId]
   )
 
   const applyStartupSnapshot = useCallback(
@@ -524,7 +571,7 @@ export default function App(): JSX.Element {
       if (restoredView === 'general') {
         setActiveProject(null)
         setView('general')
-        setActiveSessionId(restoredSession?.id ?? null)
+        updateActiveSessionId(restoredSession?.id ?? null)
         selectHistory(restoredSession?.id ?? null, 'general', restoredSession?.providerId)
         return
       }
@@ -534,19 +581,19 @@ export default function App(): JSX.Element {
         const session = restoredSession ?? (project ? latestSessionFrom(snapshot.sessions, project.id) : null)
         setActiveProject(project)
         setView('workspace')
-        setActiveSessionId(session?.id ?? null)
+        updateActiveSessionId(session?.id ?? null)
         selectHistory(session?.id ?? null, 'workspace', session?.providerId)
         return
       }
 
       setActiveProject(restoredProject)
       setView(restoredView)
-      setActiveSessionId(restoredSession?.id ?? null)
+      updateActiveSessionId(restoredSession?.id ?? null)
       if (restoredSession) {
         selectHistory(restoredSession.id, restoredSession.projectId ? 'workspace' : 'general', restoredSession.providerId)
       }
     },
-    [selectHistory]
+    [selectHistory, updateActiveSessionId]
   )
 
   useEffect(() => {
@@ -613,6 +660,10 @@ export default function App(): JSX.Element {
     void window.api.settings.setTheme(theme)
   }, [theme])
 
+  useEffect(() => {
+    try { localStorage.setItem('akorith.workspaceToolsOpen', String(workbenchOpen)) } catch { /* ignore */ }
+  }, [workbenchOpen])
+
   const handleNavigate = useCallback(
     (nextView: AppView): void => {
       if (nextView === 'general') {
@@ -623,14 +674,17 @@ export default function App(): JSX.Element {
         void openWorkspaceForProject(activeProject)
         return
       }
-      setView(nextView)
+      // Heavy feature chunks may still be resolving on the first visit.
+      // Keep the current surface interactive until React can commit the next
+      // section instead of replacing the whole stage with a blocking frame.
+      startTransition(() => setView(nextView))
     },
     [activeProject, openGeneralChat, openWorkspaceForProject]
   )
 
   const selectSession = useCallback(
     (sessionId: string, project?: ProjectRow | null, providerId?: string) => {
-      setActiveSessionId(sessionId)
+      updateActiveSessionId(sessionId)
       if (project) {
         setActiveProject(project)
         setView('workspace')
@@ -640,7 +694,7 @@ export default function App(): JSX.Element {
       setView('general')
       selectHistory(sessionId, 'general', providerId)
     },
-    [selectHistory]
+    [selectHistory, updateActiveSessionId]
   )
 
   // Centralized "Open Project" used by both the sidebar and the center empty
@@ -699,6 +753,7 @@ export default function App(): JSX.Element {
           : 'Workspace'
         : undefined
   const showChromeWorkbench = view === 'workspace' && Boolean(activeProject?.path)
+  const workspaceToolsVisible = showChromeWorkbench && workbenchOpen
   const activeChatMode: ChatMode = view === 'general' || view === 'workspace'
     ? view
     : historySel?.mode ?? (activeProject ? 'workspace' : 'general')
@@ -753,13 +808,18 @@ export default function App(): JSX.Element {
           title={view === 'workspace' && activeProject && activeSessionId ? chromeTitle : view === 'general' && activeSessionId ? chromeTitle : undefined}
           scope={view === 'workspace' && activeProject && activeSessionId ? chromeScope : undefined}
           showWorkbench={showChromeWorkbench}
-          workbenchOpen={workbenchOpen}
-          onToggleWorkbench={() => setWorkbenchOpen((value) => !value)}
+          workbenchOpen={workspaceToolsVisible}
+          onToggleWorkbench={toggleWorkspaceTools}
         />
         <div className="app-view-stage">
-      {/* Chat-first workspace. CLIs run headlessly and stream normalized progress
-          into the conversation; no terminal or Agent Activity surface is mounted. */}
-      <div className="workspace" style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}>
+      <div
+        className={`workspace ${
+          view === 'workspace' && activeProject?.path
+            ? `has-workspace-tools ${workspaceToolsVisible ? 'tools-open' : 'tools-closed'}`
+            : ''
+        }`}
+        style={{ display: view === 'workspace' || view === 'general' ? 'flex' : 'none' }}
+      >
         <ChatPanel
           mode={activeChatMode}
           active={view === 'workspace' || view === 'general'}
@@ -768,15 +828,22 @@ export default function App(): JSX.Element {
           onOpenProject={() => void openProject()}
           onCreateProject={requestCreateProject}
           onHistoryChange={bumpHistory}
-          onActiveSession={setActiveSessionId}
+          onActiveSession={updateActiveSessionId}
           pendingSessions={pendingSessions}
           onPendingChange={setSessionPending}
+          onWorkspaceToolRequest={requestWorkspaceTool}
         />
-        <BottomWorkbench
-          activeProject={view === 'general' ? null : activeProject}
-          open={workbenchOpen}
-          onClose={() => setWorkbenchOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <WorkspaceToolsPanel
+            key={activeProject?.id ?? 'no-project'}
+            project={view === 'workspace' ? activeProject : null}
+            open={workbenchOpen}
+            active={view === 'workspace'}
+            refreshKey={historyVersion}
+            requestedTool={workspaceToolRequest}
+            onOpen={openWorkspaceTools}
+          />
+        </Suspense>
       </div>
       {/* Heavy feature surfaces load only on first use. Long-running pages remain
           mounted after that first visit so navigation never interrupts a run. */}

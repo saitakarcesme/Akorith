@@ -8,14 +8,15 @@ import { createRequire } from 'module'
 import { loadConfig, getDigestSettings } from '../config'
 import { buildDigest } from '../digest'
 import {
-  addMessage,
+  beginChatTurn,
   getContextSummary,
   getRunningWorkspaceGoalForPath,
   getSessionMessages,
   getSessionProjectContext,
   recordUsageEvent,
   sessionExists,
-  setContextSummary
+  setContextSummary,
+  updateChatTurnAssistant
 } from '../db'
 import {
   buildOlderSummaryPrompt,
@@ -65,6 +66,7 @@ import {
   type IncomingChatAttachment,
   type StoredChatAttachment
 } from '../chat-attachments'
+import type { ChatLifecycleState } from '../../shared/chat-lifecycle'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
@@ -132,6 +134,7 @@ const MAX_CHAT_IMAGES = 4
 const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
 const VALID_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const PROVIDER_SNAPSHOT_CACHE_MS = 60_000
+const TOKEN_IPC_BATCH_MS = 16
 
 let providerSnapshotCache: {
   configSignature: string
@@ -141,6 +144,10 @@ let providerSnapshotCache: {
 let providerSnapshotInFlight: {
   configSignature: string
   request: Promise<ProviderInfo[]>
+} | null = null
+let providerInstanceCache: {
+  configSignature: string
+  value: Map<string, Provider>
 } | null = null
 
 function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider {
@@ -159,6 +166,10 @@ function loadExternalProvider(id: string, entry: ProviderConfigEntry): Provider 
 /** Build provider instances from the current config. Failures skip the
  *  provider (logged) — a bad entry must never take the app down. */
 function buildProviders(config: ReturnType<typeof loadConfig> = loadConfig()): Map<string, Provider> {
+  const configSignature = JSON.stringify(config.providers)
+  if (providerInstanceCache?.configSignature === configSignature) {
+    return providerInstanceCache.value
+  }
   const providers = new Map<string, Provider>()
   for (const [id, entry] of Object.entries(config.providers)) {
     if (!entry?.enabled || !VALID_ID.test(id)) continue
@@ -173,6 +184,7 @@ function buildProviders(config: ReturnType<typeof loadConfig> = loadConfig()): M
       console.error(`[registry] failed to load provider "${id}":`, err)
     }
   }
+  providerInstanceCache = { configSignature, value: providers }
   return providers
 }
 
@@ -235,10 +247,33 @@ export async function sendWorkspacePrompt(
 }
 
 /** The available-provider snapshot, also consumed by the Phase 6 router. */
-async function describeProvidersFresh(config: ReturnType<typeof loadConfig>): Promise<ProviderInfo[]> {
+async function describeProvidersFresh(
+  config: ReturnType<typeof loadConfig>,
+  force: boolean
+): Promise<ProviderInfo[]> {
   const providers = buildProviders(config)
   return Promise.all(
     [...providers.values()].map(async (provider): Promise<ProviderInfo> => {
+      if (provider.discover) {
+        try {
+          const discovered = await provider.discover(force)
+          return {
+            id: provider.id,
+            label: provider.label,
+            kind: provider.kind,
+            available: discovered.available,
+            models: discovered.available.ok ? discovered.models : []
+          }
+        } catch (err) {
+          return {
+            id: provider.id,
+            label: provider.label,
+            kind: provider.kind,
+            available: { ok: false, reason: err instanceof Error ? err.message : String(err) },
+            models: []
+          }
+        }
+      }
       let available: ProviderAvailability = { ok: false, reason: 'availability check failed' }
       try {
         available = await provider.isAvailable()
@@ -276,7 +311,7 @@ export async function describeProviders(force = false): Promise<ProviderInfo[]> 
     return providerSnapshotInFlight.request
   }
 
-  const request = describeProvidersFresh(config)
+  const request = describeProvidersFresh(config, force)
   providerSnapshotInFlight = { configSignature, request }
   try {
     const value = await request
@@ -319,8 +354,37 @@ function cleanActivity(activity: ProviderActivity): ProviderActivity {
     kind: activity.kind,
     label: clean(activity.label, 180) ?? 'Working',
     detail: clean(activity.detail, 500),
-    status: activity.status ?? 'running'
+    status: activity.status ?? 'running',
+    surface: activity.surface ?? (activity.kind === 'file' ? 'files' : undefined)
   }
+}
+
+function publicChatFailure(error: unknown): string {
+  return safeRuntimeError(error, 240)
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(
+      /\b(api[-_ ]?key|authorization|password|secret|token)(\s*[:=]\s*)([^\s,;]+)/gi,
+      '$1$2[redacted]'
+    )
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,}|xox[a-z]-[A-Za-z0-9-]{8,})\b/g, '[redacted]')
+}
+
+function durableFailureText(
+  state: Extract<ChatLifecycleState, 'error' | 'cancelled' | 'timed_out'>,
+  error: unknown,
+  workspace: boolean,
+  timeoutMs?: number
+): string {
+  const projectNote = workspace
+    ? ' Any project changes produced before it stopped remain available in Review and Files.'
+    : ''
+  if (state === 'cancelled') {
+    return `This request was stopped before Akorith could save a final response.${projectNote}`
+  }
+  if (state === 'timed_out') {
+    return `This request timed out${timeoutMs ? ` after ${timeoutMs}ms` : ''} before Akorith could save a final response.${projectNote}`
+  }
+  return `Akorith could not complete this request: ${publicChatFailure(error)}.${projectNote}`
 }
 
 async function completeWorkspaceBrowserAction(input: {
@@ -337,7 +401,8 @@ async function completeWorkspaceBrowserAction(input: {
   input.emit?.({
     kind: 'tool',
     label: `Opening the project preview in ${browserLabel}`,
-    status: 'running'
+    status: 'running',
+    surface: 'browser'
   })
   const outcome = await runWorkspaceBrowserAction({
     prompt: input.prompt,
@@ -367,7 +432,8 @@ async function completeWorkspaceBrowserAction(input: {
     kind: 'tool',
     label: outcome.label,
     detail: outcome.url,
-    status: 'complete'
+    status: 'complete',
+    surface: 'browser'
   })
   const text = input.result.text.trim()
   const receipt = `${outcome.label}: ${outcome.url}`
@@ -679,6 +745,8 @@ export function registerChatIpc(): void {
     // cross-chat / cross-project leakage is possible since only this session's
     // rows are read.
     let prior: ConvMessage[] = []
+    const requestStartedAt = Date.now()
+    let assistantMessageId: string | undefined
     if (sessionId) {
       try {
         prior = toConv(getSessionMessages(sessionId))
@@ -686,15 +754,24 @@ export function registerChatIpc(): void {
         console.error('[registry] failed to load session context:', err)
       }
       try {
-        addMessage(sessionId, 'user', args.prompt, args.providerId, args.model, storedAttachments)
+        assistantMessageId = beginChatTurn({
+          sessionId,
+          prompt: args.prompt,
+          providerId: args.providerId,
+          model: args.model,
+          requestId: args.requestId,
+          startedAt: requestStartedAt,
+          attachments: storedAttachments
+        }).assistantMessageId
       } catch (err) {
-        console.error('[registry] failed to persist user message:', err)
+        console.error('[registry] failed to persist durable chat turn:', err)
+        releaseWorkspaceWriterLease()
+        return { ok: false, error: 'Could not save this conversation turn. No model work was started.' }
       }
     }
 
     const sender = event.sender
     const controller = new AbortController()
-    const requestStartedAt = Date.now()
     const requestTimeoutMs = args.generation?.timeoutMs
     let requestTimedOut = false
     const requestTimeout = requestTimeoutMs
@@ -708,29 +785,37 @@ export function registerChatIpc(): void {
       // Opt-in repo context (Phase 6): a bounded digest the PROVIDER sees — the
       // stored user message and the usage event stay the clean typed prompt. A
       // digest failure never blocks the send.
-      let digest: string | null = null
-      try {
-        const digestSettings = getDigestSettings()
-        if (args.includeDigest === true && digestSettings.enabled) {
-          digest = await buildDigest({
+      const digestPromise = (async (): Promise<string | null> => {
+        try {
+          const digestSettings = getDigestSettings()
+          if (args.includeDigest !== true || !digestSettings.enabled) return null
+          return await buildDigest({
             ...digestSettings,
             workingDir: workspaceContext?.projectPath || digestSettings.workingDir
           })
+        } catch (err) {
+          console.error('[registry] repo digest failed — sending without context:', err)
+          return null
         }
-      } catch (err) {
-        console.error('[registry] repo digest failed — sending without context:', err)
-      }
-
-      // If the session is long, compress the older turns into a cached summary
-      // (a meta call — no usage_event); recent turns are sent verbatim.
-      let summary: string | null = null
-      if (sessionId && prior.length > 0) {
-        summary = await ensureOlderSummary(sessionId, prior, args.providerId, args.model, controller.signal)
-      }
-
-      const localAttachmentContext = args.providerId === 'local'
-        ? await inlineTextAttachmentContext(storedAttachments)
-        : ''
+      })()
+      // Context summarization, digest construction, attachment reads, and the
+      // pre-edit Git snapshot are independent. Start them together so CLI
+      // launch is not delayed by a main-process waterfall.
+      const summaryPromise = sessionId && prior.length > 0
+        ? ensureOlderSummary(sessionId, prior, args.providerId, args.model, controller.signal)
+        : Promise.resolve<string | null>(null)
+      const localAttachmentPromise = args.providerId === 'local'
+        ? inlineTextAttachmentContext(storedAttachments)
+        : Promise.resolve('')
+      const changesBeforePromise = workspaceContext?.projectPath && args.intent !== 'plan'
+        ? summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
+        : Promise.resolve(null)
+      const [digest, summary, localAttachmentContext, changesBefore] = await Promise.all([
+        digestPromise,
+        summaryPromise,
+        localAttachmentPromise,
+        changesBeforePromise
+      ])
       const localPlanContext = args.providerId === 'local' && args.intent === 'plan' && workspaceContext?.projectPath
         ? `\n\nProject snapshot:\n${renderProjectContext(inspectProject(workspaceContext.projectPath))}`
         : ''
@@ -750,9 +835,6 @@ export function registerChatIpc(): void {
           : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
-      const changesBefore = workspaceContext?.projectPath && args.intent !== 'plan'
-        ? await summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
-        : null
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
       let result: SendResult
       const emitActivity = (activity: ProviderActivity): void => {
@@ -766,42 +848,57 @@ export function registerChatIpc(): void {
       }
       try {
         emitActivity({ kind: 'status', label: 'Starting the selected model', status: 'running' })
-        const onToken = (token: string): void => {
-            if (!sender.isDestroyed()) {
-              sender.send('chat:token', { requestId: args.requestId, token })
-            }
+        let pendingToken = ''
+        let tokenTimer: ReturnType<typeof setTimeout> | null = null
+        const flushPendingToken = (): void => {
+          if (tokenTimer) clearTimeout(tokenTimer)
+          tokenTimer = null
+          if (!pendingToken) return
+          const token = pendingToken
+          pendingToken = ''
+          if (!sender.isDestroyed()) {
+            sender.send('chat:token', { requestId: args.requestId, token })
           }
-        result = workspaceContext?.projectPath && args.providerId === 'local' && args.intent !== 'plan'
-          ? await sendWorkspaceLocal(
-              provider,
-              args.prompt,
-              args.model,
-              workspaceContext.projectPath,
-              controller.signal,
-              emitActivity,
-              onToken,
-              args.generation,
-              args.usageSource
-            )
-          : await provider.send(
-              promptForProvider,
-              {
-                model: args.model,
-                signal: controller.signal,
-                workingDirectory: workspaceContext?.projectPath,
-                images: args.images ?? storedAttachments.filter((item) => item.kind === 'image' && item.dataBase64).map((item) => ({
-                  name: item.name,
-                  mimeType: item.mimeType,
-                  dataBase64: item.dataBase64!
-                })),
-                attachments: storedAttachments,
-                intent: args.intent ?? 'execute',
-                generation: args.generation,
-                usageSource: args.usageSource,
-                onActivity: emitActivity
-              },
-              onToken
-            )
+        }
+        const onToken = (token: string): void => {
+          pendingToken += token
+          if (!tokenTimer) tokenTimer = setTimeout(flushPendingToken, TOKEN_IPC_BATCH_MS)
+        }
+        try {
+          result = workspaceContext?.projectPath && args.providerId === 'local' && args.intent !== 'plan'
+            ? await sendWorkspaceLocal(
+                provider,
+                args.prompt,
+                args.model,
+                workspaceContext.projectPath,
+                controller.signal,
+                emitActivity,
+                onToken,
+                args.generation,
+                args.usageSource
+              )
+            : await provider.send(
+                promptForProvider,
+                {
+                  model: args.model,
+                  signal: controller.signal,
+                  workingDirectory: workspaceContext?.projectPath,
+                  images: args.images ?? storedAttachments.filter((item) => item.kind === 'image' && item.dataBase64).map((item) => ({
+                    name: item.name,
+                    mimeType: item.mimeType,
+                    dataBase64: item.dataBase64!
+                  })),
+                  attachments: storedAttachments,
+                  intent: args.intent ?? 'execute',
+                  generation: args.generation,
+                  usageSource: args.usageSource,
+                  onActivity: emitActivity
+                },
+                onToken
+              )
+        } finally {
+          flushPendingToken()
+        }
         if (workspaceContext?.projectPath && args.intent !== 'plan') {
           const changesAfter = await summarizeGitChanges(workspaceContext.projectPath).catch(() => null)
           result = { ...result, changes: changedSince(changesBefore, changesAfter) }
@@ -824,11 +921,15 @@ export function registerChatIpc(): void {
         failProviderObservation(observation, err)
         throw err
       }
-      if (sessionId) {
+      if (assistantMessageId) {
         try {
-          addMessage(sessionId, 'assistant', result.text, args.providerId, result.model, [], {
+          updateChatTurnAssistant(assistantMessageId, result.text, args.providerId, result.model, {
             startedAt: requestStartedAt,
             endedAt: Date.now(),
+            chatLifecycle: {
+              requestId: args.requestId,
+              state: 'completed'
+            },
             usage: result.usage,
             changes: result.changes
           })
@@ -859,10 +960,38 @@ export function registerChatIpc(): void {
       }
       return { ok: true, result }
     } catch (err) {
-      if (requestTimedOut && requestTimeoutMs) {
-        return { ok: false, error: `request timed out after ${requestTimeoutMs}ms` }
+      const state: Extract<ChatLifecycleState, 'error' | 'cancelled' | 'timed_out'> = requestTimedOut
+        ? 'timed_out'
+        : controller.signal.aborted
+          ? 'cancelled'
+          : 'error'
+      const error = durableFailureText(
+        state,
+        err,
+        Boolean(workspaceContext?.projectPath),
+        requestTimeoutMs
+      )
+      if (assistantMessageId) {
+        try {
+          updateChatTurnAssistant(
+            assistantMessageId,
+            error,
+            args.providerId,
+            args.model,
+            {
+              startedAt: requestStartedAt,
+              endedAt: Date.now(),
+              chatLifecycle: {
+                requestId: args.requestId,
+                state
+              }
+            }
+          )
+        } catch (persistError) {
+          console.error('[registry] failed to persist assistant failure:', persistError)
+        }
       }
-      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      return { ok: false, error }
     } finally {
       if (requestTimeout) clearTimeout(requestTimeout)
       activeRequests.delete(args.requestId)

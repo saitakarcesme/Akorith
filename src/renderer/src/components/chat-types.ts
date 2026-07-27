@@ -24,6 +24,8 @@ export interface ChatMessage {
     workspaceGoal?: WorkspaceGoalMessageMeta
   }
   activities?: ChatActivity[]
+  /** User request that owns this assistant turn, used by truthful live narration. */
+  taskPrompt?: string
   startedAt?: number
   endedAt?: number
   intent?: 'execute' | 'plan'
@@ -46,4 +48,10 @@ export interface QueuedTurn {
   model: string
   attachments: ComposerAttachment[]
   intent: 'execute' | 'plan'
+  mode: 'workspace' | 'general'
+  workspace: {
+    projectId: string
+    projectName: string
+    projectPath: string
+  } | null
 }

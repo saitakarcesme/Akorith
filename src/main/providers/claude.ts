@@ -8,6 +8,7 @@ import type {
   Provider,
   ProviderAvailability,
   ProviderConfigEntry,
+  ProviderDiscovery,
   SendOptions,
   SendResult
 } from './types'
@@ -24,28 +25,43 @@ export class ClaudeProvider implements Provider {
     this.models = entry.models ?? DEFAULT_MODELS
   }
 
-  async isAvailable(): Promise<ProviderAvailability> {
+  async discover(): Promise<ProviderDiscovery> {
     try {
-      const res = await runCli('claude', ['--version'], { timeoutMs: 15_000 })
-      if (res.code !== 0) return { ok: false, reason: `claude CLI exited with code ${res.code}` }
-
-      // A successful --version only proves that the binary exists. Claude can
-      // still fail every Goal immediately when its OAuth session has expired.
-      // Surface that state before the user starts long-running work.
+      // Modern Claude CLIs expose login and executable health through one
+      // command. Older builds fall back to --version below.
       const auth = await runCli('claude', ['auth', 'status', '--json'], { timeoutMs: 15_000 })
       try {
         const status = JSON.parse(auth.stdout || auth.stderr) as { loggedIn?: boolean }
         if (status.loggedIn === false) {
-          return { ok: false, reason: 'Claude login expired. Run `claude auth login` in Terminal.' }
+          return {
+            available: { ok: false, reason: 'Claude login expired. Run `claude auth login` in Terminal.' },
+            models: []
+          }
+        }
+        if (auth.code === 0 && status.loggedIn === true) {
+          return { available: { ok: true }, models: this.models }
         }
       } catch {
-        // Older Claude CLIs may not support the JSON auth command. The binary
-        // check remains a useful compatibility fallback for those versions.
+        // Older Claude CLIs may not support the JSON auth command.
       }
-      return { ok: true }
+
+      const version = await runCli('claude', ['--version'], { timeoutMs: 15_000 })
+      return version.code === 0
+        ? { available: { ok: true }, models: this.models }
+        : {
+            available: { ok: false, reason: `claude CLI exited with code ${version.code}` },
+            models: []
+          }
     } catch {
-      return { ok: false, reason: 'claude CLI not found on PATH' }
+      return {
+        available: { ok: false, reason: 'claude CLI not found on PATH' },
+        models: []
+      }
     }
+  }
+
+  async isAvailable(): Promise<ProviderAvailability> {
+    return (await this.discover()).available
   }
 
   async listModels(): Promise<string[]> {

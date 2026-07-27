@@ -5,6 +5,7 @@ import type {
   WorkspaceGoalSnapshot,
   WorkspaceGoalStatus
 } from '../../../preload/index.d'
+import { useDocumentVisible } from '../documentVisibility'
 import type { WorkspaceGoalMessageMeta } from './chat-types'
 
 interface WorkspaceLoopActivityProps {
@@ -154,6 +155,7 @@ function finalResult(goal: string, runs: ProjectLoopRun[], events: ProjectLoopEv
 }
 
 function WorkspaceLoopActivity({ metadata, active, projectName }: WorkspaceLoopActivityProps): JSX.Element {
+  const documentVisible = useDocumentVisible()
   const [snapshot, setSnapshot] = useState<WorkspaceGoalSnapshot | null>(null)
   const [events, setEvents] = useState<ProjectLoopEvent[]>([])
   const [runs, setRuns] = useState<ProjectLoopRun[]>([])
@@ -191,7 +193,7 @@ function WorkspaceLoopActivity({ metadata, active, projectName }: WorkspaceLoopA
   }, [])
 
   useEffect(() => {
-    if (!active) return
+    if (!active || !documentVisible) return
     let disposed = false
     let timer: number | undefined
     const poll = async (): Promise<void> => {
@@ -217,7 +219,7 @@ function WorkspaceLoopActivity({ metadata, active, projectName }: WorkspaceLoopA
       disposed = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [active, applyGoal, loadGoal, metadata.status, pollGeneration])
+  }, [active, applyGoal, documentVisible, loadGoal, metadata.status, pollGeneration])
 
   const status = liveStatusRef.current
   const error = snapshot?.error ?? metadata.error

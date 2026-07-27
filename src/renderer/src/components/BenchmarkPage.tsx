@@ -11,6 +11,7 @@ import type {
   TestRepoContext,
   TestRunRow
 } from '../../../preload/index.d'
+import { useDocumentVisible } from '../documentVisibility'
 import {
   canonicalTokenTotal,
   estimateRunDuration,
@@ -334,6 +335,7 @@ function runStatus(run: BenchmarkRun): BenchmarkRecentRunView['status'] {
 }
 
 export default function BenchmarkPage({ active, activeProject }: BenchmarkPageProps): JSX.Element {
+  const documentVisible = useDocumentVisible()
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [selectedModelKeys, setSelectedModelKeys] = useState<string[]>(() => loadStringArray(MODELS_KEY))
@@ -408,10 +410,11 @@ export default function BenchmarkPage({ active, activeProject }: BenchmarkPagePr
   }, [active, providers, refreshProviders])
 
   useEffect(() => {
-    if (!active || !running) return
+    if (!active || !running || !documentVisible) return
+    setClock(Date.now())
     const timer = window.setInterval(() => setClock(Date.now()), 1_000)
     return () => window.clearInterval(timer)
-  }, [active, running])
+  }, [active, documentVisible, running])
 
   useEffect(() => {
     if (activeProject?.path) setSourceRepo((current) => current || activeProject.path || '')
@@ -461,16 +464,27 @@ export default function BenchmarkPage({ active, activeProject }: BenchmarkPagePr
       reason: model.reason ?? group.reason
     }))), [modelGroups])
 
+  const modelOptionsByKey = useMemo(
+    () => new Map(modelOptions.map((option) => [option.key, option])),
+    [modelOptions]
+  )
   const selectedModels = useMemo(() =>
     selectedModelKeys
-      .map((key) => modelOptions.find((option) => option.key === key))
-      .filter((option): option is ModelOption => Boolean(option)), [modelOptions, selectedModelKeys])
+      .map((key) => modelOptionsByKey.get(key))
+      .filter((option): option is ModelOption => Boolean(option)), [modelOptionsByKey, selectedModelKeys])
 
   useEffect(() => {
     const validKeys = new Set(modelOptions.filter((option) => option.available).map((option) => option.key))
     setSelectedModelKeys((current) => current.filter((key) => validKeys.has(key)))
   }, [modelOptions.map((option) => `${option.key}:${option.available ? 1 : 0}`).join('|')])
 
+  const historyCountsByChallenge = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const entry of libraryEntries) {
+      counts.set(entry.challengeId, (counts.get(entry.challengeId) ?? 0) + 1)
+    }
+    return counts
+  }, [libraryEntries])
   const challengeViews = useMemo<BenchmarkChallengeView[]>(() => CHALLENGES.map((challenge) => ({
     id: challenge.id,
     label: challenge.label,
@@ -479,8 +493,8 @@ export default function BenchmarkPage({ active, activeProject }: BenchmarkPagePr
     metricLabel: challenge.metricLabel,
     deliverables: challenge.deliverables,
     requiresRepository: challenge.metric === 'tests',
-    historicalRuns: libraryEntries.filter((entry) => entry.challengeId === challenge.id).length
-  })), [libraryEntries])
+    historicalRuns: historyCountsByChallenge.get(challenge.id) ?? 0
+  })), [historyCountsByChallenge])
 
   const estimatedMs = useMemo(() => {
     if (!selectedChallenge) return null
