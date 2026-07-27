@@ -37,6 +37,36 @@ async function verify(): Promise<void> {
     { type: 'open_project_preview', browser: 'default' },
     'a generic browser request must use the default browser'
   )
+  assert.deepEqual(
+    detectWorkspaceBrowserAction('Run the app so I can see it.', 'execute'),
+    { type: 'open_project_preview', browser: 'default' },
+    'an explicit app run request must start the trusted project preview'
+  )
+  assert.deepEqual(
+    detectWorkspaceBrowserAction('I want you to start this app.', 'execute'),
+    { type: 'open_project_preview', browser: 'default' },
+    'a natural app start request must start the trusted project preview'
+  )
+  assert.deepEqual(
+    detectWorkspaceBrowserAction('Uygulamayı çalıştır.', 'execute'),
+    { type: 'open_project_preview', browser: 'default' },
+    'a Turkish app run request must start the trusted project preview'
+  )
+  assert.equal(
+    detectWorkspaceBrowserAction('Do not run the app yet.', 'execute'),
+    null,
+    'a negated app run request must not start the preview'
+  )
+  assert.equal(
+    detectWorkspaceBrowserAction('Open this file and fix the type error.', 'execute'),
+    null,
+    'ordinary file actions must not be mistaken for a project preview request'
+  )
+  assert.equal(
+    detectWorkspaceBrowserAction('Run the unit tests.', 'execute'),
+    null,
+    'validation commands must not be mistaken for a project preview request'
+  )
   assert.equal(
     detectWorkspaceBrowserAction('Open the site in Chrome.', 'plan'),
     null,

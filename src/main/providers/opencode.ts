@@ -3,7 +3,7 @@
 
 import { homedir } from 'os'
 import { runCli, estimateTokens } from './util'
-import { parseOpenCodeJson } from '../../shared/opencode-output'
+import { normalizeOpenCodeActivityEvent, parseOpenCodeJson } from '../../shared/opencode-output'
 import type {
   Provider,
   ProviderAvailability,
@@ -131,9 +131,10 @@ export class OpenCodeProvider implements Provider {
     const workspacePrompt = opts.workingDirectory
       ? opts.intent === 'plan'
         ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
-        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested browser launch after this turn, so do not try to run an app-opening shell command or give the user a manual browser command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
+        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested app start or preview after this turn, so treat that as a concrete action but do not start a long-lived server, run an app-opening shell command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     args.push(workspacePrompt)
+    let streamedText = ''
 
     const res = await runCli('opencode', args, {
       signal: opts.signal,
@@ -155,33 +156,15 @@ export class OpenCodeProvider implements Provider {
         } catch {
           return
         }
-        const type = typeof event.type === 'string' ? event.type : ''
-        const part = event.part && typeof event.part === 'object' ? event.part as Record<string, unknown> : null
-        const partType = typeof part?.type === 'string' ? part.type : ''
-        if (type === 'step_start' || partType === 'step-start') {
-          opts.onActivity?.({ kind: 'status', label: 'Planning the next project change', status: 'running' })
-          return
+        const part = event.part && typeof event.part === 'object'
+          ? event.part as Record<string, unknown>
+          : null
+        if (part?.type === 'text' && typeof part.text === 'string' && part.text) {
+          streamedText += part.text
+          onToken(part.text)
         }
-        if (type === 'step_finish' || partType === 'step-finish') {
-          opts.onActivity?.({ kind: 'status', label: 'Project step finished', status: 'complete' })
-          return
-        }
-        if (type === 'tool_use' || partType === 'tool') {
-          const tool = String(part?.tool ?? event.tool ?? 'tool')
-          const state = part?.state && typeof part.state === 'object' ? part.state as Record<string, unknown> : {}
-          const stateInput = state.input && typeof state.input === 'object' ? state.input as Record<string, unknown> : {}
-          const input = part?.input && typeof part.input === 'object' ? part.input as Record<string, unknown> : stateInput
-          const file = typeof input.filePath === 'string' ? input.filePath : typeof input.path === 'string' ? input.path : ''
-          const command = typeof input.command === 'string' ? input.command : ''
-          const rawStatus = String(state.status ?? '')
-          const status = rawStatus === 'error' ? 'error' : rawStatus === 'completed' ? 'complete' : 'running'
-          opts.onActivity?.({
-            kind: command ? 'command' : file ? 'file' : 'tool',
-            label: command || file || `Using ${tool}`,
-            detail: tool,
-            status
-          })
-        }
+        const activity = normalizeOpenCodeActivityEvent(event, opts.workingDirectory)
+        if (activity) opts.onActivity?.(activity)
       }
     })
 
@@ -208,7 +191,7 @@ export class OpenCodeProvider implements Provider {
         status: 'error'
       })
     }
-    onToken(text)
+    if (!streamedText) onToken(text)
 
     return {
       text,

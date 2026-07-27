@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { normalizeStoredOpenCodeMessage, parseOpenCodeJson } from '../src/shared/opencode-output.ts'
+import {
+  normalizeOpenCodeActivityEvent,
+  normalizeStoredOpenCodeMessage,
+  parseOpenCodeJson
+} from '../src/shared/opencode-output.ts'
 
 const textOutput = [
   JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }),
@@ -49,5 +53,50 @@ assert.equal(
 const plainOutput = parseOpenCodeJson('A formatted response from an older CLI.')
 assert.equal(plainOutput.eventCount, 0)
 assert.equal(plainOutput.text, '')
+
+assert.deepEqual(
+  normalizeOpenCodeActivityEvent({
+    type: 'tool_use',
+    part: {
+      type: 'tool',
+      tool: 'read',
+      state: {
+        status: 'completed',
+        input: { filePath: 'C:\\Users\\example\\Project\\src\\App.tsx' }
+      }
+    }
+  }, 'C:\\Users\\example\\Project'),
+  {
+    kind: 'file',
+    label: 'Reading src/App.tsx',
+    detail: undefined,
+    status: 'complete'
+  }
+)
+assert.deepEqual(
+  normalizeOpenCodeActivityEvent({
+    type: 'tool_use',
+    part: {
+      type: 'tool',
+      tool: 'bash',
+      state: {
+        status: 'completed',
+        input: { command: 'npm run typecheck' },
+        output: 'typecheck: ok'
+      }
+    }
+  }),
+  {
+    kind: 'command',
+    label: 'npm run typecheck',
+    detail: 'typecheck: ok',
+    status: 'complete'
+  }
+)
+assert.equal(
+  normalizeOpenCodeActivityEvent({ type: 'step_start', part: { type: 'step-start' } }),
+  null,
+  'generic OpenCode step envelopes must not become repetitive user-facing activity'
+)
 
 console.log('verify-opencode-output: ok')

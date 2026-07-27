@@ -47,9 +47,9 @@ function requestTitle(prompt: string, projectName: string): string {
 function requestDescription(prompt: string, projectName: string): string {
   const request = compact(prompt, 220)
   if (!request) {
-    return `Akorith is carrying out the current request inside ${projectName}. The workflow below is built from recorded project activity rather than a fixed phase template.`
+    return `The selected CLI is carrying out the current request inside ${projectName}.`
   }
-  return `The requested outcome for ${projectName} is: ${sentence(request)} The remaining steps are built from the selected model's recorded project activity.`
+  return `Requested in ${projectName}: ${sentence(request)}`
 }
 
 function fileDisplay(label: string): string {
@@ -75,36 +75,35 @@ function activityTitle(item: ChatActivity, projectName: string, goal: string): s
   return compact(label, 68)
 }
 
-function activityDescription(item: ChatActivity, projectName: string, goal: string): string {
+function activityDescription(item: ChatActivity, projectName: string): string {
   const detail = item.detail && item.detail.trim() && item.detail.trim() !== item.label.trim()
     ? compact(item.detail, 120)
     : ''
 
   if (item.kind === 'command') {
-    const purpose = /\b(?:test|check|verify|build|lint|typecheck)\b/i.test(item.label)
-      ? 'It checks the current result against the project’s own validation path.'
-      : 'Its output becomes evidence for the next project decision.'
-    return `Akorith is running this command inside ${projectName}, within the selected project boundary. ${purpose}${detail ? ` The provider runs it through ${detail}.` : ''}`
+    return item.status === 'complete'
+      ? `The CLI finished this command in ${projectName}.${detail ? ` Reported output: ${sentence(detail)}` : ''}`
+      : `The CLI is running this command in ${projectName}.${detail ? ` Current output: ${sentence(detail)}` : ''}`
   }
   if (item.kind === 'file') {
-    return `This step reads or updates the recorded project file inside ${projectName}. It supports “${goal}” while keeping the surrounding project context available.${detail ? ` The provider reported: ${sentence(detail)}` : ''}`
+    return `The CLI reported this file action in ${projectName}.${detail ? ` ${sentence(detail)}` : ''}`
   }
   if (item.kind === 'plan' || item.kind === 'reasoning') {
-    return `The selected model identified this direction while connecting “${goal}” to the current state of ${projectName}. It is a task-specific decision captured from the live run, not a preset Akorith phase.${detail ? ` Additional context: ${sentence(detail)}` : ''}`
+    return sentence(detail || item.label)
   }
   if (item.kind === 'warning' || item.status === 'error') {
-    return `This recorded step needs attention before Akorith can safely finish “${goal}” in ${projectName}. The existing project context is preserved so the issue can be reviewed or retried.${detail ? ` Reported detail: ${sentence(detail)}` : ''}`
+    return `The CLI could not complete this action in ${projectName}.${detail ? ` ${sentence(detail)}` : ''}`
   }
   if (/session started/i.test(item.label)) {
-    return `Akorith connected the selected local CLI to ${projectName} and established the project-scoped session. The request and its bounded workspace context are now available to that provider.`
+    return `The selected CLI connected to ${projectName} and received the project-scoped request.`
   }
   if (/prepar|starting/i.test(item.label)) {
-    return `Akorith is loading ${projectName}, its conversation memory, and the selected local CLI. This establishes the bounded context required before any project action begins.`
+    return `Akorith started the selected CLI in ${projectName} and is waiting for its first concrete action.`
   }
   if (/finish|complete/i.test(item.label) || item.status === 'complete') {
-    return `This recorded unit of work finished inside ${projectName}. Its files, command results, and provider explanation remain available to the final answer and continuing project memory.${detail ? ` Recorded detail: ${sentence(detail)}` : ''}`
+    return detail || `This CLI action finished in ${projectName}.`
   }
-  return `Akorith recorded this action while working toward “${goal}” in ${projectName}. It describes the live provider activity that currently determines the project workflow.${detail ? ` Provider detail: ${sentence(detail)}` : ''}`
+  return detail || `The CLI reported this live action while working in ${projectName}.`
 }
 
 function meaningfulActivities(activities: ChatActivity[]): ChatActivity[] {
@@ -158,7 +157,7 @@ export function deriveWorkspaceWorkflow({
     steps.push({
       id: `${item.kind}:${compact(item.label, 80).toLowerCase()}`,
       title: activityTitle(item, projectName, goal),
-      description: activityDescription(item, projectName, goal),
+      description: activityDescription(item, projectName),
       state
     })
   })
