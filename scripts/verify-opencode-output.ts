@@ -60,39 +60,54 @@ assert.deepEqual(
   normalizeOpenCodeActivityEvent({
     type: 'tool_use',
     part: {
+      id: 'part-read-1',
+      callID: 'call-read-1',
       type: 'tool',
       tool: 'read',
       state: {
         status: 'completed',
-        input: { filePath: 'C:\\Users\\example\\Project\\src\\App.tsx' }
+        input: { filePath: 'C:\\Users\\example\\Project\\src\\App.tsx' },
+        time: { start: 1_720_000_000_000, end: 1_720_000_000_250 }
       }
     }
   }, 'C:\\Users\\example\\Project'),
   {
+    id: 'call-read-1',
     kind: 'file',
     label: 'Reading src/App.tsx',
     detail: undefined,
-    status: 'complete'
+    status: 'complete',
+    surface: 'files',
+    timestamp: 1_720_000_000_250,
+    startedAt: 1_720_000_000_000,
+    endedAt: 1_720_000_000_250
   }
 )
 assert.deepEqual(
   normalizeOpenCodeActivityEvent({
     type: 'tool_use',
     part: {
+      callID: 'call-command-1',
       type: 'tool',
       tool: 'bash',
       state: {
         status: 'completed',
         input: { command: 'npm run typecheck' },
-        output: 'typecheck: ok'
+        output: 'typecheck: ok',
+        time: { start: 1_720_000_001_000, end: 1_720_000_001_500 }
       }
     }
   }),
   {
+    id: 'call-command-1',
     kind: 'command',
     label: 'npm run typecheck',
     detail: 'typecheck: ok',
-    status: 'complete'
+    status: 'complete',
+    surface: 'terminal',
+    timestamp: 1_720_000_001_500,
+    startedAt: 1_720_000_001_000,
+    endedAt: 1_720_000_001_500
   }
 )
 assert.equal(
@@ -112,6 +127,26 @@ assert.doesNotMatch(
   sendSource,
   /args\.push\(workspacePrompt\)/,
   'OpenCode prompts must never travel through Windows shell argv'
+)
+assert.match(
+  providerSource,
+  /'Get-ChildItem -Force':\s*'allow'/,
+  'OpenCode must allow the exact safe Windows hidden-file inspection command'
+)
+assert.doesNotMatch(
+  providerSource,
+  /'Get-ChildItem \*':\s*'allow'/,
+  'OpenCode must not allow arbitrary Get-ChildItem argument chains'
+)
+assert.match(
+  providerSource,
+  /Do not chain commands with semicolons/,
+  'OpenCode must tell the model to keep safe Windows inspection commands separate'
+)
+assert.match(
+  sendSource,
+  /\.\.\.providerRuntimeWatchdog\('opencode',\s*'OpenCode',\s*opts\.onActivity\)/,
+  'OpenCode workspace sends must use the shared inactivity watchdog'
 )
 
 console.log('verify-opencode-output: ok')

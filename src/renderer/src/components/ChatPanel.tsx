@@ -3,6 +3,7 @@ import type { ContextInfo, GitStatusResult, ProjectRow, ProviderInfo, RouterSugg
 import type { ChatMode, HistorySelection } from '../App'
 import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHint } from '../workspaceLoopCommand'
 import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
+import { mergeWorkspaceActivityEvent } from '../workspaceActivityFeed'
 import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../workspaceLiveChanges'
 import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
@@ -44,6 +45,7 @@ const TOKEN_RENDER_INTERVAL_MS = 100
 const FINAL_RESPONSE_REVEAL_INTERVAL_MS = 55
 const FINAL_RESPONSE_REVEAL_STEPS = 9
 const LIVE_CHANGE_POLL_MS = 2_000
+const WORKSPACE_REQUEST_TIMEOUT_MS = 8 * 60 * 1_000
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
@@ -124,9 +126,14 @@ export default function ChatPanel({
   const [displayName] = useState(() => storageString('akorith.displayName', 'Ibrahim').trim() || 'Ibrahim')
   const [ollamaActive, setOllamaActive] = useState<{ label: string; baseUrl: string } | null>(null)
   const [loopStarting, setLoopStarting] = useState(false)
+  const [startingTurn, setStartingTurn] = useState<QueuedTurn | null>(null)
+  const [stoppingRequests, setStoppingRequests] = useState<Record<string, boolean>>({})
+  const [showLatestActivity, setShowLatestActivity] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const transcriptRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
+  const scrollFrameRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerInputRef = useRef<HTMLTextAreaElement>(null)
   const activeSessionRef = useRef<string | null>(null)
@@ -141,12 +148,14 @@ export default function ChatPanel({
   const historyHydrationRequestRef = useRef(0)
   const activeRef = useRef(active)
   const loopStartingRef = useRef(false)
+  const cancelledStartingTurnsRef = useRef(new Set<string>())
   activeRef.current = active
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
 
   useEffect(() => () => {
     activeRef.current = false
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
     for (const requestId of Object.keys(revealGenerationRef.current)) {
       revealGenerationRef.current[requestId] += 1
     }
@@ -327,10 +336,42 @@ export default function ChatPanel({
 
   const selected = providers?.find((provider) => provider.id === providerId)
   useEffect(() => { setModel((current) => selected?.models.includes(current) ? current : selected?.models[0] ?? '') }, [selected])
-  useEffect(() => {
+
+  const followLatestActivity = useCallback((force = false): void => {
     const element = scrollRef.current
-    if (element && nearBottomRef.current) element.scrollTop = element.scrollHeight
-  }, [messages])
+    if (!element || (!force && !nearBottomRef.current)) return
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      const current = scrollRef.current
+      if (!current) return
+      current.scrollTop = current.scrollHeight
+      nearBottomRef.current = true
+      setShowLatestActivity(false)
+    })
+  }, [])
+
+  useEffect(() => {
+    followLatestActivity()
+  }, [followLatestActivity, messages])
+
+  useEffect(() => {
+    const transcript = transcriptRef.current
+    if (!transcript || typeof ResizeObserver === 'undefined') return
+    let previousHeight = transcript.getBoundingClientRect().height
+    const observer = new ResizeObserver(() => {
+      const nextHeight = transcript.getBoundingClientRect().height
+      if (nextHeight <= previousHeight) {
+        previousHeight = nextHeight
+        return
+      }
+      previousHeight = nextHeight
+      if (nearBottomRef.current) followLatestActivity()
+      else setShowLatestActivity(true)
+    })
+    observer.observe(transcript)
+    return () => observer.disconnect()
+  }, [followLatestActivity, messages.length])
 
   useEffect(() => {
     if (!hasProject || !activeProject || mentionQuery === null) { setMentionFiles([]); return }
@@ -492,12 +533,23 @@ export default function ChatPanel({
 
   const executeTurnRef = useRef<(turn: QueuedTurn, requestedSessionId?: string | null) => Promise<void>>(async () => {})
   const executeTurn = useCallback(async (turn: QueuedTurn, requestedSessionId?: string | null): Promise<void> => {
-    const sessionId = requestedSessionId ?? await ensureSession(
-      turn.prompt,
-      turn.providerId,
-      turn.workspace?.projectId ?? null
-    )
-    const requestId = newId()
+    const requestId = turn.id
+    let sessionId: string
+    try {
+      sessionId = requestedSessionId ?? await ensureSession(
+        turn.prompt,
+        turn.providerId,
+        turn.workspace?.projectId ?? null
+      )
+    } catch (error) {
+      setStartingTurn((current) => current?.id === turn.id ? null : current)
+      showToast(error instanceof Error ? error.message : String(error))
+      return
+    }
+    if (cancelledStartingTurnsRef.current.delete(turn.id)) {
+      setStartingTurn((current) => current?.id === turn.id ? null : current)
+      return
+    }
     const assistantId = newId()
     const liveChangesBaselinePromise: Promise<GitStatusResult | null> = turn.workspace && turn.intent !== 'plan'
       ? window.api.git.status(turn.workspace.projectPath).catch(() => null)
@@ -515,7 +567,7 @@ export default function ChatPanel({
     }
     setActiveRequests((current) => ({ ...current, [sessionId]: requestId }))
     onPendingChange?.(sessionId, true)
-    const startedAt = Date.now()
+    const startedAt = turn.startedAt
     let publicAttachments = turn.attachments.map(({ previewUrl: _previewUrl, dataBase64, ...item }) => ({ ...item, dataBase64 }))
     const visibleAttachments = publicAttachments.map((item) => item.kind === 'image'
       ? item
@@ -541,6 +593,7 @@ export default function ChatPanel({
         meta: { provider: turn.providerId, model: turn.model || 'default' }
       }
     ])
+    setStartingTurn((current) => current?.id === turn.id ? null : current)
     const offToken = window.api.chat.onToken(requestId, (token) => {
       tokenBuffersRef.current[requestId] = `${tokenBuffersRef.current[requestId] ?? ''}${token}`
       if (tokenTimersRef.current[requestId] === undefined) {
@@ -562,7 +615,7 @@ export default function ChatPanel({
             requestWorkspaceTool(activity.surface, 'activity')
           }
           setSessionMessages(sessionId, (current) => current.map((message) => message.id === assistantId
-            ? { ...message, activities: [...(message.activities ?? []), activity].slice(-30) }
+            ? { ...message, activities: mergeWorkspaceActivityEvent(message.activities ?? [], activity) }
             : message))
         })
       : () => {}
@@ -579,7 +632,10 @@ export default function ChatPanel({
           ? { projectName: turn.workspace.projectName, projectPath: turn.workspace.projectPath }
           : undefined,
         attachments: publicAttachments,
-        intent: turn.intent
+        intent: turn.intent,
+        generation: turn.mode === 'workspace'
+          ? { timeoutMs: WORKSPACE_REQUEST_TIMEOUT_MS }
+          : undefined
       })
       // Register the IPC request before awaiting the optional Git snapshot so
       // Stop can cancel immediately and provider startup is not serialized
@@ -627,7 +683,10 @@ export default function ChatPanel({
                     ...message,
                     meta: { ...(message.meta ?? { provider: turn.providerId, model: turn.model || 'default' }), changes },
                     activities: createdActivities.length
-                      ? [...(message.activities ?? []), ...createdActivities].slice(-30)
+                      ? createdActivities.reduce(
+                          (activityItems, activity) => mergeWorkspaceActivityEvent(activityItems, activity),
+                          message.activities ?? []
+                        )
                       : message.activities
                   }
                 }))
@@ -679,9 +738,15 @@ export default function ChatPanel({
         const next = { ...current }; delete next[sessionId]; return next
       })
       onPendingChange?.(sessionId, false)
+      setStoppingRequests((current) => {
+        if (!current[requestId]) return current
+        const next = { ...current }
+        delete next[requestId]
+        return next
+      })
       const next = queuedTurnsRef.current[sessionId]?.shift()
       setQueueVersion((version) => version + 1)
-      if (next) window.setTimeout(() => { void executeTurnRef.current(next, sessionId) }, 0)
+      if (next) window.setTimeout(() => { void executeTurnRef.current(next) }, 0)
     }
   }, [digestEnabled, flushToken, onHistoryChange, onPendingChange, onWorkspaceToolRequest, refreshContext, revealFinalResponse, setSessionMessages])
   executeTurnRef.current = executeTurn
@@ -691,6 +756,7 @@ export default function ChatPanel({
     if (!prompt || !selected?.available.ok || (isWorkspace && !hasProject)) return null
     return {
       id: newId(),
+      startedAt: Date.now(),
       prompt,
       providerId,
       model,
@@ -813,6 +879,7 @@ export default function ChatPanel({
       showToast('Follow-up queued', 'success')
       return
     }
+    setStartingTurn(turn)
     void executeTurn(turn)
   }
 
@@ -820,9 +887,72 @@ export default function ChatPanel({
     const requestId = activeSessionRef.current ? activeRequests[activeSessionRef.current] : undefined
     if (requestId) {
       revealGenerationRef.current[requestId] = (revealGenerationRef.current[requestId] ?? 0) + 1
+      setStoppingRequests((current) => ({ ...current, [requestId]: true }))
+      if (activeSessionRef.current) {
+        const sessionId = activeSessionRef.current
+        setSessionMessages(sessionId, (items) => items.map((message) => (
+          message.role === 'assistant' && message.status === 'streaming'
+            ? {
+                ...message,
+                activities: mergeWorkspaceActivityEvent(
+                  message.activities ?? [],
+                  {
+                    kind: 'status',
+                    label: 'Stopping the current task',
+                    detail: 'Akorith is interrupting the provider process and preserving the conversation so this task can be resumed.',
+                    status: 'running',
+                    timestamp: Date.now()
+                  }
+                )
+              }
+            : message
+        )))
+      }
       window.api.chat.cancel(requestId)
+      return
+    }
+    if (startingTurn) {
+      cancelledStartingTurnsRef.current.add(startingTurn.id)
+      setStartingTurn(null)
     }
   }
+
+  const resumeWorkspaceTask = useCallback((message: ChatMessage): void => {
+    const prompt = message.taskPrompt?.trim()
+    if (!prompt || !activeProject?.path || !isWorkspace) return
+    const originalProvider = providers?.find((provider) => provider.id === message.meta?.provider && provider.available.ok)
+    const resumeProvider = originalProvider ?? selected
+    if (!resumeProvider?.available.ok) {
+      showToast('The provider for this task is unavailable. Select an available model and try again.')
+      return
+    }
+    const turn: QueuedTurn = {
+      id: newId(),
+      startedAt: Date.now(),
+      prompt: `Resume the interrupted workspace task below. Inspect the current files first, keep any valid work already completed, then finish and verify the request.\n\n${prompt}`,
+      providerId: resumeProvider.id,
+      model: originalProvider
+        ? message.meta?.model ?? resumeProvider.models[0] ?? ''
+        : model,
+      attachments: [],
+      intent: message.intent ?? 'execute',
+      mode: 'workspace',
+      workspace: {
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectPath: activeProject.path
+      }
+    }
+    const sessionId = activeSessionRef.current
+    if (sessionId && activeRequests[sessionId]) {
+      queuedTurnsRef.current[sessionId] = [...(queuedTurnsRef.current[sessionId] ?? []), turn]
+      setQueueVersion((version) => version + 1)
+      showToast('Resume queued after the current task', 'success')
+      return
+    }
+    setStartingTurn(turn)
+    void executeTurn(turn)
+  }, [activeProject, activeRequests, executeTurn, isWorkspace, model, providers, selected])
 
   const clearContext = async (): Promise<void> => {
     if (!activeSessionRef.current) return
@@ -864,27 +994,63 @@ export default function ChatPanel({
     setMentionFiles([])
   }
 
-  const hasConversation = messages.length > 0
+  const renderMessages = useMemo<ChatMessage[]>(() => {
+    if (!startingTurn) return messages
+    const projectName = startingTurn.workspace?.projectName ?? 'this workspace'
+    return [
+      ...messages,
+      {
+        id: `starting-user:${startingTurn.id}`,
+        role: 'user',
+        text: startingTurn.prompt,
+        status: 'done',
+        intent: startingTurn.intent
+      },
+      {
+        id: `starting-assistant:${startingTurn.id}`,
+        role: 'assistant',
+        text: '',
+        status: 'streaming',
+        taskPrompt: startingTurn.prompt,
+        startedAt: startingTurn.startedAt,
+        intent: startingTurn.intent,
+        activities: startingTurn.mode === 'workspace'
+          ? [{
+              kind: 'status',
+              label: `Preparing ${projectName}`,
+              detail: 'Akorith is opening the saved project context and connecting the selected CLI before the first project action is sent.',
+              status: 'running',
+              timestamp: startingTurn.startedAt
+            }]
+          : undefined,
+        meta: {
+          provider: startingTurn.providerId,
+          model: startingTurn.model || 'default'
+        }
+      }
+    ]
+  }, [messages, startingTurn])
+  const hasConversation = renderMessages.length > 0
   const latestWorkspaceContext = useMemo(() => {
     if (!isWorkspace) return null
     let runIndex = -1
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role === 'assistant' && messages[index].startedAt && !messages[index].meta?.workspaceGoal) {
+    for (let index = renderMessages.length - 1; index >= 0; index -= 1) {
+      if (renderMessages[index].role === 'assistant' && renderMessages[index].startedAt && !renderMessages[index].meta?.workspaceGoal) {
         runIndex = index
         break
       }
     }
     if (runIndex < 0) return null
-    const run = messages[runIndex]
+    const run = renderMessages[runIndex]
     let prompt = ''
     for (let index = runIndex - 1; index >= 0; index -= 1) {
-      if (messages[index].role === 'user') {
-        prompt = messages[index].text
+      if (renderMessages[index].role === 'user') {
+        prompt = renderMessages[index].text
         break
       }
     }
     return { run, prompt }
-  }, [isWorkspace, messages])
+  }, [isWorkspace, renderMessages])
   const latestWorkspaceRun = latestWorkspaceContext?.run
   const latestWorkspaceActivities = latestWorkspaceRun?.activities
   const latestWorkspacePrompt = latestWorkspaceContext?.prompt ?? ''
@@ -911,7 +1077,8 @@ export default function ChatPanel({
       latestWorkspaceStatus
     ]
   )
-  const busyRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
+  const busyRequestId = (activeSessionId ? activeRequests[activeSessionId] : undefined) ?? startingTurn?.id
+  const isStopping = Boolean(busyRequestId && stoppingRequests[busyRequestId])
   const reviewLiveChanges = useCallback((): void => {
     if (!activeProject || !activeSessionId || !busyRequestId) return
     onWorkspaceToolRequest?.({
@@ -976,7 +1143,9 @@ export default function ChatPanel({
           <div className="composer-submit-group">
             <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders(true)} modelSource={(id) => id === 'local' ? ollamaActive?.label ?? 'Local' : undefined} />
             {busyRequestId && canSubmit && <button type="button" className="composer-queue-button" onClick={sendOrQueue}><QueueIcon size={14} />Queue</button>}
-            {busyRequestId ? <ComposerSendButton stop onClick={cancel}><StopIcon size={16} /></ComposerSendButton> : <ComposerSendButton disabled={!canSubmit} onClick={sendOrQueue}><SendIcon size={16} /></ComposerSendButton>}
+            {busyRequestId
+              ? <ComposerSendButton stop disabled={isStopping} onClick={cancel}><StopIcon size={16} /></ComposerSendButton>
+              : <ComposerSendButton disabled={!canSubmit} onClick={sendOrQueue}><SendIcon size={16} /></ComposerSendButton>}
           </div>
         </div>
       </div>
@@ -1057,7 +1226,45 @@ export default function ChatPanel({
           </div>
         </div>
       )
-          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} active={active} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{liveWorkspaceChanges?.files.length ? <WorkspaceLiveChangesCard changes={liveWorkspaceChanges} onReview={reviewLiveChanges} /> : null}{composer}</div></>}
+          : <>
+              <div
+                className="chat-messages"
+                ref={scrollRef}
+                onScroll={() => {
+                  const element = scrollRef.current
+                  if (!element) return
+                  const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120
+                  nearBottomRef.current = nearBottom
+                  if (nearBottom) setShowLatestActivity(false)
+                }}
+              >
+                <div className="chat-messages-col" ref={transcriptRef}>
+                  <Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>
+                    {renderMessages.map((message) => (
+                      <ChatMessageView
+                        key={message.id}
+                        message={message}
+                        isWorkspace={isWorkspace}
+                        active={active}
+                        projectName={activeProject?.name}
+                        onResume={resumeWorkspaceTask}
+                      />
+                    ))}
+                  </Suspense>
+                </div>
+                {showLatestActivity && (
+                  <button type="button" className="chat-latest-activity" onClick={() => followLatestActivity(true)}>
+                    Latest activity
+                    <span aria-hidden="true">↓</span>
+                  </button>
+                )}
+              </div>
+              <div className="composer-dock">
+                {latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}
+                {liveWorkspaceChanges?.files.length ? <WorkspaceLiveChangesCard changes={liveWorkspaceChanges} onReview={reviewLiveChanges} /> : null}
+                {composer}
+              </div>
+            </>}
     </main>
   )
 }

@@ -45,6 +45,7 @@ function storedAssistant(
       changes: message.metadata?.changes,
       workspaceGoal: message.metadata?.workspaceGoal
     },
+    activities: workspace ? message.metadata?.activities : undefined,
     taskPrompt,
     startedAt: message.metadata?.startedAt ??
       (message.metadata?.workspaceGoal ? message.createdAt : undefined),

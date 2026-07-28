@@ -3,7 +3,11 @@
 
 import { homedir } from 'os'
 import { dirname } from 'path'
-import { runCli } from './util'
+import {
+  cleanCliEventId,
+  providerRuntimeWatchdog,
+  runCli
+} from './util'
 import type {
   Provider,
   ProviderAvailability,
@@ -81,12 +85,22 @@ export class ClaudeProvider implements Provider {
     let streamedText = ''
     let resultEvent: ClaudeResultEvent | null = null
     let initModel: string | null = null
+    let toolSequence = 0
+    const activeTools = new Map<number, {
+      id: string
+      kind: 'command' | 'file' | 'tool'
+      label: string
+      detail?: string
+      surface?: 'terminal' | 'files'
+      startedAt: number
+    }>()
 
     // The prompt travels over stdin (never argv): no shell-quoting surface.
     const res = await runCli('claude', args, {
       stdin: prompt,
       signal: opts.signal,
       timeoutMs: 300_000,
+      ...providerRuntimeWatchdog('claude', 'Claude', opts.onActivity),
       cwd: opts.workingDirectory ?? homedir(),
       onStdoutLine: (line) => {
         let event: ClaudeStreamLine
@@ -97,7 +111,15 @@ export class ClaudeProvider implements Provider {
         }
         if (event.type === 'system' && typeof event.model === 'string') {
           initModel = event.model
-          opts.onActivity?.({ kind: 'status', label: 'Claude session started', status: 'complete' })
+          const now = Date.now()
+          opts.onActivity?.({
+            id: 'claude:session',
+            kind: 'status',
+            label: 'Claude session started',
+            status: 'complete',
+            timestamp: now,
+            endedAt: now
+          })
         } else if (event.type === 'stream_event') {
           const delta = event.event?.delta
           if (event.event?.type === 'content_block_delta' && delta?.type === 'text_delta' && delta.text) {
@@ -110,17 +132,48 @@ export class ClaudeProvider implements Provider {
               const input = block.input ?? {}
               const file = typeof input.file_path === 'string' ? input.file_path : typeof input.path === 'string' ? input.path : ''
               const command = typeof input.command === 'string' ? input.command : ''
-              opts.onActivity?.({
-                kind: command ? 'command' : file ? 'file' : 'tool',
+              const index = typeof event.event.index === 'number' ? event.event.index : toolSequence++
+              const now = Date.now()
+              const activity = {
+                id: `claude:${cleanCliEventId(block.id) ?? `tool-${index}`}`,
+                kind: command ? 'command' as const : file ? 'file' as const : 'tool' as const,
                 label: command || file || `Using ${name}`,
                 detail: command || file ? name : undefined,
-                status: 'running'
+                surface: command ? 'terminal' as const : file ? 'files' as const : undefined,
+                startedAt: now
+              }
+              activeTools.set(index, activity)
+              opts.onActivity?.({
+                ...activity,
+                status: 'running',
+                timestamp: now
               })
+            }
+          } else if (event.event?.type === 'content_block_stop') {
+            const index = typeof event.event.index === 'number' ? event.event.index : -1
+            const activity = activeTools.get(index)
+            if (activity) {
+              const now = Date.now()
+              opts.onActivity?.({
+                ...activity,
+                status: 'complete',
+                timestamp: now,
+                endedAt: now
+              })
+              activeTools.delete(index)
             }
           }
         } else if (event.type === 'result') {
           resultEvent = event
-          opts.onActivity?.({ kind: 'status', label: 'Claude finished the workspace task', status: event.is_error ? 'error' : 'complete' })
+          const now = Date.now()
+          opts.onActivity?.({
+            id: 'claude:result',
+            kind: 'status',
+            label: 'Claude finished the workspace task',
+            status: event.is_error ? 'error' : 'complete',
+            timestamp: now,
+            endedAt: now
+          })
         }
       }
     })
@@ -170,8 +223,10 @@ interface ClaudeStreamLine {
   model?: string
   event?: {
     type?: string
+    index?: number
     delta?: { type?: string; text?: string }
     content_block?: {
+      id?: string
       type?: string
       name?: string
       input?: Record<string, unknown>

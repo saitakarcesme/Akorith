@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react'
 import { formatModelLabel } from '../modelLabels'
-import { CopyIcon, FileIcon } from './icons'
+import { CopyIcon, FileIcon, PlayIcon } from './icons'
 import ChatMarkdown from './ChatMarkdown'
 import WorkspaceActivity from './WorkspaceActivity'
 import WorkspaceLoopActivity from './WorkspaceLoopActivity'
@@ -84,12 +84,14 @@ function ChatMessageView({
   message,
   isWorkspace,
   active,
-  projectName
+  projectName,
+  onResume
 }: {
   message: ChatMessage
   isWorkspace: boolean
   active: boolean
   projectName?: string
+  onResume?: (message: ChatMessage) => void
 }): JSX.Element {
   const [copied, setCopied] = useState(false)
   const workspaceGoal = isWorkspace && message.role === 'assistant' ? message.meta?.workspaceGoal : undefined
@@ -119,7 +121,7 @@ function ChatMessageView({
   }
 
   return (
-    <article className={`chat-msg ${message.role} ${message.status}`}>
+    <article className={`chat-msg ${message.role} ${message.status}${isWorkspace && message.role === 'assistant' ? ' workspace-message' : ''}`}>
       {images.length > 0 && <div className="chat-image-strip">{images.map((image) => <img key={image.id} src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={image.name} loading="lazy" decoding="async" />)}</div>}
       {files.length > 0 && <div className="chat-attachment-strip">{files.map((file) => <span className="chat-attachment" key={file.id}><FileIcon size={14} /><span>{file.name}</span><small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>)}</div>}
       {message.intent === 'plan' && <span className="chat-intent-badge">Plan</span>}
@@ -131,11 +133,17 @@ function ChatMessageView({
           active={message.status === 'streaming'}
           failed={message.status === 'error'}
           projectName={projectName}
+          taskPrompt={message.taskPrompt}
         />
       )}
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'
         ? <div className="chat-msg-text"><ChatMarkdown text={message.text} /></div>
         : <div className="chat-msg-text">{message.text}</div>}
+      {message.role === 'assistant' && message.status === 'streaming' && (
+        <div className="chat-thinking" role="status" aria-live="polite">
+          <span className="chat-thinking-label">Akorithing…</span>
+        </div>
+      )}
       {isWorkspace && message.role === 'assistant' && showAssistantText && message.text && <CompletionSummary message={message} />}
       {message.role === 'assistant' && showAssistantText && message.text && (
         <div className="chat-msg-meta">
@@ -151,6 +159,15 @@ function ChatMessageView({
           >
             <CopyIcon size={15} />
           </button>
+        </div>
+      )}
+      {isWorkspace && message.role === 'assistant' && message.status === 'error' && message.taskPrompt && onResume && (
+        <div className="chat-recovery-actions">
+          <button type="button" onClick={() => onResume(message)}>
+            <PlayIcon size={13} />
+            Resume task
+          </button>
+          <span>Continue with the same project and conversation context.</span>
         </div>
       )}
     </article>

@@ -2,7 +2,11 @@
 // the Claude/Codex provider shape so Benchmark can run it headlessly.
 
 import { homedir } from 'os'
-import { runCli, estimateTokens } from './util'
+import {
+  estimateTokens,
+  providerRuntimeWatchdog,
+  runCli
+} from './util'
 import { normalizeOpenCodeActivityEvent, parseOpenCodeJson } from '../../shared/opencode-output'
 import type {
   Provider,
@@ -14,6 +18,23 @@ import type {
 } from './types'
 
 const DEFAULT_MODELS = ['default']
+
+const READ_ONLY_SHELL_PERMISSIONS = {
+  '*': 'deny',
+  pwd: 'allow',
+  'Get-Location': 'allow',
+  'ls *': 'allow',
+  'Get-ChildItem': 'allow',
+  'Get-ChildItem -Force': 'allow',
+  'Get-ChildItem -Name': 'allow',
+  'Get-ChildItem -Force -Name': 'allow',
+  'git status*': 'allow',
+  'git diff*': 'allow',
+  'git log*': 'allow',
+  'git show*': 'allow',
+  'git rev-parse*': 'allow',
+  'git ls-files*': 'allow'
+} as const
 
 // `opencode run` is non-interactive. If a user's global config asks for tool
 // approval, a project read/edit is otherwise rejected because there is no TUI
@@ -33,15 +54,7 @@ const WORKSPACE_PERMISSION_CONFIG = JSON.stringify({
     question: 'deny',
     external_directory: 'deny',
     bash: {
-      '*': 'deny',
-      pwd: 'allow',
-      'ls *': 'allow',
-      'git status*': 'allow',
-      'git diff*': 'allow',
-      'git log*': 'allow',
-      'git show*': 'allow',
-      'git rev-parse*': 'allow',
-      'git ls-files*': 'allow',
+      ...READ_ONLY_SHELL_PERMISSIONS,
       'node --check *': 'allow',
       'npm test*': 'allow',
       'npm run test*': 'allow',
@@ -61,23 +74,17 @@ const PLAN_PERMISSION_CONFIG = JSON.stringify({
     lsp: 'allow',
     question: 'deny',
     external_directory: 'deny',
-    bash: {
-      '*': 'deny',
-      pwd: 'allow',
-      'ls *': 'allow',
-      'git status*': 'allow',
-      'git diff*': 'allow',
-      'git log*': 'allow',
-      'git show*': 'allow',
-      'git rev-parse*': 'allow',
-      'git ls-files*': 'allow'
-    }
+    bash: READ_ONLY_SHELL_PERMISSIONS
   }
 })
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
+
+const WINDOWS_INSPECTION_GUIDANCE = process.platform === 'win32'
+  ? 'On Windows, prefer the read, list, glob, and grep tools for discovery. If a shell inspection is essential, use one command per tool call: Get-Location, Get-ChildItem, Get-ChildItem -Force, or a read-only git command. Do not chain commands with semicolons, &&, pipes, redirection, or $null.'
+  : 'Prefer the read, list, glob, and grep tools for discovery. Keep any shell inspection to one read-only command per tool call.'
 
 export class OpenCodeProvider implements Provider {
   readonly id = 'opencode'
@@ -157,8 +164,8 @@ export class OpenCodeProvider implements Provider {
     for (const attachment of opts.attachments ?? []) args.push('-f', attachment.path)
     const workspacePrompt = opts.workingDirectory
       ? opts.intent === 'plan'
-        ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
-        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested app start or preview after this turn, so treat that as a concrete action but do not start a long-lived server, run an app-opening shell command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
+        ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. ${WINDOWS_INSPECTION_GUIDANCE} Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
+        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. ${WINDOWS_INSPECTION_GUIDANCE} Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested app start or preview after this turn, so treat that as a concrete action but do not start a long-lived server, run an app-opening shell command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     let streamedText = ''
 
@@ -171,6 +178,7 @@ export class OpenCodeProvider implements Provider {
       stdin: workspacePrompt,
       signal: opts.signal,
       timeoutMs: 600_000,
+      ...providerRuntimeWatchdog('opencode', 'OpenCode', opts.onActivity),
       cwd: opts.workingDirectory ?? homedir(),
       env: opts.workingDirectory
         ? {

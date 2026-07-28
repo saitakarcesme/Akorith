@@ -64,10 +64,22 @@ const completed = hydrateStoredChatMessages([
   row('a5', 'assistant', 'finished result', {
     startedAt: 100,
     endedAt: 200,
-    chatLifecycle: { requestId: 'request-5', state: 'completed' }
+    chatLifecycle: { requestId: 'request-5', state: 'completed' },
+    activities: [{
+      id: 'tool-1',
+      kind: 'file',
+      label: 'Created src/app.ts',
+      status: 'complete',
+      surface: 'files',
+      timestamp: 180,
+      startedAt: 150,
+      endedAt: 180
+    }]
   })
 ], true)
 assert.equal(completed[1].status, 'done')
 assert.equal(completed[1].text, 'finished result')
+assert.equal(completed[1].activities?.[0]?.id, 'tool-1')
+assert.equal(completed[1].activities?.[0]?.endedAt, 180)
 
 console.log('chat lifecycle verification passed')

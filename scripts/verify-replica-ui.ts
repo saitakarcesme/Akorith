@@ -350,15 +350,14 @@ check(
 )
 check(
   workspaceActivity.includes('ProgressiveNarrative') &&
-  workspaceActivity.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
+    workspaceActivity.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
     workspaceActivity.includes('liveAnnouncement') &&
-    workspaceActivity.includes('workspace-activity-headlines') &&
     workspaceActivity.includes('workspace-activity-sr') &&
-    stylesCss.includes('.workspace-activity-headline.is-plan') &&
-    stylesCss.includes('.workspace-activity-headline.is-file') &&
-    workspaceActivity.includes('index === headlines.length - 1') &&
-    !workspaceActivity.includes('text={narrative}'),
-  'Workspace activity interleaves purple and green headings with one compact progressive event narrative'
+    workspaceActivity.includes("(['plan', 'actions', 'result'] as const).map") &&
+    workspaceActivity.includes('item.id === latestId') &&
+    productPolishCss.includes('.workspace-activity-event.is-current .workspace-activity-event-toggle strong') &&
+    productPolishCss.includes('animation: akorith-text-flow'),
+  'Workspace activity groups a chronological feed and gives the current heading a restrained color flow'
 )
 
 const mappedCenter = mapPreviewPoint(
@@ -544,13 +543,13 @@ check(
 )
 check(
   !workspaceActivity.includes('<i aria-hidden') &&
-    selectorBlocks(stylesCss, '.workspace-activity-headline i').length === 0 &&
-    selectorBlocks(stylesCss, '.workspace-activity-headline strong').some((block) => /font-weight\s*:\s*700/.test(block)),
+    selectorBlocks(productPolishCss, '.workspace-activity-event-toggle strong')
+      .some((block) => /font-weight\s*:\s*7(?:00|20)/.test(block)),
   'Workspace activity headings are bold and omit leading dots'
 )
 check(
   workspaceActivity.includes('buildWorkspaceActivityEventNarrative') &&
-    workspaceActivity.includes('index === headlines.length - 1') &&
+    workspaceActivity.includes('item.id === latestId') &&
     workspaceActivity.includes('ProgressiveNarrative') &&
     chat.includes('LIVE_CHANGE_POLL_MS = 2_000') &&
     chat.includes('liveWorkspaceChangesSince') &&

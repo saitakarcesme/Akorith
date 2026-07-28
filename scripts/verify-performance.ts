@@ -178,7 +178,8 @@ check(
 check(
   workspaceActivity.includes('export default memo(WorkspaceActivity)') &&
     workspaceStepDock.includes('export default memo(WorkspaceStepDock)') &&
-    workspaceActivity.includes('NARRATIVE_REVEAL_STEPS = 10'),
+    workspaceActivity.includes('const feed = useMemo') &&
+    workspaceActivity.includes('const byPhase = useMemo'),
   'stable Workspace progress displays skip unrelated chat renders'
 )
 

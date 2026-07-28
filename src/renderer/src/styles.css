@@ -132,65 +132,6 @@
   font-size: 12px;
 }
 .workspace-activity-rule { height: 1px; background: var(--border-subtle); }
-.workspace-activity-list { display: flex; flex-direction: column; gap: 3px; padding: 15px 0 8px; }
-.workspace-activity-row {
-  display: block;
-  min-height: 29px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-.workspace-activity-row.is-running { color: var(--text); }
-.workspace-activity-row.is-error { color: var(--danger); }
-.workspace-activity-copy { min-width: 0; overflow-wrap: anywhere; }
-.workspace-activity-copy strong { display: block; color: inherit; font-size: 12px; font-weight: 560; }
-.workspace-activity-copy p { max-width: 620px; margin: 3px 0 4px; color: var(--text-faint); font-size: 11.5px; line-height: 1.55; }
-.workspace-activity-narrative {
-  padding: 16px 0 8px;
-}
-.workspace-activity-headlines {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.workspace-activity-headlines:empty { display: none; }
-.workspace-activity-headline {
-  display: flex;
-  min-width: 0;
-  min-height: 20px;
-  align-items: center;
-  color: var(--text-muted);
-  font-size: 12.25px;
-  line-height: 1.4;
-}
-.workspace-activity-headline strong {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.workspace-activity-headline.is-plan,
-.workspace-activity-headline.is-reasoning {
-  color: color-mix(in srgb, var(--ak-purple) 78%, var(--text) 22%);
-}
-.workspace-activity-headline.is-file,
-.workspace-activity-headline.is-command,
-.workspace-activity-headline.is-status {
-  color: color-mix(in srgb, var(--ak-green-bright) 76%, var(--text) 24%);
-}
-.workspace-activity-headline.is-warning,
-.workspace-activity-headline.is-error {
-  color: var(--danger);
-}
-.workspace-activity-headline:is(.is-running, .is-created) strong {
-  color: transparent;
-  background: linear-gradient(90deg, var(--ak-green-bright), var(--text), color-mix(in srgb, var(--ak-purple) 72%, white 28%), var(--ak-green-bright));
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: akorith-text-flow 2.6s linear infinite, workspace-label-breathe 1.7s ease-in-out infinite;
-}
 .workspace-activity-sr {
   position: absolute;
   width: 1px;
@@ -270,45 +211,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-step-dock.is-active .workspace-step i { animation: none; }
-  .workspace-activity-headline:is(.is-running, .is-created) strong { animation: none; }
 }
 
 /* ==========================================================================
    Akorith 0.5 — Goal cycle, session-scoped chat work, and transcript polish
    New class names keep this layer isolated from the historical Loop board.
    ========================================================================== */
-
-.workspace-activity-list {
-  gap: 7px;
-}
-
-.workspace-activity-row {
-  gap: 11px;
-  min-height: 38px;
-}
-
-.workspace-activity-copy strong {
-  width: fit-content;
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-
-.workspace-activity-copy p {
-  max-width: 700px;
-  margin-top: 4px;
-  color: color-mix(in srgb, var(--text) 82%, transparent);
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.workspace-activity-row.is-running .workspace-activity-copy strong {
-  color: transparent;
-  background: linear-gradient(90deg, var(--ak-green-bright), var(--text), color-mix(in srgb, var(--ak-purple) 72%, white 28%), var(--ak-green-bright));
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: akorith-text-flow 2.6s linear infinite, workspace-label-breathe 1.7s ease-in-out infinite;
-}
 
 @keyframes workspace-label-breathe {
   0%, 100% { opacity: .64; }
@@ -1245,12 +1153,6 @@
   .research-book-status-symbol::before,
   .research-phase.is-active .research-phase-dot { animation: none; }
   .research-book-cover, .research-submit { transition: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .workspace-activity-row.is-running .workspace-activity-copy strong {
-    animation: none;
-  }
 }
 
 * {
@@ -5365,14 +5267,7 @@ textarea:focus-visible {
   color: #7e2b2b;
 }
 
-.chat-msg.assistant.streaming .chat-msg-text::after {
-  content: '▍';
-  color: var(--accent);
-  animation: blink 1s steps(1) infinite;
-}
-
-/* Phase 37.7: monochrome "Thinking" indicator (no layout jump, persists while
-   the request is pending). Three pulsing dots + a muted label. */
+/* Stable waiting label; Workspace supplies the product shimmer. */
 .chat-thinking {
   display: inline-flex;
   align-items: center;
@@ -5380,58 +5275,10 @@ textarea:focus-visible {
   min-height: 20px;
 }
 
-.chat-thinking-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.chat-thinking-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--text-dim);
-  opacity: 0.3;
-  animation: thinking-pulse 1.2s ease-in-out infinite;
-}
-
-.chat-thinking-dots span:nth-child(2) {
-  animation-delay: 0.18s;
-}
-.chat-thinking-dots span:nth-child(3) {
-  animation-delay: 0.36s;
-}
-
 .chat-thinking-label {
   font-size: 12.5px;
   color: var(--text-faint);
   letter-spacing: 0.01em;
-}
-
-@keyframes thinking-pulse {
-  0%,
-  60%,
-  100% {
-    opacity: 0.28;
-    transform: translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-thinking-dots span {
-    animation: none;
-    opacity: 0.7;
-  }
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
 }
 
 .chat-msg-meta {
@@ -9977,11 +9824,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Akorith's waiting state carries the product colors without changing layout. */
-.chat-thinking-dots span:nth-child(1) { background: var(--ak-purple); }
-.chat-thinking-dots span:nth-child(2) { background: #73a8aa; }
-.chat-thinking-dots span:nth-child(3) { background: var(--ak-green-bright); }
 
 .chat-thinking-label {
   color: transparent;

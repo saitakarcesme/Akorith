@@ -63,12 +63,15 @@ interface ChatTokenPayload {
 
 interface ChatActivityPayload {
   requestId: string
+  id?: string
   kind: 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
   label: string
   detail?: string
   status?: 'running' | 'complete' | 'error'
   surface?: 'review' | 'terminal' | 'browser' | 'computer' | 'files'
   timestamp: number
+  startedAt?: number
+  endedAt?: number
 }
 
 const chat = Object.freeze({

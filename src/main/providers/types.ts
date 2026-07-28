@@ -10,12 +10,19 @@ export type ProviderActivitySurface = 'review' | 'terminal' | 'browser' | 'compu
 
 /** A provider-neutral progress event. Raw CLI protocol envelopes never cross IPC. */
 export interface ProviderActivity {
+  /** Stable within one provider request so running/completed updates can be reconciled. */
+  id?: string
   kind: ProviderActivityKind
   label: string
   detail?: string
   status?: ProviderActivityStatus
   /** Optional machine-readable workspace surface. Renderers never infer this from prose labels. */
   surface?: ProviderActivitySurface
+  /** Provider event time, or the registry observation time when the provider has none. */
+  timestamp?: number
+  /** Provider-reported lifecycle boundaries for duration rendering. */
+  startedAt?: number
+  endedAt?: number
 }
 
 export interface ProviderAvailability {

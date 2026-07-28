@@ -43,6 +43,7 @@ export interface ComposerAttachment {
 
 export interface QueuedTurn {
   id: string
+  startedAt: number
   prompt: string
   providerId: string
   model: string

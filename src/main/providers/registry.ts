@@ -16,7 +16,8 @@ import {
   recordUsageEvent,
   sessionExists,
   setContextSummary,
-  updateChatTurnAssistant
+  updateChatTurnAssistant,
+  type StoredMessageActivity
 } from '../db'
 import {
   buildOlderSummaryPrompt,
@@ -36,10 +37,8 @@ import type {
   ProviderUsageSource,
   SendResult
 } from './types'
-import { ClaudeProvider } from './claude'
 import { ChatGPTProvider } from './chatgpt'
 import { LocalProvider } from './local'
-import { OpenCodeProvider } from './opencode'
 import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
@@ -67,21 +66,62 @@ import {
   type StoredChatAttachment
 } from '../chat-attachments'
 import type { ChatLifecycleState } from '../../shared/chat-lifecycle'
+import { isCliTimeoutError, redactCliText } from './util'
 
 // The only place built-in provider classes are referenced. New built-ins are
 // one line here; external providers need no code change at all — a config
 // entry with a `module` path is loaded at runtime.
+function lazyBuiltIn(
+  id: string,
+  label: string,
+  load: () => Promise<Provider>
+): Provider {
+  let loaded: Promise<Provider> | null = null
+  const get = (): Promise<Provider> => {
+    loaded ??= load()
+    return loaded
+  }
+  return {
+    id,
+    label,
+    kind: ['chat', 'executor'],
+    isAvailable: async () => (await get()).isAvailable(),
+    listModels: async () => (await get()).listModels(),
+    discover: async (force) => {
+      const provider = await get()
+      return provider.discover
+        ? provider.discover(force)
+        : {
+            available: await provider.isAvailable(),
+            models: await provider.listModels()
+          }
+    },
+    send: async (prompt, options, onToken) => (await get()).send(prompt, options, onToken)
+  }
+}
+
 const BUILT_IN: Record<string, (entry: ProviderConfigEntry) => Provider> = {
-  claude: (entry) => new ClaudeProvider(entry),
+  claude: (entry) => lazyBuiltIn(
+    'claude',
+    'Claude',
+    () => import('./claude').then(({ ClaudeProvider }) => new ClaudeProvider(entry))
+  ),
   chatgpt: (entry) => new ChatGPTProvider(entry),
   local: (entry) => new LocalProvider(entry),
-  opencode: (entry) => new OpenCodeProvider(entry)
+  opencode: (entry) => lazyBuiltIn(
+    'opencode',
+    'OpenCode',
+    () => import('./opencode').then(({ OpenCodeProvider }) => new OpenCodeProvider(entry))
+  )
 }
 
 const VALID_ID = /^[a-z0-9-]{1,32}$/
 const VALID_MODEL = /^[\w.:/-]{1,64}$/
 const VALID_USAGE_SOURCE_ID = /^[\w:.-]{1,128}$/
 const MAX_PROMPT_CHARS = 200_000
+const MAX_STORED_ACTIVITIES = 200
+const CONTEXT_SUMMARY_TIMEOUT_MS = 30_000
+const PENDING_CANCEL_TTL_MS = 60_000
 
 function validGenerationOptions(value: unknown): value is ProviderGenerationOptions {
   if (value === undefined) return true
@@ -343,30 +383,51 @@ interface ChatSendArgs {
 type ChatSendResponse = { ok: true; result: SendResult } | { ok: false; error: string }
 
 const activeRequests = new Map<string, AbortController>()
+const pendingCancellations = new Map<string, number>()
 
-function cleanActivity(activity: ProviderActivity): ProviderActivity {
+type CleanProviderActivity = ProviderActivity & {
+  status: NonNullable<ProviderActivity['status']>
+  timestamp: number
+}
+
+function cleanActivity(activity: ProviderActivity): CleanProviderActivity {
   const clean = (value: string | undefined, max: number): string | undefined => {
     if (!value) return undefined
     const text = value.replace(/\s+/g, ' ').trim()
     return text ? text.slice(0, max) : undefined
   }
+  const cleanPublic = (value: string | undefined, max: number): string | undefined => {
+    const text = clean(value, max)
+    return text ? redactCliText(text) : undefined
+  }
+  const finiteTimestamp = (value: number | undefined): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? Math.trunc(value)
+      : undefined
   return {
+    id: clean(activity.id, 160),
     kind: activity.kind,
-    label: clean(activity.label, 180) ?? 'Working',
-    detail: clean(activity.detail, 500),
+    label: cleanPublic(activity.label, 180) ?? 'Working',
+    detail: cleanPublic(activity.detail, 500),
     status: activity.status ?? 'running',
-    surface: activity.surface ?? (activity.kind === 'file' ? 'files' : undefined)
+    surface: activity.surface ??
+      (activity.kind === 'file' ? 'files' : activity.kind === 'command' ? 'terminal' : undefined),
+    timestamp: finiteTimestamp(activity.timestamp) ?? Date.now(),
+    startedAt: finiteTimestamp(activity.startedAt),
+    endedAt: finiteTimestamp(activity.endedAt)
   }
 }
 
 function publicChatFailure(error: unknown): string {
-  return safeRuntimeError(error, 240)
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(
-      /\b(api[-_ ]?key|authorization|password|secret|token)(\s*[:=]\s*)([^\s,;]+)/gi,
-      '$1$2[redacted]'
-    )
-    .replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,}|xox[a-z]-[A-Za-z0-9-]{8,})\b/g, '[redacted]')
+  return redactCliText(safeRuntimeError(error, 240))
+}
+
+function readableTimeout(timeoutMs?: number): string {
+  if (!timeoutMs) return ''
+  const seconds = Math.max(1, Math.round(timeoutMs / 1_000))
+  return seconds >= 60 && seconds % 60 === 0
+    ? `${seconds / 60} ${seconds === 60 ? 'minute' : 'minutes'}`
+    : `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
 }
 
 function durableFailureText(
@@ -382,7 +443,8 @@ function durableFailureText(
     return `This request was stopped before Akorith could save a final response.${projectNote}`
   }
   if (state === 'timed_out') {
-    return `This request timed out${timeoutMs ? ` after ${timeoutMs}ms` : ''} before Akorith could save a final response.${projectNote}`
+    const duration = readableTimeout(timeoutMs)
+    return `This request timed out${duration ? ` after ${duration}` : ''} before Akorith could save a final response.${projectNote}`
   }
   return `Akorith could not complete this request: ${publicChatFailure(error)}.${projectNote}`
 }
@@ -619,9 +681,14 @@ async function ensureOlderSummary(
   const cached = getContextSummary(sessionId)
   // Reuse the cached summary while it still covers the whole older window.
   if (cached.summary && cached.count >= window.older.length) return cached.summary
+  const summaryController = new AbortController()
+  const forwardAbort = (): void => summaryController.abort()
+  const timeout = setTimeout(() => summaryController.abort(), CONTEXT_SUMMARY_TIMEOUT_MS)
+  if (signal.aborted) summaryController.abort()
+  else signal.addEventListener('abort', forwardAbort, { once: true })
   try {
     const prompt = buildOlderSummaryPrompt(window.older, cached.summary)
-    const res = await sendMetaPrompt(providerId, model, prompt, signal)
+    const res = await sendMetaPrompt(providerId, model, prompt, summaryController.signal)
     const summary = res.text.trim()
     if (summary) {
       setContextSummary(sessionId, summary, window.older.length)
@@ -629,6 +696,9 @@ async function ensureOlderSummary(
     }
   } catch (err) {
     console.error('[registry] older-context summary failed — using recent turns only:', err)
+  } finally {
+    clearTimeout(timeout)
+    signal.removeEventListener('abort', forwardAbort)
   }
   return cached.summary // fall back to a stale summary if we have one
 }
@@ -746,6 +816,8 @@ export function registerChatIpc(): void {
     // rows are read.
     let prior: ConvMessage[] = []
     const requestStartedAt = Date.now()
+    const requestActivities: StoredMessageActivity[] = []
+    let activitySequence = 0
     let assistantMessageId: string | undefined
     if (sessionId) {
       try {
@@ -772,6 +844,21 @@ export function registerChatIpc(): void {
 
     const sender = event.sender
     const controller = new AbortController()
+    const emitActivity = (activity: ProviderActivity): void => {
+      const clean = cleanActivity(activity)
+      const normalized: StoredMessageActivity = {
+        ...clean,
+        id: clean.id ?? `registry:event-${++activitySequence}`
+      }
+      requestActivities.push(normalized)
+      if (requestActivities.length > MAX_STORED_ACTIVITIES) requestActivities.shift()
+      if (!sender.isDestroyed()) {
+        sender.send('chat:activity', {
+          requestId: args.requestId,
+          ...normalized
+        })
+      }
+    }
     const requestTimeoutMs = args.generation?.timeoutMs
     let requestTimedOut = false
     const requestTimeout = requestTimeoutMs
@@ -781,7 +868,23 @@ export function registerChatIpc(): void {
         }, requestTimeoutMs)
       : null
     activeRequests.set(args.requestId, controller)
+    const pendingCancelAt = pendingCancellations.get(args.requestId)
+    pendingCancellations.delete(args.requestId)
+    if (pendingCancelAt && Date.now() - pendingCancelAt <= PENDING_CANCEL_TTL_MS) controller.abort()
+    const onSenderDestroyed = (): void => controller.abort()
+    sender.once('destroyed', onSenderDestroyed)
     try {
+      const contextStartedAt = Date.now()
+      emitActivity({
+        id: 'registry:project-context',
+        kind: 'status',
+        label: 'Preparing the project context',
+        detail: 'Akorith is loading the conversation, attachments, repository context, and current file-change snapshot before the model starts.',
+        status: 'running',
+        timestamp: contextStartedAt,
+        startedAt: contextStartedAt
+      })
+      if (controller.signal.aborted) throw new Error('cancelled')
       // Opt-in repo context (Phase 6): a bounded digest the PROVIDER sees — the
       // stored user message and the usage event stay the clean typed prompt. A
       // digest failure never blocks the send.
@@ -816,6 +919,17 @@ export function registerChatIpc(): void {
         localAttachmentPromise,
         changesBeforePromise
       ])
+      const contextEndedAt = Date.now()
+      emitActivity({
+        id: 'registry:project-context',
+        kind: 'status',
+        label: 'Project context is ready',
+        detail: 'The selected model now has the bounded project and conversation context needed for this request.',
+        status: 'complete',
+        timestamp: contextEndedAt,
+        endedAt: contextEndedAt
+      })
+      if (controller.signal.aborted) throw new Error('cancelled')
       const localPlanContext = args.providerId === 'local' && args.intent === 'plan' && workspaceContext?.projectPath
         ? `\n\nProject snapshot:\n${renderProjectContext(inspectProject(workspaceContext.projectPath))}`
         : ''
@@ -832,22 +946,22 @@ export function registerChatIpc(): void {
       const workspaceInstruction = workspaceContext
         ? args.intent === 'plan'
           ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
-          : `You are Akorith's project coding agent. Work directly in the current working directory. Inspect the project, make the requested file changes, and run relevant checks. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
+          : `You are Akorith's project coding agent. Work directly in the current working directory. Treat the user's explicit request as the concrete task: inspect the project, make the requested file changes, and run relevant checks. If the selected directory is empty, scaffold or create the requested project there instead of claiming no task was provided. Make reasonable, safe implementation assumptions and continue; ask a question only when a genuinely missing decision would materially change the result. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
       let result: SendResult
-      const emitActivity = (activity: ProviderActivity): void => {
-        if (!sender.isDestroyed()) {
-          sender.send('chat:activity', {
-            requestId: args.requestId,
-            ...cleanActivity(activity),
-            timestamp: Date.now()
-          })
-        }
-      }
       try {
-        emitActivity({ kind: 'status', label: 'Starting the selected model', status: 'running' })
+        const modelStartedAt = Date.now()
+        emitActivity({
+          id: 'registry:model-start',
+          kind: 'status',
+          label: 'Starting the selected model',
+          detail: `${provider.label} is connected to the trusted project boundary and is beginning the requested work.`,
+          status: 'running',
+          timestamp: modelStartedAt,
+          startedAt: modelStartedAt
+        })
         let pendingToken = ''
         let tokenTimer: ReturnType<typeof setTimeout> | null = null
         const flushPendingToken = (): void => {
@@ -910,13 +1024,32 @@ export function registerChatIpc(): void {
             emit: emitActivity
           })
         }
-        emitActivity({ kind: 'status', label: 'Workspace task complete', status: 'complete' })
+        const modelEndedAt = Date.now()
+        emitActivity({
+          id: 'registry:model-start',
+          kind: 'status',
+          label: 'Workspace task complete',
+          detail: 'The provider finished its work; Akorith is saving the response, activity history, usage, and file-change evidence.',
+          status: 'complete',
+          timestamp: modelEndedAt,
+          endedAt: modelEndedAt
+        })
         completeProviderObservation(observation, result)
       } catch (err) {
+        const failedAt = Date.now()
+        const providerTimedOut = requestTimedOut || isCliTimeoutError(err)
         emitActivity({
+          id: 'registry:model-start',
           kind: 'warning',
-          label: err instanceof Error ? err.message : 'Workspace task failed',
-          status: 'error'
+          label: providerTimedOut
+            ? 'Workspace task timed out'
+            : controller.signal.aborted
+              ? 'Workspace task stopped'
+              : 'Workspace task failed',
+          detail: publicChatFailure(err),
+          status: 'error',
+          timestamp: failedAt,
+          endedAt: failedAt
         })
         failProviderObservation(observation, err)
         throw err
@@ -931,7 +1064,8 @@ export function registerChatIpc(): void {
               state: 'completed'
             },
             usage: result.usage,
-            changes: result.changes
+            changes: result.changes,
+            activities: requestActivities
           })
         } catch (err) {
           console.error('[registry] failed to persist assistant message:', err)
@@ -960,7 +1094,8 @@ export function registerChatIpc(): void {
       }
       return { ok: true, result }
     } catch (err) {
-      const state: Extract<ChatLifecycleState, 'error' | 'cancelled' | 'timed_out'> = requestTimedOut
+      const providerTimedOut = isCliTimeoutError(err)
+      const state: Extract<ChatLifecycleState, 'error' | 'cancelled' | 'timed_out'> = requestTimedOut || providerTimedOut
         ? 'timed_out'
         : controller.signal.aborted
           ? 'cancelled'
@@ -969,7 +1104,7 @@ export function registerChatIpc(): void {
         state,
         err,
         Boolean(workspaceContext?.projectPath),
-        requestTimeoutMs
+        requestTimedOut ? requestTimeoutMs : providerTimedOut ? err.thresholdMs : undefined
       )
       if (assistantMessageId) {
         try {
@@ -984,7 +1119,8 @@ export function registerChatIpc(): void {
               chatLifecycle: {
                 requestId: args.requestId,
                 state
-              }
+              },
+              activities: requestActivities
             }
           )
         } catch (persistError) {
@@ -994,14 +1130,28 @@ export function registerChatIpc(): void {
       return { ok: false, error }
     } finally {
       if (requestTimeout) clearTimeout(requestTimeout)
+      sender.removeListener('destroyed', onSenderDestroyed)
       activeRequests.delete(args.requestId)
       releaseWorkspaceWriterLease()
     }
   })
 
   ipcMain.on('chat:cancel', (_event, args: { requestId: string }) => {
-    if (typeof args?.requestId !== 'string') return
-    activeRequests.get(args.requestId)?.abort()
+    if (typeof args?.requestId !== 'string' || !/^[\w-]{1,64}$/.test(args.requestId)) return
+    const active = activeRequests.get(args.requestId)
+    if (active) {
+      active.abort()
+      return
+    }
+    const now = Date.now()
+    for (const [requestId, timestamp] of pendingCancellations) {
+      if (now - timestamp > PENDING_CANCEL_TTL_MS) pendingCancellations.delete(requestId)
+    }
+    if (pendingCancellations.size >= 256) {
+      const oldest = pendingCancellations.keys().next().value
+      if (typeof oldest === 'string') pendingCancellations.delete(oldest)
+    }
+    pendingCancellations.set(args.requestId, now)
   })
 
   // Phase 14.2: read-only report of what conversation context WOULD be sent for a

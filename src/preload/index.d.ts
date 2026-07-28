@@ -93,12 +93,15 @@ export interface ChatSendResult {
 }
 
 export interface ChatActivity {
+  id?: string
   kind: 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
   label: string
   detail?: string
   status?: 'running' | 'complete' | 'error'
   surface?: 'review' | 'terminal' | 'browser' | 'computer' | 'files'
   timestamp: number
+  startedAt?: number
+  endedAt?: number
 }
 
 export type ChatSendResponse = { ok: true; result: ChatSendResult } | { ok: false; error: string }
@@ -228,6 +231,7 @@ export interface MessageRow {
     startedAt?: number
     endedAt?: number
     chatLifecycle?: ChatLifecycleMetadata
+    activities?: ChatActivity[]
     usage?: ChatUsage
     changes?: ChatSendResult['changes']
     workspaceGoal?: {

@@ -19,6 +19,11 @@ import {
   interruptedChatResponse,
   type ChatLifecycleMetadata
 } from '../shared/chat-lifecycle'
+import type {
+  ProviderActivityKind,
+  ProviderActivityStatus,
+  ProviderActivitySurface
+} from './providers/types'
 
 let db: Database.Database | null = null
 let dbInitPromise: Promise<void> | null = null
@@ -982,6 +987,8 @@ export interface StoredMessageMetadata {
   endedAt?: number
   /** Durable lifecycle for a normal chat provider turn. */
   chatLifecycle?: ChatLifecycleMetadata
+  /** Bounded, normalized provider activity for Workspace history hydration. */
+  activities?: StoredMessageActivity[]
   usage?: {
     promptTokens?: number
     completionTokens?: number
@@ -1008,6 +1015,18 @@ export interface StoredMessageMetadata {
     final: boolean
     error?: string
   }
+}
+
+export interface StoredMessageActivity {
+  id: string
+  kind: ProviderActivityKind
+  label: string
+  detail?: string
+  status: ProviderActivityStatus
+  surface?: ProviderActivitySurface
+  timestamp: number
+  startedAt?: number
+  endedAt?: number
 }
 
 export interface StoredMessageAttachment {

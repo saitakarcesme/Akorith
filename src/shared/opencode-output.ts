@@ -17,10 +17,15 @@ export interface OpenCodeTokenUsage {
 }
 
 export interface OpenCodeActivity {
+  id?: string
   kind: 'command' | 'file' | 'tool' | 'warning'
   label: string
   detail?: string
   status: 'running' | 'complete' | 'error'
+  surface?: 'terminal' | 'files'
+  timestamp?: number
+  startedAt?: number
+  endedAt?: number
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -31,6 +36,13 @@ function cleanInline(value: unknown, maxLength = 240): string {
   if (typeof value !== 'string') return ''
   const text = value.replace(ANSI_PATTERN, '').replace(/[\0\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim()
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text
+}
+
+function eventTimestamp(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.trunc(value)
+  if (typeof value !== 'string' || !value.trim()) return undefined
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 function displayPath(value: string, workspaceDirectory?: string): string {
@@ -85,6 +97,7 @@ export function normalizeOpenCodeActivityEvent(
 
   const tool = cleanInline(part.tool ?? event.tool, 80) || 'tool'
   const state = record(part.state)
+  const time = record(state.time)
   const directInput = record(part.input)
   const input = Object.keys(directInput).length > 0 ? directInput : record(state.input)
   const rawStatus = String(state.status ?? '')
@@ -97,10 +110,18 @@ export function normalizeOpenCodeActivityEvent(
   const normalized = toolLabel(tool, input, workspaceDirectory)
   const error = cleanInline(state.error, 300)
   const output = normalized.kind === 'command' ? cleanInline(state.output, 220) : ''
+  const id = cleanInline(part.callID ?? part.callId ?? part.id ?? event.id, 160)
+  const startedAt = eventTimestamp(time.start ?? state.startedAt ?? event.startedAt)
+  const endedAt = eventTimestamp(time.end ?? state.endedAt ?? event.endedAt)
   return {
+    id: id || undefined,
     ...normalized,
     detail: error || output || undefined,
-    status
+    status,
+    surface: normalized.kind === 'command' ? 'terminal' : 'files',
+    timestamp: endedAt ?? startedAt,
+    startedAt,
+    endedAt
   }
 }
 

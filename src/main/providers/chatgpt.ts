@@ -4,7 +4,13 @@
 import { unlink, readFile } from 'fs/promises'
 import { homedir, tmpdir } from 'os'
 import { join } from 'path'
-import { runCli, estimateTokens } from './util'
+import {
+  cleanCliEventId,
+  estimateTokens,
+  providerRuntimeWatchdog,
+  redactCliText,
+  runCli
+} from './util'
 import type {
   Provider,
   ProviderAvailability,
@@ -15,6 +21,16 @@ import type {
 } from './types'
 
 const DEFAULT_MODELS = ['default', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'codex-auto-review']
+
+export function boundedCommandOutput(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = redactCliText(value
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+    .replace(/\0/g, '')
+    .trim())
+  if (!text) return undefined
+  return text.length > 480 ? `…${text.slice(-479)}` : text
+}
 
 export class ChatGPTProvider implements Provider {
   readonly id = 'chatgpt'
@@ -103,6 +119,7 @@ export class ChatGPTProvider implements Provider {
         stdin: prompt,
         signal: opts.signal,
         timeoutMs: 600_000,
+        ...providerRuntimeWatchdog('chatgpt', 'Codex', opts.onActivity),
         cwd: opts.workingDirectory ?? homedir(),
         onStdoutLine: (line) => {
           let event: Record<string, unknown>
@@ -115,23 +132,66 @@ export class ChatGPTProvider implements Provider {
           const item = event.item && typeof event.item === 'object' ? event.item as Record<string, unknown> : null
           const itemType = typeof item?.type === 'string' ? item.type : ''
           const status = type.endsWith('.completed') ? 'complete' : 'running'
+          const now = Date.now()
+          const nativeId = cleanCliEventId(item?.id ?? event.item_id ?? event.id ?? event.turn_id ?? event.thread_id)
+          const activityId = nativeId ? `codex:${nativeId}` : undefined
+          const lifecycle = status === 'complete'
+            ? { timestamp: now, endedAt: now }
+            : { timestamp: now, startedAt: now }
           if (type === 'thread.started') {
-            opts.onActivity?.({ kind: 'status', label: 'Codex session started', status: 'complete' })
+            opts.onActivity?.({
+              id: activityId ?? 'codex:session',
+              kind: 'status',
+              label: 'Codex session started',
+              status: 'complete',
+              timestamp: now,
+              endedAt: now
+            })
           } else if (type === 'turn.started') {
-            opts.onActivity?.({ kind: 'status', label: 'Inspecting the workspace', status: 'running' })
+            opts.onActivity?.({
+              id: activityId ?? 'codex:turn',
+              kind: 'status',
+              label: 'Inspecting the workspace',
+              status: 'running',
+              timestamp: now,
+              startedAt: now
+            })
           } else if (itemType === 'command_execution') {
             const command = typeof item?.command === 'string' ? item.command : 'Running a command'
-            opts.onActivity?.({ kind: 'command', label: command, status })
+            const output = boundedCommandOutput(item?.aggregated_output ?? item?.output)
+            opts.onActivity?.({
+              id: activityId,
+              kind: 'command',
+              label: command,
+              detail: output,
+              status,
+              surface: 'terminal',
+              ...lifecycle
+            })
           } else if (itemType === 'file_change') {
             const changes = Array.isArray(item?.changes) ? item.changes as Record<string, unknown>[] : []
             const paths = changes.map((change) => String(change.path ?? '')).filter(Boolean)
-            opts.onActivity?.({ kind: 'file', label: paths.length ? paths.join(', ') : 'Updating project files', status })
+            opts.onActivity?.({
+              id: activityId,
+              kind: 'file',
+              label: paths.length ? paths.join(', ') : 'Updating project files',
+              status,
+              surface: 'files',
+              ...lifecycle
+            })
           } else if (itemType === 'reasoning') {
             const text = typeof item?.text === 'string' ? item.text : 'Reasoning through the task'
-            opts.onActivity?.({ kind: 'reasoning', label: text, status })
+            opts.onActivity?.({ id: activityId, kind: 'reasoning', label: text, status, ...lifecycle })
           } else if (itemType === 'plan') {
             const text = typeof item?.text === 'string' ? item.text : 'Updating the plan'
-            opts.onActivity?.({ kind: 'plan', label: text, status })
+            opts.onActivity?.({
+              id: activityId,
+              kind: 'plan',
+              label: text,
+              status,
+              surface: 'review',
+              ...lifecycle
+            })
           } else if (type === 'turn.completed') {
             const usage = event.usage && typeof event.usage === 'object'
               ? event.usage as Record<string, unknown>
@@ -161,7 +221,14 @@ export class ChatGPTProvider implements Provider {
                 }
               }
             }
-            opts.onActivity?.({ kind: 'status', label: 'Preparing the final result', status: 'complete' })
+            opts.onActivity?.({
+              id: activityId ?? 'codex:turn',
+              kind: 'status',
+              label: 'Preparing the final result',
+              status: 'complete',
+              timestamp: now,
+              endedAt: now
+            })
           }
         }
       })
