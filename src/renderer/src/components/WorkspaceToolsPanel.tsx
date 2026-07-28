@@ -83,7 +83,8 @@ export default function WorkspaceToolsPanel({
   active,
   refreshKey,
   requestedTool,
-  onOpen
+  onOpen,
+  onClose
 }: {
   project: ProjectRow | null
   open: boolean
@@ -91,6 +92,7 @@ export default function WorkspaceToolsPanel({
   refreshKey?: string | number
   requestedTool?: WorkspaceToolRequest | null
   onOpen: () => void
+  onClose: () => void
 }): JSX.Element | null {
   const [activeTool, setActiveTool] = useState<WorkspaceToolId | null>(null)
   const [openTabs, setOpenTabs] = useState<WorkspaceToolId[]>([])
@@ -246,7 +248,7 @@ export default function WorkspaceToolsPanel({
         />
       )}
 
-      {openTabs.length > 0 && (
+      {open && (
         <nav className="workspace-tool-tabs" aria-label="Open workspace tools">
           <div className="workspace-tool-tab-list" role="tablist">
             {openTabs.map((tool) => {
@@ -281,6 +283,15 @@ export default function WorkspaceToolsPanel({
               )
             })}
           </div>
+          <button
+            type="button"
+            className="workspace-tools-close"
+            aria-label="Close workspace tools"
+            title="Close workspace tools"
+            onClick={onClose}
+          >
+            <PanelsIcon size={15} />
+          </button>
         </nav>
       )}
 

@@ -310,13 +310,11 @@ function SurfaceToolbar({
         {scope && <span>{scope}</span>}
       </div>
       <div className="app-surface-toolbar-right">
-        {showWorkbench && (
+        {showWorkbench && !workbenchOpen && (
           <button
             type="button"
-            className={workbenchOpen ? 'is-active' : ''}
-            aria-label="Toggle workspace tools"
-            aria-pressed={workbenchOpen}
-            title="Toggle workspace tools"
+            aria-label="Open workspace tools"
+            title="Open workspace tools"
             onClick={onToggleWorkbench}
           >
             <PanelsIcon size={15} />
@@ -842,6 +840,7 @@ export default function App(): JSX.Element {
             refreshKey={historyVersion}
             requestedTool={workspaceToolRequest}
             onOpen={openWorkspaceTools}
+            onClose={toggleWorkspaceTools}
           />
         </Suspense>
       </div>

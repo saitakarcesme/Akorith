@@ -1,13 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ContextInfo, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
+import type { ContextInfo, GitStatusResult, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { ChatMode, HistorySelection } from '../App'
 import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHint } from '../workspaceLoopCommand'
 import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
+import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../workspaceLiveChanges'
 import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
 import WorkspaceStepDock from './WorkspaceStepDock'
+import WorkspaceLiveChangesCard from './WorkspaceLiveChangesCard'
 import type { WorkspaceToolId } from './WorkspaceToolsPanel'
 import { hydrateStoredChatMessages } from './chat-history'
 
@@ -41,6 +43,7 @@ const MAX_COMPOSER_HEIGHT = 192
 const TOKEN_RENDER_INTERVAL_MS = 100
 const FINAL_RESPONSE_REVEAL_INTERVAL_MS = 55
 const FINAL_RESPONSE_REVEAL_STEPS = 9
+const LIVE_CHANGE_POLL_MS = 2_000
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
@@ -496,6 +499,9 @@ export default function ChatPanel({
     )
     const requestId = newId()
     const assistantId = newId()
+    const liveChangesBaselinePromise: Promise<GitStatusResult | null> = turn.workspace && turn.intent !== 'plan'
+      ? window.api.git.status(turn.workspace.projectPath).catch(() => null)
+      : Promise.resolve(null)
     revealGenerationRef.current[requestId] = 0
     const requestedTools = new Set<WorkspaceToolId>()
     const requestWorkspaceTool = (tool: WorkspaceToolId, reason: 'activity' | 'changes'): void => {
@@ -523,7 +529,17 @@ export default function ChatPanel({
     setSessionMessages(sessionId, (current) => [
       ...current,
       { id: newId(), role: 'user', text: turn.prompt, status: 'done', attachments: visibleAttachments, intent: turn.intent },
-      { id: assistantId, role: 'assistant', text: '', status: 'streaming', activities: turn.mode === 'workspace' ? [] : undefined, taskPrompt: turn.prompt, startedAt, intent: turn.intent }
+      {
+        id: assistantId,
+        role: 'assistant',
+        text: '',
+        status: 'streaming',
+        activities: turn.mode === 'workspace' ? [] : undefined,
+        taskPrompt: turn.prompt,
+        startedAt,
+        intent: turn.intent,
+        meta: { provider: turn.providerId, model: turn.model || 'default' }
+      }
     ])
     const offToken = window.api.chat.onToken(requestId, (token) => {
       tokenBuffersRef.current[requestId] = `${tokenBuffersRef.current[requestId] ?? ''}${token}`
@@ -550,6 +566,7 @@ export default function ChatPanel({
             : message))
         })
       : () => {}
+    let stopLiveChangePolling = (): void => {}
     try {
       const responsePromise = window.api.chat.send({
         requestId,
@@ -564,11 +581,69 @@ export default function ChatPanel({
         attachments: publicAttachments,
         intent: turn.intent
       })
+      // Register the IPC request before awaiting the optional Git snapshot so
+      // Stop can cancel immediately and provider startup is not serialized
+      // behind a renderer-only status read.
+      void responsePromise.catch(() => {})
       // ipcRenderer.invoke clones its argument synchronously. Release the
       // renderer's non-display base64 copies while the provider is working.
       turn.attachments.length = 0
       publicAttachments = []
+      const liveChangesBaseline = await liveChangesBaselinePromise
+      if (turn.workspace && liveChangesBaseline?.ok && liveChangesBaseline.isRepo) {
+        let stopped = false
+        let timer: number | undefined
+        let lastSignature = ''
+        const announcedCreatedFiles = new Set<string>()
+        const poll = async (): Promise<void> => {
+          if (stopped) return
+          if (
+            activeRef.current &&
+            !document.hidden &&
+            activeSessionRef.current === sessionId
+          ) {
+            const current = await window.api.git.status(turn.workspace!.projectPath).catch(() => null)
+            if (stopped) return
+            if (current) {
+              const changes = liveWorkspaceChangesSince(liveChangesBaseline, current)
+              const signature = JSON.stringify(changes ?? null)
+              if (signature !== lastSignature) {
+                lastSignature = signature
+                const created = changes
+                  ? newlyCreatedWorkspaceFiles(changes).filter((path) => !announcedCreatedFiles.has(path))
+                  : []
+                for (const path of created) announcedCreatedFiles.add(path)
+                const timestamp = Date.now()
+                setSessionMessages(sessionId, (items) => items.map((message) => {
+                  if (message.id !== assistantId || message.status !== 'streaming') return message
+                  const createdActivities = created.map((path, index) => ({
+                    kind: 'file' as const,
+                    label: `Created ${path}`,
+                    detail: 'Detected in this task’s Git working-tree changes',
+                    status: 'complete' as const,
+                    timestamp: timestamp + index
+                  }))
+                  return {
+                    ...message,
+                    meta: { ...(message.meta ?? { provider: turn.providerId, model: turn.model || 'default' }), changes },
+                    activities: createdActivities.length
+                      ? [...(message.activities ?? []), ...createdActivities].slice(-30)
+                      : message.activities
+                  }
+                }))
+              }
+            }
+          }
+          if (!stopped) timer = window.setTimeout(() => { void poll() }, LIVE_CHANGE_POLL_MS)
+        }
+        timer = window.setTimeout(() => { void poll() }, 800)
+        stopLiveChangePolling = () => {
+          stopped = true
+          if (timer !== undefined) window.clearTimeout(timer)
+        }
+      }
       const response = await responsePromise
+      stopLiveChangePolling()
       const completedAt = Date.now()
       const timer = tokenTimersRef.current[requestId]
       if (timer !== undefined) window.clearTimeout(timer)
@@ -592,6 +667,7 @@ export default function ChatPanel({
         ? { ...message, text: error instanceof Error ? error.message : String(error), status: 'error', endedAt: Date.now() }
         : message))
     } finally {
+      stopLiveChangePolling()
       offToken()
       offActivity()
       const timer = tokenTimersRef.current[requestId]
@@ -813,6 +889,9 @@ export default function ChatPanel({
   const latestWorkspaceActivities = latestWorkspaceRun?.activities
   const latestWorkspacePrompt = latestWorkspaceContext?.prompt ?? ''
   const latestWorkspaceStatus = latestWorkspaceRun?.status
+  const liveWorkspaceChanges = latestWorkspaceStatus === 'streaming'
+    ? latestWorkspaceRun?.meta?.changes
+    : undefined
   const hasLatestWorkspaceRun = latestWorkspaceRun !== undefined
   const latestWorkspaceSteps = useMemo(
     () => hasLatestWorkspaceRun
@@ -833,6 +912,16 @@ export default function ChatPanel({
     ]
   )
   const busyRequestId = activeSessionId ? activeRequests[activeSessionId] : undefined
+  const reviewLiveChanges = useCallback((): void => {
+    if (!activeProject || !activeSessionId || !busyRequestId) return
+    onWorkspaceToolRequest?.({
+      projectId: activeProject.id,
+      sessionId: activeSessionId,
+      requestId: busyRequestId,
+      tool: 'review',
+      reason: 'changes'
+    })
+  }, [activeProject, activeSessionId, busyRequestId, onWorkspaceToolRequest])
   const currentQueue = activeSessionId ? queuedTurnsRef.current[activeSessionId] ?? [] : []
   void queueVersion
   const loopHint = isWorkspace && hasProject ? workspaceLoopHint(draft) : null
@@ -968,7 +1057,7 @@ export default function ChatPanel({
           </div>
         </div>
       )
-          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} active={active} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{composer}</div></>}
+          : <><div className="chat-messages" ref={scrollRef} onScroll={() => { const element = scrollRef.current; if (element) nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120 }}><div className="chat-messages-col"><Suspense fallback={<div className="chat-transcript-loading" role="status">Opening conversation...</div>}>{messages.map((message) => <ChatMessageView key={message.id} message={message} isWorkspace={isWorkspace} active={active} projectName={activeProject?.name} />)}</Suspense></div></div><div className="composer-dock">{latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}{liveWorkspaceChanges?.files.length ? <WorkspaceLiveChangesCard changes={liveWorkspaceChanges} onReview={reviewLiveChanges} /> : null}{composer}</div></>}
     </main>
   )
 }

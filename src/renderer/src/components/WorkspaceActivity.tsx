@@ -1,7 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatActivity } from '../../../preload/index.d'
 import { useDocumentVisible } from '../documentVisibility'
-import { buildWorkspaceActivityNarrative } from '../workspaceActivityNarrative'
+import {
+  buildWorkspaceActivityEventNarrative
+} from '../workspaceActivityNarrative'
 
 interface WorkspaceActivityProps {
   activities: ChatActivity[]
@@ -10,7 +12,6 @@ interface WorkspaceActivityProps {
   active: boolean
   failed?: boolean
   projectName?: string
-  taskPrompt?: string
 }
 
 const NARRATIVE_REVEAL_INTERVAL_MS = 45
@@ -33,6 +34,7 @@ function sharedPrefixLength(left: string, right: string): number {
 }
 
 function activityHeadline(item: ChatActivity): string {
+  if (/^Created\s+/i.test(item.label)) return item.label
   if (item.kind === 'reasoning') return 'Reasoning about the next action'
   if (item.kind === 'plan') return 'Updating the plan'
   if (item.label === 'Starting the selected model') return 'Starting the selected CLI'
@@ -85,8 +87,7 @@ function WorkspaceActivity({
   endedAt,
   active,
   failed = false,
-  projectName = 'the selected project',
-  taskPrompt
+  projectName = 'the selected project'
 }: WorkspaceActivityProps): JSX.Element {
   const documentVisible = useDocumentVisible()
   const [now, setNow] = useState(Date.now())
@@ -103,13 +104,6 @@ function WorkspaceActivity({
     setCollapsed(!active)
   }, [active])
 
-  const narrative = useMemo(() => buildWorkspaceActivityNarrative({
-    activities,
-    projectName,
-    taskPrompt,
-    active,
-    failed
-  }), [active, activities, failed, projectName, taskPrompt])
   const headlines = useMemo(() => {
     const latest = new Map<string, ChatActivity>()
     for (const activity of activities) {
@@ -120,7 +114,7 @@ function WorkspaceActivity({
         ? { ...activity, status: 'complete' }
         : activity)
     }
-    return [...latest.values()].slice(-4)
+    return [...latest.values()].slice(-3)
   }, [active, activities, failed])
   const recordedEnd = useMemo(
     () => activities.reduce((latest, item) => Math.max(latest, item.timestamp), startedAt),
@@ -153,23 +147,29 @@ function WorkspaceActivity({
       {!collapsed && (
         <div className="workspace-activity-narrative">
           <div className="workspace-activity-headlines" aria-label="Current CLI activity">
-            {headlines.map((item) => (
-              <div
-                className={`workspace-activity-headline is-${item.kind} is-${item.status ?? 'running'}`}
-                key={`${item.timestamp}-${item.kind}-${item.label}`}
-              >
-                <i aria-hidden="true" />
-                <strong>{activityHeadline(item)}</strong>
+            {headlines.map((item, index) => (
+              <div className="workspace-activity-copy" key={`${item.timestamp}-${item.kind}-${item.label}`}>
+                <div
+                  className={`workspace-activity-headline is-${item.kind} is-${item.status ?? 'running'}${/^Created\s+/i.test(item.label) ? ' is-created' : ''}`}
+                >
+                  <strong>{activityHeadline(item)}</strong>
+                </div>
+                <p>
+                  {index === headlines.length - 1
+                    ? <ProgressiveNarrative text={buildWorkspaceActivityEventNarrative(item, projectName)} animate={active} />
+                    : buildWorkspaceActivityEventNarrative(item, projectName)}
+                </p>
               </div>
             ))}
             {headlines.length === 0 && active && (
-              <div className="workspace-activity-headline is-status is-running">
-                <i aria-hidden="true" />
-                <strong>Starting the selected CLI</strong>
+              <div className="workspace-activity-copy">
+                <div className="workspace-activity-headline is-status is-running">
+                  <strong>Starting the selected CLI</strong>
+                </div>
+                <p>Akorith is connecting the selected CLI to {projectName} and waiting for its first concrete action.</p>
               </div>
             )}
           </div>
-          <p><ProgressiveNarrative text={narrative} animate={active} /></p>
           <span className="workspace-activity-sr" role="status" aria-live="polite" aria-atomic="true">
             {liveAnnouncement}
           </span>

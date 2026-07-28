@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseDiffRows } from '../src/renderer/src/components/BottomWorkbench'
 import { mapPreviewPoint } from '../src/renderer/src/components/ProjectPreviewPanel'
-import { buildWorkspaceActivityNarrative } from '../src/renderer/src/workspaceActivityNarrative'
+import {
+  buildWorkspaceActivityEventNarrative,
+  buildWorkspaceActivityNarrative
+} from '../src/renderer/src/workspaceActivityNarrative'
+import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../src/renderer/src/workspaceLiveChanges'
 import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
 
 const root = join(__dirname, '..')
@@ -50,15 +54,6 @@ function selectorBlocks(css: string, selectorFragment: string): string[] {
   return blocks
 }
 
-function highestZIndex(blocks: string[]): number {
-  return blocks.reduce((highest, block) => {
-    const values = [...block.matchAll(/z-index\s*:\s*(-?\d+)/gi)]
-      .map((match) => Number(match[1]))
-      .filter(Number.isFinite)
-    return Math.max(highest, ...values)
-  }, Number.NEGATIVE_INFINITY)
-}
-
 function hasBreakpoint(css: string, width: number): boolean {
   return new RegExp(
     `@media\\s*\\(\\s*max-width\\s*:\\s*${width}px\\s*\\)`,
@@ -100,6 +95,7 @@ const research = read('src/renderer/src/components/ResearchProgress.tsx')
 const researchEssay = read('src/renderer/src/components/ResearchEssay.tsx')
 const researchOperations = read('src/renderer/src/components/ResearchOperationalDetails.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
+const workspaceLiveChangesCard = read('src/renderer/src/components/WorkspaceLiveChangesCard.tsx')
 const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
 const workspaceTools = read('src/renderer/src/components/WorkspaceToolsPanel.tsx')
 const workspaceFiles = read('src/renderer/src/components/WorkspaceFilesPanel.tsx')
@@ -187,8 +183,8 @@ check(
     workspaceTools.includes('workspace-tools-resizer') &&
     workspaceTools.includes('is-closed') &&
     !workspaceTools.includes('workspace-tools-rail') &&
-    !workspaceTools.includes('workspace-tools-close'),
-  'Workspace tools close to zero width and have no duplicate rail or panel-close controls'
+    (workspaceTools.match(/className="workspace-tools-close"/g) ?? []).length === 1,
+  'Workspace tools close to zero width and keep one integrated panel-close control'
 )
 check(
   workspaceTools.includes('const [openTabs, setOpenTabs]') &&
@@ -224,19 +220,25 @@ check(
   'structured file activity and completed change evidence open the relevant tool without label parsing'
 )
 check(
-  (app.match(/aria-label="Toggle workspace tools"/g) ?? []).length === 1 &&
+  (app.match(/aria-label="Open workspace tools"/g) ?? []).length === 1 &&
+    app.includes('showWorkbench && !workbenchOpen') &&
+    workspaceTools.includes('aria-label="Close workspace tools"') &&
+    workspaceTools.indexOf('className="workspace-tools-close"') <
+      workspaceTools.indexOf('</nav>') &&
     app.includes("const showChromeWorkbench = view === 'workspace' && Boolean(activeProject?.path)") &&
     app.includes('const workspaceToolsVisible = showChromeWorkbench && workbenchOpen') &&
     app.includes('if (!activeProject?.path) return') &&
     !app.includes('workspaceHasToolTabs') &&
     !app.includes("tool: 'files'") &&
     !app.includes('aria-label="Toggle sidebar panel"'),
-  'the persistent surface toolbar control opens the neutral tool launcher'
+  'the closed-surface opener hands off to one close control inside the tool tab row'
 )
 check(
-  highestZIndex(selectorBlocks(replicaCss, '.app-surface-toolbar')) >
-    highestZIndex(selectorBlocks(replicaCss, '.workspace-tools.is-open')),
-  'workspace tool toggle remains clickable above the narrow full-surface tool overlay'
+  selectorBlocks(replicaCss, '.workspace-tools-close').some((block) =>
+    /width\s*:\s*30px/.test(block) &&
+    /height\s*:\s*30px/.test(block)
+  ),
+  'workspace tool close control aligns with the compact tab row'
 )
 check(
   selectorBlocks(
@@ -267,23 +269,26 @@ check(
 )
 check(
   selectorBlocks(replicaCss, '.workspace-tool-tabs').some((block) =>
-    /height\s*:\s*34px/.test(block) &&
+    /height\s*:\s*50px/.test(block) &&
+    /padding\s*:\s*8px\s+8px\s+8px\s+12px/.test(block) &&
     /inset\s*:\s*0\s+0\s+auto/.test(block)
   ) &&
     selectorBlocks(replicaCss, '.workspace-tool-tab-list').some((block) =>
       /overflow-x\s*:\s*auto/.test(block)
     ) &&
     selectorBlocks(replicaCss, '.workspace-tool-tab').some((block) =>
-      /min-width\s*:\s*124px/.test(block) &&
+      /min-width\s*:\s*132px/.test(block) &&
+      /height\s*:\s*34px/.test(block) &&
+      /border-radius\s*:\s*9px/.test(block) &&
       /flex\s*:\s*0\s+0\s+auto/.test(block)
     ),
-  'workspace tools use a thin horizontal tab strip with readable tab widths'
+  'workspace tools use the same compact pill-tab geometry as Research'
 )
 check(
   selectorBlocks(replicaCss, '.workspace-tools-content.has-tabs').some((block) =>
-    /inset\s*:\s*34px\s+0\s+0/.test(block)
+    /inset\s*:\s*50px\s+0\s+0/.test(block)
   ),
-  'workspace tool content begins immediately below the thin tab strip'
+  'workspace tool content begins immediately below the integrated tab strip'
 )
 check(
   selectorBlocks(replicaCss, '.workspace-tools').some((block) =>
@@ -351,8 +356,9 @@ check(
     workspaceActivity.includes('workspace-activity-sr') &&
     stylesCss.includes('.workspace-activity-headline.is-plan') &&
     stylesCss.includes('.workspace-activity-headline.is-file') &&
-    /min-block-size\s*:\s*calc\(1\.68em\s*\*\s*5\)/.test(stylesCss),
-  'Workspace activity restores purple and green live headings above the progressive narrative'
+    workspaceActivity.includes('index === headlines.length - 1') &&
+    !workspaceActivity.includes('text={narrative}'),
+  'Workspace activity interleaves purple and green headings with one compact progressive event narrative'
 )
 
 const mappedCenter = mapPreviewPoint(
@@ -394,10 +400,43 @@ const activityNarrative = buildWorkspaceActivityNarrative({
 })
 check(
   activityNarrative.includes('Create an index.html snake game') &&
-    activityNarrative.includes('Writing index.html') &&
-    activityNarrative.includes('npm run check') &&
-    activityNarrative.includes('Passed'),
-  'Workspace narrative stays task-aware and uses concrete provider evidence'
+    activityNarrative.length <= 380 &&
+    !activityNarrative.includes('Writing index.html') &&
+    buildWorkspaceActivityEventNarrative(
+      { kind: 'command', label: 'npm run check', detail: 'Passed', status: 'complete', timestamp: 2 },
+      'Akorith'
+    ).includes('Passed'),
+  'Workspace run narrative stays brief while event copy carries concrete provider evidence'
+)
+
+const liveChanges = liveWorkspaceChangesSince(
+  {
+    ok: true,
+    isRepo: true,
+    branch: 'main',
+    files: [{ status: ' M', path: 'existing.ts', staged: false, additions: 2, deletions: 0 }],
+    truncated: false,
+    stat: '',
+    clean: false
+  },
+  {
+    ok: true,
+    isRepo: true,
+    branch: 'main',
+    files: [
+      { status: ' M', path: 'existing.ts', staged: false, additions: 2, deletions: 0 },
+      { status: '??', path: 'created.ts', staged: false, additions: 12, deletions: 0 }
+    ],
+    truncated: false,
+    stat: '',
+    clean: false
+  }
+)
+check(
+  liveChanges?.files.length === 1 &&
+    liveChanges.additions === 12 &&
+    newlyCreatedWorkspaceFiles(liveChanges)[0] === 'created.ts',
+  'live Workspace changes exclude pre-turn dirty files and identify truthful created files'
 )
 
 const parsedDiff = parseDiffRows([
@@ -426,6 +465,21 @@ check(
   workspaceFiles.includes('window.api.projects.readFile') &&
   workspaceFiles.includes('akorith:request-file-edit'),
   'Files tool reads project-scoped code and prepares explicit edit requests'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-files-panel').some((block) =>
+    /grid-template-areas\s*:\s*['"]review tree['"]/.test(block)
+  ) &&
+    selectorBlocks(replicaCss, '.workspace-file-tree').some((block) =>
+      /grid-area\s*:\s*tree/.test(block) &&
+      /border-left\s*:\s*1px/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.workspace-code-review').some((block) =>
+      /grid-area\s*:\s*review/.test(block)
+    ) &&
+    replicaCss.includes('grid-template-columns: minmax(0, 1fr) minmax(170px, 34%);') &&
+    replicaCss.includes('grid-template-columns: minmax(0,1fr) minmax(150px,31%);'),
+  'Files keeps the wide code surface on the left and the narrower directory tree on the right at desktop and compact widths'
 )
 check(!chat.includes('replica-composer-context'), 'chat omits the redundant static composer context strip')
 check(!sidebar.includes('direction="down"'), 'Akorith brand omits the single-app dropdown chevron')
@@ -489,9 +543,20 @@ check(
   'GPU utilization records real samples and renders a history wave'
 )
 check(
-  !workspaceActivity.includes('workspace-activity-icon') &&
-    selectorBlocks(stylesCss, '.workspace-activity-headline i').some((block) => /width\s*:\s*6px/.test(block)),
-  'Workspace activity headings use compact status dots instead of large leading icons'
+  !workspaceActivity.includes('<i aria-hidden') &&
+    selectorBlocks(stylesCss, '.workspace-activity-headline i').length === 0 &&
+    selectorBlocks(stylesCss, '.workspace-activity-headline strong').some((block) => /font-weight\s*:\s*700/.test(block)),
+  'Workspace activity headings are bold and omit leading dots'
+)
+check(
+  workspaceActivity.includes('buildWorkspaceActivityEventNarrative') &&
+    workspaceActivity.includes('index === headlines.length - 1') &&
+    workspaceActivity.includes('ProgressiveNarrative') &&
+    chat.includes('LIVE_CHANGE_POLL_MS = 2_000') &&
+    chat.includes('liveWorkspaceChangesSince') &&
+    workspaceLiveChangesCard.includes('Edited {changes.files.length}') &&
+    workspaceLiveChangesCard.includes('onReview'),
+  'Workspace activity interleaves progressive event copy and exposes a live Review changes receipt'
 )
 check(
   !workspaceStepDock.includes('const STEPS') &&
@@ -586,6 +651,12 @@ check(
   /border-top\s*:\s*0\s*!important/.test(finalComposerDock) &&
   hasToken(replicaCss, ['--radius-composer'], ['16px']),
   'composer uses a 16px borderless surface with no top separator'
+)
+check(
+  selectorBlocks(replicaCss, '.composer-box .send-button').some((block) =>
+    /border-radius\s*:\s*50%\s*!important/.test(block)
+  ),
+  'composer send and stop states remain fully circular'
 )
 check(
   selectorBlocks(replicaCss, '.chat-msg.user').some((block) =>

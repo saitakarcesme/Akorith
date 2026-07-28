@@ -131,7 +131,6 @@ function ChatMessageView({
           active={message.status === 'streaming'}
           failed={message.status === 'error'}
           projectName={projectName}
-          taskPrompt={message.taskPrompt}
         />
       )}
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'

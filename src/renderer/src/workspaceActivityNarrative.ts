@@ -1,9 +1,8 @@
 import type { ChatActivity } from '../../preload/index.d'
 
-const MAX_TASK_CHARS = 220
-const MAX_DETAIL_CHARS = 180
-const MAX_ACTIVITY_EVENTS = 4
-const MAX_NARRATIVE_CHARS = 1_300
+const MAX_TASK_CHARS = 150
+const MAX_DETAIL_CHARS = 130
+const MAX_NARRATIVE_CHARS = 380
 
 function clean(value: string | undefined, max: number): string {
   const text = value?.replace(/\s+/g, ' ').trim() ?? ''
@@ -15,47 +14,39 @@ function sentence(value: string): string {
   return /[.!?…]$/.test(value) ? value : `${value}.`
 }
 
-function activitySentence(item: ChatActivity, projectName: string): string {
-  const label = clean(item.label, MAX_DETAIL_CHARS)
+export function buildWorkspaceActivityEventNarrative(
+  item: ChatActivity,
+  projectName: string
+): string {
+  const label = clean(item.label, MAX_DETAIL_CHARS) || 'the current workspace action'
   const detail = clean(item.detail, MAX_DETAIL_CHARS)
-  const reported = detail && detail.toLocaleLowerCase() !== label.toLocaleLowerCase()
-    ? ` ${sentence(detail)}`
-    : ''
-
   if (item.status === 'error' || item.kind === 'warning') {
-    return `The CLI reported a problem in ${projectName} while handling “${label || 'the current action'}”.${reported}`
-  }
-  if (item.kind === 'file') {
-    return item.status === 'complete'
-      ? `The file action “${label}” finished in ${projectName}, so its actual result is available for the next decision.${reported}`
-      : `The CLI is currently performing the file action “${label}” inside ${projectName}.${reported}`
-  }
-  if (item.kind === 'command') {
-    return item.status === 'complete'
-      ? `The command “${label}” finished inside ${projectName}.${reported || ' Its result is available for validation.'}`
-      : `The command “${label}” is running inside ${projectName}.${reported}`
+    return detail
+      ? `The CLI reported: ${sentence(detail)}`
+      : `The CLI could not complete “${label}” in ${projectName}.`
   }
   if (item.kind === 'reasoning' || item.kind === 'plan') {
-    return `The model’s latest reported ${item.kind === 'plan' ? 'plan update' : 'reasoning update'} is: ${sentence(detail || label)}`
+    return sentence(detail || label)
   }
-  if (/starting the selected model|session started|inspecting the workspace/i.test(label)) {
-    return `The selected CLI is connected to the trusted ${projectName} working directory and has started processing the request.`
+  if (item.kind === 'file') {
+    if (/^Created\s+/i.test(label)) return `${sentence(label)} It is now visible in this task's working changes.`
+    if (detail && detail.toLocaleLowerCase() !== label.toLocaleLowerCase()) return sentence(detail)
+    return item.status === 'complete'
+      ? `${sentence(label)} The result is ready for the next project step.`
+      : `The CLI is working with “${label}” in ${projectName}.`
   }
-  if (/finished|complete/i.test(label) || item.status === 'complete') {
-    return `The CLI completed “${label}” in ${projectName}.${reported}`
+  if (item.kind === 'command') {
+    if (detail && detail.toLocaleLowerCase() !== label.toLocaleLowerCase()) {
+      return `The command reported: ${sentence(detail)}`
+    }
+    return item.status === 'complete'
+      ? `The command finished and its result is available for validation.`
+      : `The CLI is running this command in ${projectName}.`
   }
-  return `The CLI is reporting “${label || 'a workspace action'}” while it works in ${projectName}.${reported}`
-}
-
-function recentDistinctActivities(activities: ChatActivity[]): ChatActivity[] {
-  const latest = new Map<string, ChatActivity>()
-  for (const item of activities) {
-    if (/^(workspace task complete|project step finished)$/i.test(item.label.trim())) continue
-    const key = `${item.kind}:${item.label.replace(/\s+/g, ' ').trim().toLocaleLowerCase()}`
-    latest.delete(key)
-    latest.set(key, item)
-  }
-  return [...latest.values()].slice(-MAX_ACTIVITY_EVENTS)
+  if (detail && detail.toLocaleLowerCase() !== label.toLocaleLowerCase()) return sentence(detail)
+  return item.status === 'complete'
+    ? `${sentence(label)} Akorith is using that result for the next step.`
+    : `The selected CLI is handling “${label}” in ${projectName}.`
 }
 
 export function buildWorkspaceActivityNarrative(input: {
@@ -69,20 +60,16 @@ export function buildWorkspaceActivityNarrative(input: {
   const task = clean(input.taskPrompt, MAX_TASK_CHARS)
   const state = input.failed ? 'stopped while working' : input.active ? 'is working' : 'worked'
   const lead = task
-    ? `Akorith ${state} in ${projectName} on this request: “${task}”.`
-    : `Akorith ${state} on the current request inside ${projectName}.`
-  const scope = `The selected CLI is working from this project directory, and this live account is assembled from the file, command, reasoning, and validation events it actually reports.`
-  const events = recentDistinctActivities(input.activities)
-  const evidence = events.length > 0
-    ? events.map((item) => activitySentence(item, projectName)).join(' ')
+    ? `Akorith ${state} in ${projectName} on “${task}”.`
+    : `Akorith ${state} on the current request in ${projectName}.`
+  const hasEvidence = input.activities.some((item) =>
+    !/^(workspace task complete|project step finished)$/i.test(item.label.trim()))
+  const tail = input.active && hasEvidence
+    ? `The live updates above reflect the CLI’s reported actions and refresh with its next concrete event.`
     : input.active
-      ? `Akorith has passed the project-scoped request to the selected CLI and is waiting for its first concrete workspace event.`
-      : `No additional workspace event was reported before this turn ended.`
-  const tail = input.active
-    ? `As another concrete event arrives, this paragraph will update in place; the final response will summarize only the resulting files, checks, and reported outcome.`
+      ? `The selected CLI is connected and waiting for its first concrete project event.`
     : input.failed
-      ? `The project remains available for review, and the reported problem can be used for a focused retry.`
-      : `The completed response below carries the provider’s final result and any verified file-change evidence.`
-  const narrative = `${lead} ${scope} ${evidence} ${tail}`.replace(/\s+/g, ' ').trim()
-  return clean(narrative, MAX_NARRATIVE_CHARS)
+      ? `The reported state remains available for a focused retry.`
+      : `The final response below contains the reported result.`
+  return clean(`${lead} ${tail}`.replace(/\s+/g, ' ').trim(), MAX_NARRATIVE_CHARS)
 }

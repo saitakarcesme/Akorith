@@ -467,7 +467,8 @@ textarea:focus-visible,
   .app-working-indicator i,
   .project-chat-time i,
   .recent-chat-text small i,
-  .workspace-activity-row.is-running .workspace-activity-copy strong { animation: none !important; }
+  .workspace-activity-row.is-running .workspace-activity-copy strong,
+  .workspace-activity-headline.is-created strong { animation: none !important; }
 }
 
 /* Phase 61: Loop keeps its tabs, but the working surface is a quiet transcript
