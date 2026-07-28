@@ -20,6 +20,22 @@ const MAX_VIEWPORT_WIDTH = 1920
 const MAX_VIEWPORT_HEIGHT = 1200
 const PREVIEW_READY_TIMEOUT_MS = 8_000
 const PREVIEW_READY_POLL_MS = 100
+const PREVIEW_INPUT_KEYS = new Set([
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'Backspace',
+  'Delete',
+  'End',
+  'Enter',
+  'Escape',
+  'Home',
+  'PageDown',
+  'PageUp',
+  'Space',
+  'Tab'
+])
 const STATIC_MIME_TYPES = new Map<string, string>([
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
@@ -339,6 +355,12 @@ function commandFor(manager: NonNullable<ProjectPreviewInspection['packageManage
     }
   }
   return { command: manager, args: runnerArgs }
+}
+
+function projectPreviewInputKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  if (PREVIEW_INPUT_KEYS.has(value)) return value
+  return Array.from(value).length === 1 && !/[\p{Cc}\p{Cs}]/u.test(value) ? value : null
 }
 
 function addLog(session: PreviewSession, chunk: unknown): void {
@@ -683,10 +705,20 @@ export function registerProjectPreviewIpc(): void {
     return true
   })
   ipcMain.handle('projectPreview:input', (_event, input: unknown) => {
-    const args = input && typeof input === 'object' ? input as { id?: unknown; type?: unknown; x?: unknown; y?: unknown; text?: unknown; key?: unknown } : {}
+    const args = input && typeof input === 'object' ? input as {
+      id?: unknown
+      type?: unknown
+      x?: unknown
+      y?: unknown
+      deltaX?: unknown
+      deltaY?: unknown
+      text?: unknown
+      key?: unknown
+    } : {}
     const session = requireSession(args.id)
     const previewWindow = session.previewWindow
     if (!previewWindow || previewWindow.isDestroyed()) throw new Error('Live preview is not ready.')
+    if (!session.url || !isLoopbackUrl(session.url)) throw new Error('Preview input is limited to verified loopback sessions.')
     if ((args.type === 'move' || args.type === 'click') && Number.isFinite(args.x) && Number.isFinite(args.y)) {
       const [width, height] = previewWindow.getContentSize()
       const x = Math.min(Math.max(0, width - 1), Math.max(0, Math.round(Number(args.x))))
@@ -697,13 +729,30 @@ export function registerProjectPreviewIpc(): void {
       previewWindow.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, x, y })
       return true
     }
+    if (
+      args.type === 'wheel' &&
+      Number.isFinite(args.x) &&
+      Number.isFinite(args.y) &&
+      Number.isFinite(args.deltaX) &&
+      Number.isFinite(args.deltaY)
+    ) {
+      const [width, height] = previewWindow.getContentSize()
+      const x = Math.min(Math.max(0, width - 1), Math.max(0, Math.round(Number(args.x))))
+      const y = Math.min(Math.max(0, height - 1), Math.max(0, Math.round(Number(args.y))))
+      const deltaX = Math.max(-1_200, Math.min(1_200, Math.round(Number(args.deltaX))))
+      const deltaY = Math.max(-1_200, Math.min(1_200, Math.round(Number(args.deltaY))))
+      if (deltaX === 0 && deltaY === 0) return true
+      previewWindow.webContents.sendInputEvent({ type: 'mouseWheel', x, y, deltaX, deltaY, canScroll: true })
+      return true
+    }
     if (args.type === 'text' && typeof args.text === 'string' && args.text.length <= 4000) {
       previewWindow.webContents.insertText(args.text)
       return true
     }
-    if (args.type === 'key' && typeof args.key === 'string' && args.key.length <= 32) {
-      previewWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode: args.key })
-      previewWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode: args.key })
+    const key = args.type === 'key' ? projectPreviewInputKey(args.key) : null
+    if (key) {
+      previewWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode: key })
+      previewWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode: key })
       return true
     }
     throw new Error('Unsupported preview input.')

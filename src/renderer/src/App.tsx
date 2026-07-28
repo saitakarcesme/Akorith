@@ -405,6 +405,7 @@ export default function App(): JSX.Element {
   }): void => {
     if (
       toolAutoOpenBlocked ||
+      (request.reason === 'activity' && request.tool === 'terminal') ||
       view !== 'workspace' ||
       activeProject?.id !== request.projectId ||
       activeSessionIdRef.current !== request.sessionId

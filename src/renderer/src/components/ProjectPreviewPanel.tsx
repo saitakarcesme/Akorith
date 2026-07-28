@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
 import type { ProjectPreviewInspection, ProjectPreviewStatus } from '../../../preload/index.d'
 import { FolderOpenIcon, GlobeIcon, PanelsIcon, PlayIcon, StopIcon } from './icons'
 
@@ -13,6 +13,8 @@ interface ProjectPreviewPanelProps {
   variant?: 'compact' | 'workspace'
   title?: 'Browser' | 'Computer Use'
   interactive?: boolean
+  /** Pointer/keyboard input can be enabled without showing the Computer Use text tray. */
+  pointerInput?: boolean
 }
 
 interface FrameState {
@@ -31,12 +33,49 @@ interface PreviewBounds {
 const BROWSER_CAPTURE_INTERVAL_MS = 1_200
 const COMPUTER_CAPTURE_INTERVAL_MS = 550
 const STARTUP_STATUS_INTERVAL_MS = 1_600
+const PREVIEW_SPECIAL_KEYS: Readonly<Record<string, string>> = {
+  ' ': 'Space',
+  ArrowDown: 'ArrowDown',
+  ArrowLeft: 'ArrowLeft',
+  ArrowRight: 'ArrowRight',
+  ArrowUp: 'ArrowUp',
+  Backspace: 'Backspace',
+  Delete: 'Delete',
+  End: 'End',
+  Enter: 'Enter',
+  Escape: 'Escape',
+  Home: 'Home',
+  PageDown: 'PageDown',
+  PageUp: 'PageUp',
+  Tab: 'Tab'
+}
 
 export interface PreviewPoint {
   x: number
   y: number
   displayX: number
   displayY: number
+}
+
+export function previewKeyForInput(input: {
+  key: string
+  altKey: boolean
+  ctrlKey: boolean
+  metaKey: boolean
+  shiftKey: boolean
+}): string | null {
+  if (input.altKey || input.ctrlKey || input.metaKey) return null
+  const special = PREVIEW_SPECIAL_KEYS[input.key]
+  if (special) return input.shiftKey ? null : special
+  return input.key.length === 1 && input.key >= ' ' && input.key !== '\u007f'
+    ? input.key
+    : null
+}
+
+export function previewWheelDelta(delta: number, mode: number, pageSize: number): number {
+  if (!Number.isFinite(delta)) return 0
+  const scale = mode === 1 ? 16 : mode === 2 ? Math.max(1, pageSize) : 1
+  return Math.max(-1_200, Math.min(1_200, Math.round(delta * scale)))
 }
 
 /** Map pointer coordinates through the frame's CSS object-fit mode. */
@@ -86,7 +125,8 @@ export function ProjectPreviewPanel({
   refreshKey,
   variant = 'compact',
   title = 'Computer Use',
-  interactive = true
+  interactive = true,
+  pointerInput = interactive
 }: ProjectPreviewPanelProps): JSX.Element | null {
   const [inspection, setInspection] = useState<ProjectPreviewInspection | null>(null)
   const [session, setSession] = useState<ProjectPreviewStatus | null>(null)
@@ -104,6 +144,7 @@ export function ProjectPreviewPanel({
   const projectRef = useRef(projectPath)
   const running = session?.state === 'starting' || session?.state === 'running'
   const workspaceVariant = variant === 'workspace'
+  const pointerEnabled = interactive || pointerInput
 
   useEffect(() => {
     if (!active) return
@@ -133,7 +174,7 @@ export function ProjectPreviewPanel({
     let cancelled = false
     let timer: number | null = null
     const interval = live
-      ? interactive
+      ? pointerEnabled
         ? COMPUTER_CAPTURE_INTERVAL_MS
         : BROWSER_CAPTURE_INTERVAL_MS
       : STARTUP_STATUS_INTERVAL_MS
@@ -173,7 +214,7 @@ export function ProjectPreviewPanel({
       cancelled = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [active, interactive, live, session?.id, session?.state])
+  }, [active, live, pointerEnabled, session?.id, session?.state])
 
   useEffect(() => {
     if (!workspaceVariant || !active || !live || !running || !session?.id) return
@@ -250,11 +291,46 @@ export function ProjectPreviewPanel({
 
   const interact = async (event: MouseEvent<HTMLDivElement>): Promise<void> => {
     if (!session || !frame) return
+    event.currentTarget.focus({ preventScroll: true })
     const bounds = frameImageRef.current?.getBoundingClientRect()
     if (!bounds) return
     const point = mapPreviewPoint(bounds, frame, event.clientX, event.clientY, workspaceVariant ? 'fill' : 'contain')
     if (!point) return
     await window.api.projectPreview.input({ id: session.id, type: 'click', x: point.x, y: point.y })
+  }
+
+  const sendPreviewKey = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (!session) return
+    const key = previewKeyForInput(event)
+    if (!key) return
+    event.preventDefault()
+    event.stopPropagation()
+    void window.api.projectPreview.input({ id: session.id, type: 'key', key }).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    })
+  }
+
+  const scrollPreview = (event: WheelEvent<HTMLDivElement>): void => {
+    if (!session || !frame) return
+    const bounds = frameImageRef.current?.getBoundingClientRect()
+    if (!bounds) return
+    const point = mapPreviewPoint(bounds, frame, event.clientX, event.clientY, workspaceVariant ? 'fill' : 'contain')
+    if (!point) return
+    const deltaX = previewWheelDelta(event.deltaX, event.deltaMode, bounds.width)
+    const deltaY = previewWheelDelta(event.deltaY, event.deltaMode, bounds.height)
+    if (deltaX === 0 && deltaY === 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    void window.api.projectPreview.input({
+      id: session.id,
+      type: 'wheel',
+      x: point.x,
+      y: point.y,
+      deltaX,
+      deltaY
+    }).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    })
   }
 
   const moveCursor = (event: MouseEvent<HTMLDivElement>): void => {
@@ -289,13 +365,13 @@ export function ProjectPreviewPanel({
   if (hideWhenUnavailable && !session && !inspection?.runnable) return null
 
   return (
-    <section className={`project-preview ${live ? 'is-open' : ''} is-${variant} ${interactive ? 'is-interactive' : 'is-readonly'}`} aria-label={`${projectName} live project preview`}>
+    <section className={`project-preview ${live ? 'is-open' : ''} is-${variant} ${pointerEnabled ? 'is-interactive' : 'is-readonly'}`} aria-label={`${projectName} live project preview`}>
       <div className="project-preview-bar">
         {workspaceVariant
           ? (
             <div className="project-preview-address" role="status" aria-live="polite">
               <span className={`project-preview-dot is-${session?.state ?? 'ready'}`} />
-              {interactive ? <PanelsIcon size={13} /> : <GlobeIcon size={13} />}
+              {title === 'Browser' ? <GlobeIcon size={13} /> : <PanelsIcon size={13} />}
               <span className="project-preview-address-copy">
                 <strong title={addressLabel}>{addressLabel}</strong>
                 <small>{statusLabel}</small>
@@ -326,8 +402,8 @@ export function ProjectPreviewPanel({
       {live && running && <div className="project-preview-stage">
         <div ref={displayRef} className="project-preview-display">
           {frame
-          ? interactive
-            ? <div className="project-preview-frame" title="Click to interact with the running project" onMouseMove={moveCursor} onMouseLeave={() => { if (cursorRef.current) cursorRef.current.style.opacity = '0' }} onClick={(event) => void interact(event)}><img ref={frameImageRef} src={frame.dataUrl} alt={`Live view of ${projectName}`} /><span ref={cursorRef} className="project-preview-cursor" aria-hidden="true" /></div>
+          ? pointerEnabled
+            ? <div className="project-preview-frame" role="group" tabIndex={0} aria-label={`Interactive ${title} preview. Click to focus, then use the keyboard.`} title="Click to interact with the running project" onMouseMove={moveCursor} onMouseLeave={() => { if (cursorRef.current) cursorRef.current.style.opacity = '0' }} onClick={(event) => void interact(event)} onKeyDown={sendPreviewKey} onWheel={scrollPreview}><img ref={frameImageRef} src={frame.dataUrl} alt={`Live view of ${projectName}`} /><span ref={cursorRef} className="project-preview-cursor" aria-hidden="true" /></div>
             : <div className="project-preview-frame is-readonly"><img src={frame.dataUrl} alt={`Browser preview of ${projectName}`} /></div>
           : <div className="project-preview-loading"><span />Waiting for the first live frame…</div>}
         </div>

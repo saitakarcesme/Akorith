@@ -371,6 +371,7 @@ export default function WorkspaceToolsPanel({
                 variant="workspace"
                 title={activeTool === 'computer' ? 'Computer Use' : 'Browser'}
                 interactive={activeTool === 'computer'}
+                pointerInput={previewActive}
               />
             </Suspense>
           )}

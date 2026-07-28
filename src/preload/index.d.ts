@@ -2344,7 +2344,7 @@ export interface ProjectPreviewApi {
   stop(id: string): Promise<ProjectPreviewStatus>
   open(id: string): Promise<boolean>
   reveal(projectPath: string): Promise<boolean>
-  input(input: { id: string; type: 'move' | 'click'; x: number; y: number } | { id: string; type: 'text'; text: string } | { id: string; type: 'key'; key: string }): Promise<boolean>
+  input(input: { id: string; type: 'move' | 'click'; x: number; y: number } | { id: string; type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number } | { id: string; type: 'text'; text: string } | { id: string; type: 'key'; key: string }): Promise<boolean>
 }
 
 export type OllamaAutoConnectResult =

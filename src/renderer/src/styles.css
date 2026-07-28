@@ -147,17 +147,14 @@
 .workspace-step {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 11px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
-  background: var(--bg-raised);
+  background: var(--bg-chat);
   color: var(--text-muted);
-  font-size: 12px;
+  font: 500 12px/1.4 var(--font-ui);
 }
-.workspace-step i { width: 8px; height: 8px; border: 2px solid color-mix(in srgb, var(--ak-purple) 64%, var(--ak-green) 36%); border-radius: 50%; }
-.workspace-step-dock.is-active .workspace-step i { animation: akorith-icon-breathe 1.7s ease-in-out infinite; }
 @keyframes akorith-icon-breathe { 0%, 100% { opacity: .42; } 50% { opacity: 1; } }
 
 .chat-copy {
@@ -209,10 +206,6 @@
   .goal-target-actions .ws-hero-btn { justify-content: center; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .workspace-step-dock.is-active .workspace-step i { animation: none; }
-}
-
 /* ==========================================================================
    Akorith 0.5 — Goal cycle, session-scoped chat work, and transcript polish
    New class names keep this layer isolated from the historical Loop board.
@@ -239,17 +232,17 @@
   left: 50%;
   width: min(440px, calc(100vw - 48px));
   max-height: min(62vh, 520px);
-  padding: 13px;
+  padding: 9px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   color: var(--text);
-  background: color-mix(in srgb, var(--bg-raised) 96%, var(--ak-purple) 4%);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 18px 52px rgba(0, 0, 0, .32);
+  background: var(--bg-chat);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .2);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 7px) scale(.985);
+  transform: translate(-50%, 5px);
   transform-origin: 50% 100%;
   transition: opacity var(--fast), transform var(--fast);
 }
@@ -257,64 +250,28 @@
 .workspace-step-dock:hover .workspace-step-popover,
 .workspace-step-dock:focus-within .workspace-step-popover {
   opacity: 1;
-  transform: translate(-50%, 0) scale(1);
+  transform: translate(-50%, 0);
 }
 
 .workspace-step-popover > span {
   display: block;
-  margin: 1px 4px 10px;
-  color: var(--text-faint);
-  font: 9px/1 var(--font-mono);
-  letter-spacing: .15em;
+  margin: 0 12px 8px;
+  color: var(--text-muted);
+  font: 600 12px/1.4 var(--font-ui);
 }
 
 .workspace-step-popover > div {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 9px;
-  padding: 7px 6px;
-  border-radius: 9px;
+  display: block;
+  padding: 7px 12px;
+  background: transparent;
 }
 
-.workspace-step-popover > div.is-current {
-  background: var(--hover);
-}
+.workspace-step-popover > div + div { border-top: 1px solid var(--border-soft); }
 
 .workspace-step-popover > div.is-waiting {
   opacity: .66;
 }
 
-.workspace-step-popover > div > i {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  color: var(--text-faint);
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  font: normal 9px/1 var(--font-mono);
-}
-
-.workspace-step-popover > div.is-complete > i {
-  color: #10251d;
-  border-color: color-mix(in srgb, var(--ak-green-bright) 75%, var(--border));
-  background: var(--ak-green-bright);
-}
-
-.workspace-step-popover > div.is-current > i {
-  color: white;
-  border-color: color-mix(in srgb, var(--ak-purple) 75%, var(--ak-green) 25%);
-  background: color-mix(in srgb, var(--ak-purple) 75%, var(--ak-green) 25%);
-  animation: akorith-icon-breathe 1.7s ease-in-out infinite;
-}
-
-.workspace-step-popover > div.is-error > i {
-  color: white;
-  border-color: color-mix(in srgb, var(--danger) 75%, var(--border));
-  background: var(--danger);
-}
-
-.workspace-step-popover p,
 .workspace-step-popover strong,
 .workspace-step-popover small {
   display: block;
@@ -322,16 +279,18 @@
 
 .workspace-step-popover strong {
   color: var(--text);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .workspace-step-popover small {
   margin-top: 2px;
-  color: var(--text-faint);
-  font-size: 10px;
-  line-height: 1.5;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
+
+.workspace-step-popover > div.is-error strong { color: var(--danger); }
 
 .chat-msg .chat-code {
   margin: 14px 0;

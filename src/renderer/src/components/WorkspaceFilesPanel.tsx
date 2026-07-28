@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ProjectRow } from '../../../preload/index.d'
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../workspaceFileTree'
+import { highlightWorkspaceCode } from '../workspaceSyntax'
 import { ChevronIcon, EditIcon, FileIcon, FolderIcon, SearchIcon } from './icons'
 
 function TreeBranch({
@@ -128,6 +129,11 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
     window.dispatchEvent(new CustomEvent('akorith:request-file-edit', { detail: { path: selected } }))
   }
 
+  const codeLines = useMemo(
+    () => selected ? highlightWorkspaceCode(content, selected) : [],
+    [content, selected]
+  )
+
   return (
     <section className="workspace-files-panel">
       <aside className="workspace-file-tree">
@@ -168,7 +174,22 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
             </div>
           )
           : selected
-            ? <pre><code>{content}</code></pre>
+            ? (
+              <div className="workspace-code-editor" role="region" aria-label={`${selected} source code`} tabIndex={0}>
+                <div className="workspace-code-lines">
+                  {codeLines.map((line) => (
+                    <div className="workspace-code-line" key={line.number}>
+                      <span className="workspace-code-line-number" aria-hidden="true">{line.number}</span>
+                      <code>
+                        {line.tokens.map((token, index) => (
+                          <span className={`workspace-syntax-token is-${token.kind}`} key={index}>{token.text}</span>
+                        ))}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
             : (
               <div className="workspace-tool-empty-state">
                 <span><FileIcon size={17} /></span>

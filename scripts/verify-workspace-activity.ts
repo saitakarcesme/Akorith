@@ -169,7 +169,7 @@ const narrativeCases: Array<{
       2,
       'This file owns the Workspace transcript'
     ),
-    evidence: [/App\.tsx/i, /existing implementation|Workspace transcript/i]
+    evidence: [/App\.tsx/i, /existing implementation|Workspace transcript/i, /Nebula/i]
   },
   {
     name: 'command result',
@@ -180,7 +180,7 @@ const narrativeCases: Array<{
       3,
       'Typecheck completed without errors'
     ),
-    evidence: [/npm run typecheck/i, /Nebula/i]
+    evidence: [/typecheck|without errors/i, /Nebula/i]
   },
   {
     name: 'created file',
@@ -209,9 +209,9 @@ const narrativeCases: Array<{
 for (const fixture of narrativeCases) {
   test(`narrative explains the ${fixture.name} event instead of echoing it`, () => {
     const text = buildWorkspaceActivityEventNarrative(fixture.item, 'Nebula')
-    assert.ok(text.length >= 80, `expected explanatory copy, received ${text.length} characters: ${text}`)
-    assert.ok(text.length <= 420, `narrative must stay compact: ${text.length} characters`)
-    assert.ok(sentenceCount(text) >= 2, `expected at least two explanatory sentences: ${text}`)
+    assert.ok(text.length >= 45, `expected explanatory copy, received ${text.length} characters: ${text}`)
+    assert.ok(text.length <= 240, `narrative must stay compact: ${text.length} characters`)
+    assert.ok(sentenceCount(text) >= 1 && sentenceCount(text) <= 2, `expected one compact explanation: ${text}`)
     for (const evidence of fixture.evidence) assert.match(text, evidence)
     assert.doesNotMatch(text, /^Akorith is using that result for the next step\.?$/i)
   })
@@ -222,10 +222,9 @@ test('no-output commands still explain what ran and how Akorith proceeds', () =>
     activity('command', 'git status --short', 'complete', 6, '(no output)'),
     'Nebula'
   )
-  assert.match(text, /git status --short/i)
   assert.match(text, /Nebula/i)
-  assert.ok(sentenceCount(text) >= 2)
-  assert.notEqual(text, 'The command reported: (no output).')
+  assert.match(text, /without output/i)
+  assert.equal(sentenceCount(text), 1)
 })
 
 test('run duration renders stable running, completed, and stopped states', () => {
@@ -289,18 +288,46 @@ test('streaming UI uses the named Akorithing label and no square pseudo-cursor',
   ), 'Akorithing label must keep its restrained animated color treatment')
 })
 
-test('activity source exposes collapsible events, badges, icons, and durations', () => {
+test('activity source exposes a flat iconless transcript with subtle durations', () => {
   const workspaceActivity = source('src/renderer/src/components/WorkspaceActivity.tsx')
+  const css = source('src/renderer/src/product-polish.css')
   for (const contract of [
-    'workspace-activity-event-toggle',
-    'workspace-activity-event-icon',
-    'workspace-activity-event-badge',
-    'workspace-activity-event-duration',
+    'workspace-activity-event-line',
+    '<time>',
     'workspace-activity-event-detail'
   ]) {
     assert.match(workspaceActivity, new RegExp(contract))
   }
+  assert.doesNotMatch(workspaceActivity, /ActivityIcon|workspace-activity-event-icon|workspace-activity-event-badge/)
+  assert.doesNotMatch(workspaceActivity, /workspace-activity-phase|collapsedEvents/)
   assert.match(workspaceActivity, /aria-expanded=/)
+  assert.ok(selectorBlocks(css, '.workspace-activity-event').some((block) =>
+    /background\s*:\s*transparent/.test(block)
+  ))
+  assert.ok(selectorBlocks(css, '.workspace-activity-event-line strong').some((block) =>
+    /font-size\s*:\s*14px/.test(block) &&
+    /font-weight\s*:\s*600/.test(block)
+  ))
+  assert.ok(selectorBlocks(css, '.workspace-activity-event-detail').some((block) =>
+    /padding\s*:\s*0/.test(block) &&
+    /font-size\s*:\s*14px/.test(block)
+  ))
+})
+
+test('workflow popup keeps a neutral pill and flat iconless rows', () => {
+  const stepDock = source('src/renderer/src/components/WorkspaceStepDock.tsx')
+  const css = source('src/renderer/src/styles.css')
+  assert.doesNotMatch(stepDock, /<i[\s>]/)
+  assert.match(stepDock, /Project workflow/)
+  assert.match(stepDock, /steps\.map/)
+  assert.ok(selectorBlocks(css, '.workspace-step').some((block) =>
+    /border\s*:\s*1px solid var\(--border-soft\)/.test(block) &&
+    /background\s*:\s*var\(--bg-chat\)/.test(block)
+  ))
+  assert.ok(selectorBlocks(css, '.workspace-step-popover').some((block) =>
+    /background\s*:\s*var\(--bg-chat\)/.test(block) &&
+    !/purple|gradient/i.test(block)
+  ))
 })
 
 test('stopped tasks expose Resume task while the composer remains writable', () => {

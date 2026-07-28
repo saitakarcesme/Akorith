@@ -179,7 +179,7 @@ check(
   workspaceActivity.includes('export default memo(WorkspaceActivity)') &&
     workspaceStepDock.includes('export default memo(WorkspaceStepDock)') &&
     workspaceActivity.includes('const feed = useMemo') &&
-    workspaceActivity.includes('const byPhase = useMemo'),
+    workspaceActivity.includes('const recordedEnd = useMemo'),
   'stable Workspace progress displays skip unrelated chat renders'
 )
 

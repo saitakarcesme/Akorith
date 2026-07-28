@@ -1,12 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseDiffRows } from '../src/renderer/src/components/BottomWorkbench'
-import { mapPreviewPoint } from '../src/renderer/src/components/ProjectPreviewPanel'
+import {
+  mapPreviewPoint,
+  previewKeyForInput,
+  previewWheelDelta
+} from '../src/renderer/src/components/ProjectPreviewPanel'
 import {
   buildWorkspaceActivityEventNarrative,
   buildWorkspaceActivityNarrative
 } from '../src/renderer/src/workspaceActivityNarrative'
 import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../src/renderer/src/workspaceLiveChanges'
+import { highlightWorkspaceCode } from '../src/renderer/src/workspaceSyntax'
 import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
 
 const root = join(__dirname, '..')
@@ -103,6 +108,8 @@ const bottomWorkbench = read('src/renderer/src/components/BottomWorkbench.tsx')
 const sidebar = read('src/renderer/src/components/Sidebar.tsx')
 const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
+const projectPreviewMain = read('src/main/project-preview.ts')
+const preloadTypes = read('src/preload/index.d.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const stylesCss = read('src/renderer/src/styles.css')
 const productPolishCss = read('src/renderer/src/product-polish.css')
@@ -349,15 +356,51 @@ check(
   'Browser uses compact address chrome and a real responsive viewport that fills the tool surface'
 )
 check(
+  workspaceTools.includes('pointerInput={previewActive}') &&
+    preview.includes('const pointerEnabled = interactive || pointerInput') &&
+    preview.includes('tabIndex={0}') &&
+    preview.includes('onKeyDown={sendPreviewKey}') &&
+    preview.includes('onWheel={scrollPreview}') &&
+    preview.includes('event.currentTarget.focus({ preventScroll: true })'),
+  'Browser preview accepts direct pointer, wheel, and keyboard input without exposing the Computer Use text tray'
+)
+check(
+  previewKeyForInput({ key: 'a', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }) === 'a' &&
+    previewKeyForInput({ key: 'Enter', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }) === 'Enter' &&
+    previewKeyForInput({ key: 'x', altKey: false, ctrlKey: true, metaKey: false, shiftKey: false }) === null &&
+    previewKeyForInput({ key: 'Enter', altKey: false, ctrlKey: false, metaKey: false, shiftKey: true }) === null,
+  'Browser keyboard forwarding accepts plain/safe keys and blocks modifier shortcuts'
+)
+check(
+  previewWheelDelta(2, 1, 500) === 32 &&
+    previewWheelDelta(2, 2, 500) === 1_000 &&
+    previewWheelDelta(5_000, 0, 500) === 1_200 &&
+    projectPreviewMain.includes("args.type === 'wheel'") &&
+    projectPreviewMain.includes("type: 'mouseWheel'") &&
+    projectPreviewMain.includes('isLoopbackUrl(session.url)') &&
+    projectPreviewMain.includes('projectPreviewInputKey(args.key)') &&
+    preview.includes('? pointerEnabled') &&
+    preloadTypes.includes("type: 'wheel'"),
+  'Browser input uses the responsive capture cadence and validates keys/wheel deltas inside verified loopback sessions'
+)
+check(
+  app.includes("(request.reason === 'activity' && request.tool === 'terminal')"),
+  'background command activity never auto-opens the unrelated interactive Terminal tab'
+)
+check(
   workspaceActivity.includes('ProgressiveNarrative') &&
     workspaceActivity.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
     workspaceActivity.includes('liveAnnouncement') &&
     workspaceActivity.includes('workspace-activity-sr') &&
-    workspaceActivity.includes("(['plan', 'actions', 'result'] as const).map") &&
-    workspaceActivity.includes('item.id === latestId') &&
-    productPolishCss.includes('.workspace-activity-event.is-current .workspace-activity-event-toggle strong') &&
-    productPolishCss.includes('animation: akorith-text-flow'),
-  'Workspace activity groups a chronological feed and gives the current heading a restrained color flow'
+    workspaceActivity.includes('feed.map') &&
+    workspaceActivity.includes('item.id === latest?.id') &&
+    workspaceActivity.includes('workspace-activity-event-line') &&
+    !/ActivityIcon|workspace-activity-event-icon|workspace-activity-event-badge|workspace-activity-phase/.test(workspaceActivity) &&
+    selectorBlocks(productPolishCss, '.workspace-activity-event').some((block) =>
+      /background\s*:\s*transparent/.test(block)
+    ) &&
+    !productPolishCss.includes('.workspace-activity-event.is-current'),
+  'Workspace activity renders one flat chronological transcript without cards, icons, or a highlighted current row'
 )
 
 const mappedCenter = mapPreviewPoint(
@@ -465,6 +508,35 @@ check(
   workspaceFiles.includes('akorith:request-file-edit'),
   'Files tool reads project-scoped code and prepares explicit edit requests'
 )
+const highlightedWorkspaceCode = highlightWorkspaceCode(
+  'const answer = 42\n// visible comment\nreturn "done"',
+  'example.ts'
+)
+check(
+  workspaceFiles.includes('useMemo') &&
+    workspaceFiles.includes('highlightWorkspaceCode(content, selected)') &&
+    workspaceFiles.includes('workspace-code-line-number') &&
+    !workspaceFiles.includes('<pre>') &&
+    highlightedWorkspaceCode.length === 3 &&
+    highlightedWorkspaceCode[0]?.tokens.some((token) => token.kind === 'keyword' && token.text === 'const') &&
+    highlightedWorkspaceCode[0]?.tokens.some((token) => token.kind === 'number' && token.text === '42') &&
+    highlightedWorkspaceCode[1]?.tokens.some((token) => token.kind === 'comment'),
+  'Files uses a memoized dependency-free syntax tokenizer with explicit line rows'
+)
+check(
+  selectorBlocks(replicaCss, '.workspace-code-editor').some((block) =>
+    /font\s*:\s*13px\/1\.65/.test(block) &&
+    /overflow\s*:\s*auto/.test(block)
+  ) &&
+    selectorBlocks(replicaCss, '.workspace-code-line-number').some((block) =>
+      /position\s*:\s*sticky/.test(block) &&
+      /user-select\s*:\s*none/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.workspace-syntax-token.is-keyword').some((block) =>
+      /color\s*:\s*var\(--purple\)/.test(block)
+    ),
+  'Files code viewer has readable VS Code-like typography, sticky line numbers, and theme-safe tokens'
+)
 check(
   selectorBlocks(replicaCss, '.workspace-files-panel').some((block) =>
     /grid-template-areas\s*:\s*['"]review tree['"]/.test(block)
@@ -543,13 +615,18 @@ check(
 )
 check(
   !workspaceActivity.includes('<i aria-hidden') &&
-    selectorBlocks(productPolishCss, '.workspace-activity-event-toggle strong')
-      .some((block) => /font-weight\s*:\s*7(?:00|20)/.test(block)),
-  'Workspace activity headings are bold and omit leading dots'
+    selectorBlocks(productPolishCss, '.workspace-activity-event-line strong')
+      .some((block) =>
+        /font-size\s*:\s*14px/.test(block) &&
+        /font-weight\s*:\s*600/.test(block)
+      ) &&
+    selectorBlocks(productPolishCss, '.workspace-activity-event-detail')
+      .some((block) => /padding\s*:\s*0/.test(block)),
+  'Workspace activity headings are iconless, transcript-sized, and share the narrative left edge'
 )
 check(
   workspaceActivity.includes('buildWorkspaceActivityEventNarrative') &&
-    workspaceActivity.includes('item.id === latestId') &&
+    workspaceActivity.includes('item.id === latest?.id') &&
     workspaceActivity.includes('ProgressiveNarrative') &&
     chat.includes('LIVE_CHANGE_POLL_MS = 2_000') &&
     chat.includes('liveWorkspaceChangesSince') &&
@@ -560,8 +637,18 @@ check(
 check(
   !workspaceStepDock.includes('const STEPS') &&
   workspaceStepDock.includes('steps.map') &&
-  chat.includes('deriveWorkspaceWorkflow'),
-  'Workspace workflow uses task-derived steps instead of a fixed phase list'
+  !workspaceStepDock.includes('<i') &&
+  workspaceStepDock.includes('Project workflow') &&
+  chat.includes('deriveWorkspaceWorkflow') &&
+  selectorBlocks(stylesCss, '.workspace-step').some((block) =>
+    /border\s*:\s*1px solid var\(--border-soft\)/.test(block) &&
+    /background\s*:\s*var\(--bg-chat\)/.test(block)
+  ) &&
+  selectorBlocks(stylesCss, '.workspace-step-popover').some((block) =>
+    /background\s*:\s*var\(--bg-chat\)/.test(block) &&
+    !/(?:purple|gradient)/i.test(block)
+  ),
+  'Workspace workflow uses task-derived steps in a neutral pill and flat iconless popup'
 )
 
 const derivedWorkflow = deriveWorkspaceWorkflow({

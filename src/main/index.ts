@@ -45,6 +45,19 @@ let splashWindowRef: BrowserWindow | null = null
 let researchShutdownComplete = false
 let researchShutdownInProgress = false
 const AKORITH_APP_ID = 'com.akorith.app'
+const WINDOW_THEME_COLORS: Record<AppTheme, { chrome: string; surface: string; symbol: string }> = {
+  dark: { chrome: '#1b1d20', surface: '#24272b', symbol: '#f3f4f6' },
+  light: { chrome: '#d8dce1', surface: '#e7e9ec', symbol: '#20242a' }
+}
+
+function applyWindowTheme(window: BrowserWindow, theme: AppTheme): void {
+  if (window.isDestroyed()) return
+  const colors = WINDOW_THEME_COLORS[theme]
+  if (process.platform === 'win32') {
+    window.setBackgroundColor(colors.surface)
+    window.setTitleBarOverlay({ color: colors.chrome, symbolColor: colors.symbol, height: 36 })
+  }
+}
 
 // Visible app identity is Akorith. `app.setName` drives app.name, the
 // "About Akorith"/"Hide Akorith"/"Quit Akorith" menu roles, and userData.
@@ -210,8 +223,8 @@ function createSplashWindow(): BrowserWindow | null {
   // The background follows the selected theme (mirrored to config for the splash,
   // since the renderer's localStorage doesn't exist yet at this point).
   const theme: AppTheme = getTheme()
-  const bg = theme === 'light' ? '#ffffff' : '#181818'
-  const fg = theme === 'light' ? '#1a1c1f' : '#ffffff'
+  const bg = WINDOW_THEME_COLORS[theme].surface
+  const fg = WINDOW_THEME_COLORS[theme].symbol
 
   const splash = new BrowserWindow({
     width: 420,
@@ -284,7 +297,8 @@ function createWindow(): void {
   splashWindowRef = splashWindow
   // Paint the main window in the selected theme's base color so there's no
   // bright flash between the splash and the rendered UI.
-  const mainBg = getTheme() === 'light' ? '#ffffff' : '#181818'
+  const initialTheme = getTheme()
+  const initialColors = WINDOW_THEME_COLORS[initialTheme]
   const useTransparentWindow = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
     width: 1440,
@@ -292,7 +306,7 @@ function createWindow(): void {
     minWidth: 360,
     minHeight: 520,
     show: false,
-    backgroundColor: useTransparentWindow ? '#00000000' : mainBg,
+    backgroundColor: useTransparentWindow ? '#00000000' : initialColors.surface,
     transparent: useTransparentWindow,
     autoHideMenuBar: true,
     title: 'Akorith',
@@ -310,8 +324,8 @@ function createWindow(): void {
       ? {
           titleBarStyle: 'hidden' as const,
           titleBarOverlay: {
-            color: getTheme() === 'light' ? '#f9f9f9' : '#000000',
-            symbolColor: getTheme() === 'light' ? '#1a1c1f' : '#ffffff',
+            color: initialColors.chrome,
+            symbolColor: initialColors.symbol,
             height: 36
           }
         }
@@ -390,9 +404,11 @@ function createWindow(): void {
 // splash can paint the matching background before any renderer exists.
 function registerSettingsIpc(): void {
   ipcMain.handle('settings:getTheme', (): AppTheme => getTheme())
-  ipcMain.handle('settings:setTheme', (_event, theme: unknown): AppTheme =>
-    setTheme(theme === 'light' ? 'light' : 'dark')
-  )
+  ipcMain.handle('settings:setTheme', (_event, theme: unknown): AppTheme => {
+    const nextTheme = setTheme(theme === 'light' ? 'light' : 'dark')
+    if (mainWindowRef) applyWindowTheme(mainWindowRef, nextTheme)
+    return nextTheme
+  })
 }
 
 function registerWindowControlsIpc(): void {

@@ -27,14 +27,14 @@ function WorkspaceStepDock({ steps, active }: WorkspaceStepDockProps): JSX.Eleme
         aria-label={`Project workflow step ${current} of ${steps.length}`}
         aria-haspopup="true"
       >
-        <i />Step {current} / {steps.length}
+        Step {current} / {steps.length}
       </button>
       <div className="workspace-step-popover" role="tooltip">
-        <span>PROJECT WORKFLOW</span>
+        <span>Project workflow</span>
         {steps.map((step, index) => (
           <div className={`is-${step.state} ${index === currentIndex ? 'is-current' : ''}`} key={step.id}>
-            <i>{index + 1}</i>
-            <p><strong>{step.title}</strong><small>{step.description}</small></p>
+            <strong>{step.title}</strong>
+            <small>{step.description}</small>
           </div>
         ))}
       </div>

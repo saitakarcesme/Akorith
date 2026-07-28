@@ -939,7 +939,10 @@ export default function Sidebar({
                               </div>
                             )}
                           </div>
-                          {isExpanded && (
+                          <div
+                            className={`project-chats-collapse ${isExpanded ? 'is-open' : ''}`}
+                            aria-hidden={!isExpanded}
+                          >
                             <div className="project-chats">
                               {chats.map((chat) =>
                                 renamingId === chat.id ? (
@@ -996,7 +999,7 @@ export default function Sidebar({
                               )}
                               {startupHydrated && chats.length === 0 && <div className="project-chats-empty">No chats yet</div>}
                             </div>
-                          )}
+                          </div>
                         </div>
                       )
                     })
