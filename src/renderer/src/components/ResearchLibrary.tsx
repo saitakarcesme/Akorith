@@ -17,9 +17,9 @@ const STATUS_LABELS: Record<ResearchJob['status'], string> = {
   planning: 'Planning',
   researching: 'Researching',
   verifying: 'Verifying',
-  synthesizing: 'Synthesizing',
-  exporting: 'Publishing',
-  completed: 'Published',
+  synthesizing: 'Deciding',
+  exporting: 'Reporting',
+  completed: 'Completed',
   paused: 'Paused',
   error: 'Needs attention',
   archived: 'Archived'
@@ -32,11 +32,16 @@ interface ResearchLibraryProps {
   onSelect: (id: string) => void
 }
 
-export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }: ResearchLibraryProps): JSX.Element {
+export default function ResearchLibrary({
+  jobs,
+  covers,
+  onNeedCovers,
+  onSelect
+}: ResearchLibraryProps): JSX.Element {
   const [filter, setFilter] = useState<LibraryFilter>('all')
   const [visibleLimit, setVisibleLimit] = useState(LIBRARY_PAGE_SIZE)
   const visibleJobs = useMemo(() => jobs.filter((job) => {
-    if (filter === 'published') return job.status === 'completed' && Boolean(job.artifactPath)
+    if (filter === 'published') return job.status === 'completed'
     if (filter === 'active') return !['completed', 'archived'].includes(job.status)
     return job.status !== 'archived'
   }), [filter, jobs])
@@ -50,11 +55,11 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
     <section className="research-library">
       <header className="research-library-header">
         <div>
-          <span className="research-eyebrow">RESEARCH LIBRARY</span>
-          <h1>Research essays built to keep</h1>
-          <p>Every finished essay stays readable and publishable, with its supporting evidence available when needed.</p>
+          <span className="research-eyebrow">EXPERIMENT LIBRARY</span>
+          <h1>Every run, decision, and best checkpoint</h1>
+          <p>Completed programs keep their baseline, retained improvements, rejected candidates, logs, and reproducible report.</p>
         </div>
-        <div className="research-library-filters" role="group" aria-label="Research library filter">
+        <div className="research-library-filters" role="group" aria-label="Experiment library filter">
           {(['all', 'published', 'active'] as LibraryFilter[]).map((item) => (
             <button
               key={item}
@@ -66,7 +71,7 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
                 setVisibleLimit(LIBRARY_PAGE_SIZE)
               }}
             >
-              {item === 'all' ? 'All' : item === 'published' ? 'Published' : 'In progress'}
+              {item === 'all' ? 'All' : item === 'published' ? 'Completed' : 'In progress'}
             </button>
           ))}
         </div>
@@ -75,8 +80,8 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
       {visibleJobs.length === 0 ? (
         <div className="research-library-empty">
           <FileIcon size={22} />
-          <strong>No research in this shelf yet</strong>
-          <span>Start an investigation and its cover will appear here.</span>
+          <strong>No experiment programs yet</strong>
+          <span>Start Autoresearch and its measured ledger will appear here.</span>
         </div>
       ) : (
         <div className="research-library-grid">
@@ -93,9 +98,9 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
                   ? <img src={covers[job.id] ?? undefined} alt={`Cover of ${job.title}`} loading="lazy" decoding="async" />
                   : (
                     <span className="research-book-draft">
-                      <small>AKORITH RESEARCH</small>
+                      <small>{job.mode === 'autoresearch' ? 'AKORITH AUTORESEARCH' : 'AKORITH RESEARCH'}</small>
                       <strong>{job.plan?.title || job.title}</strong>
-                      <em>{researchDurationLabel(job.depth)} · {job.outputFormat.toUpperCase()}</em>
+                      <em>{researchDurationLabel(job.depth)} · {job.mode === 'autoresearch' ? job.experimentConfig?.metric.name ?? 'experiment' : job.outputFormat.toUpperCase()}</em>
                     </span>
                   )}
                 <span className={`research-book-status is-${job.status}`} aria-hidden="true">
@@ -105,7 +110,9 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
               </span>
               <span className="research-book-meta">
                 <strong>{job.plan?.title || job.title}</strong>
-                <small>{job.outputFormat.toUpperCase()} · {job.sourceCount} cited sources</small>
+                <small>{job.mode === 'autoresearch'
+                  ? `${job.cycleCount} experiments · best ${formatMetric(job.experimentState?.bestMetric)}`
+                  : `${job.outputFormat.toUpperCase()} · ${job.sourceCount} cited sources`}</small>
                 <em>{formatDate(job.updatedAt)}</em>
               </span>
             </button>
@@ -127,4 +134,8 @@ export default function ResearchLibrary({ jobs, covers, onNeedCovers, onSelect }
 
 function formatDate(timestamp: number): string {
   return DATE_FORMATTER.format(new Date(timestamp))
+}
+
+function formatMetric(value: number | undefined): string {
+  return value === undefined ? 'pending' : value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
 }

@@ -479,6 +479,8 @@ const research = Object.freeze({
 const projectPreview = Object.freeze({
   inspect: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:inspect', projectPath),
   start: (projectPath: string, script?: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:start', { projectPath, script }),
+  openUrl: (projectPath: string, url: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectPreview:openUrl', { projectPath, url }),
   active: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:active', projectPath),
   status: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:status', id),
   setViewport: (id: string, width: number, height: number): Promise<unknown> =>
@@ -486,6 +488,8 @@ const projectPreview = Object.freeze({
   capture: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:capture', id),
   stop: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:stop', id),
   open: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:open', id),
+  navigate: (id: string, action: 'back' | 'forward' | 'reload' | 'go', value?: string): Promise<unknown> =>
+    ipcRenderer.invoke('projectPreview:navigate', { id, action, value }),
   reveal: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:reveal', projectPath),
   input: (input: unknown): Promise<unknown> => ipcRenderer.invoke('projectPreview:input', input)
 })

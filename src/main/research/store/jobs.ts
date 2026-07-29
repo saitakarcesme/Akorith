@@ -5,6 +5,7 @@ import {
   RESEARCH_DEPTHS,
   RESEARCH_OUTPUT_FORMATS,
   RESEARCH_PHASES,
+  RESEARCH_MODES,
   RESEARCH_STATUSES,
   type CreateResearchJobInput,
   type ResearchJob
@@ -37,6 +38,11 @@ export function validateCreateResearchJobInput(input: CreateResearchJobInput): v
   }
   if (!RESEARCH_DEPTHS.includes(input.depth)) throw new Error('invalid research depth')
   if (!RESEARCH_OUTPUT_FORMATS.includes(input.outputFormat)) throw new Error('invalid research output format')
+  const mode = input.mode ?? 'evidence'
+  if (!RESEARCH_MODES.includes(mode)) throw new Error('invalid research mode')
+  if (mode === 'autoresearch' && !input.experimentConfig) {
+    throw new Error('Autoresearch configuration is required.')
+  }
 }
 
 export function createResearchJob(
@@ -51,19 +57,22 @@ export function createResearchJob(
   const status = input.autoStart === false ? 'draft' : 'planning'
   getDb().prepare(
     `INSERT INTO research_jobs (
-      id, title, prompt, status, phase, provider_id, model, depth, output_format,
+      id, title, prompt, research_mode, status, phase, provider_id, model, depth, output_format,
       target_duration_ms, max_cycles, source_target, cycle_count, source_count,
-      finding_count, workspace_dir, created_at, updated_at, started_at,
+      finding_count, workspace_dir, experiment_config_json, experiment_state_json,
+      created_at, updated_at, started_at,
       active_elapsed_ms, active_accounted_at, next_run_at
     ) VALUES (
-      @id, @title, @prompt, @status, 'understand', @provider_id, @model, @depth, @output_format,
+      @id, @title, @prompt, @research_mode, @status, 'understand', @provider_id, @model, @depth, @output_format,
       @target_duration_ms, @max_cycles, @source_target, 0, 0, 0, @workspace_dir,
+      @experiment_config_json, @experiment_state_json,
       @created_at, @updated_at, @started_at, 0, NULL, @next_run_at
     )`
   ).run({
     id,
     title,
     prompt: input.prompt.trim(),
+    research_mode: input.mode ?? 'evidence',
     status,
     provider_id: input.providerId,
     model: input.model ?? null,
@@ -73,6 +82,10 @@ export function createResearchJob(
     max_cycles: profile.maxCycles,
     source_target: profile.sourceTarget,
     workspace_dir: workspaceDir,
+    experiment_config_json: input.experimentConfig ? JSON.stringify(input.experimentConfig) : null,
+    experiment_state_json: input.experimentConfig
+      ? JSON.stringify({ version: 1, setupStatus: 'pending' })
+      : null,
     created_at: now,
     updated_at: now,
     // The duration clock starts only when the scheduler actually leases the
@@ -100,6 +113,7 @@ export function listResearchJobs(options: { includeArchived?: boolean; limit?: n
 
 const UPDATE_COLUMNS: Record<string, string> = {
   title: 'title',
+  mode: 'research_mode',
   status: 'status',
   phase: 'phase',
   providerId: 'provider_id',
@@ -114,6 +128,8 @@ const UPDATE_COLUMNS: Record<string, string> = {
   findingCount: 'finding_count',
   artifactPath: 'artifact_path',
   coverPath: 'cover_path',
+  experimentConfig: 'experiment_config_json',
+  experimentState: 'experiment_state_json',
   plan: 'plan_json',
   summary: 'summary',
   error: 'error',
@@ -135,6 +151,9 @@ export function updateResearchJob(id: string, patch: Partial<ResearchJob>): Rese
   if ('outputFormat' in patch && patch.outputFormat !== undefined && !RESEARCH_OUTPUT_FORMATS.includes(patch.outputFormat)) {
     throw new Error('invalid research output format')
   }
+  if ('mode' in patch && patch.mode !== undefined && !RESEARCH_MODES.includes(patch.mode)) {
+    throw new Error('invalid research mode')
+  }
   const sets: string[] = []
   const params: Record<string, unknown> = { id, updated_at: Date.now() }
   if (
@@ -152,7 +171,9 @@ export function updateResearchJob(id: string, patch: Partial<ResearchJob>): Rese
   for (const [key, column] of Object.entries(UPDATE_COLUMNS)) {
     if (!(key in patch)) continue
     let value = (patch as Record<string, unknown>)[key]
-    if (key === 'plan') value = value == null ? null : JSON.stringify(value)
+    if (key === 'plan' || key === 'experimentConfig' || key === 'experimentState') {
+      value = value == null ? null : JSON.stringify(value)
+    }
     if (key === 'title' && typeof value === 'string') {
       value = normalizeResearchTitle(value).slice(0, MAX_TITLE_LENGTH) || 'Untitled research'
     }

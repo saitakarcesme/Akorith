@@ -9,6 +9,7 @@ import type {
   ResearchOutputFormat
 } from '../../../preload/index.d'
 import { useDocumentVisible } from '../documentVisibility'
+import '../research-autoresearch.css'
 import { CloseIcon, PlusIcon } from './icons'
 import ResearchComposer from './ResearchComposer'
 import ResearchLibrary from './ResearchLibrary'
@@ -333,7 +334,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
     <div className="research-page">
       <header className="research-page-toolbar">
         <div className="research-surface-switch" role="tablist" aria-label="Research views">
-          <button id="research-workspace-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'workspace'} tabIndex={surface === 'workspace' ? 0 : -1} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')} onKeyDown={handleSurfaceKeyDown}>Research</button>
+          <button id="research-workspace-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'workspace'} tabIndex={surface === 'workspace' ? 0 : -1} className={surface === 'workspace' ? 'is-active' : ''} onClick={() => setSurface('workspace')} onKeyDown={handleSurfaceKeyDown}>Autoresearch</button>
           <button id="research-library-tab" type="button" role="tab" aria-controls="research-view-panel" aria-selected={surface === 'library'} tabIndex={surface === 'library' ? 0 : -1} className={surface === 'library' ? 'is-active' : ''} onClick={() => setSurface('library')} onKeyDown={handleSurfaceKeyDown}>Library <span>{jobs.length}</span></button>
         </div>
         <div className="research-toolbar-status" role="status" aria-live="polite"><i aria-hidden="true" />{runningCount > 0 ? `${runningCount} running` : 'Ready'}</div>
@@ -342,7 +343,7 @@ export default function ResearchPage({ active }: ResearchPageProps): JSX.Element
           className="research-new-tab"
           onClick={() => { setSelectedId(null); setSurface('workspace') }}
         >
-          <PlusIcon size={15} /> New research
+          <PlusIcon size={15} /> New run
         </button>
       </header>
 

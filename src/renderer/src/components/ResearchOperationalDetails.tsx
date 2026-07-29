@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react'
-import type { ResearchLiveDetail, ResearchPhase } from '../../../preload/index.d'
+import type {
+  AutoresearchExperiment,
+  ResearchLiveDetail,
+  ResearchPhase
+} from '../../../preload/index.d'
 import ChatMarkdown from './ChatMarkdown'
 import { researchDurationLabel } from './researchDuration'
 
@@ -10,6 +14,15 @@ const PHASES: Array<{ id: ResearchPhase; label: string }> = [
   { id: 'verify', label: 'Verify' },
   { id: 'synthesize', label: 'Write' },
   { id: 'export', label: 'Publish' }
+]
+
+const AUTORESEARCH_PHASES: Array<{ id: ResearchPhase; label: string }> = [
+  { id: 'understand', label: 'Setup' },
+  { id: 'plan', label: 'Baseline' },
+  { id: 'research', label: 'Change' },
+  { id: 'verify', label: 'Measure' },
+  { id: 'synthesize', label: 'Decide' },
+  { id: 'export', label: 'Report' }
 ]
 
 const CLOCK_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -31,8 +44,10 @@ export default function ResearchOperationalDetails({
   onOpenSource
 }: ResearchOperationalDetailsProps): JSX.Element {
   const { job } = detail
+  const autoresearch = job.mode === 'autoresearch'
+  const phases = autoresearch ? AUTORESEARCH_PHASES : PHASES
   const terminal = job.status === 'completed' || job.status === 'archived'
-  const currentIndex = PHASES.findIndex((phase) => phase.id === job.phase)
+  const currentIndex = phases.findIndex((phase) => phase.id === job.phase)
   const recentEvents = detail.events.slice(-80)
   const recentEventOffset = detail.events.length - recentEvents.length
   const eventListRef = useRef<HTMLDivElement>(null)
@@ -45,6 +60,9 @@ export default function ResearchOperationalDetails({
       ? 0
       : Math.min(15_000, Math.max(0, Date.now() - job.activeAccountingAt)))
   )
+  const keptExperiments = autoresearch
+    ? detail.experiments.filter((experiment) => experiment.status === 'keep').length
+    : 0
 
   useEffect(() => {
     const list = eventListRef.current
@@ -58,7 +76,7 @@ export default function ResearchOperationalDetails({
     <div className="research-details-content">
       <div className="research-phase-scroll">
         <section className="research-phase-rail" role="list" aria-label="Research phases">
-          {PHASES.map((phase, index) => {
+          {phases.map((phase, index) => {
             const complete = terminal || index < currentIndex
             const active = !terminal && index === currentIndex
             const stateLabel = complete ? 'Done' : active ? 'Current' : 'Pending'
@@ -79,18 +97,38 @@ export default function ResearchOperationalDetails({
 
       <section className="research-metrics" aria-label="Research metrics">
         <Metric label="Active research" value={duration} />
-        <Metric label="Research duration" value={researchDurationLabel(job.depth)} />
-        <Metric label="Cycles" value={String(job.cycleCount)} />
-        <Metric label="Sources" value={String(job.sourceCount)} />
-        <Metric label="Findings" value={String(job.findingCount)} />
-        <Metric label="Output" value={job.outputFormat.toUpperCase()} />
+        <Metric label="Run duration" value={researchDurationLabel(job.depth)} />
+        {autoresearch ? (
+          <>
+            <Metric label="Experiments" value={String(detail.experiments.length)} />
+            <Metric label="Retained" value={String(keptExperiments)} />
+            <Metric
+              label={job.experimentConfig?.metric.name ?? 'Best metric'}
+              value={formatMetric(job.experimentState?.bestMetric)}
+            />
+            <Metric label="Branch" value={job.experimentState?.branchName?.replace(/^autoresearch\//, '') ?? 'preparing'} />
+          </>
+        ) : (
+          <>
+            <Metric label="Cycles" value={String(job.cycleCount)} />
+            <Metric label="Sources" value={String(job.sourceCount)} />
+            <Metric label="Findings" value={String(job.findingCount)} />
+            <Metric label="Output" value={job.outputFormat.toUpperCase()} />
+          </>
+        )}
       </section>
 
       {job.error && <div className="research-error" role="alert"><strong>Research needs attention</strong><span>{job.error}</span></div>}
 
-      {(job.plan || recentEvents.length > 0) && (
+      {(autoresearch || job.plan || recentEvents.length > 0) && (
         <div className="research-workbench-grid">
-          {job.plan && (
+          {autoresearch ? (
+            <AutoresearchExperimentBoard
+              experiments={detail.experiments}
+              metricName={job.experimentConfig?.metric.name ?? 'metric'}
+              direction={job.experimentConfig?.metric.direction ?? 'minimize'}
+            />
+          ) : job.plan ? (
             <section className="research-plan-panel">
               <div className="research-section-heading">
                 <div><span className="research-eyebrow">PLAN</span><h2>Evidence program</h2></div>
@@ -107,7 +145,7 @@ export default function ResearchOperationalDetails({
                 ))}
               </div>
             </section>
-          )}
+          ) : null}
 
           {recentEvents.length > 0 && (
             <section className="research-event-stream">
@@ -154,7 +192,7 @@ export default function ResearchOperationalDetails({
         </div>
       )}
 
-      {detail.sources.length > 0 && (
+      {!autoresearch && detail.sources.length > 0 && (
         <details className="research-source-panel">
           <summary><span>Sources</span><em>{detail.sources.length} collected</em></summary>
           <div className="research-source-list">
@@ -175,11 +213,59 @@ export default function ResearchOperationalDetails({
   return (
     <details className="research-details-panel">
       <summary>
-        <span><strong>Research details</strong><small>Method, activity, evidence, and collected sources</small></span>
-        <em>{job.sourceCount} sources</em>
+        <span>
+          <strong>{autoresearch ? 'Experiment details' : 'Research details'}</strong>
+          <small>{autoresearch ? 'Protocol, decisions, commits, and benchmark activity' : 'Method, activity, evidence, and collected sources'}</small>
+        </span>
+        <em>{autoresearch ? `${detail.experiments.length} runs` : `${job.sourceCount} sources`}</em>
       </summary>
       {content}
     </details>
+  )
+}
+
+function AutoresearchExperimentBoard({
+  experiments,
+  metricName,
+  direction
+}: {
+  experiments: AutoresearchExperiment[]
+  metricName: string
+  direction: 'minimize' | 'maximize'
+}): JSX.Element {
+  const visible = experiments.slice(-100).reverse()
+  return (
+    <section className="autoresearch-ledger">
+      <div className="research-section-heading">
+        <div><span className="research-eyebrow">EXPERIMENTS</span><h2>Decision ledger</h2></div>
+        <span>{direction === 'minimize' ? 'lower wins' : 'higher wins'}</span>
+      </div>
+      <div className="autoresearch-ledger-head" aria-hidden="true">
+        <span>Run</span><span>Decision</span><span>{metricName}</span><span>Commit</span>
+      </div>
+      <div className="autoresearch-ledger-list">
+        {visible.length === 0 ? (
+          <div className="autoresearch-ledger-empty">
+            <i aria-hidden="true" />
+            <span>The baseline will appear here when setup finishes.</span>
+          </div>
+        ) : visible.map((experiment) => (
+          <article key={experiment.id} className={`autoresearch-ledger-row is-${experiment.status}`}>
+            <span className="autoresearch-run-index">{experiment.kind === 'baseline' ? 'BASE' : `#${experiment.index}`}</span>
+            <span className="autoresearch-decision"><i aria-hidden="true" />{experiment.status}</span>
+            <strong>{formatMetric(experiment.metric)}</strong>
+            <code>{experiment.commit?.slice(0, 7) ?? '—'}</code>
+            <p>{experiment.description}</p>
+            <small>
+              {formatDuration(experiment.durationMs)}
+              {experiment.memoryGb === undefined ? '' : ` · ${experiment.memoryGb.toFixed(1)} GB`}
+              {experiment.changedFiles.length === 0 ? '' : ` · ${experiment.changedFiles.join(', ')}`}
+            </small>
+            {experiment.error && <em>{experiment.error}</em>}
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -198,6 +284,12 @@ function formatDuration(milliseconds: number): string {
   if (minutes < 60) return `${minutes}m ${seconds % 60}s`
   const hours = Math.floor(minutes / 60)
   return `${hours}h ${minutes % 60}m`
+}
+
+function formatMetric(value: number | undefined): string {
+  if (value === undefined) return '—'
+  if (Math.abs(value) >= 1_000) return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function sourceHostname(url: string): string {

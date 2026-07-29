@@ -45,6 +45,9 @@ import { recordResearchModelUsage } from './usage'
 export async function runResearchCycle(jobId: string, signal?: AbortSignal): Promise<ResearchCycleResult> {
   let job = getResearchJob(jobId)
   if (!job) throw new Error('Research job not found.')
+  if (job.mode === 'autoresearch') {
+    return (await import('./autoresearch-runner')).runAutoresearchCycle(jobId, signal)
+  }
   if (job.status === 'completed' || job.status === 'archived' || job.status === 'paused') {
     return { ok: false, job, completed: job.status === 'completed', error: `Research is ${job.status}.` }
   }

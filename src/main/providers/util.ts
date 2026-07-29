@@ -325,6 +325,27 @@ function resolveWindowsNpmShim(
       }
     }
   }
+  if (command === 'npm' || command === 'npx') {
+    const script = join(
+      npmRoot,
+      'node_modules',
+      'npm',
+      'bin',
+      command === 'npm' ? 'npm-cli.js' : 'npx-cli.js'
+    )
+    if (
+      existsSync(script) &&
+      statSync(script).isFile() &&
+      !pathWithin(excludedDirectory, script)
+    ) {
+      const executable = findExecutableSource('node', env, excludedDirectory)
+      return {
+        executable,
+        prefixArgs: [realpathSync.native(script)],
+        source
+      }
+    }
+  }
   throw new Error(`Refusing unsupported Windows command shim: ${source}`)
 }
 

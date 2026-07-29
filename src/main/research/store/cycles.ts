@@ -47,10 +47,24 @@ export function getResearchCycle(id: string): ResearchCycle | null {
   return row ? rowToResearchCycle(row) : null
 }
 
-export function listResearchCycles(jobId: string): ResearchCycle[] {
-  const rows = getDb()
-    .prepare('SELECT * FROM research_cycles WHERE job_id = ? ORDER BY cycle_index ASC')
-    .all(jobId) as DbRow[]
+export function listResearchCycles(jobId: string, limit?: number): ResearchCycle[] {
+  const boundedLimit = typeof limit === 'number' && Number.isFinite(limit)
+    ? Math.max(1, Math.min(1_000, Math.floor(limit)))
+    : undefined
+  const rows = boundedLimit
+    ? getDb()
+      .prepare(
+        `SELECT * FROM (
+           SELECT * FROM research_cycles
+           WHERE job_id = ?
+           ORDER BY cycle_index DESC
+           LIMIT ?
+         ) ORDER BY cycle_index ASC`
+      )
+      .all(jobId, boundedLimit) as DbRow[]
+    : getDb()
+      .prepare('SELECT * FROM research_cycles WHERE job_id = ? ORDER BY cycle_index ASC')
+      .all(jobId) as DbRow[]
   return rows.map(rowToResearchCycle)
 }
 

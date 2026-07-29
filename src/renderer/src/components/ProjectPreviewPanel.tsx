@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
 import type { ProjectPreviewInspection, ProjectPreviewStatus } from '../../../preload/index.d'
-import { FolderOpenIcon, GlobeIcon, PanelsIcon, PlayIcon, StopIcon } from './icons'
+import { ChevronIcon, FolderOpenIcon, GlobeIcon, MoreIcon, PanelsIcon, PlayIcon, RefreshIcon, StopIcon } from './icons'
 
 interface ProjectPreviewPanelProps {
   projectPath: string
@@ -133,6 +133,7 @@ export function ProjectPreviewPanel({
   const [frame, setFrame] = useState<FrameState | null>(null)
   const [live, setLive] = useState(false)
   const [typing, setTyping] = useState('')
+  const [address, setAddress] = useState('')
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef(false)
   const viewportBusyRef = useRef(false)
@@ -145,6 +146,7 @@ export function ProjectPreviewPanel({
   const running = session?.state === 'starting' || session?.state === 'running'
   const workspaceVariant = variant === 'workspace'
   const pointerEnabled = interactive || pointerInput
+  const browserMode = workspaceVariant && title === 'Browser'
 
   useEffect(() => {
     if (!active) return
@@ -168,6 +170,10 @@ export function ProjectPreviewPanel({
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)) })
     return () => { cancelled = true }
   }, [active, projectPath, refreshKey])
+
+  useEffect(() => {
+    if (session?.url) setAddress(session.url)
+  }, [session?.url])
 
   useEffect(() => {
     if (!active || !session || (session.state !== 'starting' && session.state !== 'running')) return
@@ -299,6 +305,40 @@ export function ProjectPreviewPanel({
     await window.api.projectPreview.input({ id: session.id, type: 'click', x: point.x, y: point.y })
   }
 
+  const navigate = async (
+    action: 'back' | 'forward' | 'reload' | 'go',
+    value?: string
+  ): Promise<void> => {
+    if (!session) return
+    setError(null)
+    try {
+      const next = await window.api.projectPreview.navigate(session.id, action, value)
+      setSession(next)
+      setLive(true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }
+
+  const submitAddress = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    const requested = address.trim()
+    if (!requested) return
+    const normalized = /^[a-z][a-z\d+.-]*:\/\//i.test(requested) ? requested : `http://${requested}`
+    if (!session) {
+      setError(null)
+      try {
+        const next = await window.api.projectPreview.openUrl(projectPath, normalized)
+        setSession(next)
+        setLive(true)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
+      return
+    }
+    await navigate('go', normalized)
+  }
+
   const sendPreviewKey = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!session) return
     const key = previewKeyForInput(event)
@@ -366,7 +406,34 @@ export function ProjectPreviewPanel({
 
   return (
     <section className={`project-preview ${live ? 'is-open' : ''} is-${variant} ${pointerEnabled ? 'is-interactive' : 'is-readonly'}`} aria-label={`${projectName} live project preview`}>
-      <div className="project-preview-bar">
+      {browserMode
+        ? (
+          <form className="workspace-browser-toolbar" onSubmit={(event) => void submitAddress(event)}>
+            <div className="workspace-browser-navigation">
+              <button type="button" disabled={!session?.canGoBack} title="Back" aria-label="Back" onClick={() => void navigate('back')}>
+                <ChevronIcon size={14} direction="left" />
+              </button>
+              <button type="button" disabled={!session?.canGoForward} title="Forward" aria-label="Forward" onClick={() => void navigate('forward')}>
+                <ChevronIcon size={14} direction="right" />
+              </button>
+              <button type="button" disabled={!running} title="Reload" aria-label="Reload" onClick={() => void navigate('reload')}>
+                <RefreshIcon size={14} />
+              </button>
+            </div>
+            <input
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              placeholder="Enter a URL"
+              aria-label="Browser address"
+              spellCheck={false}
+            />
+            <button type="button" className="workspace-browser-more" title="Browser options" aria-label="Browser options">
+              <MoreIcon size={15} />
+            </button>
+          </form>
+        )
+        : (
+          <div className="project-preview-bar">
         {workspaceVariant
           ? (
             <div className="project-preview-address" role="status" aria-live="polite">
@@ -388,15 +455,18 @@ export function ProjectPreviewPanel({
             : <button type="button" className="is-run" disabled={!inspection?.runnable} title="Run project" aria-label="Run project" onClick={() => void start()}><PlayIcon size={13} /></button>}
         </div>
       </div>
+        )}
       {!running && !error && !session?.error && (
         <div className="project-preview-empty">
           <span className="project-preview-empty-icon"><GlobeIcon size={20} /></span>
-          <strong>{inspection ? `${title} is ready` : `Preparing ${title.toLowerCase()}`}</strong>
-          <p>{inspection?.note ?? 'Akorith is inspecting this project for a safe local preview entry point.'}</p>
-          <button type="button" disabled={!inspection?.runnable} onClick={() => void start()}>
-            <PlayIcon size={13} />
-            Run preview
-          </button>
+          <strong>{browserMode ? 'Start browsing' : inspection ? `${title} is ready` : `Preparing ${title.toLowerCase()}`}</strong>
+          <p>{browserMode ? 'Enter a URL to open a page.' : inspection?.note ?? 'Akorith is inspecting this project for a safe local preview entry point.'}</p>
+          {(!browserMode || inspection?.runnable) && (
+            <button type="button" disabled={!inspection?.runnable} onClick={() => void start()}>
+              <PlayIcon size={13} />
+              {browserMode ? 'Open project preview' : 'Run preview'}
+            </button>
+          )}
         </div>
       )}
       {live && running && <div className="project-preview-stage">

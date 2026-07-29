@@ -8,18 +8,6 @@ import {
   pauseScheduledResearchJob,
   resumeScheduledResearchJob
 } from './scheduler'
-import {
-  archiveManagedResearchJob,
-  createManagedResearchJob,
-  deleteManagedResearchJob,
-  getResearchEssayPreview,
-  getResearchJobDetail,
-  listResearchLibrary,
-  openResearchArtifact,
-  pollResearchJob,
-  researchCoverDataUrl,
-  revealResearchArtifact
-} from './service'
 import { RESEARCH_OUTPUT_FORMATS, type CreateResearchJobInput, type ResearchOutputFormat } from './types'
 import { getResearchSource } from './store'
 import {
@@ -34,13 +22,13 @@ import {
 export function registerResearchIpc(): void {
   ipcMain.handle('research:list', async () => {
     await ensureDbReady()
-    return listResearchLibrary()
+    return (await researchService()).listResearchLibrary()
   })
 
   ipcMain.handle('research:get', async (_event, input: unknown) => {
     await ensureDbReady()
     const id = requireId(input, 'research job')
-    return { ...getResearchJobDetail(id), running: isResearchJobRunning(id) }
+    return { ...(await researchService()).getResearchJobDetail(id), running: isResearchJobRunning(id) }
   })
 
   ipcMain.handle('research:poll', async (_event, input: unknown) => {
@@ -50,17 +38,17 @@ export function registerResearchIpc(): void {
     const version = typeof input.version === 'string' && input.version.length <= 512
       ? input.version
       : undefined
-    return pollResearchJob(id, isResearchJobRunning(id), version)
+    return (await researchService()).pollResearchJob(id, isResearchJobRunning(id), version)
   })
 
   ipcMain.handle('research:essay', async (_event, input: unknown) => {
     await ensureDbReady()
-    return getResearchEssayPreview(requireId(input, 'research job'))
+    return (await researchService()).getResearchEssayPreview(requireId(input, 'research job'))
   })
 
   ipcMain.handle('research:create', async (_event, input: unknown) => {
     await ensureDbReady()
-    const job = createManagedResearchJob(requireCreateInput(input))
+    const job = (await researchService()).createManagedResearchJob(requireCreateInput(input))
     if (job.status !== 'draft') kickResearchScheduler()
     return job
   })
@@ -79,14 +67,14 @@ export function registerResearchIpc(): void {
     await ensureDbReady()
     const id = requireId(input, 'research job')
     cancelActiveResearchRun(id)
-    return archiveManagedResearchJob(id)
+    return (await researchService()).archiveManagedResearchJob(id)
   })
 
   ipcMain.handle('research:delete', async (_event, input: unknown) => {
     await ensureDbReady()
     const id = requireId(input, 'research job')
     cancelActiveResearchRun(id)
-    return deleteManagedResearchJob(id)
+    return (await researchService()).deleteManagedResearchJob(id)
   })
 
   ipcMain.handle('research:export', async (_event, input: unknown) => {
@@ -103,19 +91,20 @@ export function registerResearchIpc(): void {
 
   ipcMain.handle('research:openArtifact', async (_event, input: unknown) => {
     await ensureDbReady()
-    await openResearchArtifact(requireId(input, 'research artifact'))
+    await (await researchService()).openResearchArtifact(requireId(input, 'research artifact'))
     return true
   })
 
   ipcMain.handle('research:revealArtifact', async (_event, input: unknown) => {
     await ensureDbReady()
-    revealResearchArtifact(requireId(input, 'research artifact'))
+    const service = await researchService()
+    service.revealResearchArtifact(requireId(input, 'research artifact'))
     return true
   })
 
   ipcMain.handle('research:coverDataUrl', async (_event, input: unknown) => {
     await ensureDbReady()
-    return researchCoverDataUrl(requireId(input, 'research job'))
+    return (await researchService()).researchCoverDataUrl(requireId(input, 'research job'))
   })
 
   ipcMain.handle('research:openSource', async (_event, input: unknown) => {
@@ -179,6 +168,7 @@ function requireDiscordSettingsPatch(input: unknown): ResearchDiscordSettingsPat
 
 function requireCreateInput(input: unknown): CreateResearchJobInput {
   if (!isRecord(input)) throw new Error('invalid research input')
+  const mode = input.mode === 'autoresearch' ? 'autoresearch' : 'evidence'
   return {
     prompt: input.prompt as string,
     title: typeof input.title === 'string' ? input.title : undefined,
@@ -186,7 +176,36 @@ function requireCreateInput(input: unknown): CreateResearchJobInput {
     model: typeof input.model === 'string' ? input.model : undefined,
     depth: input.depth as CreateResearchJobInput['depth'],
     outputFormat: input.outputFormat as CreateResearchJobInput['outputFormat'],
+    mode,
+    autoresearch: mode === 'autoresearch' ? requireAutoresearchInput(input.autoresearch) : undefined,
     autoStart: input.autoStart !== false
+  }
+}
+
+function researchService() {
+  return import('./service')
+}
+
+function requireAutoresearchInput(input: unknown): NonNullable<CreateResearchJobInput['autoresearch']> {
+  if (!isRecord(input) || !isRecord(input.target)) throw new Error('invalid Autoresearch configuration')
+  const target = input.target.kind === 'karpathy-starter'
+    ? { kind: 'karpathy-starter' as const }
+    : input.target.kind === 'project' && typeof input.target.projectId === 'string'
+      ? { kind: 'project' as const, projectId: input.target.projectId }
+      : null
+  if (!target) throw new Error('invalid Autoresearch target')
+  return {
+    target,
+    command: typeof input.command === 'string' ? input.command : undefined,
+    metricName: typeof input.metricName === 'string' ? input.metricName : undefined,
+    metricPattern: typeof input.metricPattern === 'string' ? input.metricPattern : undefined,
+    metricDirection: input.metricDirection === 'maximize' ? 'maximize' : 'minimize',
+    editablePaths: Array.isArray(input.editablePaths)
+      ? input.editablePaths.filter((value): value is string => typeof value === 'string')
+      : undefined,
+    experimentTimeoutMinutes: typeof input.experimentTimeoutMinutes === 'number'
+      ? input.experimentTimeoutMinutes
+      : undefined
   }
 }
 

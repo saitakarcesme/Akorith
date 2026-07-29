@@ -17,6 +17,88 @@ export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number]
 export const RESEARCH_OUTPUT_FORMATS = ['pdf', 'html', 'md', 'docx', 'xlsx', 'pptx'] as const
 export type ResearchOutputFormat = (typeof RESEARCH_OUTPUT_FORMATS)[number]
 
+export const RESEARCH_MODES = ['evidence', 'autoresearch'] as const
+export type ResearchMode = (typeof RESEARCH_MODES)[number]
+
+export const AUTORESEARCH_METRIC_DIRECTIONS = ['minimize', 'maximize'] as const
+export type AutoresearchMetricDirection = (typeof AUTORESEARCH_METRIC_DIRECTIONS)[number]
+
+export const AUTORESEARCH_EXPERIMENT_STATUSES = ['keep', 'discard', 'crash'] as const
+export type AutoresearchExperimentStatus = (typeof AUTORESEARCH_EXPERIMENT_STATUSES)[number]
+
+export interface AutoresearchCommand {
+  executable: string
+  args: string[]
+  display: string
+}
+
+export interface AutoresearchExperimentConfig {
+  version: 1
+  target:
+    | {
+        kind: 'karpathy-starter'
+        repositoryUrl: string
+        repositoryRef: string
+      }
+    | {
+        kind: 'project'
+        projectId: string
+        projectName: string
+        projectPath: string
+      }
+  command: AutoresearchCommand
+  metric: {
+    name: string
+    pattern: string
+    direction: AutoresearchMetricDirection
+  }
+  editablePaths: string[]
+  experimentTimeoutMs: number
+}
+
+export interface AutoresearchExperimentState {
+  version: 1
+  setupStatus: 'pending' | 'ready'
+  repositoryDir?: string
+  branchName?: string
+  baselineMetric?: number
+  bestMetric?: number
+  bestCommit?: string
+}
+
+export interface AutoresearchCreateInput {
+  target:
+    | { kind: 'karpathy-starter' }
+    | { kind: 'project'; projectId: string }
+  /** shell-free command line, parsed into one executable plus argv in main */
+  command?: string
+  metricName?: string
+  metricPattern?: string
+  metricDirection?: AutoresearchMetricDirection
+  editablePaths?: string[]
+  experimentTimeoutMinutes?: number
+}
+
+export interface AutoresearchExperiment {
+  id: string
+  jobId: string
+  cycleId: string
+  index: number
+  kind: 'baseline' | 'candidate'
+  status: AutoresearchExperimentStatus
+  description: string
+  commit?: string
+  metric?: number
+  previousBest?: number
+  memoryGb?: number
+  durationMs: number
+  changedFiles: string[]
+  logFile?: string
+  error?: string
+  startedAt: number
+  endedAt?: number
+}
+
 export const RESEARCH_STATUSES = [
   'draft',
   'planning',
@@ -39,6 +121,12 @@ export const RESEARCH_EVENT_KINDS = [
   'planning_started',
   'plan_ready',
   'cycle_started',
+  'baseline_started',
+  'baseline_recorded',
+  'experiment_proposed',
+  'experiment_kept',
+  'experiment_discarded',
+  'experiment_crashed',
   'source_found',
   'finding_added',
   'verification_started',
@@ -153,6 +241,7 @@ export interface ResearchJob {
   id: string
   title: string
   prompt: string
+  mode?: ResearchMode
   status: ResearchStatus
   phase: ResearchPhase
   providerId: string
@@ -168,6 +257,8 @@ export interface ResearchJob {
   workspaceDir: string
   artifactPath?: string
   coverPath?: string
+  experimentConfig?: AutoresearchExperimentConfig
+  experimentState?: AutoresearchExperimentState
   plan?: ResearchPlan
   summary?: string
   error?: string
@@ -287,6 +378,10 @@ export interface CreateResearchJobInput {
   model?: string
   depth: ResearchDepth
   outputFormat: ResearchOutputFormat
+  mode?: ResearchMode
+  autoresearch?: AutoresearchCreateInput
+  /** Canonicalized main-process-only configuration persisted with the job. */
+  experimentConfig?: AutoresearchExperimentConfig
   autoStart?: boolean
 }
 

@@ -27,7 +27,16 @@ export interface GitChangeSummary {
 }
 
 export type GitStatusResult =
-  | { ok: true; isRepo: true; branch: string; files: GitChangeFile[]; truncated: boolean; stat: string; clean: boolean }
+  | {
+      ok: true
+      isRepo: true
+      branch: string
+      upstream: string | null
+      files: GitChangeFile[]
+      truncated: boolean
+      stat: string
+      clean: boolean
+    }
   | { ok: true; isRepo: false }
   | { ok: false; error: string }
 
@@ -221,8 +230,9 @@ async function gitStatus(path: string): Promise<GitStatusResult> {
   if (!inside.ok || inside.stdout.trim() !== 'true') {
     return { ok: true, isRepo: false }
   }
-  const [branchRes, statusRes, statRes, headNumstat] = await Promise.all([
+  const [branchRes, upstreamRes, statusRes, statRes, headNumstat] = await Promise.all([
     runGit(path, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    runGit(path, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']),
     runGit(path, ['status', '--porcelain=v1', '-z']),
     runGit(path, ['diff', '--stat', '--no-color']),
     runGit(path, ['diff', 'HEAD', '--numstat', '-z', '--no-renames'])
@@ -250,6 +260,7 @@ async function gitStatus(path: string): Promise<GitStatusResult> {
     ok: true,
     isRepo: true,
     branch: branchRes.stdout.trim() || 'HEAD',
+    upstream: upstreamRes.ok ? upstreamRes.stdout.trim() || null : null,
     files,
     truncated: parsed.truncated,
     stat,

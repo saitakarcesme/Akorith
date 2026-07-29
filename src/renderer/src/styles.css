@@ -292,23 +292,7 @@
 
 .workspace-step-popover > div.is-error strong { color: var(--danger); }
 
-.chat-msg .chat-code {
-  margin: 14px 0;
-  color: var(--text);
-  background: color-mix(in srgb, var(--bg-raised) 93%, var(--ak-purple) 7%);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--ak-purple) 16%);
-  border-radius: 15px;
-  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
-}
 
-.chat-msg .chat-code-header {
-  min-height: 42px;
-  padding: 7px 10px 7px 14px;
-  color: var(--text-dim);
-  background: color-mix(in srgb, var(--bg-panel) 92%, var(--ak-green) 8%);
-  border-bottom: 1px solid var(--border-soft);
-  font-family: var(--font-ui);
-}
 
 .chat-code-language {
   display: inline-flex;
@@ -328,14 +312,6 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--ak-green) 9%, transparent);
 }
 
-.chat-msg .chat-code pre {
-  padding: 17px 18px 19px;
-  color: color-mix(in srgb, var(--text) 92%, var(--ak-green-bright) 8%);
-  background: transparent;
-  font-size: 12.5px;
-  line-height: 1.72;
-  tab-size: 2;
-}
 
 .chat-code-header .chat-copy {
   min-height: 27px;
@@ -343,14 +319,7 @@
   background: transparent;
 }
 
-.app[data-theme='light'] .chat-msg .chat-code {
-  background: #f1f1ed;
-  border-color: rgba(32, 33, 31, .14);
-}
 
-.app[data-theme='light'] .chat-msg .chat-code-header {
-  background: #f8f8f5;
-}
 
 /* Research — a durable investigation workspace, visually quieter than Loop. */
 .research-page-wrap {
@@ -654,7 +623,6 @@
 }
 .research-submit:hover:not(:disabled) { background: var(--accent-strong); transform: translateY(-1px); }
 .research-submit:disabled { opacity: .28; }
-
 .research-progress {
   width: min(860px, calc(100% - 40px));
   display: flex;
@@ -1120,12 +1088,6 @@
   padding: 0;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-  overflow: hidden;
-}
 
 body {
   font-family: var(--font-ui);
@@ -1135,12 +1097,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button,
-select,
-input,
-textarea {
-  font: inherit;
-}
 
 /* Phase 33.19: readable defaults for any native control not otherwise styled
    (Test Lab / Loops selects, misc inputs) so no white dropdown or low-contrast
@@ -1781,9 +1737,6 @@ textarea:focus-visible {
 }
 
 /* Phase 36.2: "Projects" plain heading (not a collapsible folder). */
-.projects-heading {
-  padding: 2px 6px 6px;
-}
 
 .projects-heading-label {
   display: inline-flex;
@@ -2267,19 +2220,8 @@ textarea:focus-visible {
 }
 
 /* Phase 36.3: hover-only background; active chat is brighter/heavier text. */
-.recent-section .recent-chat:hover {
-  background: var(--hover) !important;
-}
 
-.recent-section .recent-chat.is-active {
-  background: transparent !important;
-  color: var(--text);
-  font-weight: 600;
-}
 
-.recent-section .recent-chat.is-active:hover {
-  background: var(--hover) !important;
-}
 
 .recent-section .recent-chat-text span {
   font-size: 12px;
@@ -2362,13 +2304,6 @@ textarea:focus-visible {
 }
 
 /* The per-row menu anchors to the overflow button, opening below it. */
-.project-row-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 4px;
-  z-index: 75;
-  min-width: 184px;
-}
 
 .project-menu button.is-danger {
   color: var(--danger);
@@ -2489,11 +2424,6 @@ textarea:focus-visible {
   cursor: default;
 }
 
-.provider-section {
-  margin: 4px 0;
-  padding: 7px 4px 5px;
-  border-radius: 8px;
-}
 
 .provider-section.tone-claude,
 .recent-chat.tone-claude {
@@ -2555,10 +2485,6 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.profile-button:hover {
-  color: var(--text);
-  background: var(--hover-strong);
-}
 
 /* Avatar mark in a small square so the row reads evenly. */
 .profile-button > svg:first-child {
@@ -2767,10 +2693,6 @@ textarea:focus-visible {
   border-color: var(--border-soft);
 }
 
-.settings-tab span {
-  font-size: 12px;
-  font-weight: 700;
-}
 
 .settings-tab em {
   max-width: 100%;
@@ -5125,14 +5047,6 @@ textarea:focus-visible {
   gap: 10px;
 }
 
-.chat-msg {
-  max-width: 78%;
-  padding: 11px 15px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
 
 .chat-msg-text {
   white-space: pre-wrap;
@@ -5164,15 +5078,7 @@ textarea:focus-visible {
   gap: 12px;
 }
 
-.chat-prose p {
-  margin: 0;
-}
 
-.chat-prose ol,
-.chat-prose ul {
-  margin: 0;
-  padding-left: 1.35rem;
-}
 
 .chat-prose li + li {
   margin-top: 6px;
@@ -5207,11 +5113,6 @@ textarea:focus-visible {
 }
 
 /* Keep any inline code legible inside the white bubble. */
-.chat-msg.user code {
-  color: var(--bubble-user-text);
-  background: rgba(0, 0, 0, 0.07);
-  border-color: rgba(0, 0, 0, 0.12);
-}
 
 .chat-msg.assistant {
   align-self: flex-start;
@@ -5221,10 +5122,6 @@ textarea:focus-visible {
   border-color: var(--border);
 }
 
-.chat-msg.assistant.error {
-  background: #f6e2e2;
-  color: #7e2b2b;
-}
 
 /* Stable waiting label; Workspace supplies the product shimmer. */
 .chat-thinking {
@@ -5578,22 +5475,10 @@ textarea:focus-visible {
 }
 
 
-.hm-l0 {
-  background: var(--bg-input);
-}
 
 
-.hm-l1 {
-  background: rgba(255, 255, 255, 0.22);
-}
 
-.hm-l2 {
-  background: rgba(255, 255, 255, 0.46);
-}
 
-.hm-l3 {
-  background: rgba(255, 255, 255, 0.84);
-}
 
 
 /* ---------- scrollbars ---------- */
@@ -5650,10 +5535,6 @@ textarea:focus-visible {
   gap: 11px;
 }
 
-.test-title {
-  font-size: 16px;
-  font-weight: 600;
-}
 
 .test-head {
   display: flex;
@@ -5673,11 +5554,6 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
-.test-sub {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.45;
-}
 
 .test-wizard {
   display: flex;
@@ -5721,12 +5597,6 @@ textarea:focus-visible {
   margin-bottom: 2px;
 }
 
-.test-step-head p {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
 
 .test-source-tabs,
 .test-choice-grid {
@@ -5959,15 +5829,6 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 
-.test-btn {
-  padding: 7px 14px;
-  font-size: 12px;
-  color: var(--text);
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-}
 
 .test-btn:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.36);
@@ -5980,11 +5841,6 @@ textarea:focus-visible {
   border-color: transparent;
 }
 
-.test-btn.is-stop {
-  color: var(--danger);
-  background: rgba(215, 130, 130, 0.12);
-  border-color: rgba(215, 130, 130, 0.3);
-}
 
 .test-btn:disabled {
   color: var(--text-faint);
@@ -6722,12 +6578,6 @@ textarea:focus-visible {
   align-items: center;
 }
 
-.isa-card {
-  padding: 10px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-}
 
 .isa-title {
   font-size: 13px;
@@ -7278,9 +7128,6 @@ textarea:focus-visible {
   gap: 10px;
 }
 
-.ws-hero-inner.is-wide {
-  max-width: 740px;
-}
 
 .ws-hero-title {
   font-size: 28px;
@@ -7492,10 +7339,6 @@ textarea:focus-visible {
 /* Phase 34.4: no focus border/outline on the composer. Focus is shown only by
    a subtle surface lift (no ring, no layout shift). The border stays
    transparent so nothing draws a box around the textbox when selected. */
-.composer-box:focus-within {
-  border-color: transparent;
-  background: var(--bg-raised);
-}
 
 .composer-input {
   resize: none;
@@ -7801,10 +7644,6 @@ textarea:focus-visible {
   accent-color: var(--text-dim);
 }
 
-.composer-chip.is-active {
-  color: var(--text);
-  background: var(--hover-strong);
-}
 
 /* ---- Phase 39.7: composer "More" popover (declutters secondary actions) ---- */
 .composer-more {
@@ -8155,261 +7994,22 @@ textarea:focus-visible {
   gap: 16px;
 }
 
-.plugins-header h1 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.plugins-header p {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
 
 
-.workbench {
-  flex: 0 0 auto;
-  height: min(38vh, 460px);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
-  animation: workbench-in 160ms var(--ease);
-}
 
-@keyframes workbench-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.workbench-tabs {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 10px;
-  background: var(--bg-soft);
-}
-
-.workbench-tab {
-  padding: 5px 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.workbench-tab:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.workbench-tab.is-active {
-  color: var(--text);
-  background: var(--hover-strong);
-}
-
-.workbench-spacer {
-  flex: 1 1 auto;
-}
-
-.workbench-action,
-.workbench-close {
-  padding: 4px 10px;
-  font-size: 11px;
-  color: var(--text-dim);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.workbench-action:hover,
-.workbench-close:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.workbench-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px 14px;
-}
-
-.workbench-empty {
-  padding: 14px 4px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.workbench-empty.is-error {
-  color: var(--danger);
-}
-
-.workbench-changes-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.workbench-branch {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.workbench-count {
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-.workbench-file-list,
-.workbench-mission-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.workbench-file {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 6px;
-  border-radius: var(--radius-sm);
-}
-
-.workbench-file:hover {
-  background: var(--hover);
-}
-
-.workbench-file-status {
-  flex: 0 0 auto;
-  width: 22px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: center;
-}
-
+/* Current Review uses the Codex-aligned embedded workbench in replica-ui.css.
+   Keep only the semantic status accents consumed by its changed-file tree. */
 .workbench-file-status.status-new {
   color: var(--success);
 }
+
 .workbench-file-status.status-deleted {
   color: var(--danger);
 }
+
 .workbench-file-status.status-modified {
   color: var(--warning);
 }
-
-.workbench-file-path {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text);
-}
-
-.workbench-file-word {
-  flex: 0 0 auto;
-  font-size: 10.5px;
-  font-style: normal;
-  color: var(--text-faint);
-}
-
-.workbench-diffstat {
-  margin-top: 10px;
-  padding: 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-dim);
-  white-space: pre-wrap;
-  background: var(--bg-soft);
-  border-radius: var(--radius-sm);
-}
-
-.workbench-note {
-  margin-top: 10px;
-  font-size: 10.5px;
-  color: var(--text-faint);
-}
-
-.workbench-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.workbench-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  background: var(--bg-soft);
-  border-radius: var(--radius-sm);
-}
-
-.workbench-stat span {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-}
-
-.workbench-stat strong {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.workbench-mission {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.workbench-mission:hover {
-  background: var(--hover);
-}
-
-.workbench-mission-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text);
-}
-
-.workbench-mission-status {
-  flex: 0 0 auto;
-  font-size: 10.5px;
-  font-style: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-}
-
 /* Phase 34.9: bottom-dock vertical resize handle (top edge of the dock). */
 .agent-dock-resizer {
   flex: 0 0 auto;
@@ -8581,23 +8181,6 @@ textarea:focus-visible {
    ============================================================ */
 
 /* Chat column: more breathing room, intentional placement (not edge-stuck). */
-.chat-messages {
-  padding: 30px 32px 10px;
-}
-.chat-messages-col {
-  max-width: 720px;
-  margin: 0 auto;
-}
-.chat-msg.assistant {
-  padding: 2px 14px;
-}
-.chat-msg.user {
-  /* Phase 40.2: tighter vertical padding (the bubble felt too tall). */
-  padding: 9px 18px;
-}
-.composer-dock {
-  padding: 12px 32px 18px;
-}
 .composer-dock .composer {
   max-width: 720px;
   margin: 0 auto;
@@ -8820,13 +8403,6 @@ textarea:focus-visible {
 }
 
 /* ---- readable chat content + polished code/prompt blocks (Item 4) ---- */
-.chat-messages-col {
-  gap: 20px;
-}
-.chat-msg {
-  font-size: 15px;
-  line-height: 1.72;
-}
 .chat-msg-text {
   max-width: 72ch;
   /* Phase 40.3: long prose/URLs wrap at word boundaries, never overflow. */
@@ -8840,15 +8416,6 @@ textarea:focus-visible {
      effective radius rule — it previously collapsed back to var(--radius)/5px). */
   line-height: 1.5;
   border-radius: 26px 26px 10px 26px;
-}
-.chat-msg .chat-code {
-  margin: 12px 0;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: var(--radius);
-  background: #303039;
-  overflow: hidden;
-  /* Phase 40.3: never let a code block stretch the chat column. */
-  max-width: 100%;
 }
 .chat-msg .chat-code-header {
   padding: 8px 14px;
@@ -9349,10 +8916,6 @@ textarea:focus-visible {
   color: var(--text-faint);
 }
 
-.project-chat:hover .project-chat-time,
-.project-chat.is-active .project-chat-time {
-  display: none;
-}
 
 .project-chat:hover {
   color: var(--text);
@@ -9378,17 +8941,7 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.project-chat .sidebar-item-actions {
-  flex: 0 0 auto;
-  display: inline-flex;
-  gap: 4px;
-  opacity: 0;
-}
 
-.project-chat:hover .sidebar-item-actions,
-.project-chat.is-active .sidebar-item-actions {
-  opacity: 1;
-}
 
 .project-chat .sidebar-item-actions button {
   padding: 1px 5px;
@@ -9400,10 +8953,6 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.project-chat .sidebar-item-actions button:hover {
-  color: var(--text);
-  background: var(--hover-strong);
-}
 
 .project-chat .sidebar-item-actions button.is-danger:hover {
   color: var(--danger);
@@ -9455,10 +9004,6 @@ textarea:focus-visible {
   padding: 0;
 }
 
-.sidebar-fixed-groups .sidebar-section-header {
-  min-height: 27px;
-  padding: 1px 4px;
-}
 
 .sidebar-fixed-groups .sidebar-fold {
   gap: 6px;
@@ -9470,9 +9015,6 @@ textarea:focus-visible {
 }
 
 /* --- Readability bump: slightly larger text without scaling the whole window --- */
-body {
-  font-size: 14px;
-}
 
 .sidebar,
 .chat-panel,
@@ -9487,10 +9029,6 @@ body {
 /* Phase 46: smaller chat body text (Phase 45 14.5px -> 13px). Effective
    .chat-msg font-size — assistant/output + markdown prose (inherits), in both
    general and workspace chats. Line-height kept comfortable. */
-.chat-msg {
-  font-size: 13px;
-  line-height: 1.6;
-}
 
 /* Phase 46: user bubble text matches the body (-> 13px); still right-aligned
    and rounded — only the size changes. */
@@ -9499,43 +9037,13 @@ body {
 }
 
 /* Phase 56: Codex-like density polish — narrower, rounder, lighter composer. */
-.chat-messages-col,
-.composer-dock .composer {
-  max-width: 640px;
-}
 
-.ws-hero-inner.is-wide {
-  max-width: 640px;
-}
 
-.chat-msg.user {
-  max-width: 62%;
-  padding: 10px 16px;
-  border-radius: 30px 30px 12px 30px;
-}
 
-.composer-dock {
-  padding: 6px 28px 12px;
-}
 
-.composer-box {
-  border-radius: 28px;
-  background: var(--bg-composer);
-}
 
-.composer-input {
-  min-height: 34px;
-  padding: 10px 14px 2px;
-}
 
-.composer-controls {
-  padding: 4px 9px 6px;
-}
 
-.send-button {
-  width: 36px;
-  height: 36px;
-}
 
 .chat-msg-meta,
 .composer-meta,
@@ -9553,9 +9061,6 @@ body {
 }
 
 /* Phase 46: code blocks a touch smaller but still readable (was 13.5px). */
-.chat-msg .chat-code pre {
-  font-size: 12.5px;
-}
 
 .ws-hero-title {
   font-size: 30px;
@@ -9611,9 +9116,6 @@ body {
     border-right: 0;
     border-bottom: 1px solid var(--border-soft);
   }
-  .settings-tab {
-    min-width: 150px;
-  }
   .settings-summary-grid,
   .settings-readonly-grid,
   .settings-two-col,
@@ -9650,27 +9152,9 @@ body {
   margin: 0 auto 44px;
 }
 
-.heatmap-shell {
-  padding-bottom: 24px;
-}
 
-.heatmap-grid {
-  grid-template-rows: repeat(7, 9px);
-  grid-auto-columns: 9px;
-  gap: 3px;
-}
 
-.profile-dashboard .hm-cell {
-  width: 9px;
-  height: 9px;
-  border-radius: 2.5px;
-}
 
-.heatmap-months {
-  grid-template-columns: repeat(53, 9px);
-  column-gap: 3px;
-  margin-top: 8px;
-}
 
 /* ==========================================================================
    Akorith identity + dashboard/benchmark refinement
@@ -9688,9 +9172,6 @@ body {
   user-select: none;
 }
 
-.sidebar-brand + .sidebar-nav {
-  padding-top: 3px;
-}
 
 /* Center the compact heatmap and let edge tooltips paint above the surrounding
    dashboard instead of being clipped by the former horizontal scroll box. */
@@ -9711,15 +9192,7 @@ body {
   margin-left: auto;
 }
 
-.profile-dashboard .hm-cell:not(.is-future):hover::after {
-  z-index: 120;
-}
 
-.profile-dashboard .hm-cell:nth-child(-n + 7):not(.is-future):hover::after {
-  right: auto;
-  left: 0;
-  transform: none;
-}
 
 .profile-dashboard .hm-cell:nth-last-child(-n + 7):not(.is-future):hover::after {
   right: 0;
@@ -10732,7 +10205,6 @@ body {
   border-radius: var(--radius);
   cursor: pointer;
 }
-.companion-card.is-active { border-color: var(--border); background: var(--bg-raised); }
 .companion-card-avatar {
   flex: 0 0 auto;
   width: 30px;
@@ -10746,11 +10218,9 @@ body {
   background: var(--bg-raised);
   border-radius: 10px;
 }
-.companion-card-name { font-size: 14px; font-weight: 650; color: var(--text); }
 .companion-card-body { min-width: 0; }
 .companion-card-tagline { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--text-dim); margin-top: 1px; }
 .companion-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.companion-card-tags span { font-size: 9.5px; padding: 1px 6px; border-radius: 999px; background: var(--bg-raised); color: var(--text-faint); }
 .companion-card-meta { font-size: 9.5px; color: var(--text-faint); margin-top: 3px; }
 .companion-sessions-head { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 5px; font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
 .companion-sessions-head button { font-size: 11px; background: transparent; border: 0; color: var(--text-dim); cursor: pointer; }
@@ -10758,7 +10228,6 @@ body {
 .companion-session-row { display: flex; align-items: center; border-radius: var(--radius-sm); }
 .companion-session-row:hover,
 .companion-session-row:focus-within { background: rgba(255, 255, 255, 0.05); }
-.companion-session-row.is-active { background: var(--hover); }
 .companion-session-open { min-width: 0; flex: 1 1 auto; display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; text-align: left; background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 12px; }
 .companion-session-row.is-active .companion-session-open { color: var(--text); }
 .companion-session-delete { flex: 0 0 auto; margin-right: 4px; padding: 3px 6px; font-size: 10px; color: var(--text-faint); background: transparent; border: 1px solid transparent; border-radius: 999px; opacity: 0; cursor: pointer; }
@@ -10809,7 +10278,6 @@ body {
 .companions-memory.is-collapsed { flex-basis: 46px; align-items: center; padding: 12px 7px; overflow: hidden; }
 .companions-memory-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .companions-memory-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
-.companions-memory-head button { font-size: 11px; background: var(--bg-raised); border: 0; border-radius: 999px; padding: 3px 10px; color: var(--text-dim); cursor: pointer; }
 .companions-memory-title { min-width: 0; flex: 1 1 auto; display: flex; align-items: baseline; gap: 7px; }
 .companions-memory-title span { font-size: 10px; color: var(--text-faint); }
 .memory-collapse-btn { width: 24px; height: 24px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
@@ -10831,8 +10299,6 @@ body {
 .memory-title { font-size: 12px; font-weight: 600; color: var(--text); margin-top: 3px; }
 .memory-content { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.45; }
 .memory-actions { display: flex; gap: 6px; margin-top: 6px; }
-.memory-actions button { font-size: 10px; background: transparent; border: 0; color: var(--text-faint); cursor: pointer; }
-.memory-actions button.is-danger { color: var(--danger); }
 .memory-add-toggle { margin-top: 12px; font-size: 11px; background: transparent; border: 1px dashed var(--border-soft); border-radius: var(--radius-sm); padding: 8px; color: var(--text-faint); cursor: pointer; width: 100%; }
 .memory-add { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .memory-add textarea { resize: none; min-height: 60px; }
@@ -10848,15 +10314,10 @@ body {
 .agents-library { flex: 0 0 300px; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 30px; overflow-y: auto; border-right: 1px solid var(--border-soft); }
 .agents-lib-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 10px 0 4px; }
 .agent-lib-card { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; text-align: left; background: var(--bg-soft); border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; }
-.agent-lib-card.is-active { border-color: var(--border); background: var(--bg-raised); }
-.agent-lib-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
-.agent-lib-meta { font-size: 10px; color: var(--text-faint); }
 .agent-templates { display: flex; flex-direction: column; gap: 6px; }
 .agent-template-card { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; text-align: left; color: inherit; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--border-soft); border-radius: 16px; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
 .agent-template-card:hover { background: var(--bg-soft); border-color: var(--border); }
 .agent-template-card:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.13); }
-.agent-template-name { font-size: 12px; font-weight: 600; color: var(--text); }
-.agent-template-desc { font-size: 10.5px; color: var(--text-faint); line-height: 1.4; }
 .agent-template-note { font-size: 9.5px; color: var(--warning); }
 .agents-detail { flex: 1 1 0; min-width: 0; overflow-y: auto; padding: 18px 26px 40px; }
 .agents-empty-state { display: flex; align-items: center; justify-content: center; height: 100%; }
@@ -10889,7 +10350,6 @@ body {
 .agent-artifact summary { cursor: pointer; color: var(--text); }
 .agent-artifact summary span { color: var(--text-faint); font-size: 10px; }
 .agent-artifact pre { margin-top: 6px; padding: 10px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-soft); border-radius: var(--radius-sm); max-height: 300px; overflow-y: auto; }
-.agent-history h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
 .agent-run-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; }
 .agent-run-list li { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
 .agent-run-status { text-transform: uppercase; font-size: 9.5px; min-width: 74px; }
@@ -11806,9 +11266,6 @@ body {
   white-space: nowrap;
 }
 
-.token-activity {
-  margin-bottom: 54px;
-}
 
 .token-activity-head,
 .gpu-console-head,
@@ -11858,11 +11315,6 @@ body {
   outline: none;
 }
 
-.profile-dashboard .hm-l0 { background: rgba(255, 255, 255, 0.055); }
-.profile-dashboard .hm-l1 { background: rgba(105, 188, 255, 0.28); }
-.profile-dashboard .hm-l2 { background: rgba(105, 188, 255, 0.48); }
-.profile-dashboard .hm-l3 { background: rgba(105, 188, 255, 0.72); }
-.profile-dashboard .hm-l4 { background: #69bcff; }
 .profile-dashboard .hm-cell.is-future { opacity: 0.3; }
 
 .profile-dashboard .hm-cell:not(.is-future):hover {
@@ -12257,9 +11709,6 @@ body {
   white-space: nowrap;
 }
 
-.plugin-row-copy small.is-warn {
-  color: var(--warning);
-}
 
 .codex-switch {
   position: relative;
@@ -12998,14 +12447,6 @@ body {
 }
 
 /* Effective v0.5 code surface. Keep after the historical density layers. */
-.chat-msg .chat-code {
-  margin: 14px 0;
-  color: var(--text);
-  background: color-mix(in srgb, var(--bg-raised) 93%, var(--ak-purple) 7%);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--ak-purple) 16%);
-  border-radius: 15px;
-  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
-}
 
 .chat-msg .chat-code-header {
   min-height: 42px;
@@ -13023,13 +12464,4 @@ body {
   font-size: 12.5px;
   line-height: 1.72;
   tab-size: 2;
-}
-
-.app[data-theme='light'] .chat-msg .chat-code {
-  background: #f1f1ed;
-  border-color: rgba(32, 33, 31, .14);
-}
-
-.app[data-theme='light'] .chat-msg .chat-code-header {
-  background: #f8f8f5;
 }

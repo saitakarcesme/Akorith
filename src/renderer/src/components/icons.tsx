@@ -271,6 +271,15 @@ export function MoreIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></IconShell>
 }
 
+export function RefreshIcon(props: IconProps): JSX.Element {
+  return (
+    <IconShell {...props}>
+      <path d="M20 7v5h-5" />
+      <path d="M19 12a7 7 0 1 0 1.1 4" />
+    </IconShell>
+  )
+}
+
 export function PlanIcon(props: IconProps): JSX.Element {
   return <IconShell {...props}><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" /></IconShell>
 }

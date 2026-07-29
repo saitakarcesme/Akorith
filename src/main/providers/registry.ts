@@ -278,7 +278,11 @@ export async function sendWorkspacePrompt(
   if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
   const tools = enabledPluginContext()
   const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\n${HEADLESS_WORKSPACE_GUIDANCE}\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
-  const result = await provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
+  const result = await provider.send(
+    instruction,
+    { model, signal, workingDirectory, onActivity, intent: 'execute' },
+    () => {}
+  )
   return completeWorkspaceBrowserAction({
     prompt,
     intent: 'execute',

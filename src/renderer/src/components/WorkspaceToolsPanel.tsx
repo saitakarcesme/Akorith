@@ -15,6 +15,7 @@ import {
   FolderIcon,
   GlobeIcon,
   PanelsIcon,
+  PlusIcon,
   QueueIcon
 } from './icons'
 
@@ -33,6 +34,12 @@ export interface WorkspaceToolRequest {
   nonce: number
 }
 
+interface WorkspaceToolTab {
+  id: string
+  tool: WorkspaceToolId | null
+  title: string
+}
+
 const PANEL_WIDTH_MIN = 520
 const PANEL_WIDTH_DEFAULT = 720
 const PANEL_WIDTH_MAX = 980
@@ -49,6 +56,12 @@ const TOOLS: Array<{
   { id: 'computer', label: 'Computer Use', icon: PanelsIcon },
   { id: 'files', label: 'Files', shortcut: 'Ctrl+P', icon: FolderIcon }
 ]
+
+function titleForTool(tool: WorkspaceToolId): string {
+  if (tool === 'browser') return 'New tab'
+  if (tool === 'files') return 'Open file'
+  return TOOLS.find((item) => item.id === tool)?.label ?? tool
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -94,24 +107,53 @@ export default function WorkspaceToolsPanel({
   onOpen: () => void
   onClose: () => void
 }): JSX.Element | null {
-  const [activeTool, setActiveTool] = useState<WorkspaceToolId | null>(null)
-  const [openTabs, setOpenTabs] = useState<WorkspaceToolId[]>([])
-  const [mountedTools, setMountedTools] = useState<Set<WorkspaceToolId>>(() => new Set())
+  const tabSequenceRef = useRef(0)
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [openTabs, setOpenTabs] = useState<WorkspaceToolTab[]>([])
   const [width, setWidth] = useState(storedPanelWidth)
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const handledRequestRef = useRef<number | null>(null)
 
-  const openTool = useCallback((tool: WorkspaceToolId): void => {
-    setOpenTabs((current) => current.includes(tool) ? current : [...current, tool])
-    setMountedTools((current) => {
-      if (current.has(tool)) return current
-      const next = new Set(current)
-      next.add(tool)
-      return next
-    })
-    setActiveTool(tool)
+  const nextTabId = useCallback((): string => {
+    tabSequenceRef.current += 1
+    return `workspace-tab-${tabSequenceRef.current}`
+  }, [])
+
+  const openTool = useCallback((tool: WorkspaceToolId, reuse = true): void => {
+    const existing = reuse ? openTabs.find((tab) => tab.tool === tool) : undefined
+    if (existing) {
+      setActiveTabId(existing.id)
+      onOpen()
+      return
+    }
+    const activeTab = openTabs.find((tab) => tab.id === activeTabId)
+    if (activeTab?.tool === null) {
+      setOpenTabs((current) => current.map((tab) => tab.id === activeTab.id
+        ? { ...tab, tool, title: titleForTool(tool) }
+        : tab))
+      setActiveTabId(activeTab.id)
+      onOpen()
+      return
+    }
+    const tab: WorkspaceToolTab = { id: nextTabId(), tool, title: titleForTool(tool) }
+    setOpenTabs((current) => [...current, tab])
+    setActiveTabId(tab.id)
     onOpen()
-  }, [onOpen])
+  }, [activeTabId, nextTabId, onOpen, openTabs])
+
+  const openLauncher = useCallback((): void => {
+    const tab: WorkspaceToolTab = { id: nextTabId(), tool: null, title: 'New tab' }
+    setOpenTabs((current) => [...current, tab])
+    setActiveTabId(tab.id)
+    onOpen()
+  }, [nextTabId, onOpen])
+
+  useEffect(() => {
+    if (!open || openTabs.length > 0) return
+    const tab: WorkspaceToolTab = { id: nextTabId(), tool: null, title: 'New tab' }
+    setOpenTabs([tab])
+    setActiveTabId(tab.id)
+  }, [nextTabId, open, openTabs.length])
 
   useEffect(() => {
     if (
@@ -150,36 +192,36 @@ export default function WorkspaceToolsPanel({
 
   if (!project?.path) return null
 
-  const terminalId = `workspace-shell::${project.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40)}`
-  const previewActive = activeTool === 'browser' || activeTool === 'computer'
-  const previewMounted = mountedTools.has('browser') || mountedTools.has('computer')
+  const projectPath = project.path
+  const activeTab = openTabs.find((tab) => tab.id === activeTabId) ?? null
 
-  const closeTab = (tool: WorkspaceToolId): void => {
-    const index = openTabs.indexOf(tool)
-    const next = openTabs.filter((item) => item !== tool)
-    const nextActive = activeTool === tool
-      ? next[index] ?? next[index - 1] ?? null
-      : activeTool
-    setOpenTabs(next)
-    setMountedTools((current) => {
-      if (!current.has(tool)) return current
-      const mounted = new Set(current)
-      mounted.delete(tool)
-      return mounted
-    })
-    if (activeTool === tool) setActiveTool(nextActive)
+  const closeTab = (tabId: string): void => {
+    const index = openTabs.findIndex((tab) => tab.id === tabId)
+    const remaining = openTabs.filter((tab) => tab.id !== tabId)
+    if (remaining.length === 0) {
+      const launcher: WorkspaceToolTab = { id: nextTabId(), tool: null, title: 'New tab' }
+      setOpenTabs([launcher])
+      setActiveTabId(launcher.id)
+      window.requestAnimationFrame(() => document.getElementById(`workspace-tool-tab-${launcher.id}`)?.focus())
+      return
+    }
+    const nextActiveId = activeTabId === tabId
+      ? remaining[index]?.id ?? remaining[index - 1]?.id ?? remaining[0].id
+      : activeTabId
+    setOpenTabs(remaining)
+    setActiveTabId(nextActiveId)
     window.requestAnimationFrame(() => {
-      if (nextActive) document.getElementById(`workspace-tool-tab-${nextActive}`)?.focus()
+      if (nextActiveId) document.getElementById(`workspace-tool-tab-${nextActiveId}`)?.focus()
     })
   }
 
-  const navigateTabs = (event: KeyboardEvent<HTMLButtonElement>, tool: WorkspaceToolId): void => {
+  const navigateTabs = (event: KeyboardEvent<HTMLButtonElement>, tabId: string): void => {
     if (event.key === 'Delete') {
       event.preventDefault()
-      closeTab(tool)
+      closeTab(tabId)
       return
     }
-    const index = openTabs.indexOf(tool)
+    const index = openTabs.findIndex((tab) => tab.id === tabId)
     let nextIndex = index
     if (event.key === 'ArrowLeft') nextIndex = index > 0 ? index - 1 : openTabs.length - 1
     else if (event.key === 'ArrowRight') nextIndex = index < openTabs.length - 1 ? index + 1 : 0
@@ -189,8 +231,12 @@ export default function WorkspaceToolsPanel({
     event.preventDefault()
     const next = openTabs[nextIndex]
     if (!next) return
-    setActiveTool(next)
-    window.requestAnimationFrame(() => document.getElementById(`workspace-tool-tab-${next}`)?.focus())
+    setActiveTabId(next.id)
+    window.requestAnimationFrame(() => document.getElementById(`workspace-tool-tab-${next.id}`)?.focus())
+  }
+
+  const renameTab = (tabId: string, title: string): void => {
+    setOpenTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, title } : tab))
   }
 
   const startWidthResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -251,37 +297,46 @@ export default function WorkspaceToolsPanel({
       {open && (
         <nav className="workspace-tool-tabs" aria-label="Open workspace tools">
           <div className="workspace-tool-tab-list" role="tablist">
-            {openTabs.map((tool) => {
-              const item = TOOLS.find((candidate) => candidate.id === tool)!
-              const Icon = item.icon
-              const selected = activeTool === tool
+            {openTabs.map((tab) => {
+              const item = tab.tool ? TOOLS.find((candidate) => candidate.id === tab.tool) : null
+              const Icon = item?.icon ?? GlobeIcon
+              const selected = activeTabId === tab.id
               return (
-                <div className={`workspace-tool-tab ${selected ? 'is-active' : ''}`} role="presentation" key={tool}>
+                <div className={`workspace-tool-tab ${selected ? 'is-active' : ''}`} role="presentation" key={tab.id}>
                   <button
                     type="button"
                     className="workspace-tool-tab-select"
                     role="tab"
-                    id={`workspace-tool-tab-${tool}`}
-                    aria-controls={`workspace-tool-panel-${tool === 'browser' || tool === 'computer' ? 'preview' : tool}`}
+                    id={`workspace-tool-tab-${tab.id}`}
+                    aria-controls={`workspace-tool-panel-${tab.id}`}
                     aria-selected={selected}
                     tabIndex={selected ? 0 : -1}
-                    onClick={() => setActiveTool(tool)}
-                    onKeyDown={(event) => navigateTabs(event, tool)}
+                    onClick={() => setActiveTabId(tab.id)}
+                    onKeyDown={(event) => navigateTabs(event, tab.id)}
                   >
                     <Icon size={13} />
-                    <span>{item.label}</span>
+                    <span>{tab.title}</span>
                   </button>
                   <button
                     type="button"
                     className="workspace-tool-tab-close"
-                    aria-label={`Close ${item.label}`}
-                    onClick={() => closeTab(tool)}
+                    aria-label={`Close ${tab.title}`}
+                    onClick={() => closeTab(tab.id)}
                   >
                     <CloseIcon size={12} />
                   </button>
                 </div>
               )
             })}
+            <button
+              type="button"
+              className="workspace-tool-tab-add"
+              aria-label="Open a new tool tab"
+              title="New tab"
+              onClick={openLauncher}
+            >
+              <PlusIcon size={14} />
+            </button>
           </div>
           <button
             type="button"
@@ -296,13 +351,18 @@ export default function WorkspaceToolsPanel({
       )}
 
       <div className={`workspace-tools-content ${openTabs.length > 0 ? 'has-tabs' : 'is-launcher'}`}>
-        {openTabs.length === 0 && (
-          <div className="workspace-tools-launcher">
+        {activeTab?.tool === null && (
+          <div
+            className="workspace-tools-launcher"
+            id={`workspace-tool-panel-${activeTab.id}`}
+            role="tabpanel"
+            aria-labelledby={`workspace-tool-tab-${activeTab.id}`}
+          >
             <div className="workspace-tools-cards" aria-label="Choose a workspace tool">
               {TOOLS.map((item) => {
                 const Icon = item.icon
                 return (
-                  <button type="button" key={item.id} onClick={() => openTool(item.id)}>
+                  <button type="button" key={item.id} onClick={() => openTool(item.id, false)}>
                     <Icon size={14} />
                     <strong>{item.label}</strong>
                     {item.shortcut ? <kbd>{item.shortcut}</kbd> : <span aria-hidden="true" />}
@@ -312,84 +372,78 @@ export default function WorkspaceToolsPanel({
             </div>
           </div>
         )}
-        <section
-          className={`workspace-tool-pane is-review ${activeTool === 'review' ? 'is-active' : ''}`}
-          id="workspace-tool-panel-review"
-          role="tabpanel"
-          aria-labelledby="workspace-tool-tab-review"
-          aria-hidden={activeTool !== 'review'}
-        >
-          {mountedTools.has('review') && (
-            <Suspense fallback={<ToolPaneFallback label="Opening Review…" />}>
-              <BottomWorkbench
-                activeProject={project}
-                open={open && activeTool === 'review'}
-                refreshKey={refreshKey}
-                embedded
-              />
-            </Suspense>
-          )}
-        </section>
 
-        <section
-          className={`workspace-tool-pane is-terminal ${activeTool === 'terminal' ? 'is-active' : ''}`}
-          id="workspace-tool-panel-terminal"
-          role="tabpanel"
-          aria-labelledby="workspace-tool-tab-terminal"
-          aria-hidden={activeTool !== 'terminal'}
-        >
-          {mountedTools.has('terminal') && (
-            <Suspense fallback={<ToolPaneFallback label="Opening Terminal…" />}>
-              <div className="workspace-terminal-shell">
-                <TerminalPane
-                  id={terminalId}
-                  title="Terminal"
-                  identity="terminal"
-                  cwd={project.path}
-                  commandKind="shell"
-                  active={active && open && activeTool === 'terminal'}
+        {openTabs.filter((tab) => tab.tool !== null).map((tab) => {
+          const selected = activeTabId === tab.id
+          const panelProps = {
+            className: `workspace-tool-pane is-${tab.tool} ${selected ? 'is-active' : ''}`,
+            id: `workspace-tool-panel-${tab.id}`,
+            role: 'tabpanel',
+            'aria-labelledby': `workspace-tool-tab-${tab.id}`,
+            'aria-hidden': !selected
+          } as const
+
+          if (tab.tool === 'review') {
+            return (
+              <section {...panelProps} key={tab.id}>
+                <Suspense fallback={<ToolPaneFallback label="Opening Review…" />}>
+                  <BottomWorkbench activeProject={project} open={open && selected} refreshKey={refreshKey} embedded />
+                </Suspense>
+              </section>
+            )
+          }
+
+          if (tab.tool === 'terminal') {
+            const terminalId = `workspace-shell::${project.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 32)}::${tab.id}`
+            return (
+              <section {...panelProps} key={tab.id}>
+                <Suspense fallback={<ToolPaneFallback label="Opening Terminal…" />}>
+                  <div className="workspace-terminal-shell">
+                    <TerminalPane
+                      id={terminalId}
+                      title="Terminal"
+                      identity="terminal"
+                      cwd={projectPath}
+                      commandKind="shell"
+                      active={active && open && selected}
+                    />
+                  </div>
+                </Suspense>
+              </section>
+            )
+          }
+
+          if (tab.tool === 'browser' || tab.tool === 'computer') {
+            return (
+              <section {...panelProps} key={tab.id}>
+                <Suspense fallback={<ToolPaneFallback label={`Opening ${tab.tool === 'computer' ? 'Computer Use' : 'Browser'}…`} />}>
+                  <ProjectPreviewPanel
+                    projectPath={projectPath}
+                    projectName={project.name}
+                    active={active && open && selected}
+                    refreshKey={refreshKey}
+                    variant="workspace"
+                    title={tab.tool === 'computer' ? 'Computer Use' : 'Browser'}
+                    interactive={tab.tool === 'computer'}
+                    pointerInput
+                  />
+                </Suspense>
+              </section>
+            )
+          }
+
+          return (
+            <section {...panelProps} key={tab.id}>
+              <Suspense fallback={<ToolPaneFallback label="Opening Files…" />}>
+                <WorkspaceFilesPanel
+                  project={project}
+                  refreshKey={refreshKey}
+                  onSelectionChange={(path) => renameTab(tab.id, path?.split('/').at(-1) ?? 'Open file')}
                 />
-              </div>
-            </Suspense>
-          )}
-        </section>
-
-        <section
-          className={`workspace-tool-pane is-preview ${previewActive ? 'is-active' : ''}`}
-          id="workspace-tool-panel-preview"
-          role="tabpanel"
-          aria-labelledby={activeTool === 'computer' ? 'workspace-tool-tab-computer' : 'workspace-tool-tab-browser'}
-          aria-hidden={!previewActive}
-        >
-          {previewMounted && (
-            <Suspense fallback={<ToolPaneFallback label={`Opening ${activeTool === 'computer' ? 'Computer Use' : 'Browser'}…`} />}>
-              <ProjectPreviewPanel
-                projectPath={project.path}
-                projectName={project.name}
-                active={active && open && previewActive}
-                refreshKey={refreshKey}
-                variant="workspace"
-                title={activeTool === 'computer' ? 'Computer Use' : 'Browser'}
-                interactive={activeTool === 'computer'}
-                pointerInput={previewActive}
-              />
-            </Suspense>
-          )}
-        </section>
-
-        <section
-          className={`workspace-tool-pane is-files ${activeTool === 'files' ? 'is-active' : ''}`}
-          id="workspace-tool-panel-files"
-          role="tabpanel"
-          aria-labelledby="workspace-tool-tab-files"
-          aria-hidden={activeTool !== 'files'}
-        >
-          {mountedTools.has('files') && (
-            <Suspense fallback={<ToolPaneFallback label="Opening Files…" />}>
-              <WorkspaceFilesPanel project={project} refreshKey={refreshKey} />
-            </Suspense>
-          )}
-        </section>
+              </Suspense>
+            </section>
+          )
+        })}
       </div>
     </aside>
   )

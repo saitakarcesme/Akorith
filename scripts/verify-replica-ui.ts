@@ -197,26 +197,31 @@ check(
 )
 check(
   workspaceTools.includes('const [openTabs, setOpenTabs]') &&
-    workspaceTools.includes('const [mountedTools, setMountedTools]') &&
+    workspaceTools.includes('interface WorkspaceToolTab') &&
     workspaceTools.includes('handledRequestRef') &&
     workspaceTools.includes('workspace-tool-tabs') &&
-    !workspaceTools.includes('workspace-tool-tab-add') &&
+    workspaceTools.includes('workspace-tool-tab-add') &&
     workspaceTools.includes('workspace-tools-launcher') &&
     workspaceTools.includes('Choose a workspace tool') &&
     !workspaceTools.includes('pickerOpen') &&
     workspaceTools.includes('workspace-tool-pane') &&
-    workspaceTools.includes("mountedTools.has('review')") &&
-    workspaceTools.includes("mountedTools.has('files')"),
-  'Workspace tools use a centered launcher, horizontal tabs, and preserved mounted tool context'
+    workspaceTools.includes("openTabs.filter((tab) => tab.tool !== null)") &&
+    workspaceTools.includes("title: 'New tab'"),
+  'Workspace tools use instance tabs, a shared add control, and a centered launcher'
 )
 check(
-  bottomWorkbench.includes('workbench-file-tabs') &&
+  bottomWorkbench.includes('workbench-changes-tree') &&
+    bottomWorkbench.includes('workbench-scm-toolbar') &&
+    bottomWorkbench.includes('workbench-branch-route') &&
+    bottomWorkbench.includes('changes.upstream') &&
+    !bottomWorkbench.includes('origin/{changes.branch}') &&
+    bottomWorkbench.includes('workbench-truncation-notice') &&
     bottomWorkbench.includes('workbench-line-marker') &&
     bottomWorkbench.includes('workbench-diff-line') &&
     bottomWorkbench.includes('workbench-line-number') &&
     bottomWorkbench.includes('file.additions') &&
     bottomWorkbench.includes('file.deletions'),
-  'Review provides compact file tabs and a numbered old/new/marker/code diff'
+  'Review provides a Codex SCM toolbar, right file tree, and numbered GitHub-style diff'
 )
 check(
   app.includes('onWorkspaceToolRequest={requestWorkspaceTool}') &&
@@ -258,6 +263,8 @@ check(
 )
 const closedToolPanel = selectorBlocks(replicaCss, '.workspace-tools.is-closed').at(-1) ?? ''
 const finalDiffCode = selectorBlocks(replicaCss, '.workbench-diff-line code').at(-1) ?? ''
+const finalToolTabs = selectorBlocks(replicaCss, '.workspace-tool-tabs').at(-1) ?? ''
+const finalToolContent = selectorBlocks(replicaCss, '.workspace-tools-content.has-tabs').at(-1) ?? ''
 check(
   /width\s*:\s*0/.test(closedToolPanel) &&
     /flex-basis\s*:\s*0/.test(closedToolPanel) &&
@@ -277,26 +284,23 @@ check(
   'workspace tool resize target stays full-height without a hover rail'
 )
 check(
-  selectorBlocks(replicaCss, '.workspace-tool-tabs').some((block) =>
-    /height\s*:\s*50px/.test(block) &&
-    /padding\s*:\s*8px\s+8px\s+8px\s+12px/.test(block) &&
-    /inset\s*:\s*0\s+0\s+auto/.test(block)
-  ) &&
+  /height\s*:\s*46px/.test(finalToolTabs) &&
+    /padding\s*:\s*6px\s+8px\s+6px\s+12px/.test(finalToolTabs) &&
     selectorBlocks(replicaCss, '.workspace-tool-tab-list').some((block) =>
       /overflow-x\s*:\s*auto/.test(block)
     ) &&
     selectorBlocks(replicaCss, '.workspace-tool-tab').some((block) =>
-      /min-width\s*:\s*132px/.test(block) &&
+      /min-width\s*:\s*112px/.test(block) &&
       /height\s*:\s*34px/.test(block) &&
-      /border-radius\s*:\s*9px/.test(block) &&
+      /border-radius\s*:\s*9px/.test(block)
+    ) &&
+    selectorBlocks(replicaCss, '.workspace-tool-tab').some((block) =>
       /flex\s*:\s*0\s+0\s+auto/.test(block)
     ),
   'workspace tools use the same compact pill-tab geometry as Research'
 )
 check(
-  selectorBlocks(replicaCss, '.workspace-tools-content.has-tabs').some((block) =>
-    /inset\s*:\s*50px\s+0\s+0/.test(block)
-  ),
+  /inset\s*:\s*46px\s+0\s+0/.test(finalToolContent),
   'workspace tool content begins immediately below the integrated tab strip'
 )
 check(
@@ -317,18 +321,22 @@ check(
 )
 check(
   workspaceTools.includes('tabIndex={selected ? 0 : -1}') &&
-    workspaceTools.includes('navigateTabs(event, tool)') &&
+    workspaceTools.includes('navigateTabs(event, tab.id)') &&
     workspaceTools.includes('className="workspace-tool-tab-select"') &&
     workspaceTools.includes('className="workspace-tool-tab-close"') &&
-    workspaceTools.includes('aria-label={`Close ${item.label}`}') &&
-    !workspaceTools.includes('Delete to close') &&
-    bottomWorkbench.includes('navigateFileTabs(event, index)') &&
-    bottomWorkbench.includes('tabIndex={selectedPath === file.path ? 0 : -1}'),
+    workspaceTools.includes('aria-label={`Close ${tab.title}`}') &&
+    !workspaceTools.includes('Delete to close'),
   'tool tabs have separate accessible close buttons and roving keyboard focus'
 )
 check(
+  workspaceTools.includes('role="tabpanel"') &&
+    workspaceTools.includes('aria-labelledby={`workspace-tool-tab-${activeTab.id}`}'),
+  'the New tab launcher is connected to its tab for assistive technology'
+)
+check(
   app.includes("key={activeProject?.id ?? 'no-project'}") &&
-    workspaceTools.includes('mounted.delete(tool)'),
+    workspaceTools.includes('openTabs.filter((tab) => tab.id !== tabId)') &&
+    workspaceTools.includes('openTabs.filter((tab) => tab.tool !== null)'),
   'project changes remount tool resources and closing a tab releases its mounted surface'
 )
 check(
@@ -342,7 +350,8 @@ check(
     app.includes('onWorkspaceContentChange={bumpWorkspaceContent}') &&
     app.includes('refreshKey={`${historyVersion}:${workspaceContentVersion}`}') &&
     chat.includes('if (turn.workspace) onWorkspaceContentChange?.(turn.workspace.projectId)') &&
-    workspaceTools.includes('<WorkspaceFilesPanel project={project} refreshKey={refreshKey} />') &&
+    workspaceTools.includes('<WorkspaceFilesPanel') &&
+    workspaceTools.includes('refreshKey={refreshKey}') &&
     workspaceFiles.includes('window.api.projects.files(project.id, settledQuery, refreshFromDisk)') &&
     /\[project\.id,\s*settledQuery,\s*reloadSignal,\s*refreshKey\]/.test(workspaceFiles) &&
     /\[project\.id,\s*selected,\s*reloadSignal,\s*refreshKey\]/.test(workspaceFiles) &&
@@ -353,7 +362,9 @@ check(
   'task completion, failure, and stop refresh Review and Files from the post-rollback disk state'
 )
 check(
-  preview.includes('project-preview-address') &&
+  preview.includes('workspace-browser-toolbar') &&
+    preview.includes('placeholder="Enter a URL"') &&
+    preview.includes("window.api.projectPreview.navigate") &&
     preview.includes('workspaceVariant') &&
     preview.includes('mapPreviewPoint') &&
     preview.includes('project-preview-display') &&
@@ -373,7 +384,7 @@ check(
   'Browser uses compact address chrome and a real responsive viewport that fills the tool surface'
 )
 check(
-  workspaceTools.includes('pointerInput={previewActive}') &&
+  workspaceTools.includes('pointerInput') &&
     preview.includes('const pointerEnabled = interactive || pointerInput') &&
     preview.includes('tabIndex={0}') &&
     preview.includes('onKeyDown={sendPreviewKey}') &&
@@ -394,6 +405,16 @@ check(
     previewWheelDelta(5_000, 0, 500) === 1_200 &&
     projectPreviewMain.includes("args.type === 'wheel'") &&
     projectPreviewMain.includes("type: 'mouseWheel'") &&
+    projectPreviewMain.includes("action !== 'back'") &&
+    projectPreviewMain.includes("action !== 'forward'") &&
+    projectPreviewMain.includes("action !== 'reload'") &&
+    projectPreviewMain.includes("action !== 'go'") &&
+    projectPreviewMain.includes("typeof value !== 'string' || !isLoopbackUrl(value)") &&
+    projectPreviewMain.includes('openProjectPreviewUrl') &&
+    projectPreviewMain.includes("ipcMain.handle('projectPreview:openUrl'") &&
+    preload.includes("ipcRenderer.invoke('projectPreview:openUrl'") &&
+    preview.includes('window.api.projectPreview.openUrl(projectPath, normalized)') &&
+    preload.includes("ipcRenderer.invoke('projectPreview:navigate'") &&
     projectPreviewMain.includes('isLoopbackUrl(session.url)') &&
     projectPreviewMain.includes('projectPreviewInputKey(args.key)') &&
     preview.includes('? pointerEnabled') &&

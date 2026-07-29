@@ -1618,9 +1618,11 @@ export interface LocalRuntimeApi {
   status(): Promise<RuntimeStatus>
 }
 
-// Evidence-backed autonomous Research.
+// Autonomous experiment programs plus backward-compatible evidence Research.
 export type ResearchDepth = 'quick' | 'standard' | 'focused3h' | 'extended6h' | 'deep' | 'day' | 'continuous'
 export type ResearchOutputFormat = 'pdf' | 'html' | 'md' | 'docx' | 'xlsx' | 'pptx'
+export type ResearchMode = 'evidence' | 'autoresearch'
+export type AutoresearchMetricDirection = 'minimize' | 'maximize'
 export type ResearchStatus =
   | 'draft' | 'planning' | 'researching' | 'verifying' | 'synthesizing'
   | 'exporting' | 'completed' | 'paused' | 'error' | 'archived'
@@ -1647,6 +1649,7 @@ export interface ResearchJob {
   id: string
   title: string
   prompt: string
+  mode: ResearchMode
   status: ResearchStatus
   phase: ResearchPhase
   providerId: string
@@ -1662,6 +1665,25 @@ export interface ResearchJob {
   workspaceDir: string
   artifactPath?: string
   coverPath?: string
+  experimentConfig?: {
+    version: 1
+    target:
+      | { kind: 'karpathy-starter'; repositoryUrl: string; repositoryRef: string }
+      | { kind: 'project'; projectId: string; projectName: string; projectPath: string }
+    command: { executable: string; args: string[]; display: string }
+    metric: { name: string; pattern: string; direction: AutoresearchMetricDirection }
+    editablePaths: string[]
+    experimentTimeoutMs: number
+  }
+  experimentState?: {
+    version: 1
+    setupStatus: 'pending' | 'ready'
+    repositoryDir?: string
+    branchName?: string
+    baselineMetric?: number
+    bestMetric?: number
+    bestCommit?: string
+  }
   plan?: ResearchPlan
   summary?: string
   error?: string
@@ -1755,6 +1777,26 @@ export interface ResearchArtifact {
   createdAt: number
 }
 
+export interface AutoresearchExperiment {
+  id: string
+  jobId: string
+  cycleId: string
+  index: number
+  kind: 'baseline' | 'candidate'
+  status: 'keep' | 'discard' | 'crash'
+  description: string
+  commit?: string
+  metric?: number
+  previousBest?: number
+  memoryGb?: number
+  durationMs: number
+  changedFiles: string[]
+  logFile?: string
+  error?: string
+  startedAt: number
+  endedAt?: number
+}
+
 export interface ResearchCheckpoint {
   id: string
   jobId: string
@@ -1779,6 +1821,7 @@ export interface ResearchCheckpoint {
 export interface ResearchJobDetail {
   job: ResearchJob
   cycles: ResearchCycle[]
+  experiments: AutoresearchExperiment[]
   events: ResearchEvent[]
   sources: ResearchSource[]
   claims: ResearchClaim[]
@@ -1791,6 +1834,7 @@ export interface ResearchLiveDetail {
   job: ResearchJob
   events: ResearchEvent[]
   sources: ResearchSource[]
+  experiments: AutoresearchExperiment[]
   artifacts: ResearchArtifact[]
   running: boolean
 }
@@ -1823,6 +1867,18 @@ export interface CreateResearchJobInput {
   model?: string
   depth: ResearchDepth
   outputFormat: ResearchOutputFormat
+  mode?: ResearchMode
+  autoresearch?: {
+    target:
+      | { kind: 'karpathy-starter' }
+      | { kind: 'project'; projectId: string }
+    command?: string
+    metricName?: string
+    metricPattern?: string
+    metricDirection?: AutoresearchMetricDirection
+    editablePaths?: string[]
+    experimentTimeoutMinutes?: number
+  }
   autoStart?: boolean
 }
 
@@ -2325,6 +2381,8 @@ export interface ProjectPreviewStatus {
   startedAt: number
   logs: string[]
   error?: string
+  canGoBack?: boolean
+  canGoForward?: boolean
 }
 
 export interface ProjectPreviewCapture {
@@ -2337,12 +2395,14 @@ export interface ProjectPreviewCapture {
 export interface ProjectPreviewApi {
   inspect(projectPath: string): Promise<ProjectPreviewInspection>
   start(projectPath: string, script?: string): Promise<ProjectPreviewStatus>
+  openUrl(projectPath: string, url: string): Promise<ProjectPreviewStatus>
   active(projectPath: string): Promise<ProjectPreviewStatus | null>
   status(id: string): Promise<ProjectPreviewStatus>
   setViewport(id: string, width: number, height: number): Promise<ProjectPreviewStatus>
   capture(id: string): Promise<ProjectPreviewCapture>
   stop(id: string): Promise<ProjectPreviewStatus>
   open(id: string): Promise<boolean>
+  navigate(id: string, action: 'back' | 'forward' | 'reload' | 'go', value?: string): Promise<ProjectPreviewStatus>
   reveal(projectPath: string): Promise<boolean>
   input(input: { id: string; type: 'move' | 'click'; x: number; y: number } | { id: string; type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number } | { id: string; type: 'text'; text: string } | { id: string; type: 'key'; key: string }): Promise<boolean>
 }
@@ -2392,7 +2452,16 @@ export interface GitChangeFile {
 }
 
 export type GitStatusResult =
-  | { ok: true; isRepo: true; branch: string; files: GitChangeFile[]; truncated: boolean; stat: string; clean: boolean }
+  | {
+      ok: true
+      isRepo: true
+      branch: string
+      upstream: string | null
+      files: GitChangeFile[]
+      truncated: boolean
+      stat: string
+      clean: boolean
+    }
   | { ok: true; isRepo: false }
   | { ok: false; error: string }
 

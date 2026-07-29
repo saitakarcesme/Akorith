@@ -19,6 +19,15 @@ const PHASE_COPY: Record<ResearchPhase, string> = {
   export: 'Packaging and validating the selected deliverable for the Research library.'
 }
 
+const AUTORESEARCH_PHASE_COPY: Record<ResearchPhase, string> = {
+  understand: 'Preparing a pinned repository or isolated Git worktree for reproducible experiments.',
+  plan: 'Establishing the unchanged baseline before any agent edits are accepted.',
+  research: 'The agent is making one focused change inside the configured edit boundary.',
+  verify: 'Akorith is running the fixed benchmark and reading the configured metric.',
+  synthesize: 'Comparing the candidate with the best verified checkpoint.',
+  export: 'Writing the durable experiment ledger and final run report.'
+}
+
 const EXPORT_FORMATS = [
   { id: 'pdf', label: 'PDF' },
   { id: 'html', label: 'Web page' },
@@ -52,13 +61,14 @@ function ResearchProgress({
   onOpenSource
 }: ResearchProgressProps): JSX.Element {
   const { job } = detail
+  const autoresearch = job.mode === 'autoresearch'
   const terminal = job.status === 'completed' || job.status === 'archived'
   const paused = job.status === 'paused' || job.status === 'error'
 
   const artifacts = detail.artifacts.length > 0 ? (
     <section className="research-artifacts">
       <div className="research-section-heading">
-        <div><span className="research-eyebrow">PUBLISH</span><h2>Download or publish</h2></div>
+        <div><span className="research-eyebrow">EXPORT</span><h2>{autoresearch ? 'Experiment report' : 'Download or publish'}</h2></div>
         <div className="research-export-menu" aria-label="Export research essay">
           {EXPORT_FORMATS.map((format) => (
             <button key={format.id} type="button" disabled={actionPending} onClick={() => void onExport(format.id)}>{format.label}</button>
@@ -84,9 +94,13 @@ function ResearchProgress({
 
       <header className="research-progress-header">
         <div>
-          <span className="research-eyebrow">{terminal ? 'RESEARCH ESSAY' : statusLabel(job.status)}</span>
+          <span className="research-eyebrow">{terminal ? (autoresearch ? 'AUTORESEARCH REPORT' : 'RESEARCH ESSAY') : statusLabel(job.status)}</span>
           <h1>{essay?.title || job.plan?.title || job.title}</h1>
-          <p>{terminal ? 'A publication-ready synthesis with its supporting research available separately.' : PHASE_COPY[job.phase]}</p>
+          <p>{terminal
+            ? autoresearch
+              ? 'A reproducible ledger of baseline, retained improvements, rejected candidates, and crashes.'
+              : 'A publication-ready synthesis with its supporting research available separately.'
+            : (autoresearch ? AUTORESEARCH_PHASE_COPY : PHASE_COPY)[job.phase]}</p>
         </div>
         <div className="research-progress-actions">
           {!terminal && (

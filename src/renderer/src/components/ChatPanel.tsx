@@ -198,8 +198,24 @@ export default function ChatPanel({
         )
       })
     }
+    const requestGitAction = (): void => {
+      setIntent('execute')
+      setDraft('Review the current Git changes, summarize the important diff, then commit and push the finished work safely. ')
+      window.requestAnimationFrame(() => {
+        resizeComposer()
+        composerInputRef.current?.focus()
+        composerInputRef.current?.setSelectionRange(
+          composerInputRef.current.value.length,
+          composerInputRef.current.value.length
+        )
+      })
+    }
     window.addEventListener('akorith:request-file-edit', requestFileEdit)
-    return () => window.removeEventListener('akorith:request-file-edit', requestFileEdit)
+    window.addEventListener('akorith:request-git-action', requestGitAction)
+    return () => {
+      window.removeEventListener('akorith:request-file-edit', requestFileEdit)
+      window.removeEventListener('akorith:request-git-action', requestGitAction)
+    }
   }, [isWorkspace, resizeComposer])
 
   // Plan is a workspace-only capability. A user who leaves a planned project

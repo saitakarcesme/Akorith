@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import { closeDb, getDb, initDb, usageDaily, usageSummary } from '../src/main/db.ts'
 import { exportResearchJob } from '../src/main/research/exporters/index.ts'
+import { starterExperimentConfig } from '../src/main/research/autoresearch-core.ts'
 import {
   acquireResearchLease,
   archiveResearchJob,
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
   try {
     initDb()
     verifySchema()
+    verifyAutoresearchRoundTrip()
     verifyDiscordCredentialProtection()
     verifyActiveResearchClock()
     const jobId = seedPersistentLibraryRecord()
@@ -82,6 +84,44 @@ async function main(): Promise<void> {
     rmSync(isolatedUserData, { recursive: true, force: true })
     app.quit()
   }
+}
+
+function verifyAutoresearchRoundTrip(): void {
+  const id = 'autoresearch-persistence-job'
+  const workspaceDir = initializeResearchWorkspace(id)
+  const config = starterExperimentConfig()
+  const created = createResearchJob({
+    prompt: 'Improve the baseline while preserving the fixed evaluation harness.',
+    providerId: 'chatgpt',
+    depth: 'quick',
+    outputFormat: 'md',
+    mode: 'autoresearch',
+    experimentConfig: config,
+    autoStart: false
+  }, workspaceDir, id)
+  assert.equal(created.mode, 'autoresearch')
+  assert.deepEqual(created.experimentConfig, config)
+  assert.deepEqual(created.experimentState, { version: 1, setupStatus: 'pending' })
+
+  const state = {
+    version: 1 as const,
+    setupStatus: 'ready' as const,
+    repositoryDir: join(workspaceDir, 'repository'),
+    branchName: 'autoresearch/test',
+    baselineMetric: 1.1,
+    bestMetric: 1,
+    bestCommit: 'abcdef1234567890'
+  }
+  updateResearchJob(id, { experimentState: state })
+  assert.deepEqual(getResearchJob(id)?.experimentState, state)
+  for (let index = 1; index <= 105; index += 1) {
+    startResearchCycle({ jobId: id, phase: 'research', objective: `Bounded experiment ${index}` })
+  }
+  const recentCycles = listResearchCycles(id, 100)
+  assert.equal(recentCycles.length, 100, 'live Autoresearch payloads must remain bounded')
+  assert.equal(recentCycles[0].cycleIndex, 6, 'the bounded payload must retain the newest cycles')
+  assert.equal(recentCycles.at(-1)?.cycleIndex, 105)
+  assert.equal(deleteResearchJob(id), true)
 }
 
 async function verifyArtifactVersioning(): Promise<void> {

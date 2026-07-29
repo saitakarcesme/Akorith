@@ -1,6 +1,8 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitChangeFile, GitStatusResult, ProjectRow } from '../../../preload/index.d'
-import { FileIcon } from './icons'
+import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../workspaceFileTree'
+import { highlightWorkspaceCode } from '../workspaceSyntax'
+import { ChevronIcon, FileIcon, FolderIcon, MoreIcon, RefreshIcon, SearchIcon } from './icons'
 
 interface BottomWorkbenchProps {
   activeProject: ProjectRow | null
@@ -133,6 +135,94 @@ function WorkbenchEmpty({
   )
 }
 
+function ChangedFilesTree({
+  nodes,
+  filesByPath,
+  depth,
+  expanded,
+  selectedPath,
+  queryActive,
+  onToggle,
+  onSelect,
+  onToggleStaged
+}: {
+  nodes: WorkspaceTreeNode[]
+  filesByPath: Map<string, GitChangeFile>
+  depth: number
+  expanded: Set<string>
+  selectedPath: string | null
+  queryActive: boolean
+  onToggle: (path: string) => void
+  onSelect: (path: string) => void
+  onToggleStaged: (file: GitChangeFile) => void
+}): JSX.Element {
+  return (
+    <>
+      {nodes.map((node) => {
+        if (!node.file) {
+          const isExpanded = queryActive || expanded.has(node.path)
+          return (
+            <div key={node.path}>
+              <button
+                type="button"
+                className="workbench-tree-row is-directory"
+                style={{ paddingLeft: 8 + depth * 14 }}
+                onClick={() => onToggle(node.path)}
+              >
+                <ChevronIcon size={12} direction={isExpanded ? 'down' : 'right'} />
+                <FolderIcon size={13} />
+                <span>{node.name}</span>
+              </button>
+              {isExpanded && (
+                <ChangedFilesTree
+                  nodes={node.children}
+                  filesByPath={filesByPath}
+                  depth={depth + 1}
+                  expanded={expanded}
+                  selectedPath={selectedPath}
+                  queryActive={queryActive}
+                  onToggle={onToggle}
+                  onSelect={onSelect}
+                  onToggleStaged={onToggleStaged}
+                />
+              )}
+            </div>
+          )
+        }
+
+        const file = filesByPath.get(node.path)
+        if (!file) return null
+        return (
+          <div
+            className={`workbench-tree-row is-file ${selectedPath === file.path ? 'is-active' : ''}`}
+            style={{ paddingLeft: 24 + depth * 14 }}
+            key={file.path}
+          >
+            <button type="button" className="workbench-tree-file-select" title={file.path} onClick={() => onSelect(file.path)}>
+              <span className={`workbench-file-status status-${statusWord(file.status)}`}>{file.status}</span>
+              <FileIcon size={13} />
+              <span>{node.name}</span>
+              <span className="workbench-file-counts">
+                {file.additions > 0 && <b>+{file.additions}</b>}
+                {file.deletions > 0 && <i>−{file.deletions}</i>}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`workbench-tree-stage ${file.staged ? 'is-staged' : ''}`}
+              title={file.staged ? `Unstage ${file.path}` : `Stage ${file.path}`}
+              aria-label={file.staged ? `Unstage ${file.path}` : `Stage ${file.path}`}
+              onClick={() => onToggleStaged(file)}
+            >
+              <span />
+            </button>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 export default function BottomWorkbench({
   activeProject,
   open,
@@ -147,9 +237,18 @@ export default function BottomWorkbench({
   const [diffRevision, setDiffRevision] = useState(0)
   const [visibleDiffRowCount, setVisibleDiffRowCount] = useState(DIFF_ROW_PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const loadSequenceRef = useRef(0)
 
   const files = changes?.ok && changes.isRepo ? changes.files : []
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase())
+  const filteredFiles = useMemo(
+    () => deferredQuery ? files.filter((file) => file.path.toLowerCase().includes(deferredQuery)) : files,
+    [deferredQuery, files]
+  )
+  const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files])
+  const changedFileTree = useMemo(() => buildWorkspaceFileTree(filteredFiles.map((file) => file.path)), [filteredFiles])
   const selected = useMemo(
     () => files.find((file) => file.path === selectedPath) ?? null,
     [files, selectedPath]
@@ -158,6 +257,12 @@ export default function BottomWorkbench({
   const visibleDiffRows = useMemo(
     () => diffRows.slice(0, visibleDiffRowCount),
     [diffRows, visibleDiffRowCount]
+  )
+  const visibleDiffTokens = useMemo(
+    () => visibleDiffRows.map((row) =>
+      selectedPath ? highlightWorkspaceCode(row.content, selectedPath)[0]?.tokens ?? [] : []
+    ),
+    [selectedPath, visibleDiffRows]
   )
   const totalAdditions = files.reduce((total, file) => total + file.additions, 0)
   const totalDeletions = files.reduce((total, file) => total + file.deletions, 0)
@@ -178,6 +283,8 @@ export default function BottomWorkbench({
       setChanges(result)
       setDiffRevision((revision) => revision + 1)
       if (result.ok && result.isRepo) {
+        const nextTree = buildWorkspaceFileTree(result.files.map((file) => file.path))
+        setExpanded(nextTree.directories)
         setSelectedPath((current) =>
           result.files.some((file) => file.path === current)
             ? current
@@ -251,20 +358,6 @@ export default function BottomWorkbench({
     }
   }
 
-  const navigateFileTabs = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
-    let nextIndex = index
-    if (event.key === 'ArrowLeft') nextIndex = index > 0 ? index - 1 : files.length - 1
-    else if (event.key === 'ArrowRight') nextIndex = index < files.length - 1 ? index + 1 : 0
-    else if (event.key === 'Home') nextIndex = 0
-    else if (event.key === 'End') nextIndex = files.length - 1
-    else return
-    event.preventDefault()
-    const next = files[nextIndex]
-    if (!next) return
-    setSelectedPath(next.path)
-    window.requestAnimationFrame(() => document.getElementById(`workbench-file-tab-${nextIndex}`)?.focus())
-  }
-
   if (!open) return null
 
   return (
@@ -273,23 +366,61 @@ export default function BottomWorkbench({
       aria-label="Project changes"
       aria-busy={busy || diffBusy}
     >
-      <div className="workbench-tabs">
-        <div className="workbench-tab-group">
-          <strong className="workbench-tab is-active">Changes</strong>
+      <div className="workbench-scm-toolbar">
+        <div className="workbench-scm-branch">
+          <button type="button" title="Current branch">
+            Branch <ChevronIcon size={12} direction="down" />
+          </button>
           {changes?.ok && changes.isRepo && (
-            <span className="workbench-branch" title={`Current branch: ${changes.branch}`}>{changes.branch}</span>
+            <span className="workbench-toolbar-summary">
+              <b>+{totalAdditions}</b> <i>−{totalDeletions}</i>
+            </span>
           )}
         </div>
-        <div className="workbench-spacer" />
-        {changes?.ok && changes.isRepo && (
-          <span className="workbench-toolbar-summary">
-            {files.length} files <b>+{totalAdditions}</b> <i>−{totalDeletions}</i>
-          </span>
-        )}
-        <button type="button" className="workbench-action" disabled={busy} onClick={() => void load()}>
-          {busy ? 'Reading…' : 'Refresh'}
-        </button>
+        <div className="workbench-scm-actions">
+          <button type="button" className="is-icon" title="More review actions" aria-label="More review actions">
+            <MoreIcon size={14} />
+          </button>
+          <button
+            type="button"
+            className="is-icon"
+            disabled={busy}
+            title="Refresh changes"
+            aria-label="Refresh changes"
+            onClick={() => void load()}
+          >
+            <RefreshIcon size={14} />
+          </button>
+          <button
+            type="button"
+            className="workbench-commit-action"
+            disabled={!changes?.ok || !changes.isRepo || changes.clean}
+            onClick={() => window.dispatchEvent(new CustomEvent('akorith:request-git-action'))}
+          >
+            Commit or push <ChevronIcon size={12} direction="down" />
+          </button>
+        </div>
       </div>
+      {changes?.ok && changes.isRepo && (
+        <div className="workbench-branch-route">
+          <span>{changes.branch}</span>
+          {changes.upstream && (
+            <>
+              <span aria-hidden="true">→</span>
+              <span>{changes.upstream}</span>
+            </>
+          )}
+        </div>
+      )}
+      {changes?.ok && changes.isRepo && changes.truncated && (
+        <div className="workbench-truncation-notice" role="status">
+          <div>
+            <strong>Showing the first {files.length} changed files</strong>
+            <span>Review is bounded to keep the workspace responsive. Narrow the project changes, then refresh.</span>
+          </div>
+          <button type="button" disabled={busy} onClick={() => void load()}>Refresh</button>
+        </div>
+      )}
 
       {!activeProject?.path
         ? <WorkbenchEmpty title="No project open" description="Open a project to review its working-tree changes." />
@@ -303,37 +434,11 @@ export default function BottomWorkbench({
                 ? <WorkbenchEmpty title="Working tree clean" description="There are no staged or unstaged changes to review." action={() => void load()} />
                 : (
                   <div className="workbench-review">
-                    <nav className="workbench-file-tabs" role="tablist" aria-label="Changed files">
-                      {files.map((file, index) => (
-                        <button
-                          type="button"
-                          role="tab"
-                          id={`workbench-file-tab-${index}`}
-                          aria-controls="workbench-diff-panel"
-                          aria-selected={selectedPath === file.path}
-                          tabIndex={selectedPath === file.path ? 0 : -1}
-                          key={file.path}
-                          className={`workbench-file-tab ${selectedPath === file.path ? 'is-active' : ''}`}
-                          title={file.path}
-                          onClick={() => setSelectedPath(file.path)}
-                          onKeyDown={(event) => navigateFileTabs(event, index)}
-                        >
-                          <span className={`workbench-file-status status-${statusWord(file.status)}`}>{file.status}</span>
-                          <span className="workbench-file-name"><FileIcon size={12} />{file.path}</span>
-                          <span className="workbench-file-counts">
-                            {file.additions > 0 && <b>+{file.additions}</b>}
-                            {file.deletions > 0 && <i>−{file.deletions}</i>}
-                          </span>
-                          {file.staged && <em title="Staged">●</em>}
-                        </button>
-                      ))}
-                    </nav>
-
                     <div
                       className="workbench-diff"
                       id="workbench-diff-panel"
-                      role="tabpanel"
-                      aria-labelledby={`workbench-file-tab-${Math.max(0, files.findIndex((file) => file.path === selectedPath))}`}
+                      role="region"
+                      aria-label={selected ? `Diff for ${selected.path}` : 'Changed file diff'}
                     >
                       {selected && (
                         <div className="workbench-diff-head">
@@ -383,7 +488,13 @@ export default function BottomWorkbench({
                                     <span className="workbench-line-number is-old" role="cell" aria-hidden="true">{row.oldLine ?? ''}</span>
                                     <span className="workbench-line-number is-new" role="cell" aria-hidden="true">{row.newLine ?? ''}</span>
                                     <span className="workbench-line-marker" role="cell" aria-hidden="true">{row.marker}</span>
-                                    <code role="cell">{row.content || ' '}</code>
+                                    <code role="cell">
+                                      {visibleDiffTokens[index]?.length
+                                        ? visibleDiffTokens[index].map((token, tokenIndex) => (
+                                            <span className={`workspace-syntax-token is-${token.kind}`} key={tokenIndex}>{token.text}</span>
+                                          ))
+                                        : row.content || ' '}
+                                    </code>
                                   </div>
                                 ))}
                               </div>
@@ -403,6 +514,39 @@ export default function BottomWorkbench({
                           )
                           : <WorkbenchEmpty title="No textual diff" description="This file has no text changes that can be displayed." />}
                     </div>
+                    <aside className="workbench-changes-tree" aria-label="Changed files">
+                      <label className="workbench-changes-filter">
+                        <SearchIcon size={13} />
+                        <input
+                          value={query}
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder="Filter files…"
+                          aria-label="Filter changed files"
+                        />
+                      </label>
+                      <div className="workbench-changes-tree-body">
+                        {changedFileTree.tree.length > 0
+                          ? (
+                            <ChangedFilesTree
+                              nodes={changedFileTree.tree}
+                              filesByPath={filesByPath}
+                              depth={0}
+                              expanded={expanded}
+                              selectedPath={selectedPath}
+                              queryActive={Boolean(deferredQuery)}
+                              onToggle={(path) => setExpanded((current) => {
+                                const next = new Set(current)
+                                if (next.has(path)) next.delete(path)
+                                else next.add(path)
+                                return next
+                              })}
+                              onSelect={setSelectedPath}
+                              onToggleStaged={(file) => void toggleStaged(file)}
+                            />
+                          )
+                          : <WorkbenchEmpty title="No matching files" description="Try a different file filter." />}
+                      </div>
+                    </aside>
                   </div>
                 )}
     </section>

@@ -515,6 +515,7 @@ export function initDb(): void {
       id                 TEXT PRIMARY KEY,
       title              TEXT NOT NULL,
       prompt             TEXT NOT NULL,
+      research_mode      TEXT NOT NULL DEFAULT 'evidence',
       status             TEXT NOT NULL DEFAULT 'draft',
       phase              TEXT NOT NULL DEFAULT 'understand',
       provider_id        TEXT NOT NULL,
@@ -530,6 +531,8 @@ export function initDb(): void {
       workspace_dir      TEXT NOT NULL,
       artifact_path      TEXT,
       cover_path         TEXT,
+      experiment_config_json TEXT,
+      experiment_state_json  TEXT,
       plan_json          TEXT,
       summary            TEXT,
       error              TEXT,
@@ -824,6 +827,9 @@ export function initDb(): void {
   ensureColumn('research_jobs', 'cancel_requested_at', 'INTEGER')
   ensureColumn('research_jobs', 'active_elapsed_ms', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('research_jobs', 'active_accounted_at', 'INTEGER')
+  ensureColumn('research_jobs', 'research_mode', "TEXT NOT NULL DEFAULT 'evidence'")
+  ensureColumn('research_jobs', 'experiment_config_json', 'TEXT')
+  ensureColumn('research_jobs', 'experiment_state_json', 'TEXT')
   nextDb.exec(`
     UPDATE research_jobs
        SET active_elapsed_ms = MAX(0, completed_at - started_at)

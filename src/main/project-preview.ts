@@ -20,6 +20,7 @@ const MAX_VIEWPORT_WIDTH = 1920
 const MAX_VIEWPORT_HEIGHT = 1200
 const PREVIEW_READY_TIMEOUT_MS = 8_000
 const PREVIEW_READY_POLL_MS = 100
+const BROWSER_SCRIPT = 'browser'
 const PREVIEW_INPUT_KEYS = new Set([
   'ArrowDown',
   'ArrowLeft',
@@ -88,6 +89,8 @@ export interface ProjectPreviewStatus {
   startedAt: number
   logs: string[]
   error?: string
+  canGoBack?: boolean
+  canGoForward?: boolean
 }
 
 interface PreviewSession extends ProjectPreviewStatus {
@@ -111,7 +114,18 @@ function publicStatus(session: PreviewSession): ProjectPreviewStatus {
     renderQueue: _renderQueue,
     ...status
   } = session
-  return { ...status, logs: [...status.logs] }
+  const previewWindow = session.previewWindow
+  const webContents = previewWindow && !previewWindow.isDestroyed() && !previewWindow.webContents.isDestroyed()
+    ? previewWindow.webContents
+    : null
+  const currentUrl = webContents?.getURL()
+  return {
+    ...status,
+    url: currentUrl && isLoopbackUrl(currentUrl) ? currentUrl : status.url,
+    logs: [...status.logs],
+    canGoBack: webContents?.canGoBack() ?? false,
+    canGoForward: webContents?.canGoForward() ?? false
+  }
 }
 
 function queuePreviewOperation<T>(session: PreviewSession, operation: () => Promise<T>): Promise<T> {
@@ -391,6 +405,11 @@ function createPreviewWindow(session: PreviewSession): BrowserWindow {
   previewWindow.webContents.on('will-navigate', (event, url) => {
     if (!isLoopbackUrl(url)) event.preventDefault()
   })
+  const recordNavigation = (_event: Electron.Event, url: string): void => {
+    if (isLoopbackUrl(url)) session.url = url
+  }
+  previewWindow.webContents.on('did-navigate', recordNavigation)
+  previewWindow.webContents.on('did-navigate-in-page', recordNavigation)
   previewWindow.on('closed', () => { session.previewWindow = null })
   return previewWindow
 }
@@ -411,7 +430,7 @@ async function loadPreview(session: PreviewSession): Promise<void> {
     }
   }
   session.state = 'error'
-  session.error = 'The process started, but its local preview did not become reachable.'
+  session.error = 'The local preview did not become reachable.'
 }
 
 async function waitForPreviewReady(session: PreviewSession, timeoutMs = PREVIEW_READY_TIMEOUT_MS): Promise<void> {
@@ -517,6 +536,49 @@ export async function startProjectPreview(input: unknown): Promise<ProjectPrevie
       if (code !== 0) session.error = `Project process exited with code ${code ?? 'unknown'}.`
     }
   })
+  void loadPreview(session)
+  return publicStatus(session)
+}
+
+export async function openProjectPreviewUrl(projectPath: unknown, value: unknown): Promise<ProjectPreviewStatus> {
+  const root = await canonicalProjectPath(projectPath)
+  if (typeof value !== 'string' || !isLoopbackUrl(value)) {
+    throw new Error('Akorith Browser only opens verified localhost and 127.0.0.1 URLs.')
+  }
+
+  const active = [...sessions.values()].find((candidate) =>
+    candidate.projectPath === root && (candidate.state === 'starting' || candidate.state === 'running')
+  )
+  if (active) {
+    const previewWindow = active.previewWindow
+    if (previewWindow && !previewWindow.isDestroyed() && !previewWindow.webContents.isDestroyed()) {
+      return navigateProjectPreview(active.id, 'go', value)
+    }
+    active.url = value
+    active.state = 'starting'
+    active.error = undefined
+    addLog(active, `Opening ${value} in the local browser.`)
+    void loadPreview(active)
+    return publicStatus(active)
+  }
+
+  const session: PreviewSession = {
+    id: randomUUID(),
+    projectPath: root,
+    projectName: basename(root),
+    script: BROWSER_SCRIPT,
+    state: 'starting',
+    url: value,
+    startedAt: Date.now(),
+    logs: [`Opening ${value} in the local browser.`],
+    process: null,
+    staticServer: null,
+    previewWindow: null,
+    viewportWidth: DEFAULT_VIEWPORT_WIDTH,
+    viewportHeight: DEFAULT_VIEWPORT_HEIGHT,
+    renderQueue: Promise.resolve()
+  }
+  sessions.set(session.id, session)
   void loadPreview(session)
   return publicStatus(session)
 }
@@ -645,6 +707,41 @@ export async function setProjectPreviewViewport(
   return publicStatus(session)
 }
 
+export async function navigateProjectPreview(
+  id: unknown,
+  action: unknown,
+  value?: unknown
+): Promise<ProjectPreviewStatus> {
+  const session = requireSession(id)
+  const previewWindow = session.previewWindow
+  if (!previewWindow || previewWindow.isDestroyed() || previewWindow.webContents.isDestroyed()) {
+    throw new Error('The local browser is not ready.')
+  }
+  if (action !== 'back' && action !== 'forward' && action !== 'reload' && action !== 'go') {
+    throw new Error('Unsupported browser navigation.')
+  }
+
+  await queuePreviewOperation(session, async () => {
+    const webContents = previewWindow.webContents
+    if (action === 'go') {
+      if (typeof value !== 'string' || !isLoopbackUrl(value)) {
+        throw new Error('Akorith Browser only opens verified localhost and 127.0.0.1 URLs.')
+      }
+      await webContents.loadURL(value)
+    } else if (action === 'back') {
+      if (webContents.canGoBack()) webContents.goBack()
+    } else if (action === 'forward') {
+      if (webContents.canGoForward()) webContents.goForward()
+    } else {
+      webContents.reload()
+    }
+    await settlePreviewLayout(previewWindow)
+    const currentUrl = webContents.getURL()
+    if (isLoopbackUrl(currentUrl)) session.url = currentUrl
+  })
+  return publicStatus(session)
+}
+
 async function captureProject(id: unknown): Promise<{ status: ProjectPreviewStatus; dataUrl: string | null; width: number; height: number }> {
   const session = requireSession(id)
   return queuePreviewOperation(session, async () => {
@@ -692,6 +789,12 @@ export function stopAllProjectPreviews(): void {
 export function registerProjectPreviewIpc(): void {
   ipcMain.handle('projectPreview:inspect', (_event, path: unknown) => inspectProjectPreview(path))
   ipcMain.handle('projectPreview:start', (_event, input: unknown) => startProjectPreview(input))
+  ipcMain.handle('projectPreview:openUrl', (_event, input: unknown) => {
+    const args = input && typeof input === 'object'
+      ? input as { projectPath?: unknown; url?: unknown }
+      : {}
+    return openProjectPreviewUrl(args.projectPath, args.url)
+  })
   ipcMain.handle('projectPreview:status', (_event, id: unknown) => publicStatus(requireSession(id)))
   ipcMain.handle('projectPreview:active', (_event, path: unknown) => activeProjectPreview(path))
   ipcMain.handle('projectPreview:setViewport', (_event, id: unknown, width: unknown, height: unknown) =>
@@ -699,6 +802,12 @@ export function registerProjectPreviewIpc(): void {
   ipcMain.handle('projectPreview:capture', (_event, id: unknown) => captureProject(id))
   ipcMain.handle('projectPreview:stop', (_event, id: unknown) => stopProjectPreview(id))
   ipcMain.handle('projectPreview:open', (_event, id: unknown) => openProjectPreview(id))
+  ipcMain.handle('projectPreview:navigate', (_event, input: unknown) => {
+    const args = input && typeof input === 'object'
+      ? input as { id?: unknown; action?: unknown; value?: unknown }
+      : {}
+    return navigateProjectPreview(args.id, args.action, args.value)
+  })
   ipcMain.handle('projectPreview:reveal', async (_event, path: unknown) => {
     const projectPath = await canonicalProjectPath(path)
     shell.showItemInFolder(projectPath)

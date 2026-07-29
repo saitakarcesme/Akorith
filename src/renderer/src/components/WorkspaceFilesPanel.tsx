@@ -65,10 +65,12 @@ function TreeBranch({
 
 export default function WorkspaceFilesPanel({
   project,
-  refreshKey
+  refreshKey,
+  onSelectionChange
 }: {
   project: ProjectRow
   refreshKey?: string | number
+  onSelectionChange?: (path: string | null) => void
 }): JSX.Element {
   const [files, setFiles] = useState<string[]>([])
   const [query, setQuery] = useState('')
@@ -82,6 +84,23 @@ export default function WorkspaceFilesPanel({
   const [error, setError] = useState<string | null>(null)
   const [reloadSignal, setReloadSignal] = useState(0)
   const refreshTokenRef = useRef<string | null>(null)
+  const projectIdRef = useRef(project.id)
+  const onSelectionChangeRef = useRef(onSelectionChange)
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange
+  }, [onSelectionChange])
+
+  useEffect(() => {
+    if (projectIdRef.current === project.id) return
+    projectIdRef.current = project.id
+    setSelected(null)
+    setExpanded(new Set())
+  }, [project.id])
+
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selected)
+  }, [selected])
 
   useEffect(() => {
     if (query === settledQuery) return
@@ -100,10 +119,8 @@ export default function WorkspaceFilesPanel({
       const nextIndex = buildWorkspaceFileTree(next)
       setFiles(next)
       setTree(nextIndex.tree)
-      setSelected((current) => current && next.includes(current)
-        ? current
-        : next.find((path) => /(^|\/)(?:index\.html|package\.json|readme\.md)$/i.test(path)) ?? next[0] ?? null)
-      setExpanded(nextIndex.directories)
+      setSelected((current) => current && next.includes(current) ? current : null)
+      if (settledQuery) setExpanded(nextIndex.directories)
       setError(null)
     }).catch((reason) => {
       if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
@@ -146,67 +163,76 @@ export default function WorkspaceFilesPanel({
 
   return (
     <section className="workspace-files-panel">
-      <aside className="workspace-file-tree">
-        <label className="workspace-file-search">
-          <SearchIcon size={13} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" />
-        </label>
-        <div className="workspace-file-tree-head"><span>{project.name}</span><small>{files.length} files</small></div>
-        <div className="workspace-file-tree-body">
-          {tree.length > 0
-            ? <TreeBranch nodes={tree} depth={0} expanded={expanded} selected={selected} onToggle={(path) => setExpanded((current) => {
-                const next = new Set(current)
-                if (next.has(path)) next.delete(path)
-                else next.add(path)
-                return next
-              })} onSelect={setSelected} />
-            : (
-              <div className="workspace-tool-empty-state">
-                <span><FolderIcon size={17} /></span>
-                <strong>{busy ? 'Reading project files' : 'No reviewable files'}</strong>
-                <p>{busy ? 'Building a safe, project-scoped file index.' : 'Add a text or code file, then refresh this view.'}</p>
-                {!busy && <button type="button" onClick={() => setReloadSignal((value) => value + 1)}>Refresh files</button>}
-              </div>
-            )}
-        </div>
-      </aside>
-      <div className="workspace-code-review">
-        <header>
-          <div><strong>{selected ?? 'Select a file'}</strong>{truncated && <small>Preview truncated</small>}</div>
-          <button type="button" disabled={!selected} onClick={requestEdit}><EditIcon size={13} />Ask Akorith to edit</button>
-        </header>
-        {error
-          ? (
-            <div className="workspace-tool-empty-state is-error">
-              <span><FileIcon size={17} /></span>
-              <strong>File preview unavailable</strong>
-              <p>{error}</p>
-            </div>
-          )
-          : selected
+      <div className="workspace-files-breadcrumb">
+        <span>/</span>
+        {selected && <strong>{selected}</strong>}
+        <FolderIcon size={15} />
+      </div>
+      <div className="workspace-files-body">
+        <div className="workspace-code-review">
+          {selected && (
+            <header>
+              <div><strong>{selected}</strong>{truncated && <small>Preview truncated</small>}</div>
+              <button type="button" onClick={requestEdit}><EditIcon size={13} />Ask Akorith to edit</button>
+            </header>
+          )}
+          {error
             ? (
-              <div className="workspace-code-editor" role="region" aria-label={`${selected} source code`} tabIndex={0}>
-                <div className="workspace-code-lines">
-                  {codeLines.map((line) => (
-                    <div className="workspace-code-line" key={line.number}>
-                      <span className="workspace-code-line-number" aria-hidden="true">{line.number}</span>
-                      <code>
-                        {line.tokens.map((token, index) => (
-                          <span className={`workspace-syntax-token is-${token.kind}`} key={index}>{token.text}</span>
-                        ))}
-                      </code>
-                    </div>
-                  ))}
-                </div>
+              <div className="workspace-tool-empty-state is-error">
+                <span><FileIcon size={17} /></span>
+                <strong>File preview unavailable</strong>
+                <p>{error}</p>
               </div>
             )
-            : (
-              <div className="workspace-tool-empty-state">
-                <span><FileIcon size={17} /></span>
-                <strong>Select a file</strong>
-                <p>Choose a file from the directory tree to review its contents.</p>
-              </div>
-            )}
+            : selected
+              ? (
+                <div className="workspace-code-editor" role="region" aria-label={`${selected} source code`} tabIndex={0}>
+                  <div className="workspace-code-lines">
+                    {codeLines.map((line) => (
+                      <div className="workspace-code-line" key={line.number}>
+                        <span className="workspace-code-line-number" aria-hidden="true">{line.number}</span>
+                        <code>
+                          {line.tokens.map((token, index) => (
+                            <span className={`workspace-syntax-token is-${token.kind}`} key={index}>{token.text}</span>
+                          ))}
+                        </code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+              : (
+                <div className="workspace-tool-empty-state">
+                  <span><FolderIcon size={22} /></span>
+                  <strong>Open file</strong>
+                  <p>Select a file from the workspace tree.</p>
+                </div>
+              )}
+        </div>
+        <aside className="workspace-file-tree">
+          <label className="workspace-file-search">
+            <SearchIcon size={13} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files…" />
+          </label>
+          <div className="workspace-file-tree-head"><span>{project.name}</span><small>{files.length} files</small></div>
+          <div className="workspace-file-tree-body">
+            {tree.length > 0
+              ? <TreeBranch nodes={tree} depth={0} expanded={expanded} selected={selected} onToggle={(path) => setExpanded((current) => {
+                  const next = new Set(current)
+                  if (next.has(path)) next.delete(path)
+                  else next.add(path)
+                  return next
+                })} onSelect={setSelected} />
+              : (
+                <div className="workspace-tool-empty-state">
+                  <span><FolderIcon size={17} /></span>
+                  <strong>{busy ? 'Reading project files' : 'No reviewable files'}</strong>
+                  <p>{busy ? 'Building a safe, project-scoped file index.' : 'Add a text or code file, then refresh this view.'}</p>
+                  {!busy && <button type="button" onClick={() => setReloadSignal((value) => value + 1)}>Refresh files</button>}
+                </div>
+              )}
+          </div>
+        </aside>
       </div>
     </section>
   )
