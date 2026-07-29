@@ -3,7 +3,14 @@
 // require electron, the DB, or a live Ollama.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ensureRepo, isRepo, hasChanges, commitAll, currentSha } from '../src/main/project-loop/git.ts'
@@ -30,6 +37,7 @@ async function check(name: string, fn: () => void | Promise<void>): Promise<void
 
 async function main(): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'akorith-loop-'))
+  const outside = mkdtempSync(join(tmpdir(), 'akorith-loop-outside-'))
   // Configure a throwaway git identity so commits work in CI/sandboxes.
   if (gitOk) {
     try {
@@ -52,17 +60,81 @@ async function main(): Promise<void> {
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'demo', version: '0.0.0' }))
   mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true })
   writeFileSync(join(root, 'node_modules', 'pkg', 'index.js'), '// huge dep')
+  mkdirSync(join(root, 'dist'), { recursive: true })
+  writeFileSync(join(root, 'dist', 'bundle.js'), '// generated output')
+  writeFileSync(join(root, '.env'), 'SECRET_VALUE=must-not-leak')
+  writeFileSync(join(root, 'credentials.json'), '{"token":"must-not-leak"}')
+  writeFileSync(join(root, 'credentials.ts'), 'export const token = "credential-source-canary"')
+  writeFileSync(join(root, 'secrets.py'), 'TOKEN = "python-secret-canary"')
+  writeFileSync(join(root, 'secret.js'), 'export const token = "js-secret-canary"')
+  writeFileSync(join(root, 'service-account-prod.ts'), 'export const token = "service-account-canary"')
+  mkdirSync(join(root, 'secrets'), { recursive: true })
+  writeFileSync(join(root, 'secrets', 'config.ts'), 'export const token = "secret-directory-canary"')
 
-  await check('inspectProject: lists src, hides node_modules', () => {
+  const linkedKeyTarget = join(outside, 'outside-key.txt')
+  const linkedSourceTarget = join(outside, 'outside-source.js')
+  writeFileSync(linkedKeyTarget, 'linked-key-canary')
+  writeFileSync(linkedSourceTarget, 'export const linked = "linked-source-canary"')
+  const linkOrHardlink = (target: string, link: string): void => {
+    try {
+      symlinkSync(target, link, 'file')
+    } catch {
+      linkSync(target, link)
+    }
+  }
+  linkOrHardlink(linkedKeyTarget, join(root, 'README.md'))
+  linkOrHardlink(linkedSourceTarget, join(root, 'src', 'linked-source.js'))
+
+  await check('inspectProject: lists source and excludes generated or secret paths', () => {
     const ctx = inspectProject(root)
     assert.ok(ctx.fileTree.some((f) => f.includes('src/index.ts')))
     assert.ok(!ctx.fileTree.some((f) => f.includes('node_modules')))
+    assert.ok(!ctx.fileTree.some((f) => f.includes('dist/bundle.js')))
+    assert.ok(!ctx.fileTree.some((f) => f.includes('.env')))
+    assert.ok(!ctx.fileTree.some((f) => f.includes('credentials.json')))
+    for (const secretPath of [
+      'credentials.ts',
+      'secrets.py',
+      'secret.js',
+      'service-account-prod.ts',
+      'secrets/'
+    ]) {
+      assert.ok(!ctx.fileTree.some((file) => file.includes(secretPath)), `${secretPath} is excluded`)
+    }
     assert.ok(ctx.keyFiles.some((k) => k.path === 'package.json'))
+    assert.ok(!ctx.keyFiles.some((k) => k.path === 'README.md'), 'linked key files are excluded')
+    assert.ok(ctx.sourceFiles.some((file) => file.path === 'src/index.ts'))
+    assert.ok(
+      !ctx.sourceFiles.some((file) => file.path === 'src/linked-source.js'),
+      'linked source files are excluded'
+    )
+    assert.ok(ctx.sourceFiles.length <= 8)
+    assert.ok(
+      ctx.sourceFiles.reduce(
+        (total, file) => total + Buffer.byteLength(file.excerpt, 'utf8'),
+        0
+      ) <= 16_000,
+      'source excerpts stay inside the total context budget'
+    )
   })
 
   await check('renderProjectContext: non-empty', () => {
     const text = renderProjectContext(inspectProject(root))
     assert.ok(text.includes('src/index.ts'))
+    assert.ok(text.includes('Existing source excerpts (bounded):'))
+    assert.ok(text.includes('export const x = 1'))
+    assert.ok(!text.includes('must-not-leak'))
+    for (const canary of [
+      'credential-source-canary',
+      'python-secret-canary',
+      'js-secret-canary',
+      'service-account-canary',
+      'secret-directory-canary',
+      'linked-key-canary',
+      'linked-source-canary'
+    ]) {
+      assert.ok(!text.includes(canary), `${canary} never enters rendered context`)
+    }
   })
 
   await check('GitHub URL: canonical https and SSH forms', () => {
@@ -110,6 +182,7 @@ async function main(): Promise<void> {
   }
 
   rmSync(root, { recursive: true, force: true })
+  rmSync(outside, { recursive: true, force: true })
 
   if (failures > 0) {
     console.error(`\nverify-project-loop: ${failures} failed`)

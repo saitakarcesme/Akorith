@@ -19,21 +19,12 @@ import type {
 
 const DEFAULT_MODELS = ['default']
 
-const READ_ONLY_SHELL_PERMISSIONS = {
-  '*': 'deny',
-  pwd: 'allow',
-  'Get-Location': 'allow',
-  'ls *': 'allow',
-  'Get-ChildItem': 'allow',
-  'Get-ChildItem -Force': 'allow',
-  'Get-ChildItem -Name': 'allow',
-  'Get-ChildItem -Force -Name': 'allow',
-  'git status*': 'allow',
-  'git diff*': 'allow',
-  'git log*': 'allow',
-  'git show*': 'allow',
-  'git rev-parse*': 'allow',
-  'git ls-files*': 'allow'
+export const OPENCODE_READ_ONLY_SHELL_PERMISSIONS = {
+  '*': 'deny'
+} as const
+
+export const OPENCODE_WORKSPACE_SHELL_PERMISSIONS = {
+  '*': 'deny'
 } as const
 
 // `opencode run` is non-interactive. If a user's global config asks for tool
@@ -41,7 +32,10 @@ const READ_ONLY_SHELL_PERMISSIONS = {
 // to answer it. This runtime-only override grants the minimum useful project
 // tools while keeping shell access narrow and external paths unavailable. It is
 // never written to the user's config or the selected repository.
-const WORKSPACE_PERMISSION_CONFIG = JSON.stringify({
+export const OPENCODE_WORKSPACE_PERMISSION_CONFIG = JSON.stringify({
+  mcp: {},
+  plugin: [],
+  instructions: [],
   permission: {
     '*': 'deny',
     read: 'allow',
@@ -49,42 +43,50 @@ const WORKSPACE_PERMISSION_CONFIG = JSON.stringify({
     glob: 'allow',
     grep: 'allow',
     list: 'allow',
-    lsp: 'allow',
     todowrite: 'allow',
     question: 'deny',
     external_directory: 'deny',
-    bash: {
-      ...READ_ONLY_SHELL_PERMISSIONS,
-      'node --check *': 'allow',
-      'npm test*': 'allow',
-      'npm run test*': 'allow',
-      'npm run lint*': 'allow',
-      'npm run build*': 'allow'
-    }
+    bash: OPENCODE_WORKSPACE_SHELL_PERMISSIONS
   }
 })
 
 const PLAN_PERMISSION_CONFIG = JSON.stringify({
+  mcp: {},
+  plugin: [],
+  instructions: [],
   permission: {
     '*': 'deny',
     read: 'allow',
     glob: 'allow',
     grep: 'allow',
     list: 'allow',
-    lsp: 'allow',
     question: 'deny',
     external_directory: 'deny',
-    bash: READ_ONLY_SHELL_PERMISSIONS
+    bash: OPENCODE_READ_ONLY_SHELL_PERMISSIONS
   }
 })
+
+export function buildOpenCodeRunArgs(
+  opts: Pick<SendOptions, 'workingDirectory' | 'model' | 'attachments'>
+): string[] {
+  const args = ['run', '--pure', '--format', 'json']
+  if (opts.workingDirectory) {
+    // spawn.cwd is already the validated project. A relative --dir keeps the
+    // tool boundary pinned to that same folder without exposing an absolute
+    // path through model-controlled configuration.
+    args.push('--dir', '.')
+  }
+  if (opts.model && opts.model !== 'default') args.push('-m', opts.model)
+  for (const attachment of opts.attachments ?? []) args.push('-f', attachment.path)
+  return args
+}
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
 
-const WINDOWS_INSPECTION_GUIDANCE = process.platform === 'win32'
-  ? 'On Windows, prefer the read, list, glob, and grep tools for discovery. If a shell inspection is essential, use one command per tool call: Get-Location, Get-ChildItem, Get-ChildItem -Force, or a read-only git command. Do not chain commands with semicolons, &&, pipes, redirection, or $null.'
-  : 'Prefer the read, list, glob, and grep tools for discovery. Keep any shell inspection to one read-only command per tool call.'
+const INSPECTION_GUIDANCE =
+  'Use only the native read, list, glob, grep, and edit tools. Shell, LSP, external plugins, and MCP tools are unavailable; Akorith performs host-selected syntax checks after the patch.'
 
 export class OpenCodeProvider implements Provider {
   readonly id = 'opencode'
@@ -150,31 +152,18 @@ export class OpenCodeProvider implements Provider {
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
-    const args = ['run', '--format', 'json']
-    if (opts.workingDirectory) {
-      // OpenCode 1.18+ can reuse a background server whose process cwd is the
-      // Akorith app directory. Passing --dir is therefore required in addition
-      // to spawn.cwd; otherwise the model sees the selected project as an
-      // external directory and edits its internal tool-output fallback instead.
-      args.push('--dir', opts.workingDirectory)
-    }
-    if (opts.model && opts.model !== 'default') {
-      args.push('-m', opts.model)
-    }
-    for (const attachment of opts.attachments ?? []) args.push('-f', attachment.path)
+    const args = buildOpenCodeRunArgs(opts)
     const workspacePrompt = opts.workingDirectory
       ? opts.intent === 'plan'
-        ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. ${WINDOWS_INSPECTION_GUIDANCE} Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
-        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. ${WINDOWS_INSPECTION_GUIDANCE} Shell commands are limited to inspection and existing validation scripts. Akorith's host handles an explicitly requested app start or preview after this turn, so treat that as a concrete action but do not start a long-lived server, run an app-opening shell command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
+        ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. ${INSPECTION_GUIDANCE} Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
+        : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. ${INSPECTION_GUIDANCE} Akorith's host handles an explicitly requested app start or preview after this turn, so do not start a server, run an app-opening command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     let streamedText = ''
 
     const res = await runCli('opencode', args, {
-      // Keep the complete prompt off argv. On Windows `runCli` resolves npm
-      // shims through cmd.exe; multiline argv is truncated at the first blank
-      // line there, which used to discard the actual user task after Akorith's
-      // workspace instruction. OpenCode's run command natively appends piped
-      // stdin to its message, preserving newlines and shell metacharacters.
+      // Keep the complete prompt off argv. OpenCode's run command natively
+      // appends piped stdin to its message, preserving newlines without making
+      // prompt text part of the process command line.
       stdin: workspacePrompt,
       signal: opts.signal,
       timeoutMs: 600_000,
@@ -186,7 +175,7 @@ export class OpenCodeProvider implements Provider {
             // child_process.spawn receives a different cwd. OpenCode reads
             // both values, so keep the environment and native cwd aligned.
             PWD: opts.workingDirectory,
-            OPENCODE_CONFIG_CONTENT: opts.intent === 'plan' ? PLAN_PERMISSION_CONFIG : WORKSPACE_PERMISSION_CONFIG
+            OPENCODE_CONFIG_CONTENT: opts.intent === 'plan' ? PLAN_PERMISSION_CONFIG : OPENCODE_WORKSPACE_PERMISSION_CONFIG
           }
         : undefined,
       onStdoutLine: (line) => {

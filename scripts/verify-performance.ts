@@ -206,7 +206,8 @@ check(
 check(
   projectFiles.includes('FILE_INDEX_TTL_MS') &&
     projectFiles.includes('pendingIndexes') &&
-    projectFiles.includes('const files = await getFileIndex(root)'),
+    projectFiles.includes('pending?.revision === revision') &&
+    projectFiles.includes('const files = await getFileIndex(root, refresh)'),
   'project file mentions reuse a bounded single-flight file index'
 )
 check(

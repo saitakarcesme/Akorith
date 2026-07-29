@@ -24,7 +24,8 @@ interface ProjectFileIndex {
 }
 
 const fileIndexes = new Map<string, ProjectFileIndex>()
-const pendingIndexes = new Map<string, Promise<string[]>>()
+const pendingIndexes = new Map<string, { revision: number; promise: Promise<string[]> }>()
+const fileIndexRevisions = new Map<string, number>()
 
 function projectPath(projectId: string): string | null {
   return listProjects().find((project) => project.id === projectId)?.path ?? null
@@ -70,8 +71,19 @@ function pruneFileIndexes(): void {
   for (const [root] of oldest) fileIndexes.delete(root)
 }
 
-async function getFileIndex(root: string): Promise<string[]> {
+function invalidateFileIndex(root: string): number {
+  const revision = (fileIndexRevisions.get(root) ?? 0) + 1
+  fileIndexRevisions.set(root, revision)
+  fileIndexes.delete(root)
+  pendingIndexes.delete(root)
+  return revision
+}
+
+async function getFileIndex(root: string, refresh = false): Promise<string[]> {
   const normalizedRoot = resolve(root)
+  const revision = refresh
+    ? invalidateFileIndex(normalizedRoot)
+    : fileIndexRevisions.get(normalizedRoot) ?? 0
   const now = Date.now()
   const cached = fileIndexes.get(normalizedRoot)
   if (cached && cached.expiresAt > now) {
@@ -80,10 +92,11 @@ async function getFileIndex(root: string): Promise<string[]> {
   }
 
   const pending = pendingIndexes.get(normalizedRoot)
-  if (pending) return pending
+  if (pending?.revision === revision) return pending.promise
 
   const next = buildFileIndex(normalizedRoot)
     .then((files) => {
+      if ((fileIndexRevisions.get(normalizedRoot) ?? 0) !== revision) return files
       const completedAt = Date.now()
       fileIndexes.set(normalizedRoot, {
         files,
@@ -94,15 +107,17 @@ async function getFileIndex(root: string): Promise<string[]> {
       return files
     })
     .finally(() => {
-      pendingIndexes.delete(normalizedRoot)
+      if (pendingIndexes.get(normalizedRoot)?.promise === next) {
+        pendingIndexes.delete(normalizedRoot)
+      }
     })
-  pendingIndexes.set(normalizedRoot, next)
+  pendingIndexes.set(normalizedRoot, { revision, promise: next })
   return next
 }
 
-async function collectFiles(root: string, query: string): Promise<string[]> {
+async function collectFiles(root: string, query: string, refresh = false): Promise<string[]> {
   const needle = query.trim().toLocaleLowerCase()
-  const files = await getFileIndex(root)
+  const files = await getFileIndex(root, refresh)
   if (!needle) return files.slice(0, MAX_RESULTS)
   return files
     .filter((path) => path.toLocaleLowerCase().includes(needle))
@@ -153,12 +168,15 @@ async function readProjectFile(
 
 export function registerProjectFilesIpc(): void {
   ipcMain.handle('projects:files', async (_event, args: unknown): Promise<string[]> => {
-    const input = args && typeof args === 'object' ? args as { projectId?: unknown; query?: unknown } : {}
+    const input = args && typeof args === 'object'
+      ? args as { projectId?: unknown; query?: unknown; refresh?: unknown }
+      : {}
     if (typeof input.projectId !== 'string' || !/^[\w-]{1,64}$/.test(input.projectId)) return []
     if (input.query !== undefined && typeof input.query !== 'string') return []
+    if (input.refresh !== undefined && typeof input.refresh !== 'boolean') return []
     const root = projectPath(input.projectId)
     if (!root) return []
-    return collectFiles(root, (input.query ?? '').slice(0, 160))
+    return collectFiles(root, (input.query ?? '').slice(0, 160), input.refresh === true)
   })
   ipcMain.handle('projects:readFile', async (_event, args: unknown) => {
     const input = args && typeof args === 'object'

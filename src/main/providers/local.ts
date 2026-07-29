@@ -21,9 +21,113 @@ const OLLAMA_START_RETRY_MS = 30_000
 const LAN_PROBE_TIMEOUT_MS = 350
 const LAN_PROBE_CONCURRENCY = 32
 const MODEL_CACHE_MS = 60_000
+const LOCAL_WORKSPACE_CONTEXT_TOKENS = 8_192
 
 let startedOllamaServe = false
 let lastOllamaStartAttemptAt = 0
+
+export function buildOllamaGenerationOptions(
+  opts: Pick<SendOptions, 'generation' | 'workingDirectory' | 'intent'>
+): Record<string, number> {
+  const options: Record<string, number> = {}
+  if (
+    typeof opts.generation?.temperature === 'number' &&
+    Number.isFinite(opts.generation.temperature)
+  ) {
+    options.temperature = opts.generation.temperature
+  }
+  if (
+    options.temperature === undefined &&
+    opts.intent === 'execute' &&
+    opts.workingDirectory
+  ) {
+    // Structured workspace patches should be deterministic. This avoids
+    // wasting a bounded retry on prose or a second incompatible JSON shape.
+    options.temperature = 0
+  }
+  if (
+    typeof opts.generation?.maxTokens === 'number' &&
+    Number.isInteger(opts.generation.maxTokens)
+  ) {
+    options.num_predict = opts.generation.maxTokens
+  }
+  // Ollama model tags can advertise 32K-64K contexts. Letting the runner
+  // allocate that maximum for every Workspace turn can make even a 4B/7B
+  // model fail immediately on an otherwise capable machine. Akorith already
+  // sends a bounded project snapshot, so an 8K working context preserves the
+  // useful input while keeping local execution inside a practical RAM/VRAM
+  // envelope.
+  if (opts.workingDirectory) options.num_ctx = LOCAL_WORKSPACE_CONTEXT_TOKENS
+  return options
+}
+
+const LOCAL_WORKSPACE_PATCH_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['type', 'summary', 'files', 'commands'],
+  properties: {
+    type: { type: 'string', const: 'workspace_patch' },
+    summary: { type: 'string', minLength: 1 },
+    rationale: { type: 'string' },
+    files: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 12,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['path', 'operation'],
+        properties: {
+          path: { type: 'string', minLength: 1 },
+          operation: {
+            type: 'string',
+            enum: ['create', 'modify', 'delete']
+          },
+          content: { type: 'string' }
+        }
+      }
+    },
+    commands: {
+      type: 'array',
+      maxItems: 8,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['cmd'],
+        properties: {
+          cmd: { type: 'string', minLength: 1 },
+          reason: { type: 'string' }
+        }
+      }
+    },
+    expected_outcome: { type: 'string' }
+  }
+} as const
+
+export function buildOllamaStructuredOutputOptions(
+  opts: Pick<SendOptions, 'intent' | 'workingDirectory'>
+): Record<string, unknown> {
+  if (opts.intent !== 'execute' || !opts.workingDirectory) return {}
+  // Ollama's native JSON-schema constraint keeps large file contents escaped
+  // correctly. Disabling model thinking reserves the bounded context for the
+  // actual project files and makes streaming progress reflect deliverables.
+  return {
+    format: LOCAL_WORKSPACE_PATCH_SCHEMA,
+    think: false
+  }
+}
+
+export function formatOllamaHttpError(status: number, rawBody: string): string {
+  let detail = rawBody.trim()
+  try {
+    const parsed = JSON.parse(detail) as { error?: unknown }
+    if (typeof parsed.error === 'string') detail = parsed.error
+  } catch {
+    // Non-JSON proxy/server errors still receive the same bounded treatment.
+  }
+  detail = detail.replace(/\s+/g, ' ').slice(0, 360)
+  return `Ollama /api/chat failed: HTTP ${status}${detail ? ` — ${detail}` : ''}`
+}
 
 function cleanBaseUrl(value: unknown): string {
   if (typeof value !== 'string') return DEFAULT_BASE_URL
@@ -320,19 +424,8 @@ export class LocalProvider implements Provider {
       if (!model) throw new Error('No Ollama models installed — run `ollama pull <model>` first')
     }
 
-    const generationOptions: Record<string, number> = {}
-    if (
-      typeof opts.generation?.temperature === 'number' &&
-      Number.isFinite(opts.generation.temperature)
-    ) {
-      generationOptions.temperature = opts.generation.temperature
-    }
-    if (
-      typeof opts.generation?.maxTokens === 'number' &&
-      Number.isInteger(opts.generation.maxTokens)
-    ) {
-      generationOptions.num_predict = opts.generation.maxTokens
-    }
+    const generationOptions = buildOllamaGenerationOptions(opts)
+    const structuredOutputOptions = buildOllamaStructuredOutputOptions(opts)
 
     const res = await fetch(`${this.reachableBaseUrl ?? baseUrl}/api/chat`, {
       method: 'POST',
@@ -346,13 +439,16 @@ export class LocalProvider implements Provider {
         }],
         stream: true,
         ...(Object.keys(generationOptions).length > 0 ? { options: generationOptions } : {}),
+        ...structuredOutputOptions,
         ...(opts.background === true ? { keep_alive: '30m' } : {})
       }),
       signal: opts.signal
     })
-    if (!res.ok || !res.body) {
-      throw new Error(`Ollama /api/chat failed: HTTP ${res.status}`)
+    if (!res.ok) {
+      const rawBody = await res.text().catch(() => '')
+      throw new Error(formatOllamaHttpError(res.status, rawBody))
     }
+    if (!res.body) throw new Error('Ollama /api/chat failed: response body was empty')
 
     const decoder = new TextDecoder()
     let lineBuffer = ''
@@ -413,6 +509,7 @@ interface OllamaChunk {
   model?: string
   message?: { content?: string }
   done?: boolean
+  done_reason?: string
   error?: string
   prompt_eval_count?: number
   eval_count?: number

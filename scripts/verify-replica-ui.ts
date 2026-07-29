@@ -109,6 +109,8 @@ const sidebar = read('src/renderer/src/components/Sidebar.tsx')
 const settings = read('src/renderer/src/components/SettingsCenter.tsx')
 const main = read('src/main/index.ts')
 const projectPreviewMain = read('src/main/project-preview.ts')
+const projectFilesMain = read('src/main/project-files.ts')
+const preload = read('src/preload/index.ts')
 const preloadTypes = read('src/preload/index.d.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const stylesCss = read('src/renderer/src/styles.css')
@@ -334,6 +336,21 @@ check(
     /\[open,\s*load,\s*refreshKey\]/.test(bottomWorkbench) &&
     chat.includes("reason === 'activity' && requestedTools.has(tool)"),
   'final change evidence refreshes an already-open Review tab'
+)
+check(
+  app.includes('const [workspaceContentVersion, setWorkspaceContentVersion]') &&
+    app.includes('onWorkspaceContentChange={bumpWorkspaceContent}') &&
+    app.includes('refreshKey={`${historyVersion}:${workspaceContentVersion}`}') &&
+    chat.includes('if (turn.workspace) onWorkspaceContentChange?.(turn.workspace.projectId)') &&
+    workspaceTools.includes('<WorkspaceFilesPanel project={project} refreshKey={refreshKey} />') &&
+    workspaceFiles.includes('window.api.projects.files(project.id, settledQuery, refreshFromDisk)') &&
+    /\[project\.id,\s*settledQuery,\s*reloadSignal,\s*refreshKey\]/.test(workspaceFiles) &&
+    /\[project\.id,\s*selected,\s*reloadSignal,\s*refreshKey\]/.test(workspaceFiles) &&
+    preload.includes('files: (projectId: string, query?: string, refresh?: boolean)') &&
+    preloadTypes.includes('files(projectId: string, query?: string, refresh?: boolean)') &&
+    projectFilesMain.includes('function invalidateFileIndex(root: string)') &&
+    projectFilesMain.includes('input.refresh === true'),
+  'task completion, failure, and stop refresh Review and Files from the post-rollback disk state'
 )
 check(
   preview.includes('project-preview-address') &&
@@ -710,6 +727,25 @@ check(
   selectedSidebarBlocks.some((block) => /background\s*:\s*var\(--surface-selected\)/.test(block)) &&
   selectedSidebarBlocks.every((block) => !/background\s*:\s*var\(--white-button\)/.test(block)),
   'selected sidebar rows use a neutral surface instead of a white fill'
+)
+
+const projectChatLists = selectorBlocks(replicaCss, '.project-chats-collapse > .project-chats')
+const projectChatRows = selectorBlocks(replicaCss, '.project-chat')
+check(
+  projectChatLists.some((block) =>
+    /margin\s*:\s*0(?:\s*;|$)/.test(block) &&
+    /padding\s*:\s*1px\s+0\s+6px/.test(block)
+  ) &&
+  projectChatRows.some((block) => /padding\s*:\s*0\s+9px\s+0\s+31px/.test(block)),
+  'project chat rows align compactly with project labels without inherited tree indentation'
+)
+
+const workspaceLaunchers = selectorBlocks(replicaCss, '.workspace-tools-launcher')
+const emptyLauncherSurfaces = selectorBlocks(replicaCss, '.workspace-tools-content.is-launcher')
+check(
+  workspaceLaunchers.some((block) => /background\s*:\s*var\(--bg-under\)/.test(block)) &&
+  emptyLauncherSurfaces.some((block) => /background\s*:\s*var\(--bg-under\)/.test(block)),
+  'empty workspace tool launcher shares the darker navigation chrome surface'
 )
 
 const composerFocusBlocks = [

@@ -159,7 +159,8 @@ const history = Object.freeze({
 
 const projects = Object.freeze({
   list: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
-  files: (projectId: string, query?: string): Promise<unknown> => ipcRenderer.invoke('projects:files', { projectId, query }),
+  files: (projectId: string, query?: string, refresh?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('projects:files', { projectId, query, refresh }),
   readFile: (projectId: string, filePath: string): Promise<unknown> =>
     ipcRenderer.invoke('projects:readFile', { projectId, filePath }),
   create: (args: unknown): Promise<unknown> => ipcRenderer.invoke('projects:create', args),

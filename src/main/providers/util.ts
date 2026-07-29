@@ -2,9 +2,9 @@
 // only — nothing here may know about a specific provider.
 
 import { spawn } from 'child_process'
-import { accessSync, constants, existsSync } from 'fs'
+import { accessSync, constants, existsSync, realpathSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { delimiter, isAbsolute, join, sep } from 'path'
+import { basename, delimiter, dirname, extname, isAbsolute, join, resolve, sep } from 'path'
 import type { ProviderActivity } from './types'
 
 export interface RunCliOptions {
@@ -25,6 +25,12 @@ export interface RunCliOptions {
   cwd?: string
   /** Per-invocation environment overrides. Never mutates the app process env. */
   env?: NodeJS.ProcessEnv
+  /**
+   * Host-only variables that must not leak into a nested provider process.
+   * This is intentionally explicit rather than a broad prefix filter so auth
+   * locations such as CODEX_HOME remain available.
+   */
+  unsetEnv?: string[]
   /** Called once per complete stdout line, as output arrives. */
   onStdoutLine?: (line: string) => void
   /**
@@ -63,7 +69,6 @@ export type CliTimeoutKind = 'total' | 'inactivity'
 
 /** Shared interactive-provider watchdog defaults. */
 export const PROVIDER_INACTIVITY_WARNING_MS = 20_000
-export const PROVIDER_INACTIVITY_TIMEOUT_MS = 120_000
 
 export function cleanCliEventId(value: unknown): string | undefined {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined
@@ -132,10 +137,9 @@ export function providerRuntimeWatchdog(
   providerId: string,
   providerLabel: string,
   onActivity?: (activity: ProviderActivity) => void
-): Pick<RunCliOptions, 'inactivityWarningMs' | 'inactivityTimeoutMs' | 'onDiagnostic'> {
+): Pick<RunCliOptions, 'inactivityWarningMs' | 'onDiagnostic'> {
   return {
     inactivityWarningMs: PROVIDER_INACTIVITY_WARNING_MS,
-    inactivityTimeoutMs: PROVIDER_INACTIVITY_TIMEOUT_MS,
     onDiagnostic: createProviderRuntimeDiagnostics(providerId, providerLabel, onActivity)
   }
 }
@@ -170,60 +174,221 @@ export function isCliTimeoutError(error: unknown): error is CliTimeoutError {
   )
 }
 
-const resolvedExecutableCache = new Map<string, string>()
+export interface ResolvedCliLaunch {
+  /** Absolute native executable passed to child_process.spawn(). */
+  executable: string
+  /** Trusted wrapper arguments inserted before the caller's arguments. */
+  prefixArgs: string[]
+  /** Absolute path that supplied the resolved command. */
+  source: string
+}
 
-/**
- * Resolve GUI-launched provider CLIs deterministically. Electron can inherit
- * Codex/ChatGPT helper directories ahead of the user's shell PATH; spawning a
- * bare `codex` would then select an older bundled binary even though Terminal
- * uses the current ~/.local/bin install. Prefer normal user install locations,
- * then walk PATH, while keeping Windows shim resolution unchanged.
- */
-export function resolveCliExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string {
-  if (process.platform === 'win32' || isAbsolute(command) || command.includes(sep)) return command
-  const cacheKey = `${command}\0${env.PATH ?? ''}`
-  const cached = resolvedExecutableCache.get(cacheKey)
-  if (cached) return cached
+const resolvedLaunchCache = new Map<string, ResolvedCliLaunch>()
 
+function envValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  if (env[key] !== undefined) return env[key]
+  const actual = Object.keys(env).find(
+    (candidate) => candidate.toLowerCase() === key.toLowerCase()
+  )
+  return actual ? env[actual] : undefined
+}
+
+function pathWithin(root: string | undefined, candidate: string): boolean {
+  if (!root) return false
+  let rootPath: string
+  let candidatePath: string
+  try {
+    rootPath = realpathSync.native(root)
+    candidatePath = realpathSync.native(candidate)
+  } catch {
+    rootPath = resolve(root)
+    candidatePath = resolve(candidate)
+  }
+  if (process.platform === 'win32') {
+    rootPath = rootPath.toLowerCase()
+    candidatePath = candidatePath.toLowerCase()
+  }
+  return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${sep}`)
+}
+
+function preferredExecutableDirectories(env: NodeJS.ProcessEnv): string[] {
   const home = homedir()
-  const preferredDirectories = [
+  const directories = [
     join(home, '.local', 'bin'),
     join(home, 'bin'),
     join(home, '.npm-global', 'bin'),
-    join(home, '.bun', 'bin'),
-    '/opt/homebrew/bin',
-    '/usr/local/bin'
+    join(home, '.bun', 'bin')
   ]
-  const pathDirectories = (env.PATH ?? '').split(delimiter).filter(Boolean)
-  const candidates = [...new Set([...preferredDirectories, ...pathDirectories])]
-    .map((directory) => join(directory, command))
+  if (process.platform === 'win32') {
+    directories.push(
+      join(envValue(env, 'APPDATA') ?? join(home, 'AppData', 'Roaming'), 'npm'),
+      join(envValue(env, 'ProgramFiles') ?? 'C:\\Program Files', 'nodejs'),
+      join(envValue(env, 'SystemRoot') ?? 'C:\\Windows', 'System32')
+    )
+  } else {
+    directories.push('/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin')
+  }
+  directories.push(
+    ...(envValue(env, 'PATH') ?? '').split(delimiter).filter((directory) => isAbsolute(directory))
+  )
+  return [...new Set(directories.map((directory) => resolve(directory)))]
+}
 
-  for (const candidate of candidates) {
-    if (!existsSync(candidate)) continue
+function executableCandidates(command: string, env: NodeJS.ProcessEnv): string[] {
+  if (isAbsolute(command)) return [resolve(command)]
+  if (command.includes('/') || command.includes('\\')) {
+    throw new Error(`Refusing relative executable path: ${command}`)
+  }
+  const extensions =
+    process.platform === 'win32' && !extname(command)
+      ? ['.exe', '.cmd', '']
+      : ['']
+  return preferredExecutableDirectories(env).flatMap((directory) =>
+    extensions.map((extension) => join(directory, `${command}${extension}`))
+  )
+}
+
+function findExecutableSource(
+  command: string,
+  env: NodeJS.ProcessEnv,
+  excludedDirectory?: string
+): string {
+  for (const candidate of executableCandidates(command, env)) {
+    if (!existsSync(candidate) || pathWithin(excludedDirectory, candidate)) continue
     try {
+      if (!statSync(candidate).isFile()) continue
       accessSync(candidate, constants.X_OK)
-      resolvedExecutableCache.set(cacheKey, candidate)
-      return candidate
+      const real = realpathSync.native(candidate)
+      if (pathWithin(excludedDirectory, real)) continue
+      return real
     } catch {
-      // Continue to the next candidate when a file exists but is not executable.
+      // Continue when the candidate cannot be executed or raced away.
     }
   }
-  return command
+  throw new Error(`Trusted executable "${command}" was not found outside the workspace.`)
+}
+
+function resolveWindowsNpmShim(
+  source: string,
+  env: NodeJS.ProcessEnv,
+  excludedDirectory?: string
+): ResolvedCliLaunch {
+  const command = basename(source, extname(source)).toLowerCase()
+  const npmRoot = dirname(source)
+  if (command === 'claude') {
+    const executable = join(
+      npmRoot,
+      'node_modules',
+      '@anthropic-ai',
+      'claude-code',
+      'bin',
+      'claude.exe'
+    )
+    if (
+      existsSync(executable) &&
+      statSync(executable).isFile() &&
+      !pathWithin(excludedDirectory, executable)
+    ) {
+      return {
+        executable: realpathSync.native(executable),
+        prefixArgs: [],
+        source
+      }
+    }
+  }
+  if (command === 'opencode') {
+    const executable = join(npmRoot, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')
+    if (
+      existsSync(executable) &&
+      statSync(executable).isFile() &&
+      !pathWithin(excludedDirectory, executable)
+    ) {
+      return {
+        executable: realpathSync.native(executable),
+        prefixArgs: [],
+        source
+      }
+    }
+  }
+  if (command === 'codex') {
+    const script = join(npmRoot, 'node_modules', '@openai', 'codex', 'bin', 'codex.js')
+    if (
+      existsSync(script) &&
+      statSync(script).isFile() &&
+      !pathWithin(excludedDirectory, script)
+    ) {
+      const executable = findExecutableSource('node', env, excludedDirectory)
+      return {
+        executable,
+        prefixArgs: [realpathSync.native(script)],
+        source
+      }
+    }
+  }
+  throw new Error(`Refusing unsupported Windows command shim: ${source}`)
 }
 
 /**
- * Run a CLI on the user's PATH. Windows uses a shell so .cmd shims (npm
- * installs) resolve; macOS/Linux spawn the executable directly so packaged
- * loops cannot strand shell wrappers around git/provider calls.
+ * Resolve every provider/validation executable before spawning it. A project
+ * directory is never searched, relative executable paths are rejected, and
+ * Windows npm shims are unwrapped into a native executable plus fixed argv so
+ * no cmd.exe/shell parsing is needed.
+ */
+export function resolveCliLaunch(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+  excludedDirectory?: string
+): ResolvedCliLaunch {
+  const cacheKey = [
+    command,
+    envValue(env, 'PATH') ?? '',
+    envValue(env, 'APPDATA') ?? '',
+    envValue(env, 'ProgramFiles') ?? '',
+    envValue(env, 'SystemRoot') ?? '',
+    excludedDirectory ?? ''
+  ].join('\0')
+  const cached = resolvedLaunchCache.get(cacheKey)
+  if (cached) return { ...cached, prefixArgs: [...cached.prefixArgs] }
+
+  const source = findExecutableSource(command, env, excludedDirectory)
+  const launch =
+    process.platform === 'win32' && extname(source).toLowerCase() === '.cmd'
+      ? resolveWindowsNpmShim(source, env, excludedDirectory)
+      : { executable: source, prefixArgs: [], source }
+  if (!isAbsolute(launch.executable) || pathWithin(excludedDirectory, launch.executable)) {
+    throw new Error(`Refusing executable inside the workspace: ${launch.executable}`)
+  }
+  resolvedLaunchCache.set(cacheKey, launch)
+  return { ...launch, prefixArgs: [...launch.prefixArgs] }
+}
+
+/** Compatibility helper for callers that only need the final native binary. */
+export function resolveCliExecutable(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+  excludedDirectory?: string
+): string {
+  return resolveCliLaunch(command, env, excludedDirectory).executable
+}
+
+/**
+ * Run a CLI through a resolved absolute native executable. shell:false is an
+ * invariant on every platform; caller arguments are never re-parsed by a
+ * command shell.
  */
 export function runCli(command: string, args: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now()
     let lastOutputAt = startedAt
-    const childEnv = options.env ? { ...process.env, ...options.env } : process.env
-    const executable = resolveCliExecutable(command, childEnv)
-    const child = spawn(executable, args, {
-      shell: process.platform === 'win32',
+    const childEnv = { ...process.env, ...options.env }
+    for (const key of options.unsetEnv ?? []) {
+      for (const actual of Object.keys(childEnv)) {
+        if (actual.toLowerCase() === key.toLowerCase()) delete childEnv[actual]
+      }
+    }
+    const launch = resolveCliLaunch(command, childEnv, options.cwd)
+    const child = spawn(launch.executable, [...launch.prefixArgs, ...args], {
+      shell: false,
       windowsHide: true,
       detached: process.platform !== 'win32',
       cwd: options.cwd,
@@ -234,12 +399,15 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
     const stderrChunks: string[] = []
     let lineBuffer = ''
     let settled = false
+    let hasOutput = false
     let inactivityWarned = false
+    let nextInactivityNoticeMs = 0
     let watchdogTimer: ReturnType<typeof setInterval> | null = null
     const positiveMs = (value: number | undefined): number =>
       typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
     const warningMs = positiveMs(options.inactivityWarningMs)
     const inactivityTimeoutMs = positiveMs(options.inactivityTimeoutMs)
+    nextInactivityNoticeMs = warningMs
 
     const elapsed = (): number => Math.max(0, Date.now() - startedAt)
     const emitDiagnostic = (diagnostic: Omit<RunCliDiagnostic, 'command' | 'elapsedMs'> & {
@@ -269,8 +437,10 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
     const killTree = (): void => {
       if (child.pid === undefined) return
       if (process.platform === 'win32') {
-        // shell:true means child is a cmd.exe wrapper — kill the whole tree.
-        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        // Providers may spawn descendants; terminate the resolved native
+        // process tree through the trusted Windows system binary.
+        const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe')
+        const killer = spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], {
           windowsHide: true,
           stdio: 'ignore'
         })
@@ -294,10 +464,12 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       const now = Date.now()
       const inactiveMs = Math.max(0, now - lastOutputAt)
       lastOutputAt = now
+      hasOutput = true
       if (inactivityWarned) {
         emitDiagnostic({ kind: 'activity', inactiveMs })
       }
       inactivityWarned = false
+      nextInactivityNoticeMs = warningMs
     }
 
     const onAbort = (): void => {
@@ -317,9 +489,10 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
     if (Number.isFinite(checkEveryMs)) {
       watchdogTimer = setInterval(() => {
         const inactiveMs = Math.max(0, Date.now() - lastOutputAt)
-        if (!inactivityWarned && warningMs && inactiveMs >= warningMs) {
+        if (hasOutput && warningMs && inactiveMs >= nextInactivityNoticeMs) {
           inactivityWarned = true
           emitDiagnostic({ kind: 'inactive', inactiveMs, thresholdMs: warningMs })
+          nextInactivityNoticeMs = inactiveMs + warningMs
         }
         if (inactivityTimeoutMs && inactiveMs >= inactivityTimeoutMs) {
           const timeoutError = new CliTimeoutError(
@@ -366,6 +539,15 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       stderrChunks.push(chunk.toString('utf8'))
     })
 
+    child.once('exit', () => {
+      // On Windows the shell wrapper can take a short moment to emit `close`
+      // after the provider process has already exited. Do not mislabel that
+      // teardown gap as provider inactivity.
+      if (watchdogTimer) {
+        clearInterval(watchdogTimer)
+        watchdogTimer = null
+      }
+    })
     child.on('error', (err) => finish(() => reject(err)))
     child.on('close', (code) => {
       if (options.onStdoutLine && lineBuffer.trim()) options.onStdoutLine(lineBuffer)

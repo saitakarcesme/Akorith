@@ -287,7 +287,7 @@ export interface ProjectUpdateRequest {
 export interface ProjectsApi {
   list(): Promise<ProjectRow[]>
   /** Bounded, project-scoped file index used by the Workspace @ mention picker. */
-  files(projectId: string, query?: string): Promise<string[]>
+  files(projectId: string, query?: string, refresh?: boolean): Promise<string[]>
   /** Bounded, read-only text file used by the in-app Files reviewer. */
   readFile(projectId: string, filePath: string): Promise<
     | { ok: true; path: string; content: string; bytes: number; truncated: boolean }

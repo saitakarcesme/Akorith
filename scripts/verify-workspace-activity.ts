@@ -11,6 +11,7 @@ import {
   buildWorkspaceActivityFeed,
   workspaceActivityDurationMs
 } from '../src/renderer/src/workspaceActivityFeed'
+import { workspaceRequestTimeoutMs } from '../src/renderer/src/workspaceRequestTimeout'
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React
 const WorkspaceActivity = require('../src/renderer/src/components/WorkspaceActivity').default as
@@ -340,6 +341,13 @@ test('stopped tasks expose Resume task while the composer remains writable', () 
   assert.ok(textareaStart >= 0 && textareaEnd > textareaStart)
   assert.doesNotMatch(textarea, /\bdisabled\s*=/)
   assert.match(`${chatPanel}\n${chatMessage}`, /Resume task/)
+})
+
+test('local Workspace keeps enough time for its bounded corrective attempt', () => {
+  assert.equal(workspaceRequestTimeoutMs('local'), 22 * 60 * 1_000)
+  assert.equal(workspaceRequestTimeoutMs('chatgpt'), 12 * 60 * 1_000)
+  assert.equal(workspaceRequestTimeoutMs('claude'), 12 * 60 * 1_000)
+  assert.equal(workspaceRequestTimeoutMs('opencode'), 12 * 60 * 1_000)
 })
 
 if (failures.length > 0) {

@@ -354,6 +354,7 @@ export default function App(): JSX.Element {
     }
   })
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [workspaceContentVersion, setWorkspaceContentVersion] = useState(0)
   const [projectVersion, setProjectVersion] = useState(0)
   const [startupSnapshot, setStartupSnapshot] = useState<StartupSnapshot | null>(null)
   const [startupHydrated, setStartupHydrated] = useState(false)
@@ -481,6 +482,7 @@ export default function App(): JSX.Element {
   }, [view])
 
   const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), [])
+  const bumpWorkspaceContent = useCallback(() => setWorkspaceContentVersion((v) => v + 1), [])
   const bumpProjects = useCallback(() => setProjectVersion((v) => v + 1), [])
   const selectHistory = useCallback((sessionId: string | null, mode: ChatMode, providerId?: string) => {
     setHistorySel((prev) => ({ sessionId, providerId, mode, nonce: (prev?.nonce ?? 0) + 1 }))
@@ -830,6 +832,7 @@ export default function App(): JSX.Element {
           onActiveSession={updateActiveSessionId}
           pendingSessions={pendingSessions}
           onPendingChange={setSessionPending}
+          onWorkspaceContentChange={bumpWorkspaceContent}
           onWorkspaceToolRequest={requestWorkspaceTool}
         />
         <Suspense fallback={null}>
@@ -838,7 +841,7 @@ export default function App(): JSX.Element {
             project={view === 'workspace' ? activeProject : null}
             open={workbenchOpen}
             active={view === 'workspace'}
-            refreshKey={historyVersion}
+            refreshKey={`${historyVersion}:${workspaceContentVersion}`}
             requestedTool={workspaceToolRequest}
             onOpen={openWorkspaceTools}
             onClose={toggleWorkspaceTools}

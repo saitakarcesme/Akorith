@@ -800,8 +800,8 @@ body {
 .app[data-ui='replica'] .project-chats-collapse > .project-chats {
   min-height: 0;
   overflow: hidden;
-  margin-block: 0;
-  padding-block: 1px 6px;
+  margin: 0;
+  padding: 1px 0 6px;
 }
 
 .app[data-ui='replica'] .project-row,
@@ -4450,7 +4450,13 @@ body {
   place-items: center;
   padding: 28px;
   transform: none;
-  background: var(--surface);
+  background: var(--bg-under);
+}
+
+.app[data-ui='replica'] .workspace-tools:has(.workspace-tools-content.is-launcher),
+.app[data-ui='replica'] .workspace-tools:has(.workspace-tools-content.is-launcher) .workspace-tool-tabs,
+.app[data-ui='replica'] .workspace-tools-content.is-launcher {
+  background: var(--bg-under);
 }
 
 .app[data-ui='replica'] .workspace-tools-cards {

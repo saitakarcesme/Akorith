@@ -5,6 +5,7 @@ import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHin
 import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
 import { mergeWorkspaceActivityEvent } from '../workspaceActivityFeed'
 import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../workspaceLiveChanges'
+import { workspaceRequestTimeoutMs } from '../workspaceRequestTimeout'
 import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, SendIcon, SparkIcon, StopIcon } from './icons'
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
 import { ComposerSendButton } from './CreationPrimitives'
@@ -28,6 +29,7 @@ interface ChatPanelProps {
   onActiveSession: (sessionId: string | null) => void
   pendingSessions?: Set<string>
   onPendingChange?: (sessionId: string, pending: boolean) => void
+  onWorkspaceContentChange?: (projectId: string) => void
   onWorkspaceToolRequest?: (request: {
     projectId: string
     sessionId: string
@@ -45,7 +47,6 @@ const TOKEN_RENDER_INTERVAL_MS = 100
 const FINAL_RESPONSE_REVEAL_INTERVAL_MS = 55
 const FINAL_RESPONSE_REVEAL_STEPS = 9
 const LIVE_CHANGE_POLL_MS = 2_000
-const WORKSPACE_REQUEST_TIMEOUT_MS = 8 * 60 * 1_000
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'md', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'])
 const CODE_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'scss', 'html', 'json', 'yaml', 'yml', 'toml', 'sql', 'sh'])
@@ -101,6 +102,7 @@ export default function ChatPanel({
   onActiveSession,
   pendingSessions,
   onPendingChange,
+  onWorkspaceContentChange,
   onWorkspaceToolRequest
 }: ChatPanelProps): JSX.Element {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
@@ -634,7 +636,7 @@ export default function ChatPanel({
         attachments: publicAttachments,
         intent: turn.intent,
         generation: turn.mode === 'workspace'
-          ? { timeoutMs: WORKSPACE_REQUEST_TIMEOUT_MS }
+          ? { timeoutMs: workspaceRequestTimeoutMs(turn.providerId) }
           : undefined
       })
       // Register the IPC request before awaiting the optional Git snapshot so
@@ -744,11 +746,12 @@ export default function ChatPanel({
         delete next[requestId]
         return next
       })
+      if (turn.workspace) onWorkspaceContentChange?.(turn.workspace.projectId)
       const next = queuedTurnsRef.current[sessionId]?.shift()
       setQueueVersion((version) => version + 1)
       if (next) window.setTimeout(() => { void executeTurnRef.current(next) }, 0)
     }
-  }, [digestEnabled, flushToken, onHistoryChange, onPendingChange, onWorkspaceToolRequest, refreshContext, revealFinalResponse, setSessionMessages])
+  }, [digestEnabled, flushToken, onHistoryChange, onPendingChange, onWorkspaceContentChange, onWorkspaceToolRequest, refreshContext, revealFinalResponse, setSessionMessages])
   executeTurnRef.current = executeTurn
 
   const makeTurn = (): QueuedTurn | null => {

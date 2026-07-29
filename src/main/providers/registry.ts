@@ -43,7 +43,6 @@ import { agentSessionManager } from '../agents/session-manager'
 import { safeRuntimeError } from '../agents/observation'
 import type { AgentId } from '../agents/types'
 import { normalizeStoredOpenCodeMessage } from '../../shared/opencode-output'
-import { buildLocalExecutorPrompt, executeLocalExecutorAttempt } from '../local-executor'
 import { inspectProject, renderProjectContext } from '../project-loop/context'
 import { changedSince, summarizeGitChanges } from '../git-status'
 import { enabledPluginContext } from '../plugins/manager'
@@ -175,6 +174,9 @@ const MAX_CHAT_IMAGE_BASE64_CHARS = 8_000_000
 const VALID_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const PROVIDER_SNAPSHOT_CACHE_MS = 60_000
 const TOKEN_IPC_BATCH_MS = 16
+const HEADLESS_WORKSPACE_GUIDANCE = process.platform === 'win32'
+  ? 'On Windows, prefer direct file-edit tools such as apply_patch instead of shell commands that write files. Use only one inspection or validation command per shell tool call; do not chain commands with semicolons, pipes, redirection, or &&. If one command is rejected by policy, that does not mean the workspace is read-only: continue with direct file tools or a simpler allowed command.'
+  : 'Prefer direct file-edit tools for project changes. Keep each shell tool call to one inspection or validation command. If one command is rejected by policy, continue with direct file tools or a simpler allowed command instead of treating the whole workspace as read-only.'
 
 let providerSnapshotCache: {
   configSignature: string
@@ -275,7 +277,7 @@ export async function sendWorkspacePrompt(
   const provider = buildProviders().get(providerId)
   if (!provider || !provider.kind.includes('executor')) throw new Error(`provider "${providerId}" cannot edit a workspace`)
   const tools = enabledPluginContext()
-  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
+  const instruction = `You are executing one cycle of an Akorith Goal inside the selected local workspace. The Goal may be software development, research, analysis, automation, or production of files such as PDF, DOCX, Markdown, data, or media assets. Inspect the available inputs, perform the requested work, create or update the required artifacts, and run relevant checks. Finish with a concise evidence-based summary. Do not create a git commit or push; Akorith checkpoints verified work. Stay inside the workspace, never reveal secrets, and do not only describe a solution.\n\n${HEADLESS_WORKSPACE_GUIDANCE}\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${tools ? `\n\n${tools}` : ''}\n\nCycle objective:\n${prompt}`
   const result = await provider.send(instruction, { model, signal, workingDirectory, onActivity }, () => {})
   return completeWorkspaceBrowserAction({
     prompt,
@@ -500,67 +502,6 @@ async function completeWorkspaceBrowserAction(input: {
   const text = input.result.text.trim()
   const receipt = `${outcome.label}: ${outcome.url}`
   return { ...input.result, text: text ? `${text}\n\n${receipt}` : receipt }
-}
-
-async function sendWorkspaceLocal(
-  provider: Provider,
-  goal: string,
-  model: string | undefined,
-  workspaceDir: string,
-  signal: AbortSignal,
-  emit: (activity: ProviderActivity) => void,
-  onToken: (token: string) => void,
-  generation?: ProviderGenerationOptions,
-  usageSource?: ProviderUsageSource
-): Promise<SendResult> {
-  emit({ kind: 'status', label: 'Inspecting the project', status: 'running' })
-  const context = inspectProject(workspaceDir)
-  emit({ kind: 'status', label: `Project context ready (${context.fileTree.length} entries)`, status: 'complete' })
-  emit({ kind: 'reasoning', label: 'Planning a safe workspace patch', status: 'running' })
-  const prompt = buildLocalExecutorPrompt({
-    goal,
-    workspaceContext: renderProjectContext(context),
-    previousAttempts: '',
-    validationCommands: ''
-  })
-  const generated = await provider.send(prompt, { model, signal, generation, usageSource }, () => {})
-  emit({ kind: 'reasoning', label: 'Workspace patch planned', status: 'complete' })
-  emit({ kind: 'file', label: 'Applying scoped file changes', status: 'running' })
-  const attempt = await executeLocalExecutorAttempt({
-    workspaceDir,
-    rawOutput: generated.text,
-    goal,
-    signal,
-    revertOnNoCommit: false
-  })
-  if (!attempt.action) {
-    throw new Error(attempt.errors[0] ?? 'The local model did not produce a safe workspace patch.')
-  }
-  for (const file of attempt.changedFiles) {
-    emit({ kind: 'file', label: file, detail: 'Changed', status: 'complete' })
-  }
-  for (const command of attempt.commandResults) {
-    emit({
-      kind: 'command',
-      label: command.cmd,
-      detail: command.passed ? 'Passed' : command.error ?? 'Failed',
-      status: command.passed ? 'complete' : 'error'
-    })
-  }
-  const validation = attempt.commandResults.length
-    ? `${attempt.commandResults.filter((item) => item.passed).length}/${attempt.commandResults.length} checks passed`
-    : 'No validation command was available'
-  const files = attempt.changedFiles.length
-    ? `\n\nChanged files:\n${attempt.changedFiles.map((file) => `- ${file}`).join('\n')}`
-    : ''
-  const text = `${attempt.action.summary}\n\n${validation}.${files}`.trim()
-  onToken(text)
-  return {
-    text,
-    usage: generated.usage,
-    model: generated.model,
-    raw: { score: attempt.score, errors: attempt.errors }
-  }
 }
 
 interface ProviderObservation {
@@ -946,7 +887,7 @@ export function registerChatIpc(): void {
       const workspaceInstruction = workspaceContext
         ? args.intent === 'plan'
           ? `You are Akorith's project planning agent. Inspect the current working directory and produce a concrete, ordered implementation plan with risks and validation steps. Do not edit files, install packages, commit, or run destructive commands in this turn.${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
-          : `You are Akorith's project coding agent. Work directly in the current working directory. Treat the user's explicit request as the concrete task: inspect the project, make the requested file changes, and run relevant checks. If the selected directory is empty, scaffold or create the requested project there instead of claiming no task was provided. Make reasonable, safe implementation assumptions and continue; ask a question only when a genuinely missing decision would materially change the result. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
+          : `You are Akorith's project coding agent. Work directly in the current working directory. Treat the user's explicit request as the concrete task: inspect the project, make the requested file changes, and run relevant checks. If the selected directory is empty, scaffold or create the requested project there instead of claiming no task was provided. Make reasonable, safe implementation assumptions and continue; ask a question only when a genuinely missing decision would materially change the result. Complete the task instead of only describing what should be done. Never push or expose secrets.\n\n${HEADLESS_WORKSPACE_GUIDANCE}\n\n${WORKSPACE_BROWSER_ACTION_INSTRUCTION}${workspaceTools ? `\n\n${workspaceTools}` : ''}\n\n`
         : ''
       const promptForProvider = `${workspaceInstruction}${built.prompt}`
       const observation = startProviderObservation(args, provider, workspaceContext?.projectPath)
@@ -980,7 +921,7 @@ export function registerChatIpc(): void {
         }
         try {
           result = workspaceContext?.projectPath && args.providerId === 'local' && args.intent !== 'plan'
-            ? await sendWorkspaceLocal(
+            ? await (await import('./local-workspace')).sendWorkspaceLocal(
                 provider,
                 args.prompt,
                 args.model,

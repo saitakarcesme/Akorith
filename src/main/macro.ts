@@ -67,7 +67,6 @@ import {
   buildLocalExecutorPrompt,
   executeLocalExecutorAttempt,
   renderLocalValidationEvidence,
-  rollbackLocalExecutorPatch,
   splitSuggestedCommands
 } from './local-executor'
 import {
@@ -1182,6 +1181,7 @@ async function runLocalExecutorCycle(
   }
 
   if (status !== 'committed' && attempt.rollback.length > 0 && !rolledBack) {
+    const { rollbackLocalExecutorPatch } = await import('./local-executor-quality')
     const rollbackResult = rollbackLocalExecutorPatch(attempt.rollback)
     rolledBack = rollbackResult.ok
     if (!rollbackResult.ok) {

@@ -1,5 +1,4 @@
 import { sendStructured } from '../local-runtime'
-import { runLocalValidationCommands } from '../local-executor'
 import { checkCommand } from '../safety'
 import { inspectProject, renderProjectContext } from '../project-loop/context'
 import { getAgent, recordAgentRun } from './store'
@@ -128,6 +127,7 @@ Rules: relative paths only, never delete, never touch secrets/.env/.git/node_mod
     let commandsRun = 0
     if (caps.canRunCommands && agent.allowedRoot && action.commands.length) {
       const safe = action.commands.filter((c) => checkCommand(c.cmd).ok)
+      const { runLocalValidationCommands } = await import('../local-executor-quality')
       const results = await runLocalValidationCommands(agent.allowedRoot, safe, 120_000, signal)
       for (const r of results) {
         logAgentEvent(run.id, agentId, 'command_run', r.cmd, r.passed ? 'passed' : `exit ${r.exitCode}`)

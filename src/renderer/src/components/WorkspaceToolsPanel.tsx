@@ -386,7 +386,7 @@ export default function WorkspaceToolsPanel({
         >
           {mountedTools.has('files') && (
             <Suspense fallback={<ToolPaneFallback label="Opening Files…" />}>
-              <WorkspaceFilesPanel project={project} />
+              <WorkspaceFilesPanel project={project} refreshKey={refreshKey} />
             </Suspense>
           )}
         </section>

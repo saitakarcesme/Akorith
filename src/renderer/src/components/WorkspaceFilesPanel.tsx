@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectRow } from '../../../preload/index.d'
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../workspaceFileTree'
 import { highlightWorkspaceCode } from '../workspaceSyntax'
@@ -63,7 +63,13 @@ function TreeBranch({
   )
 }
 
-export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }): JSX.Element {
+export default function WorkspaceFilesPanel({
+  project,
+  refreshKey
+}: {
+  project: ProjectRow
+  refreshKey?: string | number
+}): JSX.Element {
   const [files, setFiles] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [settledQuery, setSettledQuery] = useState('')
@@ -75,6 +81,7 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadSignal, setReloadSignal] = useState(0)
+  const refreshTokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (query === settledQuery) return
@@ -84,8 +91,11 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
 
   useEffect(() => {
     let cancelled = false
+    const refreshToken = `${project.id}:${String(refreshKey ?? '')}:${reloadSignal}`
+    const refreshFromDisk = refreshTokenRef.current !== refreshToken
+    refreshTokenRef.current = refreshToken
     setBusy(true)
-    void window.api.projects.files(project.id, settledQuery).then((next) => {
+    void window.api.projects.files(project.id, settledQuery, refreshFromDisk).then((next) => {
       if (cancelled) return
       const nextIndex = buildWorkspaceFileTree(next)
       setFiles(next)
@@ -101,7 +111,7 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
       if (!cancelled) setBusy(false)
     })
     return () => { cancelled = true }
-  }, [project.id, settledQuery, reloadSignal])
+  }, [project.id, settledQuery, reloadSignal, refreshKey])
 
   useEffect(() => {
     if (!selected) { setContent(''); return }
@@ -122,7 +132,7 @@ export default function WorkspaceFilesPanel({ project }: { project: ProjectRow }
       if (!cancelled) setBusy(false)
     })
     return () => { cancelled = true }
-  }, [project.id, selected])
+  }, [project.id, selected, reloadSignal, refreshKey])
 
   const requestEdit = (): void => {
     if (!selected) return

@@ -18,6 +18,61 @@ import type {
 } from './types'
 
 const DEFAULT_MODELS = ['default', 'claude-fable-5', 'claude-sonnet-5', 'claude-opus-5']
+const CLAUDE_CHAT_TIMEOUT_MS = 300_000
+const CLAUDE_WORKSPACE_TIMEOUT_MS = 600_000
+
+export const CLAUDE_WORKSPACE_ALLOWED_TOOLS = [
+  'Read',
+  'Glob',
+  'Grep',
+  'Edit',
+  'Write'
+] as const
+
+export const CLAUDE_WORKSPACE_DISALLOWED_TOOLS = [
+  'Bash',
+  'Bash(*)'
+] as const
+
+export const CLAUDE_PLAN_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep'] as const
+export const CLAUDE_EMPTY_MCP_CONFIG = JSON.stringify({ mcpServers: {} })
+
+export function claudeRequestTimeoutMs(
+  options: Pick<SendOptions, 'intent' | 'workingDirectory'>
+): number {
+  return options.intent === 'execute' && Boolean(options.workingDirectory)
+    ? CLAUDE_WORKSPACE_TIMEOUT_MS
+    : CLAUDE_CHAT_TIMEOUT_MS
+}
+
+export function buildClaudeCliArgs(
+  opts: Pick<SendOptions, 'workingDirectory' | 'intent' | 'attachments' | 'model'>
+): string[] {
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
+  if (opts.workingDirectory) {
+    const planning = opts.intent === 'plan'
+    // Keep OAuth/keychain auth available while excluding user/project/local
+    // settings, hooks, plugins, commands, and MCP servers for this writable
+    // non-interactive child.
+    args.push('--setting-sources=')
+    args.push('--strict-mcp-config', '--mcp-config', CLAUDE_EMPTY_MCP_CONFIG)
+    args.push('--disable-slash-commands')
+    args.push('--permission-mode', planning ? 'plan' : 'acceptEdits')
+    // Claude print mode cannot answer interactive permission prompts. Give it
+    // only native file tools; all shell execution is denied and host-selected
+    // syntax validation happens after the file patch.
+    args.push(
+      '--allowedTools',
+      (planning ? CLAUDE_PLAN_ALLOWED_TOOLS : CLAUDE_WORKSPACE_ALLOWED_TOOLS).join(',')
+    )
+    args.push('--disallowedTools', CLAUDE_WORKSPACE_DISALLOWED_TOOLS.join(','))
+  }
+  for (const directory of [...new Set((opts.attachments ?? []).map((item) => dirname(item.path)).filter(Boolean))]) {
+    args.push('--add-dir', directory)
+  }
+  if (opts.model && opts.model !== 'default') args.push('--model', opts.model)
+  return args
+}
 
 export class ClaudeProvider implements Provider {
   readonly id = 'claude'
@@ -73,14 +128,7 @@ export class ClaudeProvider implements Provider {
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
-    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
-    if (opts.workingDirectory) args.push('--permission-mode', opts.intent === 'plan' ? 'plan' : 'acceptEdits')
-    for (const directory of [...new Set((opts.attachments ?? []).map((item) => dirname(item.path)).filter(Boolean))]) {
-      args.push('--add-dir', directory)
-    }
-    if (opts.model && opts.model !== 'default') {
-      args.push('--model', opts.model)
-    }
+    const args = buildClaudeCliArgs(opts)
 
     let streamedText = ''
     let resultEvent: ClaudeResultEvent | null = null
@@ -99,7 +147,10 @@ export class ClaudeProvider implements Provider {
     const res = await runCli('claude', args, {
       stdin: prompt,
       signal: opts.signal,
-      timeoutMs: 300_000,
+      // Large workspace writes and validation passes can remain productive
+      // beyond five minutes. Preserve the existing chat/plan bound while
+      // giving execute turns the same ten-minute window as other CLI agents.
+      timeoutMs: claudeRequestTimeoutMs(opts),
       ...providerRuntimeWatchdog('claude', 'Claude', opts.onActivity),
       cwd: opts.workingDirectory ?? homedir(),
       onStdoutLine: (line) => {
