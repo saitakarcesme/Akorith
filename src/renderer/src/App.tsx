@@ -16,6 +16,7 @@ import type {
   WorkspaceToolId,
   WorkspaceToolRequest
 } from './components/WorkspaceToolsPanel'
+import type { WorkspaceWorkflowSnapshot } from './workspaceWorkflow'
 import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } from '../../preload/index.d'
 
 const Dashboard = lazy(() => import('./components/Dashboard'))
@@ -372,6 +373,7 @@ export default function App(): JSX.Element {
     try { return localStorage.getItem('akorith.workspaceToolsOpen') === 'true' } catch { return false }
   })
   const [workspaceToolRequest, setWorkspaceToolRequest] = useState<WorkspaceToolRequest | null>(null)
+  const [workspaceWorkflow, setWorkspaceWorkflow] = useState<WorkspaceWorkflowSnapshot | null>(null)
   const [toolAutoOpenBlocked, setToolAutoOpenBlocked] = useState(false)
   const [chromeSidebarWidth, setChromeSidebarWidth] = useState(initialChromeSidebarWidth)
   const [navBackStack, setNavBackStack] = useState<AppView[]>([])
@@ -406,7 +408,7 @@ export default function App(): JSX.Element {
   }): void => {
     if (
       toolAutoOpenBlocked ||
-      (request.reason === 'activity' && request.tool === 'terminal') ||
+      request.reason === 'activity' ||
       view !== 'workspace' ||
       activeProject?.id !== request.projectId ||
       activeSessionIdRef.current !== request.sessionId
@@ -834,6 +836,7 @@ export default function App(): JSX.Element {
           onPendingChange={setSessionPending}
           onWorkspaceContentChange={bumpWorkspaceContent}
           onWorkspaceToolRequest={requestWorkspaceTool}
+          onWorkspaceStepsChange={setWorkspaceWorkflow}
         />
         <Suspense fallback={null}>
           <WorkspaceToolsPanel
@@ -843,6 +846,7 @@ export default function App(): JSX.Element {
             active={view === 'workspace'}
             refreshKey={`${historyVersion}:${workspaceContentVersion}`}
             requestedTool={workspaceToolRequest}
+            workflow={workspaceWorkflow}
             onOpen={openWorkspaceTools}
             onClose={toggleWorkspaceTools}
           />

@@ -197,6 +197,7 @@ export class ChatGPTProvider implements Provider {
         timeoutMs: 600_000,
         ...providerRuntimeWatchdog('chatgpt', 'Codex', opts.onActivity),
         cwd: opts.workingDirectory ?? homedir(),
+        excludedExecutableDirectory: opts.workingDirectory ?? null,
         // Akorith is frequently launched from another coding-agent desktop.
         // Do not let that parent task's permission/thread identity redefine the
         // fresh Codex CLI sandbox. CODEX_HOME is deliberately preserved.

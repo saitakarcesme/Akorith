@@ -5,6 +5,11 @@ import { spawn } from 'child_process'
 import { accessSync, constants, existsSync } from 'fs'
 import { networkInterfaces } from 'os'
 import { delimiter, join } from 'path'
+import {
+  BEYEFENDI_MODEL_ID,
+  getBeyefendiRuntimeStatus,
+  sendBeyefendi
+} from '../beyefendi-runtime'
 import type {
   Provider,
   ProviderAvailability,
@@ -365,6 +370,9 @@ export class LocalProvider implements Provider {
   }
 
   async isAvailable(): Promise<ProviderAvailability> {
+    // Beyefendi is a managed Local runtime and remains usable when the
+    // companion Ollama daemon is temporarily offline.
+    if (getBeyefendiRuntimeStatus().available) return { ok: true }
     try {
       await this.ensureReachable(2_000, true)
       return { ok: true }
@@ -398,31 +406,45 @@ export class LocalProvider implements Provider {
   }
 
   async listModels(): Promise<string[]> {
+    const beyefendiReady = getBeyefendiRuntimeStatus().available
     if (this.modelCache && Date.now() - this.modelCache.capturedAt < MODEL_CACHE_MS) {
-      return this.modelCache.models
+      return beyefendiReady
+        ? [...new Set([BEYEFENDI_MODEL_ID, ...this.modelCache.models])]
+        : this.modelCache.models
     }
-    await this.ensureReachable(5_000, true)
-    return this.modelCache?.models ?? []
+    try {
+      await this.ensureReachable(5_000, true)
+    } catch (error) {
+      if (beyefendiReady) return [BEYEFENDI_MODEL_ID]
+      throw error
+    }
+    const models = this.modelCache?.models ?? []
+    return beyefendiReady
+      ? [...new Set([BEYEFENDI_MODEL_ID, ...models])]
+      : models
   }
 
   async discover(force = false): Promise<ProviderDiscovery> {
     if (!force && this.modelCache && Date.now() - this.modelCache.capturedAt < MODEL_CACHE_MS) {
-      return { available: { ok: true }, models: this.modelCache.models }
+      return { available: { ok: true }, models: await this.listModels() }
     }
     const available = await this.isAvailable()
     return {
       available,
-      models: available.ok ? this.modelCache?.models ?? [] : []
+      models: available.ok ? await this.listModels() : []
     }
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
-    const baseUrl = await this.ensureReachable(5_000, true)
     let model = opts.model
     if (!model || model === 'default') {
       model = (await this.listModels())[0]
       if (!model) throw new Error('No Ollama models installed — run `ollama pull <model>` first')
     }
+    if (model === BEYEFENDI_MODEL_ID) {
+      return sendBeyefendi(prompt, { ...opts, model }, onToken)
+    }
+    const baseUrl = await this.ensureReachable(5_000, true)
 
     const generationOptions = buildOllamaGenerationOptions(opts)
     const structuredOutputOptions = buildOllamaStructuredOutputOptions(opts)

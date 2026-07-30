@@ -10,6 +10,12 @@ import {
   type OllamaRemoteProfile
 } from './config'
 import { getTailscaleStatus, tailscaleOllamaCandidates, type TailscaleStatus } from './remote-runtime/tailscale'
+import {
+  getBeyefendiRuntimeStatus,
+  setupBeyefendiRuntime,
+  type BeyefendiRuntimeStatus,
+  type BeyefendiSetupResult
+} from './beyefendi-runtime'
 
 export type OllamaConnectionTestResult =
   | { ok: true; baseUrl: string; models: string[]; modelCount: number }
@@ -384,6 +390,8 @@ export function registerOllamaConnectionIpc(): void {
 
   // Phase 33.14: try configured → last → enabled remote profiles, pick first healthy.
   ipcMain.handle('ollama:autoConnect', async (): Promise<OllamaAutoConnectResult> => autoConnectOllama())
+  ipcMain.handle('ollama:beyefendiStatus', (): BeyefendiRuntimeStatus => getBeyefendiRuntimeStatus())
+  ipcMain.handle('ollama:setupBeyefendi', async (): Promise<BeyefendiSetupResult> => setupBeyefendiRuntime())
 
   // Phase 42 (Remote Ollama): runtime-source summary + presentation readiness, and a
   // read-only Tailscale status for setup guidance.

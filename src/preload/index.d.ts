@@ -2433,12 +2433,32 @@ export interface OllamaShareInfo {
   endpoints: OllamaEndpointSuggestion[]
 }
 
+export interface BeyefendiRuntimeStatus {
+  repoId: 'Ibrahimsait/Beyefendi-v2'
+  modelId: 'beyefendi-v2-hf'
+  baseModel: 'Qwen/Qwen3.5-9B'
+  adapterDir: string
+  adapterDownloaded: boolean
+  runtimeReady: boolean
+  available: boolean
+  stage: 'not_installed' | 'adapter_downloaded' | 'ready'
+  note: string
+}
+
+export interface BeyefendiSetupResult {
+  ok: boolean
+  status: BeyefendiRuntimeStatus
+  error?: string
+}
+
 export interface OllamaApi {
   getSettings(): Promise<OllamaConnectionSettings>
   getShareInfo(): Promise<OllamaShareInfo>
   setSettings(args: Partial<OllamaConnectionSettings>): Promise<OllamaSettingsResponse>
   testEndpoint(baseUrl: string): Promise<OllamaConnectionTestResult>
   autoConnect(): Promise<OllamaAutoConnectResult>
+  beyefendiStatus(): Promise<BeyefendiRuntimeStatus>
+  setupBeyefendi(): Promise<BeyefendiSetupResult>
   runtimeStatus(): Promise<RuntimeStatus>
   tailscaleStatus(): Promise<TailscaleStatus>
 }

@@ -65,6 +65,7 @@ async function main(): Promise<void> {
   await app.whenReady()
   try {
     initDb()
+    verifyLegacyV3ResearchSchemaMigration()
     verifySchema()
     verifyAutoresearchRoundTrip()
     verifyDiscordCredentialProtection()
@@ -84,6 +85,25 @@ async function main(): Promise<void> {
     rmSync(isolatedUserData, { recursive: true, force: true })
     app.quit()
   }
+}
+
+function verifyLegacyV3ResearchSchemaMigration(): void {
+  getDb().exec(`
+    ALTER TABLE research_jobs DROP COLUMN research_mode;
+    ALTER TABLE research_jobs DROP COLUMN experiment_config_json;
+    ALTER TABLE research_jobs DROP COLUMN experiment_state_json;
+  `)
+  getDb().pragma('user_version = 3')
+  closeDb()
+  initDb()
+
+  const researchJobColumns = new Set(
+    (getDb().prepare('PRAGMA table_info(research_jobs)').all() as Array<{ name: string }>).map((row) => row.name)
+  )
+  for (const column of ['research_mode', 'experiment_config_json', 'experiment_state_json']) {
+    assert.equal(researchJobColumns.has(column), true, `version 3 databases must migrate the missing ${column} column`)
+  }
+  assert.equal(getDb().pragma('user_version', { simple: true }), 4)
 }
 
 function verifyAutoresearchRoundTrip(): void {
@@ -242,6 +262,9 @@ function verifySchema(): void {
   )
   assert.equal(researchJobColumns.has('active_elapsed_ms'), true)
   assert.equal(researchJobColumns.has('active_accounted_at'), true)
+  assert.equal(researchJobColumns.has('research_mode'), true)
+  assert.equal(researchJobColumns.has('experiment_config_json'), true)
+  assert.equal(researchJobColumns.has('experiment_state_json'), true)
 }
 
 function verifyActiveResearchClock(): void {

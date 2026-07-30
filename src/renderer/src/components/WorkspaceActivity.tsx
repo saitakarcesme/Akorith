@@ -6,7 +6,10 @@ import {
   workspaceActivityDurationMs,
   type WorkspaceActivityFeedItem
 } from '../workspaceActivityFeed'
-import { buildWorkspaceActivityEventNarrative } from '../workspaceActivityNarrative'
+import {
+  buildWorkspaceActivityEventNarrative,
+  buildWorkspaceActivityNarrative
+} from '../workspaceActivityNarrative'
 
 interface WorkspaceActivityProps {
   activities: ChatActivity[]
@@ -15,6 +18,7 @@ interface WorkspaceActivityProps {
   active: boolean
   failed?: boolean
   projectName?: string
+  taskPrompt?: string
 }
 
 const NARRATIVE_REVEAL_INTERVAL_MS = 38
@@ -96,11 +100,14 @@ function WorkspaceActivity({
   endedAt,
   active,
   failed = false,
-  projectName = 'the selected project'
+  projectName = 'the selected project',
+  taskPrompt
 }: WorkspaceActivityProps): JSX.Element {
   const documentVisible = useDocumentVisible()
   const [now, setNow] = useState(Date.now())
-  const [collapsed, setCollapsed] = useState(!active)
+  // Lead with one Codex-like narrative paragraph. Detailed provider events
+  // stay available behind the duration disclosure and in the Steps tool.
+  const [collapsed, setCollapsed] = useState(true)
 
   useEffect(() => {
     if (!active || !documentVisible) return
@@ -110,13 +117,25 @@ function WorkspaceActivity({
   }, [active, documentVisible])
 
   useEffect(() => {
-    setCollapsed(!active)
+    setCollapsed(true)
   }, [active])
 
   const feed = useMemo(
     () => buildWorkspaceActivityFeed(activities).filter((item) => !REDUNDANT_EVENT.test(item.activity.label.trim())),
     [activities]
   )
+  const narrative = useMemo(() => {
+    const latest = feed.at(-1)?.activity
+    return latest
+      ? buildWorkspaceActivityEventNarrative(latest, projectName)
+      : buildWorkspaceActivityNarrative({
+          activities,
+          projectName,
+          taskPrompt,
+          active,
+          failed
+        })
+  }, [active, activities, failed, feed, projectName, taskPrompt])
   const recordedEnd = useMemo(
     () => feed.reduce((latest, item) => Math.max(latest, item.endedAt ?? item.activity.timestamp), startedAt),
     [feed, startedAt]
@@ -150,6 +169,9 @@ function WorkspaceActivity({
         </button>
         {waiting && <span className="workspace-activity-last-update">Last activity {elapsedLabel(now - latestActivityAt)} ago</span>}
       </div>
+      <p className="workspace-activity-narrative">
+        <ProgressiveNarrative text={narrative} animate={active} />
+      </p>
       {!collapsed && <div className="workspace-activity-rule" />}
       {!collapsed && (
         <div className="workspace-activity-feed" aria-label="Workspace activity">

@@ -169,6 +169,7 @@ export class OpenCodeProvider implements Provider {
       timeoutMs: 600_000,
       ...providerRuntimeWatchdog('opencode', 'OpenCode', opts.onActivity),
       cwd: opts.workingDirectory ?? homedir(),
+      excludedExecutableDirectory: opts.workingDirectory ?? null,
       env: opts.workingDirectory
         ? {
             // Electron keeps the app launch directory in PWD even when

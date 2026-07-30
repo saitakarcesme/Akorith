@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { ContextInfo, GitStatusResult, ProjectRow, ProviderInfo, RouterSuggestion } from '../../../preload/index.d'
 import type { ChatMode, HistorySelection } from '../App'
 import { insertWorkspaceLoopCommand, parseWorkspaceLoopCommand, workspaceLoopHint } from '../workspaceLoopCommand'
-import { deriveWorkspaceWorkflow } from '../workspaceWorkflow'
+import { deriveWorkspaceWorkflow, type WorkspaceWorkflowSnapshot } from '../workspaceWorkflow'
 import { mergeWorkspaceActivityEvent } from '../workspaceActivityFeed'
 import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../workspaceLiveChanges'
 import { workspaceRequestTimeoutMs } from '../workspaceRequestTimeout'
@@ -10,7 +10,6 @@ import { FileIcon, FolderIcon, PaperclipIcon, PlanIcon, PlusIcon, QueueIcon, Sen
 import type { ChatMessage, ComposerAttachment, QueuedTurn } from './chat-types'
 import { ComposerSendButton } from './CreationPrimitives'
 import ModelPicker from './ModelPicker'
-import WorkspaceStepDock from './WorkspaceStepDock'
 import WorkspaceLiveChangesCard from './WorkspaceLiveChangesCard'
 import type { WorkspaceToolId } from './WorkspaceToolsPanel'
 import { hydrateStoredChatMessages } from './chat-history'
@@ -37,6 +36,7 @@ interface ChatPanelProps {
     tool: WorkspaceToolId
     reason: 'activity' | 'changes'
   }) => void
+  onWorkspaceStepsChange?: (snapshot: WorkspaceWorkflowSnapshot | null) => void
 }
 
 const MAX_ATTACHMENTS = 8
@@ -103,7 +103,8 @@ export default function ChatPanel({
   pendingSessions,
   onPendingChange,
   onWorkspaceContentChange,
-  onWorkspaceToolRequest
+  onWorkspaceToolRequest,
+  onWorkspaceStepsChange
 }: ChatPanelProps): JSX.Element {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null)
   const [providerId, setProviderId] = useState('')
@@ -1096,6 +1097,30 @@ export default function ChatPanel({
       latestWorkspaceStatus
     ]
   )
+  useEffect(() => {
+    if (!isWorkspace || !activeProject || !activeSessionId || !latestWorkspaceRun) {
+      onWorkspaceStepsChange?.(null)
+      return
+    }
+    onWorkspaceStepsChange?.({
+      projectId: activeProject.id,
+      sessionId: activeSessionId,
+      prompt: latestWorkspacePrompt,
+      steps: latestWorkspaceSteps,
+      active: latestWorkspaceStatus === 'streaming',
+      failed: latestWorkspaceStatus === 'error',
+      updatedAt: latestWorkspaceRun.endedAt ?? latestWorkspaceRun.startedAt ?? Date.now()
+    })
+  }, [
+    activeProject,
+    activeSessionId,
+    isWorkspace,
+    latestWorkspacePrompt,
+    latestWorkspaceRun,
+    latestWorkspaceStatus,
+    latestWorkspaceSteps,
+    onWorkspaceStepsChange
+  ])
   const busyRequestId = (activeSessionId ? activeRequests[activeSessionId] : undefined) ?? startingTurn?.id
   const isStopping = Boolean(busyRequestId && stoppingRequests[busyRequestId])
   const reviewLiveChanges = useCallback((): void => {
@@ -1279,7 +1304,6 @@ export default function ChatPanel({
                 )}
               </div>
               <div className="composer-dock">
-                {latestWorkspaceSteps.length > 0 && <WorkspaceStepDock steps={latestWorkspaceSteps} active={latestWorkspaceRun?.status === 'streaming'} />}
                 {liveWorkspaceChanges?.files.length ? <WorkspaceLiveChangesCard changes={liveWorkspaceChanges} onReview={reviewLiveChanges} /> : null}
                 {composer}
               </div>

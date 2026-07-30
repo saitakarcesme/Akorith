@@ -330,6 +330,8 @@ const ollama = Object.freeze({
   testEndpoint: (baseUrl: string): Promise<unknown> => ipcRenderer.invoke('ollama:testEndpoint', { baseUrl }),
   // Phase 33.14: resolve the first healthy endpoint (configured → last → profiles).
   autoConnect: (): Promise<unknown> => ipcRenderer.invoke('ollama:autoConnect'),
+  beyefendiStatus: (): Promise<unknown> => ipcRenderer.invoke('ollama:beyefendiStatus'),
+  setupBeyefendi: (): Promise<unknown> => ipcRenderer.invoke('ollama:setupBeyefendi'),
   // Phase 42 (Remote Ollama): runtime-source summary + readiness, and Tailscale status.
   runtimeStatus: (): Promise<unknown> => ipcRenderer.invoke('runtime:status'),
   tailscaleStatus: (): Promise<unknown> => ipcRenderer.invoke('runtime:tailscaleStatus')

@@ -153,6 +153,10 @@ export class ClaudeProvider implements Provider {
       timeoutMs: claudeRequestTimeoutMs(opts),
       ...providerRuntimeWatchdog('claude', 'Claude', opts.onActivity),
       cwd: opts.workingDirectory ?? homedir(),
+      // A normal chat runs from the trusted home directory, where npm also
+      // installs Claude on Windows. Exclude only an actual project workspace
+      // from executable discovery; otherwise Akorith rejects its own CLI.
+      excludedExecutableDirectory: opts.workingDirectory ?? null,
       onStdoutLine: (line) => {
         let event: ClaudeStreamLine
         try {

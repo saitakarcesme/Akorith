@@ -130,18 +130,18 @@ assert.doesNotMatch(
 )
 assert.match(
   providerSource,
-  /'Get-ChildItem -Force':\s*'allow'/,
-  'OpenCode must allow the exact safe Windows hidden-file inspection command'
+  /OPENCODE_WORKSPACE_SHELL_PERMISSIONS\s*=\s*\{\s*'\*':\s*'deny'/,
+  'OpenCode workspace execution must keep shell access fully denied'
 )
 assert.doesNotMatch(
   providerSource,
-  /'Get-ChildItem \*':\s*'allow'/,
-  'OpenCode must not allow arbitrary Get-ChildItem argument chains'
+  /'Get-ChildItem[^']*':\s*'allow'/,
+  'OpenCode must not expose a shell inspection exception when native read/list tools are available'
 )
 assert.match(
   providerSource,
-  /Do not chain commands with semicolons/,
-  'OpenCode must tell the model to keep safe Windows inspection commands separate'
+  /Shell, LSP, external plugins, and MCP tools are unavailable/,
+  'OpenCode must tell the model to use the native project tools instead of shell fallbacks'
 )
 assert.match(
   sendSource,

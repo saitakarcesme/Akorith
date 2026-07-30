@@ -12,6 +12,14 @@ export interface RunCliOptions {
   signal?: AbortSignal
   timeoutMs?: number
   /**
+   * Directory whose executable shims must never be selected. By default this
+   * remains the child cwd, preserving the project-boundary protection for
+   * command and validation calls. Provider chat calls that deliberately use a
+   * trusted home-directory cwd can pass null so CLIs installed under the
+   * user's home (for example %APPDATA%\npm\claude.cmd) remain discoverable.
+   */
+  excludedExecutableDirectory?: string | null
+  /**
    * Emit one diagnostic when a live process has produced no stdout/stderr for
    * this long. This is informational; the process keeps running.
    */
@@ -31,6 +39,8 @@ export interface RunCliOptions {
    * locations such as CODEX_HOME remain available.
    */
   unsetEnv?: string[]
+  /** Called for raw stdout chunks as they arrive. Keep parsing bounded. */
+  onStdoutChunk?: (chunk: string) => void
   /** Called once per complete stdout line, as output arrives. */
   onStdoutLine?: (line: string) => void
   /**
@@ -407,7 +417,11 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
         if (actual.toLowerCase() === key.toLowerCase()) delete childEnv[actual]
       }
     }
-    const launch = resolveCliLaunch(command, childEnv, options.cwd)
+    const excludedExecutableDirectory =
+      options.excludedExecutableDirectory === undefined
+        ? options.cwd
+        : options.excludedExecutableDirectory ?? undefined
+    const launch = resolveCliLaunch(command, childEnv, excludedExecutableDirectory)
     const child = spawn(launch.executable, [...launch.prefixArgs, ...args], {
       shell: false,
       windowsHide: true,
@@ -545,6 +559,7 @@ export function runCli(command: string, args: string[], options: RunCliOptions =
       recordOutputActivity()
       const text = chunk.toString('utf8')
       stdoutChunks.push(text)
+      options.onStdoutChunk?.(text)
       if (options.onStdoutLine) {
         lineBuffer += text
         const lines = lineBuffer.split(/\r?\n/)

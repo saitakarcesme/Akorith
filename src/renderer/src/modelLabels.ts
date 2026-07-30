@@ -5,6 +5,7 @@ function titlePart(part: string): string {
 }
 
 function prettySlug(model: string): string {
+  if (model === 'beyefendi-v2-hf') return 'Beyefendi v2'
   if (model.startsWith('gpt-')) {
     const rest = model.slice(4).split('-').map(titlePart).join(' ')
     return `GPT-${rest}`

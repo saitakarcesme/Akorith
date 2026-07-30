@@ -42,7 +42,7 @@ const researchService = read('src/main/research/service.ts')
 const researchIpc = read('src/main/research/ipc.ts')
 const researchSynthesize = read('src/main/research/synthesize.ts')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
-const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
+const workspaceSteps = read('src/renderer/src/components/WorkspaceStepsPanel.tsx')
 const projectPreview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
 const testPage = read('src/renderer/src/components/TestPage.tsx')
 const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
@@ -177,7 +177,7 @@ check(
 )
 check(
   workspaceActivity.includes('export default memo(WorkspaceActivity)') &&
-    workspaceStepDock.includes('export default memo(WorkspaceStepDock)') &&
+    workspaceSteps.includes('export default memo(WorkspaceStepsPanel)') &&
     workspaceActivity.includes('const feed = useMemo') &&
     workspaceActivity.includes('const recordedEnd = useMemo'),
   'stable Workspace progress displays skip unrelated chat renders'

@@ -101,7 +101,7 @@ const researchEssay = read('src/renderer/src/components/ResearchEssay.tsx')
 const researchOperations = read('src/renderer/src/components/ResearchOperationalDetails.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceLiveChangesCard = read('src/renderer/src/components/WorkspaceLiveChangesCard.tsx')
-const workspaceStepDock = read('src/renderer/src/components/WorkspaceStepDock.tsx')
+const workspaceSteps = read('src/renderer/src/components/WorkspaceStepsPanel.tsx')
 const workspaceTools = read('src/renderer/src/components/WorkspaceToolsPanel.tsx')
 const workspaceFiles = read('src/renderer/src/components/WorkspaceFilesPanel.tsx')
 const bottomWorkbench = read('src/renderer/src/components/BottomWorkbench.tsx')
@@ -422,8 +422,8 @@ check(
   'Browser input uses the responsive capture cadence and validates keys/wheel deltas inside verified loopback sessions'
 )
 check(
-  app.includes("(request.reason === 'activity' && request.tool === 'terminal')"),
-  'background command activity never auto-opens the unrelated interactive Terminal tab'
+  app.includes("request.reason === 'activity'"),
+  'background provider activity never auto-opens a workspace tool before the user asks for it'
 )
 check(
   workspaceActivity.includes('ProgressiveNarrative') &&
@@ -673,20 +673,16 @@ check(
   'Workspace activity interleaves progressive event copy and exposes a live Review changes receipt'
 )
 check(
-  !workspaceStepDock.includes('const STEPS') &&
-  workspaceStepDock.includes('steps.map') &&
-  !workspaceStepDock.includes('<i') &&
-  workspaceStepDock.includes('Project workflow') &&
+  workspaceSteps.includes('snapshot.steps.map') &&
+  workspaceSteps.includes('Thinking before opening steps') &&
+  workspaceTools.includes("{ id: 'steps', label: 'Steps'") &&
+  workspaceTools.includes("tab.tool === 'steps'") &&
+  workspaceTools.includes('<WorkspaceStepsPanel') &&
   chat.includes('deriveWorkspaceWorkflow') &&
-  selectorBlocks(stylesCss, '.workspace-step').some((block) =>
-    /border\s*:\s*1px solid var\(--border-soft\)/.test(block) &&
-    /background\s*:\s*var\(--bg-chat\)/.test(block)
-  ) &&
-  selectorBlocks(stylesCss, '.workspace-step-popover').some((block) =>
-    /background\s*:\s*var\(--bg-chat\)/.test(block) &&
-    !/(?:purple|gradient)/i.test(block)
-  ),
-  'Workspace workflow uses task-derived steps in a neutral pill and flat iconless popup'
+  !chat.includes('<WorkspaceStepDock') &&
+  workspaceActivity.includes('workspace-activity-narrative') &&
+  replicaCss.includes('.workspace-steps-panel'),
+  'Workspace workflow lives beside Review, Terminal, Browser, Computer Use, and Files and waits for real provider actions'
 )
 
 const derivedWorkflow = deriveWorkspaceWorkflow({
@@ -705,6 +701,19 @@ check(
   derivedWorkflow.some((step) => step.title.includes('npm run test')) &&
   derivedWorkflow.every((step) => !['Prepare', 'Understand', 'Plan', 'Work', 'Validate', 'Finish'].includes(step.title)),
   'derived Workspace workflow reflects the actual request, file and validation command'
+)
+const waitingWorkflow = deriveWorkspaceWorkflow({
+  prompt: 'Create a single-file fighting game in index.html',
+  projectName: 'aicompanion',
+  activities: [
+    { kind: 'status', label: 'Preparing project context', status: 'running', timestamp: 1 },
+    { kind: 'status', label: 'Claude session started', status: 'complete', timestamp: 2 }
+  ],
+  active: true
+})
+check(
+  waitingWorkflow.length === 0,
+  'Workspace does not manufacture steps from the prompt before the provider reports concrete reasoning or work'
 )
 check(
   !app.includes("const ProjectLoopPage = lazy") &&
@@ -777,6 +786,18 @@ check(
   composerFocusBlocks.length > 0 &&
   composerFocusBlocks.every((block) => !/(?:--blue|#339cff)/i.test(block)),
   'composer focus treatment has no blue border'
+)
+const researchComposerFocusBlocks = [
+  ...selectorBlocks(replicaCss, '.research-composer-box textarea:focus'),
+  ...selectorBlocks(replicaCss, '.research-composer-box textarea:focus-visible')
+]
+check(
+  researchComposerFocusBlocks.length > 0 &&
+    researchComposerFocusBlocks.every((block) =>
+      /outline\s*:\s*none/.test(block) &&
+      /box-shadow\s*:\s*none/.test(block)
+    ),
+  'Research prompt keeps its composer surface borderless while focused'
 )
 const finalComposerBox = selectorBlocks(replicaCss, '.composer-box')
   .filter((block) => /border-radius\s*:/.test(block))

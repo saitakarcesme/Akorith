@@ -9,6 +9,7 @@ import type {
   AgentSessionMode,
   AgentStatus,
   BridgeSettings,
+  BeyefendiRuntimeStatus,
   DigestSettings,
   ControllerConfigView,
   ControllerDocs,
@@ -223,6 +224,9 @@ export default function SettingsCenter({
   const [ollamaShare, setOllamaShare] = useState<OllamaShareInfo | null>(null)
   const [ollamaBusy, setOllamaBusy] = useState<'test' | 'save' | null>(null)
   const [ollamaStatus, setOllamaStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  const [beyefendiStatus, setBeyefendiStatus] = useState<BeyefendiRuntimeStatus | null>(null)
+  const [beyefendiBusy, setBeyefendiBusy] = useState(false)
+  const [beyefendiNotice, setBeyefendiNotice] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
   // Phase 33.14: auto-connect (configured → last → remote profiles by priority).
   const [autoConnectBusy, setAutoConnectBusy] = useState(false)
   const [autoConnectInfo, setAutoConnectInfo] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null)
@@ -275,6 +279,7 @@ export default function SettingsCenter({
       setOllamaEndpoint('http://localhost:11434')
     })
     void window.api.ollama.getShareInfo().then(setOllamaShare).catch(() => setOllamaShare(null))
+    void window.api.ollama.beyefendiStatus().then(setBeyefendiStatus).catch(() => setBeyefendiStatus(null))
     void window.api.agent.list().then(setAgentAdapters).catch(() => setAgentAdapters([]))
     void window.api.agent.listSessions().then(setAgentSessions).catch(() => setAgentSessions([]))
     void window.api.agent.listRuntimeAttachments().then(setRuntimeAttachments).catch(() => setRuntimeAttachments([]))
@@ -374,6 +379,31 @@ export default function SettingsCenter({
       setOllamaStatus({ kind: 'ok', text: `Copied ${shortEndpointLabel(endpoint.baseUrl)}` })
     } catch {
       setOllamaStatus({ kind: 'info', text: `Selected ${shortEndpointLabel(endpoint.baseUrl)}` })
+    }
+  }
+
+  const setupBeyefendi = async (): Promise<void> => {
+    setBeyefendiBusy(true)
+    setBeyefendiNotice({
+      kind: 'info',
+      text: 'Preparing the private adapter and its isolated CUDA runtime. The first setup can take several minutes.'
+    })
+    try {
+      const result = await window.api.ollama.setupBeyefendi()
+      setBeyefendiStatus(result.status)
+      setBeyefendiNotice(
+        result.ok
+          ? { kind: 'ok', text: 'Beyefendi v2 is ready in the Local model picker.' }
+          : { kind: 'error', text: result.error ?? 'Beyefendi v2 setup failed.' }
+      )
+      if (result.ok) onRefreshProviders()
+    } catch (error) {
+      setBeyefendiNotice({
+        kind: 'error',
+        text: error instanceof Error ? error.message : String(error)
+      })
+    } finally {
+      setBeyefendiBusy(false)
     }
   }
 
@@ -914,6 +944,42 @@ export default function SettingsCenter({
                   </div>
                   )
                 })}
+              </div>
+
+              <div className="local-featured-model" aria-label="Beyefendi v2 local model">
+                <div className="local-featured-model-mark">
+                  <img src={ollamaLogo} alt="" />
+                </div>
+                <div className="local-featured-model-copy">
+                  <div>
+                    <strong>Beyefendi v2</strong>
+                    <span className={`settings-chip ${beyefendiStatus?.available ? 'is-ok' : 'is-info'}`}>
+                      {beyefendiStatus?.available ? 'Ready' : beyefendiStatus?.adapterDownloaded ? 'Runtime needed' : 'Private HF model'}
+                    </span>
+                  </div>
+                  <p>
+                    Your private <code>Ibrahimsait/Beyefendi-v2</code> QLoRA adapter on
+                    <code> Qwen/Qwen3.5-9B</code>. Ollama currently rejects this Qwen3.5
+                    adapter architecture, so Akorith runs it locally through an isolated
+                    Hugging Face PEFT/CUDA runtime and keeps it in the same Local model picker.
+                  </p>
+                  <small>{beyefendiStatus?.note ?? 'Checking the local adapter…'}</small>
+                  {beyefendiNotice && <div className={`ollama-status is-${beyefendiNotice.kind}`}>{beyefendiNotice.text}</div>}
+                </div>
+                <button
+                  type="button"
+                  className={beyefendiStatus?.available ? '' : 'is-primary'}
+                  disabled={beyefendiBusy}
+                  onClick={() => void setupBeyefendi()}
+                >
+                  {beyefendiBusy
+                    ? 'Setting up…'
+                    : beyefendiStatus?.available
+                      ? 'Verify / refresh'
+                      : beyefendiStatus?.adapterDownloaded
+                        ? 'Finish setup'
+                        : 'Install locally'}
+                </button>
               </div>
 
               <div className="settings-divider" />

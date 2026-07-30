@@ -360,9 +360,6 @@ textarea:focus-visible,
 .send-button { width: 34px !important; height: 34px !important; }
 
 .workspace-activity { margin-bottom: 13px; }
-.workspace-step-dock { z-index: 55 !important; padding-bottom: 7px !important; }
-.workspace-step { min-height: 28px; border-radius: var(--radius-pill) !important; }
-.workspace-step-popover { border-radius: 8px !important; }
 
 /* Light theme: explicit contrast rather than color inversion. */
 .app[data-theme='light'] .chat-msg.user { color: #252621 !important; border-color: rgba(32,33,31,.1); background: #f0f1ed; box-shadow: 0 5px 18px rgba(32,33,31,.05); }
@@ -1079,6 +1076,16 @@ textarea:focus-visible,
   color: var(--text-faint);
   font: 400 12px/1.4 var(--font-ui);
   white-space: nowrap;
+}
+.workspace-activity-narrative {
+  max-width: 720px;
+  min-height: 24px;
+  margin: -2px 0 10px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 450;
+  line-height: 1.68;
+  overflow-wrap: anywhere;
 }
 .workspace-activity-feed {
   display: flex;

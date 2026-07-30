@@ -9,6 +9,16 @@ export interface WorkspaceWorkflowStep {
   state: WorkspaceWorkflowState
 }
 
+export interface WorkspaceWorkflowSnapshot {
+  projectId: string
+  sessionId: string
+  prompt: string
+  steps: WorkspaceWorkflowStep[]
+  active: boolean
+  failed: boolean
+  updatedAt: number
+}
+
 interface DeriveWorkspaceWorkflowOptions {
   prompt: string
   projectName?: string
@@ -17,7 +27,7 @@ interface DeriveWorkspaceWorkflowOptions {
   failed?: boolean
 }
 
-const BOILERPLATE_ACTIVITY = /^(starting the selected model|(?:claude|codex) session started|workspace task complete|(?:claude|codex) finished the workspace task|preparing the final result|project step finished)$/i
+const BOILERPLATE_ACTIVITY = /^(starting the selected model|preparing .+|preparing project context|project context is ready|(?:claude|codex) session started|workspace task complete|(?:claude|codex) finished the workspace task|preparing the final result|project step finished)$/i
 
 function compact(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
@@ -135,6 +145,10 @@ export function deriveWorkspaceWorkflow({
 }: DeriveWorkspaceWorkflowOptions): WorkspaceWorkflowStep[] {
   const goal = requestTitle(prompt, projectName)
   const recorded = meaningfulActivities(activities)
+  // Do not invent a plan from the user's sentence while the provider is still
+  // connecting. The Steps tool shows a waiting state until a concrete
+  // reasoning, file, command, or provider-plan event actually arrives.
+  if (active && recorded.length === 0) return []
   const goalState: WorkspaceWorkflowState = failed && recorded.length === 0
     ? 'error'
     : active && recorded.length === 0

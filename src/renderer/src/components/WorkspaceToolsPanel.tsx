@@ -10,11 +10,13 @@ import {
   type PointerEvent as ReactPointerEvent
 } from 'react'
 import type { ProjectRow } from '../../../preload/index.d'
+import type { WorkspaceWorkflowSnapshot } from '../workspaceWorkflow'
 import {
   CloseIcon,
   FolderIcon,
   GlobeIcon,
   PanelsIcon,
+  PlanIcon,
   PlusIcon,
   QueueIcon
 } from './icons'
@@ -25,8 +27,9 @@ const ProjectPreviewPanel = lazy(() =>
 )
 const TerminalPane = lazy(() => import('./TerminalPane'))
 const WorkspaceFilesPanel = lazy(() => import('./WorkspaceFilesPanel'))
+const WorkspaceStepsPanel = lazy(() => import('./WorkspaceStepsPanel'))
 
-export type WorkspaceToolId = 'review' | 'terminal' | 'browser' | 'computer' | 'files'
+export type WorkspaceToolId = 'steps' | 'review' | 'terminal' | 'browser' | 'computer' | 'files'
 
 export interface WorkspaceToolRequest {
   projectId: string
@@ -50,6 +53,7 @@ const TOOLS: Array<{
   shortcut?: string
   icon: typeof QueueIcon
 }> = [
+  { id: 'steps', label: 'Steps', icon: PlanIcon },
   { id: 'review', label: 'Review', shortcut: 'Ctrl+Shift+G', icon: QueueIcon },
   { id: 'terminal', label: 'Terminal', icon: PanelsIcon },
   { id: 'browser', label: 'Browser', shortcut: 'Ctrl+T', icon: GlobeIcon },
@@ -96,6 +100,7 @@ export default function WorkspaceToolsPanel({
   active,
   refreshKey,
   requestedTool,
+  workflow,
   onOpen,
   onClose
 }: {
@@ -104,6 +109,7 @@ export default function WorkspaceToolsPanel({
   active: boolean
   refreshKey?: string | number
   requestedTool?: WorkspaceToolRequest | null
+  workflow?: WorkspaceWorkflowSnapshot | null
   onOpen: () => void
   onClose: () => void
 }): JSX.Element | null {
@@ -388,6 +394,19 @@ export default function WorkspaceToolsPanel({
               <section {...panelProps} key={tab.id}>
                 <Suspense fallback={<ToolPaneFallback label="Opening Review…" />}>
                   <BottomWorkbench activeProject={project} open={open && selected} refreshKey={refreshKey} embedded />
+                </Suspense>
+              </section>
+            )
+          }
+
+          if (tab.tool === 'steps') {
+            return (
+              <section {...panelProps} key={tab.id}>
+                <Suspense fallback={<ToolPaneFallback label="Opening Steps…" />}>
+                  <WorkspaceStepsPanel
+                    snapshot={workflow?.projectId === project.id ? workflow : null}
+                    projectName={project.name}
+                  />
                 </Suspense>
               </section>
             )

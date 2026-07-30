@@ -426,6 +426,17 @@ async function main(): Promise<void> {
     for (const marker of markers.values()) {
       assert.equal(existsSync(marker), false, `${marker} proves the workspace shim never ran`)
     }
+
+    const trustedCwdNode = await runCli('node', [fixture, 'pulse'], {
+      cwd: fakeWorkspace,
+      excludedExecutableDirectory: null,
+      timeoutMs: 1_000
+    })
+    assert.equal(
+      trustedCwdNode.code,
+      0,
+      'a trusted cwd can be separated from executable exclusion for home-installed providers'
+    )
   } finally {
     rmSync(fakeWorkspace, { recursive: true, force: true })
   }

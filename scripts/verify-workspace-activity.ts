@@ -262,7 +262,8 @@ test('run duration renders stable running, completed, and stopped states', () =>
   assert.match(completed, /aria-expanded="false"/)
   assert.match(stopped, /Stopped after 12s/)
   assert.match(running, /Working for 2m 12s/)
-  assert.match(running, /aria-expanded="true"/)
+  assert.match(running, /aria-expanded="false"/)
+  assert.match(running, /workspace-activity-narrative/)
 })
 
 test('streaming UI uses the named Akorithing label and no square pseudo-cursor', () => {
@@ -315,20 +316,19 @@ test('activity source exposes a flat iconless transcript with subtle durations',
   ))
 })
 
-test('workflow popup keeps a neutral pill and flat iconless rows', () => {
-  const stepDock = source('src/renderer/src/components/WorkspaceStepDock.tsx')
-  const css = source('src/renderer/src/styles.css')
-  assert.doesNotMatch(stepDock, /<i[\s>]/)
-  assert.match(stepDock, /Project workflow/)
-  assert.match(stepDock, /steps\.map/)
-  assert.ok(selectorBlocks(css, '.workspace-step').some((block) =>
-    /border\s*:\s*1px solid var\(--border-soft\)/.test(block) &&
-    /background\s*:\s*var\(--bg-chat\)/.test(block)
-  ))
-  assert.ok(selectorBlocks(css, '.workspace-step-popover').some((block) =>
-    /background\s*:\s*var\(--bg-chat\)/.test(block) &&
-    !/purple|gradient/i.test(block)
-  ))
+test('workflow steps live in the workspace tools and wait for real provider actions', () => {
+  const chatPanel = source('src/renderer/src/components/ChatPanel.tsx')
+  const stepPanel = source('src/renderer/src/components/WorkspaceStepsPanel.tsx')
+  const toolsPanel = source('src/renderer/src/components/WorkspaceToolsPanel.tsx')
+  const activity = source('src/renderer/src/components/WorkspaceActivity.tsx')
+
+  assert.doesNotMatch(chatPanel, /<WorkspaceStepDock/)
+  assert.match(toolsPanel, /\{ id: 'steps', label: 'Steps'/)
+  assert.match(toolsPanel, /tab\.tool === 'steps'/)
+  assert.match(toolsPanel, /<WorkspaceStepsPanel/)
+  assert.match(stepPanel, /Thinking before opening steps/)
+  assert.match(stepPanel, /snapshot\.steps\.map/)
+  assert.match(activity, /workspace-activity-narrative/)
 })
 
 test('stopped tasks expose Resume task while the composer remains writable', () => {

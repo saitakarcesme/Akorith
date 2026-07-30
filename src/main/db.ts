@@ -37,7 +37,7 @@ const MAX_PROJECT_META = 48
 const SAFE_PROJECT_DIR_NAME = /^[^/\\:*?"<>|\0\r\n]{1,120}$/
 // Bump whenever initDb adds or changes a table, column, index, or backfill.
 // The version is written only after every idempotent migration succeeds.
-const DB_SCHEMA_VERSION = 3
+const DB_SCHEMA_VERSION = 4
 
 interface StoredGeneratedFile {
   path: string
