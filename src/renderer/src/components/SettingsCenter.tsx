@@ -954,15 +954,23 @@ export default function SettingsCenter({
                   <div>
                     <strong>Beyefendi v2</strong>
                     <span className={`settings-chip ${beyefendiStatus?.available ? 'is-ok' : 'is-info'}`}>
-                      {beyefendiStatus?.available ? 'Ready' : beyefendiStatus?.adapterDownloaded ? 'Runtime needed' : 'Private HF model'}
+                      {beyefendiStatus?.available ? 'Ready' : beyefendiStatus?.adapterDownloaded ? 'Runtime needed' : 'Hugging Face model'}
                     </span>
                   </div>
                   <p>
-                    Your private <code>Ibrahimsait/Beyefendi-v2</code> QLoRA adapter on
+                    Your <code>Ibrahimsait/Beyefendi-v2</code> QLoRA adapter on
                     <code> Qwen/Qwen3.5-9B</code>. Ollama currently rejects this Qwen3.5
                     adapter architecture, so Akorith runs it locally through an isolated
                     Hugging Face PEFT/CUDA runtime and keeps it in the same Local model picker.
                   </p>
+                  <div className="local-featured-model-links" aria-label="Beyefendi Hugging Face repositories">
+                    <a href={`https://huggingface.co/${beyefendiStatus?.repoId ?? 'Ibrahimsait/Beyefendi-v2'}`} target="_blank" rel="noreferrer">
+                      Beyefendi-v2
+                    </a>
+                    <a href={`https://huggingface.co/${beyefendiStatus?.ggufRepoId ?? 'Ibrahimsait/Beyefendi-v2-GGUF'}`} target="_blank" rel="noreferrer">
+                      Beyefendi-v2-GGUF
+                    </a>
+                  </div>
                   <small>{beyefendiStatus?.note ?? 'Checking the local adapter…'}</small>
                   {beyefendiNotice && <div className={`ollama-status is-${beyefendiNotice.kind}`}>{beyefendiNotice.text}</div>}
                 </div>

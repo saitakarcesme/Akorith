@@ -19,24 +19,13 @@ function prettySlug(model: string): string {
   return model
 }
 
-export function formatModelLabel(model?: string | null, providerId?: string): string {
+export function formatModelLabel(model?: string | null, _providerId?: string): string {
   const raw = (model ?? '').trim()
-  if (!raw || raw === 'default') {
-    const owner =
-      providerId === 'claude'
-        ? 'Claude'
-        : providerId === 'chatgpt'
-          ? 'Codex'
-          : providerId === 'local'
-            ? 'Local'
-            : 'CLI'
-    return `Default (${owner} default)`
-  }
-  const pretty = prettySlug(raw)
-  return pretty === raw ? raw : `${pretty} (${raw})`
+  if (!raw || raw === 'default') return 'Default'
+  return prettySlug(raw)
 }
 
 export function formatLocalModelLabel(id: string, label?: string): string {
   const display = (label ?? id).trim()
-  return display && display !== id ? `${display} (${id})` : id
+  return display || id
 }

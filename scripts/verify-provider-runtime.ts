@@ -35,7 +35,8 @@ import {
 import {
   buildOllamaGenerationOptions,
   buildOllamaStructuredOutputOptions,
-  formatOllamaHttpError
+  formatOllamaHttpError,
+  visibleLocalModels
 } from '../src/main/providers/local.ts'
 import {
   buildOpenCodeRunArgs,
@@ -43,10 +44,23 @@ import {
   OPENCODE_WORKSPACE_SHELL_PERMISSIONS,
   usableOpenCodeCatalogModels
 } from '../src/main/providers/opencode.ts'
+import { formatLocalModelLabel, formatModelLabel } from '../src/renderer/src/modelLabels.ts'
 
 const fixture = fileURLToPath(new URL('./fixtures/provider-runtime-child.cjs', import.meta.url))
 
 async function main(): Promise<void> {
+  assert.equal(formatModelLabel('codex-auto-review', 'chatgpt'), 'Codex Auto Review')
+  assert.equal(formatModelLabel('default', 'local'), 'Default')
+  assert.equal(formatLocalModelLabel('qwen3:14b', 'Qwen 3 14B'), 'Qwen 3 14B')
+  assert.deepEqual(
+    visibleLocalModels(
+      ['qwen3:14b', 'devstral-small-2:24b', 'gemma3:12b'],
+      ['devstral-small-2:24b'],
+      true
+    ),
+    ['devstral-small-2:24b', 'beyefendi-v2-hf', 'qwen3:14b', 'gemma3:12b'],
+    'a stored Local preference must not hide discovered Ollama or Hugging Face models'
+  )
   assert.match(
     formatClaudeCliError("You've hit your session limit · resets 9:10pm", 429),
     /Claude subscription usage limit reached.*resets 9:10pm/,

@@ -298,10 +298,10 @@ export interface ProjectsApi {
   createFolder(args: {
     name: string
     projectId?: string | null
-    /** When set (from the Create Project modal) the native parent picker is skipped. */
+    /** Optional override; omitted projects are created under Documents/Akorith. */
     parentPath?: string | null
   }): Promise<{ ok: true; project: ProjectRow } | { ok: false; cancelled?: boolean; error: string }>
-  /** Pick a parent directory for the Create Project modal (main-process dialog). */
+  /** Pick a directory for settings and other explicit folder-selection flows. */
   pickDirectory(): Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error: string }>
   update(projectId: string, patch: ProjectUpdateRequest): Promise<ProjectRow | null>
   /** Phase 14.3: remove a project from Akorith. DB-only; never deletes disk files. */
@@ -2435,6 +2435,7 @@ export interface OllamaShareInfo {
 
 export interface BeyefendiRuntimeStatus {
   repoId: 'Ibrahimsait/Beyefendi-v2'
+  ggufRepoId: 'Ibrahimsait/Beyefendi-v2-GGUF'
   modelId: 'beyefendi-v2-hf'
   baseModel: 'Qwen/Qwen3.5-9B'
   adapterDir: string

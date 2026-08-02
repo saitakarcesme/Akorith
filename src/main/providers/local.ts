@@ -31,6 +31,25 @@ const LOCAL_WORKSPACE_CONTEXT_TOKENS = 8_192
 let startedOllamaServe = false
 let lastOllamaStartAttemptAt = 0
 
+/**
+ * Keep configured models first as user preference, while still exposing every
+ * model Ollama actually reports. Older configs stored one selected model in
+ * `providers.local.models`; treating that as a hard allow-list hid the rest of
+ * the local catalog.
+ */
+export function visibleLocalModels(
+  ollamaModels: string[],
+  configuredModels: string[] | undefined,
+  beyefendiReady: boolean
+): string[] {
+  const discovered = beyefendiReady
+    ? [BEYEFENDI_MODEL_ID, ...ollamaModels]
+    : ollamaModels
+  const installed = new Set(discovered)
+  const preferred = configuredModels?.filter((model) => installed.has(model)) ?? []
+  return [...new Set([...preferred, ...discovered])]
+}
+
 export function buildOllamaGenerationOptions(
   opts: Pick<SendOptions, 'generation' | 'workingDirectory' | 'intent'>
 ): Record<string, number> {
@@ -263,12 +282,7 @@ export class LocalProvider implements Provider {
   }
 
   private visibleModels(ollamaModels: string[], beyefendiReady: boolean): string[] {
-    const discovered = beyefendiReady
-      ? [...new Set([BEYEFENDI_MODEL_ID, ...ollamaModels])]
-      : ollamaModels
-    if (!this.configuredModels) return discovered
-    const installed = new Set(discovered)
-    return this.configuredModels.filter((model) => installed.has(model))
+    return visibleLocalModels(ollamaModels, this.configuredModels, beyefendiReady)
   }
 
   private baseUrls(): string[] {

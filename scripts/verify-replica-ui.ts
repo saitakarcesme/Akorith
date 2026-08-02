@@ -740,6 +740,19 @@ check(
   'New chat is selected only for a blank general chat'
 )
 check(
+  sidebar.includes('akorith.projectsSectionOpen') &&
+    sidebar.includes('akorith.chatsSectionOpen') &&
+    sidebar.includes('aria-controls="sidebar-projects-content"') &&
+    sidebar.includes('aria-controls="sidebar-chats-content"') &&
+    selectorBlocks(stylesCss, '.sidebar-section-collapse').some((block) =>
+      /grid-template-rows\s*:\s*0fr/.test(block) && /transition\s*:/.test(block)
+    ) &&
+    selectorBlocks(stylesCss, '.sidebar-section-collapse.is-open').some((block) =>
+      /grid-template-rows\s*:\s*1fr/.test(block)
+    ),
+  'Projects and Chats persist accessible animated collapse state'
+)
+check(
   /view\s*===\s*['"]workspace['"]\s*&&\s*activeProject\?\.id\s*===\s*project\.id\s*&&\s*!activeSessionId/.test(sidebar),
   'project row selection clears when one of its chats is open'
 )

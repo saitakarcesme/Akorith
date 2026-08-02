@@ -738,6 +738,21 @@ body {
   padding: 0 7px;
 }
 
+.app[data-ui='replica'] .sidebar-section-toggle {
+  min-height: 25px;
+  color: var(--text-secondary);
+  border-radius: 6px;
+}
+
+.app[data-ui='replica'] .sidebar-section-toggle:hover {
+  color: var(--text);
+}
+
+.app[data-ui='replica'] .sidebar-section-toggle .sidebar-section-title,
+.app[data-ui='replica'] .sidebar-section-toggle .projects-heading-label {
+  line-height: 25px;
+}
+
 .app[data-ui='replica'] .projects-heading {
   padding: 0 7px;
 }
@@ -898,11 +913,20 @@ body {
 }
 
 .app[data-ui='replica'] .sidebar-profile-row {
+  display: grid;
   height: 34px;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 4px;
 }
 
 .app[data-ui='replica'] .profile-identity-button {
+  display: grid;
+  width: 100%;
   height: 34px;
+  min-width: 0;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
   padding: 0 7px;
   color: var(--text);
@@ -917,6 +941,10 @@ body {
 }
 
 .app[data-ui='replica'] .profile-identity-button strong {
+  display: block;
+  min-width: 0;
+  line-height: 1;
+  text-align: left;
   font-size: 13px;
   font-weight: 560;
 }
@@ -924,6 +952,10 @@ body {
 .app[data-ui='replica'] .profile-settings-button {
   width: 30px;
   height: 30px;
+  min-height: 30px;
+  place-self: center;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
@@ -2162,6 +2194,8 @@ body {
   border: 0 !important;
   border-radius: var(--radius-composer) !important;
   box-shadow: none !important;
+  container-name: composer-shell;
+  container-type: inline-size;
 }
 
 .app[data-ui='replica'] .composer-box:focus-within {
@@ -2227,6 +2261,31 @@ body {
   height: 30px;
   border-radius: 50% !important;
   box-shadow: none;
+}
+
+@container composer-shell (max-width: 520px) {
+  .app[data-ui='replica'] .composer-controls-left {
+    flex: 1 1 100%;
+  }
+
+  .app[data-ui='replica'] .composer-submit-group {
+    width: 100%;
+  }
+
+  .app[data-ui='replica'] .composer-submit-group .model-picker {
+    flex: 1 1 auto;
+  }
+
+  .app[data-ui='replica'] .composer-submit-group .model-picker-trigger {
+    width: 100%;
+    max-width: none;
+  }
+
+  .app[data-ui='replica'] .composer-submit-group .model-picker-pop {
+    right: 0;
+    left: auto;
+    width: min(300px, calc(100cqw - 12px));
+  }
 }
 
 .app[data-ui='replica'] .composer-dock {

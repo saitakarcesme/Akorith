@@ -15,6 +15,7 @@ import type { AppTheme, AppView } from '../App'
 import { useProfileIdentity } from '../profileIdentity'
 import {
   CopyIcon,
+  ChevronIcon,
   FlaskIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -184,6 +185,8 @@ export default function Sidebar({
       return {}
     }
   })
+  const [projectsSectionOpen, setProjectsSectionOpen] = useState(() => storageBoolean('akorith.projectsSectionOpen', true))
+  const [chatsSectionOpen, setChatsSectionOpen] = useState(() => storageBoolean('akorith.chatsSectionOpen', true))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => (typeof window !== 'undefined' && window.innerWidth <= 720)
       ? true
@@ -206,7 +209,6 @@ export default function Sidebar({
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRow | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newParent, setNewParent] = useState<string | null>(null)
   const [projectBusy, setProjectBusy] = useState<'open' | 'create' | null>(null)
   const [projectError, setProjectError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -405,6 +407,14 @@ export default function Sidebar({
     localStorage.setItem('akorith.expandedProjects', JSON.stringify(expandedProjects))
   }, [expandedProjects])
 
+  useEffect(() => {
+    localStorage.setItem('akorith.projectsSectionOpen', String(projectsSectionOpen))
+  }, [projectsSectionOpen])
+
+  useEffect(() => {
+    localStorage.setItem('akorith.chatsSectionOpen', String(chatsSectionOpen))
+  }, [chatsSectionOpen])
+
   // Close row actions on Escape. These menus render inside the sidebar, avoiding
   // the full-window portal/backdrop path that could blank the app.
   useEffect(() => {
@@ -478,7 +488,6 @@ export default function Sidebar({
   const beginCreateProject = (): void => {
     setProjectMenuOpen(false)
     setNewName('')
-    setNewParent(null)
     setProjectError(null)
     setCreateOpen(true)
   }
@@ -494,27 +503,16 @@ export default function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createSignal])
 
-  const pickParentDir = async (): Promise<void> => {
-    setProjectError(null)
-    const res = await window.api.projects.pickDirectory()
-    if (res.ok) setNewParent(res.path)
-    else if (!res.cancelled) setProjectError(res.error)
-  }
-
   const submitCreateProject = async (): Promise<void> => {
     const name = newName.trim()
     if (!name) {
       setProjectError('Enter a project name.')
       return
     }
-    if (!newParent) {
-      setProjectError('Choose a parent folder.')
-      return
-    }
     setProjectBusy('create')
     setProjectError(null)
     try {
-      const res = await window.api.projects.createFolder({ name, parentPath: newParent })
+      const res = await window.api.projects.createFolder({ name })
       if (res.ok) {
         setCreateOpen(false)
         await refreshProjects()
@@ -752,13 +750,20 @@ export default function Sidebar({
       <div className="sidebar-scroll">
         <div className="sidebar-fixed-groups">
           <section className="sidebar-section project-section">
-            {/* Phase 36.2: "Projects" is a plain heading, not a collapsible folder.
-                The list below is always visible inside the scroll area. */}
             <div className="sidebar-section-header projects-heading">
-              <div className="projects-heading-label">
-                Projects
-                {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
-              </div>
+              <button
+                type="button"
+                className="sidebar-section-toggle"
+                aria-expanded={projectsSectionOpen}
+                aria-controls="sidebar-projects-content"
+                onClick={() => setProjectsSectionOpen((open) => !open)}
+              >
+                <ChevronIcon size={12} direction={projectsSectionOpen ? 'down' : 'right'} />
+                <span className="projects-heading-label">
+                  Projects
+                  {projects.length > 0 && <span className="sidebar-count">{projects.length}</span>}
+                </span>
+              </button>
               <div className="sidebar-add-wrap">
                 <button
                   type="button"
@@ -788,7 +793,12 @@ export default function Sidebar({
                 )}
               </div>
             </div>
-            <>
+            <div
+              id="sidebar-projects-content"
+              className={`sidebar-section-collapse ${projectsSectionOpen ? 'is-open' : ''}`}
+              aria-hidden={!projectsSectionOpen}
+            >
+              <div className="sidebar-section-collapse-inner">
                 {projectBusy === 'open' && <div className="sidebar-item is-empty">Opening project…</div>}
                 {projectError && !createOpen && <div className="project-onboarding-error">{projectError}</div>}
                 <div className="project-list">
@@ -1005,7 +1015,8 @@ export default function Sidebar({
                     })
                   )}
                 </div>
-              </>
+              </div>
+            </div>
           </section>
 
           {/* Phase 33.4: provider folders (Claude / Codex / Local) are removed from
@@ -1016,7 +1027,16 @@ export default function Sidebar({
 
         <section className="sidebar-section recent-section">
           <div className="sidebar-section-header">
-            <div className="sidebar-section-title">Chats</div>
+            <button
+              type="button"
+              className="sidebar-section-toggle"
+              aria-expanded={chatsSectionOpen}
+              aria-controls="sidebar-chats-content"
+              onClick={() => setChatsSectionOpen((open) => !open)}
+            >
+              <ChevronIcon size={12} direction={chatsSectionOpen ? 'down' : 'right'} />
+              <span className="sidebar-section-title">Chats</span>
+            </button>
             <button
               type="button"
               className="sidebar-add"
@@ -1026,7 +1046,12 @@ export default function Sidebar({
               <PlusIcon size={14} />
             </button>
           </div>
-          <div className="recent-list">
+          <div
+            id="sidebar-chats-content"
+            className={`sidebar-section-collapse ${chatsSectionOpen ? 'is-open' : ''}`}
+            aria-hidden={!chatsSectionOpen}
+          >
+            <div className="sidebar-section-collapse-inner recent-list">
             {!startupHydrated ? (
               <div className="sidebar-item is-empty">Loading chats...</div>
             ) : startupError ? (
@@ -1095,6 +1120,7 @@ export default function Sidebar({
                 )
               })
             )}
+            </div>
           </div>
         </section>
       </div>
@@ -1162,7 +1188,7 @@ export default function Sidebar({
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Create project" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Create project</div>
             <p className="modal-subtitle">
-              Akorith creates the folder and opens a project-scoped chat. The model you select works directly in this folder.
+              Akorith creates this project under Documents/Akorith and opens a project-scoped chat. The model you select works directly in that folder.
             </p>
             <label className="modal-field">
               <span>Project name</span>
@@ -1172,23 +1198,12 @@ export default function Sidebar({
                 autoFocus
                 onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && newName.trim() && newParent) void submitCreateProject()
+                  if (event.key === 'Enter' && newName.trim()) void submitCreateProject()
                   if (event.key === 'Escape' && projectBusy === null) setCreateOpen(false)
                 }}
               />
             </label>
-            <label className="modal-field">
-              <span>Parent folder</span>
-              <div className="modal-dir-row">
-                <span className="modal-dir-path" title={newParent ?? ''}>
-                  {newParent ?? 'No folder selected'}
-                </span>
-                <button type="button" className="modal-dir-btn" onClick={() => void pickParentDir()} disabled={projectBusy !== null}>
-                  <FolderIcon size={14} />
-                  Choose…
-                </button>
-              </div>
-            </label>
+            <div className="modal-default-path">Documents / Akorith / {newName.trim() || 'project-name'}</div>
             {projectError && <div className="modal-error">{projectError}</div>}
             <div className="modal-actions">
               <button type="button" className="modal-cancel" onClick={() => setCreateOpen(false)} disabled={projectBusy !== null}>
@@ -1198,7 +1213,7 @@ export default function Sidebar({
                 type="button"
                 className="modal-confirm"
                 onClick={() => void submitCreateProject()}
-                disabled={projectBusy !== null || !newName.trim() || !newParent}
+                disabled={projectBusy !== null || !newName.trim()}
               >
                 {projectBusy === 'create' ? 'Creating…' : 'Create Project'}
               </button>

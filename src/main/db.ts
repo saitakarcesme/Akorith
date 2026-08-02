@@ -2844,19 +2844,15 @@ async function createProjectFolder(
   if (!safeName || safeName === '.' || safeName === '..' || !SAFE_PROJECT_DIR_NAME.test(safeName)) {
     return { ok: false, error: 'project name cannot contain path separators or reserved characters' }
   }
-  // A pre-picked parent (from the modal) skips the dialog; otherwise prompt.
-  let selectedParent: string
-  if (typeof parentPath === 'string' && parentPath.trim().length > 0) {
-    selectedParent = parentPath
-  } else {
-    const result = await dialog.showOpenDialog({
-      title: 'Choose Parent Folder',
-      properties: ['openDirectory', 'createDirectory']
-    })
-    if (result.canceled || result.filePaths.length === 0) return { ok: false, cancelled: true, error: 'cancelled' }
-    selectedParent = result.filePaths[0]
-  }
+  // New projects have a predictable home and do not interrupt creation with a
+  // native folder picker. Callers may still provide an explicit parent for
+  // advanced flows, but the product default is Documents/Akorith.
+  const selectedParent = typeof parentPath === 'string' && parentPath.trim().length > 0
+    ? parentPath
+    : join(app.getPath('documents'), 'Akorith')
   try {
+    if (!isAbsolute(selectedParent)) return { ok: false, error: 'selected parent must be an absolute path' }
+    mkdirSync(selectedParent, { recursive: true })
     const parent = cleanProjectPath(selectedParent)
     if (!parent) return { ok: false, error: 'selected parent is not a valid directory' }
     const target = resolve(parent, safeName)

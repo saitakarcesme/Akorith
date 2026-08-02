@@ -17,6 +17,7 @@ import {
 
 export const BEYEFENDI_MODEL_ID = 'beyefendi-v2-hf'
 export const BEYEFENDI_REPO_ID = 'Ibrahimsait/Beyefendi-v2'
+export const BEYEFENDI_GGUF_REPO_ID = 'Ibrahimsait/Beyefendi-v2-GGUF'
 export const BEYEFENDI_BASE_MODEL = 'Qwen/Qwen3.5-9B'
 
 const REQUIRED_ADAPTER_FILES = [
@@ -94,6 +95,7 @@ print("${STREAM_END}", flush=True)
 
 export interface BeyefendiRuntimeStatus {
   repoId: typeof BEYEFENDI_REPO_ID
+  ggufRepoId: typeof BEYEFENDI_GGUF_REPO_ID
   modelId: typeof BEYEFENDI_MODEL_ID
   baseModel: typeof BEYEFENDI_BASE_MODEL
   adapterDir: string
@@ -141,6 +143,7 @@ export function getBeyefendiRuntimeStatus(): BeyefendiRuntimeStatus {
   const stage = ready ? 'ready' : downloaded ? 'adapter_downloaded' : 'not_installed'
   return {
     repoId: BEYEFENDI_REPO_ID,
+    ggufRepoId: BEYEFENDI_GGUF_REPO_ID,
     modelId: BEYEFENDI_MODEL_ID,
     baseModel: BEYEFENDI_BASE_MODEL,
     adapterDir: directory,
