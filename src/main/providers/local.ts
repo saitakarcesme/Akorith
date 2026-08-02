@@ -247,6 +247,7 @@ export class LocalProvider implements Provider {
   private readonly exposeLan: boolean
   private readonly lanDiscovery: boolean
   private readonly ollamaHost?: string
+  private readonly configuredModels?: string[]
   private reachableBaseUrl: string | null = null
   private modelCache: { baseUrl: string; capturedAt: number; models: string[] } | null = null
 
@@ -256,6 +257,18 @@ export class LocalProvider implements Provider {
     this.exposeLan = entry.exposeLan !== false
     this.lanDiscovery = entry.lanDiscovery !== false
     this.ollamaHost = cleanOllamaHost(entry.ollamaHost)
+    this.configuredModels = entry.models
+      ?.map((model) => model.trim())
+      .filter((model, index, models) => Boolean(model) && models.indexOf(model) === index)
+  }
+
+  private visibleModels(ollamaModels: string[], beyefendiReady: boolean): string[] {
+    const discovered = beyefendiReady
+      ? [...new Set([BEYEFENDI_MODEL_ID, ...ollamaModels])]
+      : ollamaModels
+    if (!this.configuredModels) return discovered
+    const installed = new Set(discovered)
+    return this.configuredModels.filter((model) => installed.has(model))
   }
 
   private baseUrls(): string[] {
@@ -408,20 +421,16 @@ export class LocalProvider implements Provider {
   async listModels(): Promise<string[]> {
     const beyefendiReady = getBeyefendiRuntimeStatus().available
     if (this.modelCache && Date.now() - this.modelCache.capturedAt < MODEL_CACHE_MS) {
-      return beyefendiReady
-        ? [...new Set([BEYEFENDI_MODEL_ID, ...this.modelCache.models])]
-        : this.modelCache.models
+      return this.visibleModels(this.modelCache.models, beyefendiReady)
     }
     try {
       await this.ensureReachable(5_000, true)
     } catch (error) {
-      if (beyefendiReady) return [BEYEFENDI_MODEL_ID]
+      if (beyefendiReady) return this.visibleModels([], true)
       throw error
     }
     const models = this.modelCache?.models ?? []
-    return beyefendiReady
-      ? [...new Set([BEYEFENDI_MODEL_ID, ...models])]
-      : models
+    return this.visibleModels(models, beyefendiReady)
   }
 
   async discover(force = false): Promise<ProviderDiscovery> {

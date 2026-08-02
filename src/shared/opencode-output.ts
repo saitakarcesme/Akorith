@@ -4,6 +4,7 @@ export interface OpenCodeJsonResult {
   text: string
   eventCount: number
   toolErrors: string[]
+  apiErrors: string[]
   usage?: OpenCodeTokenUsage
 }
 
@@ -132,6 +133,7 @@ function finiteCount(value: unknown): number {
 export function parseOpenCodeJson(stdout: string): OpenCodeJsonResult {
   const chunks: string[] = []
   const toolErrors: string[] = []
+  const apiErrors: string[] = []
   const usage: OpenCodeTokenUsage = {
     promptTokens: 0,
     completionTokens: 0,
@@ -153,6 +155,12 @@ export function parseOpenCodeJson(stdout: string): OpenCodeJsonResult {
       const part = event.part as Record<string, unknown> | undefined
       const partType = typeof part?.type === 'string' ? part.type : ''
       const eventType = typeof event.type === 'string' ? event.type : ''
+      if (eventType === 'error') {
+        const error = record(event.error)
+        const data = record(error.data)
+        const detail = cleanInline(data.message ?? error.message ?? event.message, 500)
+        if (detail) apiErrors.push(detail)
+      }
       const partText = part?.text
       if (typeof partText === 'string') chunks.push(partText)
       else if (typeof text === 'string') chunks.push(text)
@@ -189,7 +197,7 @@ export function parseOpenCodeJson(stdout: string): OpenCodeJsonResult {
       // Ignore non-JSON log noise. Raw event envelopes must never become chat.
     }
   }
-  return { text: chunks.join('').trim(), eventCount, toolErrors, usage: hasUsage ? usage : undefined }
+  return { text: chunks.join('').trim(), eventCount, toolErrors, apiErrors, usage: hasUsage ? usage : undefined }
 }
 
 /** Converts legacy event-stream messages already persisted by older builds. */
@@ -197,6 +205,8 @@ export function normalizeStoredOpenCodeMessage(content: string): string {
   const parsed = parseOpenCodeJson(content)
   if (parsed.eventCount === 0) return content
   if (parsed.text) return parsed.text
+  const apiError = parsed.apiErrors.at(-1)
+  if (apiError) return `OpenCode request failed: ${apiError}`
   const toolError = parsed.toolErrors.at(-1)
   if (toolError) return `OpenCode could not complete the workspace action: ${toolError}`
   return 'OpenCode completed without a text response. Check its workspace permissions and try again.'

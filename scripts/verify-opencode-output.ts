@@ -24,6 +24,7 @@ const parsedText = parseOpenCodeJson(textOutput)
 assert.equal(parsedText.text, 'Hello workspace.')
 assert.equal(parsedText.eventCount, 4)
 assert.deepEqual(parsedText.toolErrors, [])
+assert.deepEqual(parsedText.apiErrors, [])
 assert.deepEqual(parsedText.usage, {
   promptTokens: 154,
   completionTokens: 65,
@@ -55,6 +56,25 @@ assert.equal(
 const plainOutput = parseOpenCodeJson('A formatted response from an older CLI.')
 assert.equal(plainOutput.eventCount, 0)
 assert.equal(plainOutput.text, '')
+
+const creditsOutput = JSON.stringify({
+  type: 'error',
+  error: {
+    name: 'APIError',
+    data: {
+      message: 'CreditsError: Insufficient balance. Manage billing at https://opencode.ai',
+      statusCode: 401
+    }
+  }
+})
+const parsedCredits = parseOpenCodeJson(creditsOutput)
+assert.deepEqual(parsedCredits.apiErrors, [
+  'CreditsError: Insufficient balance. Manage billing at https://opencode.ai'
+])
+assert.equal(
+  normalizeStoredOpenCodeMessage(creditsOutput),
+  'OpenCode request failed: CreditsError: Insufficient balance. Manage billing at https://opencode.ai'
+)
 
 assert.deepEqual(
   normalizeOpenCodeActivityEvent({

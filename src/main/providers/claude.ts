@@ -21,6 +21,14 @@ const DEFAULT_MODELS = ['default', 'claude-fable-5', 'claude-sonnet-5', 'claude-
 const CLAUDE_CHAT_TIMEOUT_MS = 300_000
 const CLAUDE_WORKSPACE_TIMEOUT_MS = 600_000
 
+export function formatClaudeCliError(result: unknown, status?: number): string {
+  const detail = String(result ?? '').trim().slice(0, 500) || 'Unknown Claude CLI error'
+  if (status === 429 || /session limit|usage limit|rate limit/i.test(detail)) {
+    return `Claude subscription usage limit reached. ${detail}`
+  }
+  return `claude CLI error: ${detail}`
+}
+
 export const CLAUDE_WORKSPACE_ALLOWED_TOOLS = [
   'Read',
   'Glob',
@@ -239,7 +247,7 @@ export class ClaudeProvider implements Provider {
     }
     const result: ClaudeResultEvent = resultEvent
     if (result.is_error) {
-      throw new Error(`claude CLI error: ${String(result.result).slice(0, 500)}`)
+      throw new Error(formatClaudeCliError(result.result, result.api_error_status))
     }
 
     const text = typeof result.result === 'string' && result.result ? result.result : streamedText
@@ -294,6 +302,7 @@ interface ClaudeResultEvent extends ClaudeStreamLine {
   is_error?: boolean
   result?: unknown
   total_cost_usd?: number
+  api_error_status?: number
   usage?: {
     input_tokens?: number
     cache_creation_input_tokens?: number

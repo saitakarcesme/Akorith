@@ -17,7 +17,7 @@ import type {
   SendResult
 } from './types'
 
-const DEFAULT_MODELS = ['default']
+const DEFAULT_MODELS = ['opencode/nemotron-3-ultra-free']
 
 export const OPENCODE_READ_ONLY_SHELL_PERMISSIONS = {
   '*': 'deny'
@@ -85,6 +85,23 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
 
+/**
+ * OpenCode's public catalog includes OpenCode Go paid models even when the
+ * signed-in account has no credits. The zero-cost Zen catalog uses the
+ * `opencode/` namespace; paid models remain opt-in through an explicit
+ * `providers.opencode.models` configuration override.
+ */
+export function usableOpenCodeCatalogModels(stdout: string): string[] {
+  const models = stripAnsi(stdout)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^opencode\/[\w.:/-]+$/.test(line))
+  return [...new Set([
+    ...DEFAULT_MODELS.filter((model) => models.includes(model)),
+    ...models
+  ])]
+}
+
 const INSPECTION_GUIDANCE =
   'Use only the native read, list, glob, grep, and edit tools. Shell, LSP, external plugins, and MCP tools are unavailable; Akorith performs host-selected syntax checks after the patch.'
 
@@ -115,11 +132,8 @@ export class OpenCodeProvider implements Provider {
     try {
       const res = await runCli('opencode', ['models'], { timeoutMs: 20_000 })
       if (res.code !== 0) return this.models
-      const models = stripAnsi(res.stdout)
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => /^[\w.-]+\/[\w.:/-]+$/.test(line))
-      return [...new Set(['default', ...models])]
+      const models = usableOpenCodeCatalogModels(res.stdout)
+      return models.length > 0 ? models : this.models
     } catch {
       return this.models
     }
@@ -135,13 +149,10 @@ export class OpenCodeProvider implements Provider {
       // path this replaces the old `--version` + `models` process waterfall.
       const res = await runCli('opencode', ['models'], { timeoutMs: 20_000 })
       if (res.code === 0) {
-        const models = stripAnsi(res.stdout)
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => /^[\w.-]+\/[\w.:/-]+$/.test(line))
+        const models = usableOpenCodeCatalogModels(res.stdout)
         return {
           available: { ok: true },
-          models: [...new Set(['default', ...models])]
+          models: models.length > 0 ? models : this.models
         }
       }
     } catch {
@@ -152,7 +163,13 @@ export class OpenCodeProvider implements Provider {
   }
 
   async send(prompt: string, opts: SendOptions, onToken: (t: string) => void): Promise<SendResult> {
-    const args = buildOpenCodeRunArgs(opts)
+    const requestedModel = opts.model && opts.model !== 'default'
+      ? opts.model
+      : (await this.listModels())[0]
+    if (!requestedModel) {
+      throw new Error('OpenCode has no usable models. Refresh the model catalog and try again.')
+    }
+    const args = buildOpenCodeRunArgs({ ...opts, model: requestedModel })
     const workspacePrompt = opts.workingDirectory
       ? opts.intent === 'plan'
         ? `${prompt}\n\nOpenCode is running non-interactively inside a trusted read-only boundary. Inspect only files inside this directory. ${INSPECTION_GUIDANCE} Do not create, edit, rename, or delete files; do not request an interactive permission prompt; do not access a parent directory, commit, or push.`
@@ -199,7 +216,10 @@ export class OpenCodeProvider implements Provider {
     })
 
     if (res.code !== 0) {
-      const detail = stripAnsi(res.stderr || res.stdout).trim().slice(-500) || `exit code ${res.code}`
+      const parsedError = parseOpenCodeJson(res.stdout)
+      const detail = parsedError.apiErrors.at(-1)
+        || stripAnsi(res.stderr || res.stdout).trim().slice(-500)
+        || `exit code ${res.code}`
       throw new Error(`opencode CLI failed: ${detail}`)
     }
 
@@ -207,6 +227,8 @@ export class OpenCodeProvider implements Provider {
     const plainText = parsed.eventCount === 0 ? stripAnsi(res.stdout).trim() : ''
     const text = parsed.text || plainText
     if (!text) {
+      const apiError = parsed.apiErrors.at(-1)
+      if (apiError) throw new Error(`OpenCode request failed: ${apiError}`)
       const toolError = parsed.toolErrors.at(-1)
       if (toolError) {
         throw new Error(`OpenCode could not complete the workspace action: ${toolError}`)
@@ -233,7 +255,7 @@ export class OpenCodeProvider implements Provider {
             totalTokens: estimateTokens(prompt) + estimateTokens(text),
             estimated: true
           },
-      model: opts.model ?? 'default',
+      model: requestedModel,
       raw: {
         stdout: res.stdout.slice(-2000),
         stderr: res.stderr.slice(-2000),

@@ -29,7 +29,8 @@ import {
   CLAUDE_PLAN_ALLOWED_TOOLS,
   CLAUDE_WORKSPACE_ALLOWED_TOOLS,
   CLAUDE_WORKSPACE_DISALLOWED_TOOLS,
-  claudeRequestTimeoutMs
+  claudeRequestTimeoutMs,
+  formatClaudeCliError
 } from '../src/main/providers/claude.ts'
 import {
   buildOllamaGenerationOptions,
@@ -39,12 +40,28 @@ import {
 import {
   buildOpenCodeRunArgs,
   OPENCODE_WORKSPACE_PERMISSION_CONFIG,
-  OPENCODE_WORKSPACE_SHELL_PERMISSIONS
+  OPENCODE_WORKSPACE_SHELL_PERMISSIONS,
+  usableOpenCodeCatalogModels
 } from '../src/main/providers/opencode.ts'
 
 const fixture = fileURLToPath(new URL('./fixtures/provider-runtime-child.cjs', import.meta.url))
 
 async function main(): Promise<void> {
+  assert.match(
+    formatClaudeCliError("You've hit your session limit · resets 9:10pm", 429),
+    /Claude subscription usage limit reached.*resets 9:10pm/,
+    'Claude subscription limits must be reported immediately and explicitly'
+  )
+  assert.deepEqual(
+    usableOpenCodeCatalogModels([
+      'opencode/nemotron-3-ultra-free',
+      'opencode-go/qwen3.7-max',
+      'opencode/deepseek-v4-flash-free',
+      'opencode/nemotron-3-ultra-free'
+    ].join('\n')),
+    ['opencode/nemotron-3-ultra-free', 'opencode/deepseek-v4-flash-free'],
+    'automatic OpenCode discovery exposes zero-cost Zen models, not paid Go models'
+  )
   const sanitized = boundedCommandOutput(`\u001b[32mok\u001b[0m\nAuthorization: secret-value\n${'x'.repeat(600)}`)
   assert.ok(sanitized)
   assert.ok(!sanitized.includes('\u001b'))
