@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { BrowserWindow, ipcMain, shell, WebContentsView, type WebContents } from 'electron'
 import { randomUUID } from 'crypto'
 import { spawn, type ChildProcess } from 'child_process'
 import { createReadStream, existsSync } from 'fs'
@@ -102,7 +102,24 @@ interface PreviewSession extends ProjectPreviewStatus {
   renderQueue: Promise<void>
 }
 
+interface NativePreviewAttachment {
+  owner: BrowserWindow
+  view: WebContentsView
+}
+
 const sessions = new Map<string, PreviewSession>()
+const nativeAttachments = new Map<string, NativePreviewAttachment>()
+
+function attachedWebContents(session: PreviewSession): WebContents | null {
+  const attached = nativeAttachments.get(session.id)
+  if (attached && !attached.owner.isDestroyed() && !attached.view.webContents.isDestroyed()) {
+    return attached.view.webContents
+  }
+  const previewWindow = session.previewWindow
+  return previewWindow && !previewWindow.isDestroyed() && !previewWindow.webContents.isDestroyed()
+    ? previewWindow.webContents
+    : null
+}
 
 function publicStatus(session: PreviewSession): ProjectPreviewStatus {
   const {
@@ -114,10 +131,7 @@ function publicStatus(session: PreviewSession): ProjectPreviewStatus {
     renderQueue: _renderQueue,
     ...status
   } = session
-  const previewWindow = session.previewWindow
-  const webContents = previewWindow && !previewWindow.isDestroyed() && !previewWindow.webContents.isDestroyed()
-    ? previewWindow.webContents
-    : null
+  const webContents = attachedWebContents(session)
   const currentUrl = webContents?.getURL()
   return {
     ...status,
@@ -387,6 +401,20 @@ function addLog(session: PreviewSession, chunk: unknown): void {
   }
 }
 
+function configurePreviewWebContents(webContents: WebContents, session: PreviewSession): void {
+  webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  const blockExternalNavigation = (event: Electron.Event, url: string): void => {
+    if (!isLoopbackUrl(url)) event.preventDefault()
+  }
+  webContents.on('will-navigate', blockExternalNavigation)
+  webContents.on('will-redirect', blockExternalNavigation)
+  const recordNavigation = (_event: Electron.Event, url: string): void => {
+    if (isLoopbackUrl(url)) session.url = url
+  }
+  webContents.on('did-navigate', recordNavigation)
+  webContents.on('did-navigate-in-page', recordNavigation)
+}
+
 function createPreviewWindow(session: PreviewSession): BrowserWindow {
   const previewWindow = new BrowserWindow({
     show: false,
@@ -401,15 +429,7 @@ function createPreviewWindow(session: PreviewSession): BrowserWindow {
       backgroundThrottling: false
     }
   })
-  previewWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  previewWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isLoopbackUrl(url)) event.preventDefault()
-  })
-  const recordNavigation = (_event: Electron.Event, url: string): void => {
-    if (isLoopbackUrl(url)) session.url = url
-  }
-  previewWindow.webContents.on('did-navigate', recordNavigation)
-  previewWindow.webContents.on('did-navigate-in-page', recordNavigation)
+  configurePreviewWebContents(previewWindow.webContents, session)
   previewWindow.on('closed', () => { session.previewWindow = null })
   return previewWindow
 }
@@ -683,6 +703,75 @@ export async function openWorkspacePreview(
   return { ...opened, url: opened.url }
 }
 
+function detachNativePreview(id: string, destroy = false): boolean {
+  const attached = nativeAttachments.get(id)
+  if (!attached) return false
+  try {
+    if (!attached.owner.isDestroyed()) attached.owner.contentView.removeChildView(attached.view)
+  } catch {
+    /* the owner may already be closing */
+  }
+  if (!attached.view.webContents.isDestroyed()) attached.view.setVisible(false)
+  if (destroy) {
+    nativeAttachments.delete(id)
+    if (!attached.view.webContents.isDestroyed()) attached.view.webContents.close()
+  }
+  return true
+}
+
+async function attachNativePreview(
+  sender: WebContents,
+  id: unknown,
+  boundsInput: unknown
+): Promise<ProjectPreviewStatus> {
+  const session = requireSession(id)
+  await waitForPreviewReady(session)
+  if (!session.url || !isLoopbackUrl(session.url)) throw new Error('No verified local preview URL is available.')
+  const owner = BrowserWindow.fromWebContents(sender)
+  if (!owner || owner.isDestroyed()) throw new Error('The Akorith window is not available.')
+  const raw = boundsInput && typeof boundsInput === 'object'
+    ? boundsInput as { x?: unknown; y?: unknown; width?: unknown; height?: unknown }
+    : {}
+  if (![raw.x, raw.y, raw.width, raw.height].every((value) => typeof value === 'number' && Number.isFinite(value))) {
+    throw new Error('Invalid embedded browser bounds.')
+  }
+  const zoom = sender.getZoomFactor()
+  const [contentWidth, contentHeight] = owner.getContentSize()
+  const x = Math.max(0, Math.min(contentWidth - 1, Math.round(Number(raw.x) * zoom)))
+  const y = Math.max(0, Math.min(contentHeight - 1, Math.round(Number(raw.y) * zoom)))
+  const width = Math.max(1, Math.min(contentWidth - x, Math.round(Number(raw.width) * zoom)))
+  const height = Math.max(1, Math.min(contentHeight - y, Math.round(Number(raw.height) * zoom)))
+
+  let attached = nativeAttachments.get(session.id)
+  if (attached && (attached.owner.isDestroyed() || attached.view.webContents.isDestroyed())) {
+    detachNativePreview(session.id, true)
+    attached = undefined
+  }
+  if (attached && attached.owner !== owner) {
+    detachNativePreview(session.id, true)
+    attached = undefined
+  }
+  if (!attached) {
+    const view = new WebContentsView({
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        backgroundThrottling: false
+      }
+    })
+    configurePreviewWebContents(view.webContents, session)
+    attached = { owner, view }
+    nativeAttachments.set(session.id, attached)
+    owner.once('closed', () => detachNativePreview(session.id, true))
+    await view.webContents.loadURL(session.url)
+  }
+  owner.contentView.addChildView(attached.view)
+  attached.view.setBounds({ x, y, width, height })
+  attached.view.setVisible(true)
+  return publicStatus(session)
+}
+
 export async function setProjectPreviewViewport(
   id: unknown,
   width: unknown,
@@ -714,7 +803,8 @@ export async function navigateProjectPreview(
 ): Promise<ProjectPreviewStatus> {
   const session = requireSession(id)
   const previewWindow = session.previewWindow
-  if (!previewWindow || previewWindow.isDestroyed() || previewWindow.webContents.isDestroyed()) {
+  const webContents = attachedWebContents(session)
+  if (!webContents) {
     throw new Error('The local browser is not ready.')
   }
   if (action !== 'back' && action !== 'forward' && action !== 'reload' && action !== 'go') {
@@ -722,7 +812,6 @@ export async function navigateProjectPreview(
   }
 
   await queuePreviewOperation(session, async () => {
-    const webContents = previewWindow.webContents
     if (action === 'go') {
       if (typeof value !== 'string' || !isLoopbackUrl(value)) {
         throw new Error('Akorith Browser only opens verified localhost and 127.0.0.1 URLs.')
@@ -735,7 +824,7 @@ export async function navigateProjectPreview(
     } else {
       webContents.reload()
     }
-    await settlePreviewLayout(previewWindow)
+    if (previewWindow && webContents === previewWindow.webContents) await settlePreviewLayout(previewWindow)
     const currentUrl = webContents.getURL()
     if (isLoopbackUrl(currentUrl)) session.url = currentUrl
   })
@@ -760,6 +849,7 @@ async function captureProject(id: unknown): Promise<{ status: ProjectPreviewStat
 export async function stopProjectPreview(id: unknown): Promise<ProjectPreviewStatus> {
   const session = requireSession(id)
   session.state = 'stopped'
+  detachNativePreview(session.id, true)
   if (session.previewWindow && !session.previewWindow.isDestroyed()) session.previewWindow.destroy()
   const child = session.process
   session.process = null
@@ -799,6 +889,13 @@ export function registerProjectPreviewIpc(): void {
   ipcMain.handle('projectPreview:active', (_event, path: unknown) => activeProjectPreview(path))
   ipcMain.handle('projectPreview:setViewport', (_event, id: unknown, width: unknown, height: unknown) =>
     setProjectPreviewViewport(id, width, height))
+  ipcMain.handle('projectPreview:attach', (event, input: unknown) => {
+    const args = input && typeof input === 'object'
+      ? input as { id?: unknown; bounds?: unknown }
+      : {}
+    return attachNativePreview(event.sender, args.id, args.bounds)
+  })
+  ipcMain.handle('projectPreview:detach', (_event, id: unknown) => detachNativePreview(String(id ?? '')))
   ipcMain.handle('projectPreview:capture', (_event, id: unknown) => captureProject(id))
   ipcMain.handle('projectPreview:stop', (_event, id: unknown) => stopProjectPreview(id))
   ipcMain.handle('projectPreview:open', (_event, id: unknown) => openProjectPreview(id))

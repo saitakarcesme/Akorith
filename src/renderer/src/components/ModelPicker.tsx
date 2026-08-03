@@ -83,6 +83,21 @@ export default function ModelPicker({
     return () => document.removeEventListener('keydown', onDocKey)
   }, [open])
 
+  // A full-window fixed backdrop caused Electron's Windows compositor to paint
+  // the entire renderer as an opaque blank surface while this menu was open.
+  // Detect outside clicks at the document level so the popover stays local to
+  // the composer and no full-window layer needs to be created.
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [open])
+
   const choose = (option: FlatOption): void => {
     onSelect(option.providerId, option.model)
     setOpen(false)
@@ -131,15 +146,13 @@ export default function ModelPicker({
       </button>
 
       {open && (
-        <>
-          <div className="model-picker-backdrop" onClick={() => setOpen(false)} />
-          <div
-            className={`model-picker-pop ${dropUp ? 'is-up' : ''}`}
-            role="listbox"
-            ref={popRef}
-            tabIndex={-1}
-            onKeyDown={onListKeyDown}
-          >
+        <div
+          className={`model-picker-pop ${dropUp ? 'is-up' : ''}`}
+          role="listbox"
+          ref={popRef}
+          tabIndex={-1}
+          onKeyDown={onListKeyDown}
+        >
             <div className="model-picker-pop-head">
               <span>Model</span>
               {onRefresh && (
@@ -186,8 +199,7 @@ export default function ModelPicker({
               })}
               {!providers?.length && <div className="model-picker-empty">No providers configured.</div>}
             </div>
-          </div>
-        </>
+        </div>
       )}
     </div>
   )

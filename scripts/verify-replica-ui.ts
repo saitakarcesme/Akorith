@@ -6,10 +6,6 @@ import {
   previewKeyForInput,
   previewWheelDelta
 } from '../src/renderer/src/components/ProjectPreviewPanel'
-import {
-  buildWorkspaceActivityEventNarrative,
-  buildWorkspaceActivityNarrative
-} from '../src/renderer/src/workspaceActivityNarrative'
 import { liveWorkspaceChangesSince, newlyCreatedWorkspaceFiles } from '../src/renderer/src/workspaceLiveChanges'
 import { highlightWorkspaceCode } from '../src/renderer/src/workspaceSyntax'
 import { deriveWorkspaceWorkflow } from '../src/renderer/src/workspaceWorkflow'
@@ -94,11 +90,9 @@ function hasHiddenMountedWrapper(
 
 const app = read('src/renderer/src/App.tsx')
 const chat = read('src/renderer/src/components/ChatPanel.tsx')
+const modelPicker = read('src/renderer/src/components/ModelPicker.tsx')
 const dashboard = read('src/renderer/src/components/Dashboard.tsx')
 const preview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
-const research = read('src/renderer/src/components/ResearchProgress.tsx')
-const researchEssay = read('src/renderer/src/components/ResearchEssay.tsx')
-const researchOperations = read('src/renderer/src/components/ResearchOperationalDetails.tsx')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceLiveChangesCard = read('src/renderer/src/components/WorkspaceLiveChangesCard.tsx')
 const workspaceSteps = read('src/renderer/src/components/WorkspaceStepsPanel.tsx')
@@ -115,11 +109,13 @@ const preloadTypes = read('src/preload/index.d.ts')
 const replicaCss = read('src/renderer/src/replica-ui.css')
 const stylesCss = read('src/renderer/src/styles.css')
 const productPolishCss = read('src/renderer/src/product-polish.css')
-const benchmark = read('src/renderer/src/components/BenchmarkExperience.tsx')
-const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
-const benchmarkCss = read('src/renderer/src/benchmark.css')
 
 check(/data-ui\s*=\s*['"]replica['"]/.test(app), "App opts into data-ui='replica'")
+check(
+  !/model-picker-backdrop/.test(modelPicker) &&
+    /document\.addEventListener\(['"]pointerdown['"]/.test(modelPicker),
+  'model picker closes outside clicks without a full-window backdrop'
+)
 
 check(
   hasToken(
@@ -366,11 +362,14 @@ check(
     preview.includes('placeholder="Enter a URL"') &&
     preview.includes("window.api.projectPreview.navigate") &&
     preview.includes('workspaceVariant') &&
-    preview.includes('mapPreviewPoint') &&
     preview.includes('project-preview-display') &&
     preview.includes('new ResizeObserver(scheduleResize)') &&
-    preview.includes('window.api.projectPreview.setViewport') &&
-    preview.includes('frameImageRef.current?.getBoundingClientRect()') &&
+    preview.includes('window.api.projectPreview.attach') &&
+    preview.includes('window.api.projectPreview.detach') &&
+    projectPreviewMain.includes('new WebContentsView') &&
+    projectPreviewMain.includes("ipcMain.handle('projectPreview:attach'") &&
+    projectPreviewMain.includes('setWindowOpenHandler') &&
+    projectPreviewMain.includes('if (!isLoopbackUrl(url)) event.preventDefault()') &&
     /!workspaceVariant\s*&&\s*<p>/.test(preview) &&
     selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-stage').some((block) =>
       /padding\s*:\s*0/.test(block) && /overflow\s*:\s*hidden/.test(block)
@@ -378,10 +377,10 @@ check(
     selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-display').some((block) =>
       /display\s*:\s*flex/.test(block) && /flex\s*:\s*1\s+1\s+auto/.test(block)
     ) &&
-    selectorBlocks(replicaCss, '.project-preview.is-workspace .project-preview-frame img').some((block) =>
-      /object-fit\s*:\s*fill/.test(block) && /height\s*:\s*100%/.test(block)
+    selectorBlocks(replicaCss, '.project-preview-native').some((block) =>
+      /height\s*:\s*100%/.test(block) && /width\s*:\s*100%/.test(block)
     ),
-  'Browser uses compact address chrome and a real responsive viewport that fills the tool surface'
+  'Browser uses compact address chrome and an attached interactive WebContentsView'
 )
 check(
   workspaceTools.includes('pointerInput') &&
@@ -390,7 +389,7 @@ check(
     preview.includes('onKeyDown={sendPreviewKey}') &&
     preview.includes('onWheel={scrollPreview}') &&
     preview.includes('event.currentTarget.focus({ preventScroll: true })'),
-  'Browser preview accepts direct pointer, wheel, and keyboard input without exposing the Computer Use text tray'
+  'Computer Use retains its explicit screenshot input bridge'
 )
 check(
   previewKeyForInput({ key: 'a', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }) === 'a' &&
@@ -419,26 +418,24 @@ check(
     projectPreviewMain.includes('projectPreviewInputKey(args.key)') &&
     preview.includes('? pointerEnabled') &&
     preloadTypes.includes("type: 'wheel'"),
-  'Browser input uses the responsive capture cadence and validates keys/wheel deltas inside verified loopback sessions'
+  'Computer Use input validates keys and wheel deltas inside verified loopback sessions'
 )
 check(
   app.includes("request.reason === 'activity'"),
   'background provider activity never auto-opens a workspace tool before the user asks for it'
 )
 check(
-  workspaceActivity.includes('ProgressiveNarrative') &&
-    workspaceActivity.includes("matchMedia('(prefers-reduced-motion: reduce)')") &&
+  workspaceActivity.includes("activity.kind === 'commentary'") &&
     workspaceActivity.includes('liveAnnouncement') &&
     workspaceActivity.includes('workspace-activity-sr') &&
     workspaceActivity.includes('feed.map') &&
-    workspaceActivity.includes('item.id === latest?.id') &&
+    workspaceActivity.includes('latestAction') &&
     workspaceActivity.includes('workspace-activity-event-line') &&
     !/ActivityIcon|workspace-activity-event-icon|workspace-activity-event-badge|workspace-activity-phase/.test(workspaceActivity) &&
     selectorBlocks(productPolishCss, '.workspace-activity-event').some((block) =>
       /background\s*:\s*transparent/.test(block)
-    ) &&
-    !productPolishCss.includes('.workspace-activity-event.is-current'),
-  'Workspace activity renders one flat chronological transcript without cards, icons, or a highlighted current row'
+    ),
+  'Workspace activity renders exact provider commentary plus a chronological real-event transcript'
 )
 
 const mappedCenter = mapPreviewPoint(
@@ -466,27 +463,6 @@ check(
       'fill'
     ) === null,
   'Computer Use pointer mapping targets the full responsive viewport without letterboxing'
-)
-
-const activityNarrative = buildWorkspaceActivityNarrative({
-  projectName: 'Akorith',
-  taskPrompt: 'Create an index.html snake game',
-  active: true,
-  failed: false,
-  activities: [
-    { kind: 'file', label: 'Writing index.html', status: 'complete', timestamp: 1 },
-    { kind: 'command', label: 'npm run check', detail: 'Passed', status: 'complete', timestamp: 2 }
-  ]
-})
-check(
-  activityNarrative.includes('Create an index.html snake game') &&
-    activityNarrative.length <= 380 &&
-    !activityNarrative.includes('Writing index.html') &&
-    buildWorkspaceActivityEventNarrative(
-      { kind: 'command', label: 'npm run check', detail: 'Passed', status: 'complete', timestamp: 2 },
-      'Akorith'
-    ).includes('Passed'),
-  'Workspace run narrative stays brief while event copy carries concrete provider evidence'
 )
 
 const liveChanges = liveWorkspaceChangesSince(
@@ -621,28 +597,10 @@ check(
   'empty-chat composer is centered before optional suggestions'
 )
 check(
-  researchOperations.includes('research-phase-scroll') &&
-  researchOperations.includes('<strong>{phase.label}</strong>') &&
-  selectorBlocks(replicaCss, '.research-phase.is-active').some((block) =>
-    !/(?:purple|gradient|animation)/i.test(block)
-  ),
-  'Research uses a compact neutral phase strip'
-)
-check(
-  researchOperations.includes('research-workbench-grid') &&
-  selectorBlocks(stylesCss, '.research-workbench-grid').some((block) =>
-    /display\s*:\s*grid/.test(block) &&
-    /auto-fit/.test(block) &&
-    /gap\s*:\s*clamp\(/.test(block)
-  ),
-  'Evidence program and Research log share a responsive, spacious grid'
-)
-check(
-  research.includes('<ResearchEssay') &&
-  research.includes('collapsed={terminal}') &&
-  researchEssay.includes('Research essay') &&
-  researchEssay.includes('Bibliography'),
-  'Completed Research leads with the essay and keeps operational details collapsed'
+  app.includes('className="empty-feature-section"') &&
+    !/ResearchPage|TestPage/.test(app) &&
+    !/window\.api\.(?:research|benchmark)/.test(preload),
+  'Research and Benchmark remain as empty routes without legacy runtime APIs'
 )
 check(
   dashboard.includes('gpuHistory') &&
@@ -663,14 +621,14 @@ check(
   'Workspace activity headings are iconless, transcript-sized, and share the narrative left edge'
 )
 check(
-  workspaceActivity.includes('buildWorkspaceActivityEventNarrative') &&
-    workspaceActivity.includes('item.id === latest?.id') &&
-    workspaceActivity.includes('ProgressiveNarrative') &&
+  workspaceActivity.includes("item.activity.kind === 'commentary'") &&
+    workspaceActivity.includes('latestAction') &&
+    workspaceActivity.includes('workspace-activity-current') &&
     chat.includes('LIVE_CHANGE_POLL_MS = 2_000') &&
     chat.includes('liveWorkspaceChangesSince') &&
     workspaceLiveChangesCard.includes('Edited {changes.files.length}') &&
     workspaceLiveChangesCard.includes('onReview'),
-  'Workspace activity interleaves progressive event copy and exposes a live Review changes receipt'
+  'Workspace activity pairs exact provider commentary with real actions and a live Review receipt'
 )
 check(
   workspaceSteps.includes('snapshot.steps.map') &&
@@ -800,18 +758,6 @@ check(
   composerFocusBlocks.every((block) => !/(?:--blue|#339cff)/i.test(block)),
   'composer focus treatment has no blue border'
 )
-const researchComposerFocusBlocks = [
-  ...selectorBlocks(replicaCss, '.research-composer-box textarea:focus'),
-  ...selectorBlocks(replicaCss, '.research-composer-box textarea:focus-visible')
-]
-check(
-  researchComposerFocusBlocks.length > 0 &&
-    researchComposerFocusBlocks.every((block) =>
-      /outline\s*:\s*none/.test(block) &&
-      /box-shadow\s*:\s*none/.test(block)
-    ),
-  'Research prompt keeps its composer surface borderless while focused'
-)
 const finalComposerBox = selectorBlocks(replicaCss, '.composer-box')
   .filter((block) => /border-radius\s*:/.test(block))
   .at(-1) ?? ''
@@ -842,58 +788,6 @@ check(
   'user message text keeps contrast against its bubble'
 )
 
-const researchEventBlocks = selectorBlocks(replicaCss, '.research-event-list')
-check(
-  researchEventBlocks.some((block) =>
-    /max-height\s*:\s*clamp\(/.test(block) &&
-    /overflow-y\s*:\s*auto/.test(block) &&
-    /overscroll-behavior\s*:\s*contain/.test(block)
-  ) &&
-  researchEventBlocks.every((block) => !/max-height\s*:\s*none/.test(block)),
-  'long Research activity owns a bounded internal scroll region'
-)
-check(
-  selectorBlocks(replicaCss, '.research-page-content').some((block) =>
-    /min-height\s*:\s*0/.test(block) &&
-    /overflow-y\s*:\s*auto/.test(block)
-  ),
-  'Research keeps its toolbar and tabs outside the scrolling content'
-)
-
-check(
-  ['Select Models', 'Choose Benchmark', 'Configure', 'Run Benchmark'].every((label) => benchmark.includes(label)) &&
-    benchmark.includes("aria-current={isCurrent ? 'step' : undefined}"),
-  'Benchmark exposes the four-step accessible workflow'
-)
-check(
-  benchmark.includes('Search models...') &&
-    benchmark.includes('Search benchmarks...') &&
-    benchmark.includes('Run queue') &&
-    benchmark.includes('Recent runs') &&
-    benchmark.includes('Score table'),
-  'Benchmark includes selection, queue, history and score surfaces'
-)
-check(
-  benchmarkPage.includes('runBoundedBenchmarkQueue') &&
-    benchmarkPage.includes('window.api.benchmark.createRun') &&
-    benchmarkPage.includes('window.api.benchmark.finishRun') &&
-    benchmarkPage.includes('for (const requestId of activeRequestIds.current)'),
-  'Benchmark queue is bounded, persisted and fully cancellable'
-)
-check(
-  /--benchmark-bg\s*:\s*var\(--surface\)/.test(benchmarkCss) &&
-    /--benchmark-panel-raised\s*:\s*var\(--surface-card\)/.test(benchmarkCss) &&
-    /--benchmark-radius-lg\s*:\s*8px/.test(benchmarkCss) &&
-    !/linear-gradient|radial-gradient/i.test(benchmarkCss),
-  'Benchmark inherits the neutral theme surfaces, restrained radii and no gradients'
-)
-check(
-  benchmarkCss.includes('@container benchmark-experience (max-width: 980px)') &&
-    benchmarkCss.includes('@container benchmark-experience (max-width: 720px)') &&
-    benchmarkCss.includes('@container benchmark-experience (max-width: 520px)'),
-  'Benchmark has container-responsive desktop, tablet and narrow layouts'
-)
-
 check(
   /\btabGroups\b/.test(settings) &&
   settings.includes('settings-tab-group') &&
@@ -920,13 +814,13 @@ const responsiveSurfaces = [
   { area: 'Browser', selector: '.project-preview.is-workspace .project-preview-display' },
   { area: 'Computer Use', selector: '.project-preview.is-workspace .project-preview-type' },
   { area: 'Files', selector: '.workspace-files-panel' },
-  { area: 'Research', selector: '.research-page-wrap' },
-  { area: 'Benchmark', selector: '.benchmark-experience' },
+  { area: 'Research', selector: '.empty-feature-section' },
+  { area: 'Benchmark', selector: '.empty-feature-section' },
   { area: 'Plugins', selector: '.plugins-page' },
   { area: 'Settings', selector: '.settings-page-inner' },
   { area: 'Dashboard', selector: '.profile-dashboard' }
 ] as const
-const responsiveCss = `${replicaCss}\n${stylesCss}\n${benchmarkCss}`
+const responsiveCss = `${replicaCss}\n${stylesCss}`
 
 function hasIntrinsicWidthRelease(selector: string): boolean {
   return selectorBlocks(responsiveCss, selector).some((block) =>
@@ -982,22 +876,9 @@ check(
   'Workspace remains mounted and is hidden with display:none'
 )
 check(
-  hasHiddenMountedWrapper(
-    app,
-    'test-page-wrap',
-    /view\s*===\s*['"]test['"]/,
-    'TestPage'
-  ),
-  'Test remains mounted and is hidden with display:none'
-)
-check(
-  hasHiddenMountedWrapper(
-    app,
-    'research-page-wrap',
-    /view\s*===\s*['"]research['"]/,
-    'ResearchPage'
-  ),
-  'Research remains mounted and is hidden with display:none'
+  /view === 'test'[\s\S]{0,160}empty-feature-section/.test(app) &&
+    /view === 'research'[\s\S]{0,160}empty-feature-section/.test(app),
+  'Research and Benchmark routes render only their empty section shells'
 )
 
 if (failures.length > 0) {

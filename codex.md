@@ -13,8 +13,8 @@ desktop workspace that orchestrates coding agents **without any API keys**. The 
 chat talks to the user's own **Claude** / **ChatGPT**
 subscriptions via their installed CLIs (`claude`, `codex`) or a local **Ollama** server; the
 local CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite in strict numbered phases; currently through **Phase 73:
-Workspace `/loop` Skill**.
+history. Built with electron-vite in strict numbered phases; currently through **Phase 74:
+Workspace Turn-Flow Reset**.
 
 - Run: `npm install` then `npm run dev`. Type-check: `npm run typecheck`.
 - Config + DB live in Electron's userData dir: `loopex.config.json`, `loopex.db`.
@@ -372,6 +372,9 @@ Workspace `/loop` Skill**.
       project task ending with the exact `/loop` suffix creates a durable, recoverable Goal in its
       Workspace chat; only evidence-backed completion is final, usage is recorded, conflicting
       Workspace sends are blocked, and automatic Git init/stage/commit/push is disabled.
+- [x] **Phase 74** - Workspace Turn-Flow Reset. Workspace progress now comes from exact provider
+      events, General Chat/project Workspaces keep isolated model selections, Browser is a native
+      interactive `WebContentsView`, and Research/Benchmark are empty route shells pending redesign.
 - [x] **Phase 23 validation** - biggest test step. `docs/validation/phase23-biggest-test-step.md`
       records the full product combination matrix, passing automated checks, blocked Local/Ollama
       live cases while the home PC is off, remote model connection steps, and the build-freshness
@@ -868,8 +871,9 @@ local model, attempts, validated changes, commits, last validation, and last com
   dark/light replica token families.
 - This is a visual integration only. Keep `App.tsx` as controller, keep the preload bridge frozen,
   and preserve the existing functional surfaces. At Phase 72, Chat, Benchmark, Loop, and Research
-  remained mounted while hidden; Phase 73 supersedes the Loop portion. There is now no standalone
-  Loop mount or route. Workspace remains mounted, and Benchmark/Research retain long-running state.
+  remained mounted while hidden; Phase 73 supersedes the Loop portion and Phase 74 supersedes the
+  Benchmark/Research portion. There is now no standalone Loop mount or route. Workspace remains
+  mounted, while Benchmark/Research are empty route shells with no legacy runtime.
   Suggestion cards prepare real prompts; the feature banner remains the real permissioned Computer
   Use panel.
 - At 720 px and below the sidebar becomes a scrim-backed sheet. Responsive collapse is separate
@@ -908,6 +912,26 @@ local model, attempts, validated changes, commits, last validation, and last com
 - Canonical verification: `npm run verify:workspace-skill-loop`,
   `npm run verify:goal-cycle`, `npm run verify:project-loop`,
   `npm run verify:startup-hydration`, `npm run typecheck`, and `npm run build`.
+
+## Phase 74 - Workspace Turn-Flow Reset
+
+- Workspace assistant cards now render exact provider commentary and real command/file/tool/plan/
+  reasoning/failure events. Stable provider ids merge lifecycle updates, and activity metadata is
+  persisted during the live turn. The old synthetic narrative and fake progressive copy are gone.
+- Codex uses its official JSON event stream for progress and `--output-last-message` for the one
+  final response. Claude/OpenCode suppress partial final-answer text only in Workspace; General Chat
+  keeps normal streaming.
+- General Chat has an independent provider/model selection, and every project Workspace has its own
+  selection under `akorith.chatSelections.v1`. Saved task history restores its recorded model.
+- Browser uses a sandboxed native `WebContentsView`, restricted to verified loopback navigation and
+  redirects, with popups denied. Native input works directly and tab state survives hide/show;
+  Computer Use retains the screenshot/input bridge.
+- Research and Benchmark labels remain in the sidebar, but both routes are empty. Legacy UI, IPC,
+  scheduler, Discord settings, harnesses, exporters, dependencies, and packaging resources are
+  removed. Historical DB data is preserved for a safe future redesign.
+- Verify with `npm run verify:workspace-activity`, `npm run verify:replica-ui`,
+  `npm run verify:performance`, `npm run typecheck`, `npm run build`, and
+  `npm run verify:bundle`.
 
 ## Rule: keep the docs current
 

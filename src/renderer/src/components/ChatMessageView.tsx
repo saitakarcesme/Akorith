@@ -139,7 +139,7 @@ function ChatMessageView({
       {message.role === 'assistant' && !showAssistantText ? null : message.role === 'assistant'
         ? <div className="chat-msg-text"><ChatMarkdown text={message.text} /></div>
         : <div className="chat-msg-text">{message.text}</div>}
-      {message.role === 'assistant' && message.status === 'streaming' && (
+      {message.role === 'assistant' && message.status === 'streaming' && !isWorkspace && (
         <div className="chat-thinking" role="status" aria-live="polite">
           <span className="chat-thinking-label">Akorithing…</span>
         </div>

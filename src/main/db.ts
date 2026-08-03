@@ -1240,6 +1240,29 @@ export function updateChatTurnAssistant(
   return result.changes > 0
 }
 
+/** Persist live Workspace progress on the existing assistant placeholder.
+ *  Each provider event becomes recoverable immediately instead of waiting for
+ *  the final answer. The terminal update still replaces this metadata with the
+ *  complete lifecycle, usage, changes, and the same bounded activity list. */
+export function updateChatTurnProgress(
+  messageId: string,
+  activities: StoredMessageActivity[]
+): boolean {
+  const d = must()
+  const row = d.prepare(
+    'SELECT metadata FROM messages WHERE id = ? AND role = ?'
+  ).get(messageId, 'assistant') as { metadata: string | null } | undefined
+  if (!row) return false
+  const current = parseMessageMetadata(row.metadata) ?? {}
+  const next: StoredMessageMetadata = {
+    ...current,
+    activities
+  }
+  return d.prepare(
+    'UPDATE messages SET metadata = ? WHERE id = ? AND role = ?'
+  ).run(JSON.stringify(next), messageId, 'assistant').changes > 0
+}
+
 /** Update one persisted assistant status card without appending a second final response. */
 export function updateMessage(
   messageId: string,

@@ -176,6 +176,7 @@ export class OpenCodeProvider implements Provider {
         : `${prompt}\n\nOpenCode is running non-interactively inside a trusted project boundary. Use project-scoped read, search, and edit tools directly. ${INSPECTION_GUIDANCE} Akorith's host handles an explicitly requested app start or preview after this turn, so do not start a server, run an app-opening command, or give the user a manual launch command. Never request an interactive permission prompt, access a parent directory, delete files, commit, or push.`
       : prompt
     let streamedText = ''
+    const streamVisibleText = !opts.workingDirectory
 
     const res = await runCli('opencode', args, {
       // Keep the complete prompt off argv. OpenCode's run command natively
@@ -208,7 +209,7 @@ export class OpenCodeProvider implements Provider {
           : null
         if (part?.type === 'text' && typeof part.text === 'string' && part.text) {
           streamedText += part.text
-          onToken(part.text)
+          if (streamVisibleText) onToken(part.text)
         }
         const activity = normalizeOpenCodeActivityEvent(event, opts.workingDirectory)
         if (activity) opts.onActivity?.(activity)
@@ -243,7 +244,7 @@ export class OpenCodeProvider implements Provider {
         status: 'error'
       })
     }
-    if (!streamedText) onToken(text)
+    if (!streamedText || !streamVisibleText) onToken(text)
 
     return {
       text,

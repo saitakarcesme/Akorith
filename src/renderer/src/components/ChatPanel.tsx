@@ -67,6 +67,42 @@ function storageString(key: string, fallback: string): string {
   try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
 }
 
+interface SavedModelSelection {
+  providerId: string
+  model: string
+}
+
+const CHAT_SELECTIONS_KEY = 'akorith.chatSelections.v1'
+
+function readChatSelections(): Record<string, SavedModelSelection> {
+  try {
+    const value = JSON.parse(localStorage.getItem(CHAT_SELECTIONS_KEY) ?? '{}') as unknown
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return value as Record<string, SavedModelSelection>
+  } catch {
+    return {}
+  }
+}
+
+function storeChatSelection(scope: string, providerId: string, model: string): void {
+  if (!providerId) return
+  try {
+    const current = readChatSelections()
+    current[scope] = { providerId, model }
+    localStorage.setItem(CHAT_SELECTIONS_KEY, JSON.stringify(current))
+  } catch {
+    /* localStorage is optional */
+  }
+}
+
+function lastStoredModel(messages: Array<{ model?: string | null }>): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const value = messages[index].model
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return undefined
+}
+
 function isLocalAutoStarting(provider?: ProviderInfo): boolean {
   return Boolean(provider?.id === 'local' && !provider.available.ok && /Akorith (is starting Ollama|tried to auto-start it)/i.test(provider.available.reason ?? ''))
 }
@@ -155,6 +191,28 @@ export default function ChatPanel({
   activeRef.current = active
   const isWorkspace = mode === 'workspace'
   const hasProject = isWorkspace && Boolean(activeProject?.path)
+  const selectionScope = isWorkspace ? `workspace:${activeProject?.id ?? 'default'}` : 'general'
+  const selectionScopeRef = useRef(selectionScope)
+  const restoringSelectionRef = useRef(false)
+
+  useEffect(() => {
+    const previousScope = selectionScopeRef.current
+    if (previousScope === selectionScope) return
+    storeChatSelection(previousScope, providerId, model)
+    selectionScopeRef.current = selectionScope
+    const saved = readChatSelections()[selectionScope]
+    restoringSelectionRef.current = true
+    setProviderId(saved?.providerId ?? '')
+    setModel(saved?.model ?? '')
+  }, [model, providerId, selectionScope])
+
+  useEffect(() => {
+    if (restoringSelectionRef.current) {
+      restoringSelectionRef.current = false
+      return
+    }
+    storeChatSelection(selectionScope, providerId, model)
+  }, [model, providerId, selectionScope])
 
   useEffect(() => () => {
     activeRef.current = false
@@ -345,6 +403,8 @@ export default function ChatPanel({
       activeSessionProjectRef.current = data.session.projectId
       onActiveSession(data.session.id)
       setProviderId(data.session.providerId)
+      const storedModel = lastStoredModel(data.messages)
+      if (storedModel) setModel(storedModel)
       void refreshContext(data.session.id)
     })
     // A request completing changes pendingSessions, but must not reload this
@@ -999,6 +1059,7 @@ export default function ChatPanel({
     if (!suggestion?.available) return
     setProviderId(suggestion.providerId)
     if (suggestion.model) setModel(suggestion.model)
+    storeChatSelection(selectionScope, suggestion.providerId, suggestion.model ?? '')
     setSuggestion(null)
   }
 
@@ -1185,7 +1246,7 @@ export default function ChatPanel({
             <div className="composer-more"><button type="button" className={`composer-chip ${moreOpen ? 'is-active' : ''}`} onClick={() => setMoreOpen((open) => !open)}><SparkIcon size={13} /><span>More</span></button>{moreOpen && <><div className="composer-more-backdrop" onClick={() => setMoreOpen(false)} /><div className="composer-more-pop" role="menu"><button type="button" className="composer-more-item" disabled={!draft.trim() || suggesting} onClick={() => { setMoreOpen(false); void suggestTask() }}><SparkIcon size={13} /><span>{suggesting ? 'Classifying…' : 'Suggest model'}</span></button>{hasProject && <><div className="composer-more-sep" /><label className="composer-more-toggle"><span>Repository context</span><input type="checkbox" checked={digestEnabled} onChange={() => { const next = !digestEnabled; setDigestEnabled(next); void window.api.digest.setEnabled(next) }} /></label></>}</div></>}</div>
           </div>
           <div className="composer-submit-group">
-            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel) }} onRefresh={() => void loadProviders(true)} modelSource={(id, selectedModel) => id === 'local' ? selectedModel === 'beyefendi-v2-hf' ? 'Hugging Face' : ollamaActive?.label ?? 'Local' : undefined} />
+            <ModelPicker providers={providers} providerId={providerId} model={model} onSelect={(nextProvider, nextModel) => { setProviderId(nextProvider); setModel(nextModel); storeChatSelection(selectionScope, nextProvider, nextModel) }} onRefresh={() => void loadProviders(true)} modelSource={(id, selectedModel) => id === 'local' ? selectedModel === 'beyefendi-v2-hf' ? 'Hugging Face' : ollamaActive?.label ?? 'Local' : undefined} />
             {busyRequestId && canSubmit && <button type="button" className="composer-queue-button" onClick={sendOrQueue}><QueueIcon size={14} />Queue</button>}
             {busyRequestId
               ? <ComposerSendButton stop disabled={isStopping} onClick={cancel}><StopIcon size={16} /></ComposerSendButton>

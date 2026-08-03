@@ -4,7 +4,7 @@
 
 export type ProviderKind = 'chat' | 'executor'
 
-export type ProviderActivityKind = 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
+export type ProviderActivityKind = 'status' | 'commentary' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
 export type ProviderActivityStatus = 'running' | 'complete' | 'error'
 export type ProviderActivitySurface = 'review' | 'terminal' | 'browser' | 'computer' | 'files'
 

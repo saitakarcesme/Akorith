@@ -94,7 +94,7 @@ export interface ChatSendResult {
 
 export interface ChatActivity {
   id?: string
-  kind: 'status' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
+  kind: 'status' | 'commentary' | 'reasoning' | 'plan' | 'command' | 'file' | 'tool' | 'warning'
   label: string
   detail?: string
   status?: 'running' | 'complete' | 'error'
@@ -2399,6 +2399,8 @@ export interface ProjectPreviewApi {
   active(projectPath: string): Promise<ProjectPreviewStatus | null>
   status(id: string): Promise<ProjectPreviewStatus>
   setViewport(id: string, width: number, height: number): Promise<ProjectPreviewStatus>
+  attach(id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<ProjectPreviewStatus>
+  detach(id: string): Promise<boolean>
   capture(id: string): Promise<ProjectPreviewCapture>
   stop(id: string): Promise<ProjectPreviewStatus>
   open(id: string): Promise<boolean>
@@ -2811,7 +2813,6 @@ export interface PreloadApi {
   router: RouterApi
   digest: DigestApi
   test: TestApi
-  benchmark: BenchmarkApi
   evaluate: EvaluateApi
   macro: MacroApi
   agent: AgentApi
@@ -2828,7 +2829,6 @@ export interface PreloadApi {
   usageLimits: UsageLimitsApi
   localRuntime: LocalRuntimeApi
   projectLoop: ProjectLoopApi
-  research: ResearchApi
   projectPreview: ProjectPreviewApi
   companion: CompanionApi
   actionAgent: ActionAgentApi

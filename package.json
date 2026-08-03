@@ -22,22 +22,6 @@
     "verify:local-workspace": "tsx scripts/verify-local-workspace.ts",
     "verify:controller": "tsx scripts/verify-controller.ts",
     "verify:startup-hydration": "tsx scripts/verify-startup-hydration.ts",
-    "verify:research-contracts": "tsx scripts/research-verify-contracts.ts",
-    "verify:research-autoresearch": "tsx scripts/research-verify-autoresearch.ts",
-    "verify:research-artifacts": "tsx scripts/research-verify-artifacts.ts",
-    "verify:research-persistence": "electron scripts/research-persistence-main.cjs",
-    "verify:research-network": "tsx scripts/research-verify-network.ts",
-    "verify:research-inputs": "tsx scripts/research-verify-inputs.ts",
-    "verify:research-local-provider": "tsx scripts/research-verify-local-provider.ts",
-    "verify:research-scheduling": "tsx scripts/research-verify-scheduling.ts",
-    "verify:research-discord": "tsx scripts/research-verify-discord-delivery.ts",
-    "verify:research": "npm run verify:research-autoresearch && npm run verify:research-contracts && npm run verify:research-inputs && npm run verify:research-local-provider && npm run verify:research-scheduling && npm run verify:research-discord && npm run verify:research-network && npm run verify:research-artifacts && npm run verify:research-persistence",
-    "verify:research-gpu": "electron scripts/research-local-gpu-smoke-main.cjs",
-    "verify:research-gpu:help": "electron scripts/research-local-gpu-smoke-main.cjs --help",
-    "verify:research-live": "electron scripts/research-live-smoke-main.cjs",
-    "verify:research-live:check": "electron scripts/research-live-smoke-main.cjs --check",
-    "verify:research-seed": "electron scripts/research-seed-main.cjs",
-    "verify:research-seed:help": "electron scripts/research-seed-main.cjs --help",
     "verify:update-version": "tsx scripts/verify-update-version.ts",
     "setup": "bash scripts/setup-akorith.sh",
     "setup:mac": "bash scripts/setup-akorith.sh",
@@ -71,7 +55,6 @@
     "verify:ui-zoom": "tsx scripts/verify-ui-zoom.ts",
     "verify:replica-ui": "tsx scripts/verify-replica-ui.ts",
     "verify:performance": "tsx scripts/verify-performance.ts",
-    "verify:benchmark": "tsx scripts/verify-benchmark.ts",
     "verify:bundle": "tsx scripts/verify-bundle-budget.ts"
   },
   "build": {
@@ -97,18 +80,6 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
-      },
-      {
-        "from": "node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf",
-        "to": "research-fonts/DejaVuSans.ttf"
-      },
-      {
-        "from": "node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf",
-        "to": "research-fonts/DejaVuSans-Bold.ttf"
-      },
-      {
-        "from": "node_modules/dejavu-fonts-ttf/LICENSE",
-        "to": "research-fonts/LICENSE"
       }
     ],
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
@@ -179,12 +150,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "better-sqlite3": "^12.10.0",
-    "cheerio": "^1.0.0",
-    "docx": "^9.7.1",
-    "exceljs": "^4.4.0",
-    "jszip": "^3.10.1",
     "node-pty": "^1.1.0",
-    "pdf-parse": "^1.1.1",
     "pdfkit": "^0.19.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -198,7 +164,6 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react-swc": "^4.3.1",
-    "dejavu-fonts-ttf": "^2.37.3",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",

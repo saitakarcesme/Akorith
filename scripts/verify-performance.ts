@@ -38,16 +38,9 @@ const gpuStatus = read('src/main/gpu-status.ts')
 const main = read('src/main/index.ts')
 const sidebar = read('src/renderer/src/components/Sidebar.tsx')
 const providerRegistry = read('src/main/providers/registry.ts')
-const researchService = read('src/main/research/service.ts')
-const researchIpc = read('src/main/research/ipc.ts')
-const researchSynthesize = read('src/main/research/synthesize.ts')
 const workspaceActivity = read('src/renderer/src/components/WorkspaceActivity.tsx')
 const workspaceSteps = read('src/renderer/src/components/WorkspaceStepsPanel.tsx')
 const projectPreview = read('src/renderer/src/components/ProjectPreviewPanel.tsx')
-const testPage = read('src/renderer/src/components/TestPage.tsx')
-const benchmarkPage = read('src/renderer/src/components/BenchmarkPage.tsx')
-const researchPage = read('src/renderer/src/components/ResearchPage.tsx')
-const researchLibrary = read('src/renderer/src/components/ResearchLibrary.tsx')
 const projectFiles = read('src/main/project-files.ts')
 const ollamaConnection = read('src/main/ollama-connection.ts')
 const pluginManager = read('src/main/plugins/manager.ts')
@@ -59,7 +52,7 @@ const workspaceFilesPanel = read('src/renderer/src/components/WorkspaceFilesPane
 const workspaceFileTree = read('src/renderer/src/workspaceFileTree.ts')
 const bottomWorkbench = read('src/renderer/src/components/BottomWorkbench.tsx')
 
-for (const component of ['Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
+for (const component of ['Dashboard', 'Plugins']) {
   check(
     new RegExp(`const\\s+${escaped(component)}\\s*=\\s*lazy\\(\\(\\)\\s*=>\\s*import\\(`).test(app),
     `${component} is split out of the startup bundle`
@@ -87,10 +80,9 @@ check(
 )
 
 check(
-  app.includes("PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'research'])") &&
-    app.includes("view === 'test' || mountedFeatureViews.has('test')") &&
-    app.includes("view === 'research' || mountedFeatureViews.has('research')"),
-  'long-running feature pages mount on first visit and then preserve active work'
+  app.includes('className="empty-feature-section"') &&
+    !/ResearchPage|TestPage/.test(app),
+  'empty Research and Benchmark routes add no feature bundles or background work'
 )
 check(
   !app.includes("const ProjectLoopPage = lazy") &&
@@ -179,7 +171,7 @@ check(
   workspaceActivity.includes('export default memo(WorkspaceActivity)') &&
     workspaceSteps.includes('export default memo(WorkspaceStepsPanel)') &&
     workspaceActivity.includes('const feed = useMemo') &&
-    workspaceActivity.includes('const recordedEnd = useMemo'),
+    workspaceActivity.includes('const commentaries = useMemo'),
   'stable Workspace progress displays skip unrelated chat renders'
 )
 
@@ -218,13 +210,6 @@ check(
   'plugin diagnostics are deferred, cached, coalesced, and manually refreshable'
 )
 check(
-  [researchService, researchIpc, researchSynthesize].every((source) =>
-    !/import\s+\{\s*exportResearchJob\s*\}\s+from\s+['"]\.\/exporters['"]/.test(source) &&
-    source.includes("await import('./exporters')")
-  ),
-  'heavy Research exporters load only when an artifact is requested'
-)
-check(
   dashboard.includes("document.addEventListener('visibilitychange'") &&
     dashboard.includes('document.hidden ? 10_000 : 3_000') &&
     !dashboard.includes('sampleCompute(), 1_800'),
@@ -236,30 +221,18 @@ check(
   'GPU samples do not rebuild both year-long activity heatmaps'
 )
 check(
-  testPage.includes("export { default } from './BenchmarkPage'") &&
-    benchmarkPage.includes('if (!active || !providers.some(isLocalStarting)) return'),
-  'hidden Benchmark stops local-provider retry polling'
-)
-check(
-  researchLibrary.includes('LIBRARY_PAGE_SIZE = 48') &&
-    researchLibrary.includes('visibleJobs.slice(0, visibleLimit)') &&
-    researchPage.includes('pendingCoverIdsRef') &&
-    researchPage.includes('onNeedCovers={requestCovers}'),
-  'Research Library paginates DOM and loads only visible covers'
-)
-check(
   app.includes("active={view === 'workspace' || view === 'general'}") &&
     projectPreview.includes('if (!active || !session') &&
-    projectPreview.includes('if (document.hidden || pollingRef.current || viewportBusyRef.current)') &&
+    projectPreview.includes('if (document.hidden || pollingRef.current') &&
     projectPreview.includes('timer = window.setTimeout(() => void refresh(), interval)') &&
     !projectPreview.includes('window.setInterval'),
-  'Workspace preview polling pauses while hidden and never overlaps captures'
+  'Workspace preview status polling pauses while hidden and never overlaps work'
 )
 check(
-  projectPreview.includes('BROWSER_CAPTURE_INTERVAL_MS = 1_200') &&
-    projectPreview.includes('COMPUTER_CAPTURE_INTERVAL_MS = 550') &&
-    projectPreview.includes('STARTUP_STATUS_INTERVAL_MS = 1_600'),
-  'Browser and Computer Use apply workload-specific adaptive capture intervals'
+  projectPreview.includes('if (live && !browserMode)') &&
+    projectPreview.includes('window.api.projectPreview.attach') &&
+    projectPreview.includes('COMPUTER_CAPTURE_INTERVAL_MS = 550'),
+  'Browser uses a native view while only Computer Use pays screenshot capture cost'
 )
 check(
   workspaceFilesPanel.includes('window.setTimeout(() => setSettledQuery(query), 160)') &&

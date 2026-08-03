@@ -238,17 +238,6 @@ const evaluate = Object.freeze({
     ipcRenderer.invoke('evaluate:openPdf', { evaluationId })
 })
 
-const benchmark = Object.freeze({
-  list: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:list', { limit }),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('benchmark:get', id),
-  upsert: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:upsert', input),
-  exportForWeb: (): Promise<unknown> => ipcRenderer.invoke('benchmark:export'),
-  createRun: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:createRun', input),
-  updateRunItem: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:updateRunItem', input),
-  finishRun: (input: unknown): Promise<unknown> => ipcRenderer.invoke('benchmark:finishRun', input),
-  listRuns: (limit?: number): Promise<unknown> => ipcRenderer.invoke('benchmark:listRuns', { limit })
-})
-
 const macro = Object.freeze({
   createSession: (args: unknown): Promise<unknown> => ipcRenderer.invoke('macro:createSession', args),
   // Phase 20: scaffold an everyday-dev project + bind an auto-commit loop to it.
@@ -448,35 +437,6 @@ const projectLoop = Object.freeze({
   inspectTarget: (path: string): Promise<unknown> => ipcRenderer.invoke('projectLoop:inspectTarget', path)
 })
 
-// Long-running, evidence-backed investigations. The renderer only receives
-// validated records and identity-based commands; filesystem and provider work
-// remain in the main process.
-const research = Object.freeze({
-  list: (): Promise<unknown> => ipcRenderer.invoke('research:list'),
-  get: (id: string): Promise<unknown> => ipcRenderer.invoke('research:get', id),
-  essay: (id: string): Promise<unknown> => ipcRenderer.invoke('research:essay', id),
-  poll: (id: string, version?: string): Promise<unknown> =>
-    ipcRenderer.invoke('research:poll', { id, version }),
-  create: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:create', input),
-  pause: (id: string): Promise<unknown> => ipcRenderer.invoke('research:pause', id),
-  resume: (id: string): Promise<unknown> => ipcRenderer.invoke('research:resume', id),
-  archive: (id: string): Promise<unknown> => ipcRenderer.invoke('research:archive', id),
-  remove: (id: string): Promise<unknown> => ipcRenderer.invoke('research:delete', id),
-  export: (jobId: string, format: string): Promise<unknown> =>
-    ipcRenderer.invoke('research:export', { jobId, format }),
-  openArtifact: (id: string): Promise<unknown> => ipcRenderer.invoke('research:openArtifact', id),
-  revealArtifact: (id: string): Promise<unknown> => ipcRenderer.invoke('research:revealArtifact', id),
-  coverDataUrl: (id: string): Promise<unknown> => ipcRenderer.invoke('research:coverDataUrl', id),
-  openSource: (id: string): Promise<unknown> => ipcRenderer.invoke('research:openSource', id),
-  scheduler: (): Promise<unknown> => ipcRenderer.invoke('research:scheduler'),
-  discordSettings: (): Promise<unknown> => ipcRenderer.invoke('research:discordSettings'),
-  setDiscordSettings: (input: unknown): Promise<unknown> => ipcRenderer.invoke('research:setDiscordSettings', input),
-  testDiscord: (): Promise<unknown> => ipcRenderer.invoke('research:testDiscord'),
-  discordDeliveries: (jobId: string): Promise<unknown> => ipcRenderer.invoke('research:discordDeliveries', jobId),
-  retryDiscordDelivery: (deliveryId: string): Promise<unknown> =>
-    ipcRenderer.invoke('research:retryDiscordDelivery', deliveryId)
-})
-
 // Permissioned local project runner + loopback-only visual stream.
 const projectPreview = Object.freeze({
   inspect: (projectPath: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:inspect', projectPath),
@@ -487,6 +447,9 @@ const projectPreview = Object.freeze({
   status: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:status', id),
   setViewport: (id: string, width: number, height: number): Promise<unknown> =>
     ipcRenderer.invoke('projectPreview:setViewport', id, width, height),
+  attach: (id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<unknown> =>
+    ipcRenderer.invoke('projectPreview:attach', { id, bounds }),
+  detach: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:detach', id),
   capture: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:capture', id),
   stop: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:stop', id),
   open: (id: string): Promise<unknown> => ipcRenderer.invoke('projectPreview:open', id),
@@ -541,6 +504,6 @@ const actionAgent = Object.freeze({
   pickFolder: (): Promise<unknown> => ipcRenderer.invoke('actionAgent:pickFolder')
 })
 
-const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, benchmark, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, research, projectPreview, companion, actionAgent })
+const api = Object.freeze({ app: appApi, pty, chat, bridge, history, projects, usage, githubActivity, router, digest, test, evaluate, macro, agent, mission, settings, windowControls, ollama, git, gpu, telemetry, controller, plugins, update, usageLimits, localRuntime, projectLoop, projectPreview, companion, actionAgent })
 
 contextBridge.exposeInMainWorld('api', api)

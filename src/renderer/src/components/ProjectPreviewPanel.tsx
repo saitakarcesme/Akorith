@@ -135,6 +135,7 @@ export function ProjectPreviewPanel({
   const [typing, setTyping] = useState('')
   const [address, setAddress] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [nativeAttached, setNativeAttached] = useState(false)
   const pollingRef = useRef(false)
   const viewportBusyRef = useRef(false)
   const displayRef = useRef<HTMLDivElement>(null)
@@ -195,7 +196,7 @@ export function ProjectPreviewPanel({
       }
       pollingRef.current = true
       try {
-        if (live) {
+        if (live && !browserMode) {
           const generation = frameGenerationRef.current
           const capture = await window.api.projectPreview.capture(session.id)
           if (!cancelled) {
@@ -220,10 +221,10 @@ export function ProjectPreviewPanel({
       cancelled = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [active, live, pointerEnabled, session?.id, session?.state])
+  }, [active, browserMode, live, pointerEnabled, session?.id, session?.state])
 
   useEffect(() => {
-    if (!workspaceVariant || !active || !live || !running || !session?.id) return
+    if (browserMode || !workspaceVariant || !active || !live || !running || !session?.id) return
     const display = displayRef.current
     if (!display) return
     const sessionId = session.id
@@ -275,7 +276,64 @@ export function ProjectPreviewPanel({
       if (resizeTimer !== null) window.clearTimeout(resizeTimer)
       observer.disconnect()
     }
-  }, [active, live, running, session?.id, workspaceVariant])
+  }, [active, browserMode, live, running, session?.id, workspaceVariant])
+
+  useEffect(() => {
+    if (!browserMode || !active || !live || !running || !session?.id) {
+      setNativeAttached(false)
+      return
+    }
+    const display = displayRef.current
+    if (!display) return
+    const sessionId = session.id
+    let cancelled = false
+    let timer: number | null = null
+    let lastBounds = ''
+
+    const attach = (): void => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        const rect = display.getBoundingClientRect()
+        if (rect.width < 1 || rect.height < 1) return
+        const bounds = {
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height
+        }
+        const signature = `${Math.round(bounds.x)}:${Math.round(bounds.y)}:${Math.round(bounds.width)}:${Math.round(bounds.height)}`
+        if (signature === lastBounds) return
+        lastBounds = signature
+        void window.api.projectPreview.attach(sessionId, bounds)
+          .then((status) => {
+            if (cancelled) return
+            setSession(status)
+            setNativeAttached(true)
+            setError(null)
+          })
+          .catch((reason) => {
+            if (!cancelled) {
+              setNativeAttached(false)
+              setError(reason instanceof Error ? reason.message : String(reason))
+            }
+          })
+      }, 40)
+    }
+
+    const observer = new ResizeObserver(attach)
+    observer.observe(display)
+    window.addEventListener('resize', attach)
+    attach()
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
+      observer.disconnect()
+      window.removeEventListener('resize', attach)
+      setNativeAttached(false)
+      void window.api.projectPreview.detach(sessionId).catch(() => false)
+    }
+  }, [active, browserMode, live, running, session?.id])
 
   const start = async (): Promise<void> => {
     setError(null)
@@ -471,7 +529,9 @@ export function ProjectPreviewPanel({
       )}
       {live && running && <div className="project-preview-stage">
         <div ref={displayRef} className="project-preview-display">
-          {frame
+          {browserMode
+          ? <div className="project-preview-native" role="group" aria-label={`Interactive browser preview of ${projectName}`}>{nativeAttached ? null : <div className="project-preview-loading"><span />Attaching interactive browser…</div>}</div>
+          : frame
           ? pointerEnabled
             ? <div className="project-preview-frame" role="group" tabIndex={0} aria-label={`Interactive ${title} preview. Click to focus, then use the keyboard.`} title="Click to interact with the running project" onMouseMove={moveCursor} onMouseLeave={() => { if (cursorRef.current) cursorRef.current.style.opacity = '0' }} onClick={(event) => void interact(event)} onKeyDown={sendPreviewKey} onWheel={scrollPreview}><img ref={frameImageRef} src={frame.dataUrl} alt={`Live view of ${projectName}`} /><span ref={cursorRef} className="project-preview-cursor" aria-hidden="true" /></div>
             : <div className="project-preview-frame is-readonly"><img src={frame.dataUrl} alt={`Browser preview of ${projectName}`} /></div>

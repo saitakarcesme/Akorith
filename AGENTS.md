@@ -6,8 +6,8 @@ introduced as the visible name in Phase 9.1. It is an Electron + TypeScript + Re
 agents **without any API keys**: the center planning chat talks to the user's own
 Claude / ChatGPT subscriptions (via their installed CLIs) or a local Ollama server; the
 selected CLIs run headlessly behind the conversation; the left sidebar holds projects and session
-history. Built with electron-vite, in strict numbered phases — currently through Phase 73
-(the durable Workspace `/loop` skill).
+history. Built with electron-vite, in strict numbered phases — currently through Phase 74
+(the Workspace turn-flow reset).
 
 **Phase roadmap:** 1 shell · 2 PTY terminals · 3 provider registry · 4 chat→terminal
 bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + repo digest ·
@@ -30,7 +30,7 @@ bridge · 5 SQLite history + dashboard · 6 macOS fix + suggest-only router + re
 (see `docs/phase-*.md`) · **57 Durable Goal Cycle + chat isolation** ·
 **69 Autonomous Research** · **70 Research Presentation + unified usage + sidebar alignment** ·
 **71 launch-safe macOS releases** · **72 replica workspace UI** ·
-**73 Workspace `/loop` skill** — all done.
+**73 Workspace `/loop` skill** · **74 Workspace turn-flow reset** — all done.
 Remaining: code signing/notarization + a built Windows installer (config is in place).
 
 ## Prerequisites
@@ -1867,9 +1867,10 @@ dark/light token families. Keep `styles.css` and `product-polish.css` for featur
 
 This phase was a visual integration, not a renderer rewrite. `App.tsx` remains the state controller
 and the frozen preload API remains the only capability boundary. At Phase 72, Chat, Benchmark, Loop,
-and Research remained mounted while hidden. Phase 73 supersedes the Loop part of that statement:
-there is no standalone Loop mount or route; Workspace remains mounted, while Benchmark and Research
-preserve their long-running state after first use.
+and Research remained mounted while hidden. Phase 73 supersedes the Loop part of that statement;
+Phase 74 supersedes the Benchmark/Research part. There is no standalone Loop mount or route,
+Workspace remains mounted, and Benchmark/Research are intentionally empty route shells with no
+legacy renderer, IPC, scheduler, or delivery runtime.
 Workspace suggestion cards only prepare real prompts. The feature banner is the real permissioned
 `ProjectPreviewPanel`, and every navigation row, project action, model picker, Settings field, and
 domain page continues to use its existing IPC and persistence path.
@@ -1882,7 +1883,7 @@ Home/End, Enter, Tab, and Escape behavior. Native-style top menus expose valid A
 state and working edit commands.
 
 Verification: `npm run typecheck`, `npm run build`, `npm run verify:replica-ui`,
-`npm run verify:ui-zoom`, the relevant Workspace/Goal/Loop/Research/Plugins/update regression
+`npm run verify:ui-zoom`, the relevant Workspace/Goal/Loop/Plugins/update regression
 scripts, plus real Electron screenshots and overflow/keyboard checks at 1440×900, 960×600,
 640×800, and 390×780.
 
@@ -1933,6 +1934,35 @@ Relevant implementation: `src/renderer/src/workspaceLoopCommand.ts`,
 `npm run verify:workspace-skill-loop`, `npm run verify:goal-cycle`,
 `npm run verify:project-loop`, `npm run verify:startup-hydration`, `npm run typecheck`, and
 `npm run build`.
+
+### Phase 74: Workspace Turn-Flow Reset
+
+Phase 74 makes a normal Workspace send read like a real Codex task instead of a simulated chat
+narrative. Provider events are the source of truth: Codex `--json` agent messages become exact
+commentary, while command, file, plan, reasoning, tool, and failure items update one stable activity
+record by provider event id. Live activities are written into the pending assistant message as they
+arrive, so a reload can recover the real progress log. Claude and OpenCode no longer expose partial
+final-answer text over the activity stream in Workspace; the final answer appears once after tool
+work finishes. General Chat retains ordinary answer streaming.
+
+Model selection is isolated by surface. General Chat stores one selection and each project
+Workspace stores its own provider/model selection under `akorith.chatSelections.v1`. Entering a
+Workspace cannot inherit a model chosen in General Chat, and reopening a saved task restores the
+model recorded on that task.
+
+The Workspace Browser now attaches a sandboxed, context-isolated `WebContentsView` inside the tool
+surface. It receives native pointer, keyboard, focus, scrolling, and game input; Computer Use keeps
+the explicit offscreen capture/input bridge. Browser attachment bounds are renderer-provided but
+main-process validated and clamped, navigation and redirects are restricted to loopback URLs,
+popups are denied, and hiding/reopening the tab preserves page state until the preview is stopped.
+
+Research and Benchmark remain visible in navigation as intentionally empty sections. Their legacy
+renderer pages, main-process handlers/scheduler, preload capabilities, Discord delivery settings,
+verification harnesses, exporter dependencies, and packaging resources are removed. Historical DB
+tables and user rows remain untouched so this reset is not a destructive data migration.
+
+Canonical verification: `npm run verify:workspace-activity`, `npm run verify:replica-ui`,
+`npm run verify:performance`, `npm run typecheck`, `npm run build`, and `npm run verify:bundle`.
 
 ## Conventions
 

@@ -21,15 +21,11 @@ import type { ProjectRow, SessionRow, StartupSnapshot, StartupSnapshotRequest } 
 
 const Dashboard = lazy(() => import('./components/Dashboard'))
 const Plugins = lazy(() => import('./components/Plugins'))
-const TestPage = lazy(() => import('./components/TestPage'))
-const ResearchPage = lazy(() => import('./components/ResearchPage'))
 const WorkspaceToolsPanel = lazy(() => import('./components/WorkspaceToolsPanel'))
 
 export type ChatMode = 'workspace' | 'general'
 export type AppView = ChatMode | 'dashboard' | 'test' | 'research' | 'plugins'
 export type AppTheme = 'dark' | 'light'
-
-const PERSISTENT_FEATURE_VIEWS = new Set<AppView>(['test', 'research'])
 
 function FeaturePageFallback({ label }: { label: string }): JSX.Element {
   return (
@@ -346,7 +342,6 @@ function latestSessionFrom(sessions: SessionRow[], projectId: string | null): Se
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<AppView>('workspace')
-  const [mountedFeatureViews, setMountedFeatureViews] = useState<Set<AppView>>(() => new Set())
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       return localStorage.getItem('akorith.theme') === 'light' ? 'light' : 'dark'
@@ -450,16 +445,6 @@ export default function App(): JSX.Element {
     lastViewRef.current = view
     navTravelRef.current = null
   }, [view, startupHydrated])
-
-  useEffect(() => {
-    if (!PERSISTENT_FEATURE_VIEWS.has(view)) return
-    setMountedFeatureViews((mounted) => {
-      if (mounted.has(view)) return mounted
-      const next = new Set(mounted)
-      next.add(view)
-      return next
-    })
-  }, [view])
 
   const goBack = useCallback((): void => {
     setNavBackStack((stack) => {
@@ -852,22 +837,8 @@ export default function App(): JSX.Element {
           />
         </Suspense>
       </div>
-      {/* Heavy feature surfaces load only on first use. Long-running pages remain
-          mounted after that first visit so navigation never interrupts a run. */}
-      {(view === 'test' || mountedFeatureViews.has('test')) && (
-        <div className="test-page-wrap" style={{ display: view === 'test' ? 'flex' : 'none' }}>
-          <Suspense fallback={<FeaturePageFallback label="Loading Benchmark…" />}>
-            <TestPage active={view === 'test'} activeProject={activeProject} />
-          </Suspense>
-        </div>
-      )}
-      {(view === 'research' || mountedFeatureViews.has('research')) && (
-        <div className="research-page-wrap" style={{ display: view === 'research' ? 'flex' : 'none' }}>
-          <Suspense fallback={<FeaturePageFallback label="Loading Research…" />}>
-            <ResearchPage active={view === 'research'} />
-          </Suspense>
-        </div>
-      )}
+      {view === 'test' && <section className="empty-feature-section" aria-label="Benchmark" />}
+      {view === 'research' && <section className="empty-feature-section" aria-label="Research" />}
       {view === 'dashboard' && (
         <Suspense fallback={<FeaturePageFallback label="Loading Dashboard…" />}>
           <Dashboard activeProject={activeProject} />

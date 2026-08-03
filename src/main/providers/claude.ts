@@ -139,6 +139,7 @@ export class ClaudeProvider implements Provider {
     const args = buildClaudeCliArgs(opts)
 
     let streamedText = ''
+    const streamVisibleText = !opts.workingDirectory
     let resultEvent: ClaudeResultEvent | null = null
     let initModel: string | null = null
     let toolSequence = 0
@@ -187,7 +188,7 @@ export class ClaudeProvider implements Provider {
           const delta = event.event?.delta
           if (event.event?.type === 'content_block_delta' && delta?.type === 'text_delta' && delta.text) {
             streamedText += delta.text
-            onToken(delta.text)
+            if (streamVisibleText) onToken(delta.text)
           } else if (event.event?.type === 'content_block_start') {
             const block = event.event.content_block
             if (block?.type === 'tool_use') {
@@ -252,7 +253,7 @@ export class ClaudeProvider implements Provider {
 
     const text = typeof result.result === 'string' && result.result ? result.result : streamedText
     // Older CLIs without partial messages emit no deltas — deliver the text once.
-    if (!streamedText && text) onToken(text)
+    if ((!streamedText || !streamVisibleText) && text) onToken(text)
 
     const usage = result.usage ?? {}
     // Claude can report very large cache counters for tiny follow-up prompts.

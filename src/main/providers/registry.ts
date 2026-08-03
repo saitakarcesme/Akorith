@@ -17,6 +17,7 @@ import {
   sessionExists,
   setContextSummary,
   updateChatTurnAssistant,
+  updateChatTurnProgress,
   type StoredMessageActivity
 } from '../db'
 import {
@@ -795,8 +796,27 @@ export function registerChatIpc(): void {
         ...clean,
         id: clean.id ?? `registry:event-${++activitySequence}`
       }
-      requestActivities.push(normalized)
+      const existingIndex = requestActivities.findIndex((item) => item.id === normalized.id)
+      if (existingIndex >= 0) {
+        requestActivities[existingIndex] = {
+          ...requestActivities[existingIndex],
+          ...normalized,
+          detail: normalized.detail ?? requestActivities[existingIndex].detail,
+          timestamp: Math.min(requestActivities[existingIndex].timestamp, normalized.timestamp),
+          startedAt: requestActivities[existingIndex].startedAt ?? normalized.startedAt,
+          endedAt: normalized.endedAt ?? requestActivities[existingIndex].endedAt
+        }
+      } else {
+        requestActivities.push(normalized)
+      }
       if (requestActivities.length > MAX_STORED_ACTIVITIES) requestActivities.shift()
+      if (assistantMessageId) {
+        try {
+          updateChatTurnProgress(assistantMessageId, requestActivities)
+        } catch (error) {
+          console.error('[registry] failed to persist live chat activity:', error)
+        }
+      }
       if (!sender.isDestroyed()) {
         sender.send('chat:activity', {
           requestId: args.requestId,

@@ -73,8 +73,6 @@ const NAV_ITEMS: { view: AppView; label: string; icon: (props: { size?: number }
 
 const FEATURE_PRELOADERS: Partial<Record<AppView, () => Promise<unknown>>> = {
   dashboard: () => import('./Dashboard'),
-  research: () => import('./ResearchPage'),
-  test: () => import('./TestPage'),
   plugins: () => import('./Plugins')
 }
 

@@ -189,6 +189,21 @@ export class ChatGPTProvider implements Provider {
     // slow global connector cannot take down ordinary chat/workspace sends.
     const args = buildCodexExecArgs(outFile, opts)
     let reportedUsage: SendResult['usage'] | null = null
+    let pendingAgentMessage: { id?: string; text: string; timestamp: number } | null = null
+
+    const emitPendingAgentMessage = (): void => {
+      if (!pendingAgentMessage) return
+      opts.onActivity?.({
+        id: pendingAgentMessage.id,
+        kind: 'commentary',
+        label: pendingAgentMessage.text,
+        status: 'complete',
+        timestamp: pendingAgentMessage.timestamp,
+        startedAt: pendingAgentMessage.timestamp,
+        endedAt: pendingAgentMessage.timestamp
+      })
+      pendingAgentMessage = null
+    }
 
     try {
       const res = await runCli('codex', args, {
@@ -219,7 +234,18 @@ export class ChatGPTProvider implements Provider {
           const lifecycle = status === 'complete'
             ? { timestamp: now, endedAt: now }
             : { timestamp: now, startedAt: now }
-          if (type === 'thread.started') {
+          if (itemType === 'agent_message' && typeof item?.text === 'string' && item.text.trim()) {
+            // Keep the newest agent message pending because Codex reports its
+            // final answer through the same JSON item type. A following agent
+            // message proves the previous one was genuine progress; the final
+            // pending item is compared with --output-last-message below.
+            emitPendingAgentMessage()
+            pendingAgentMessage = {
+              id: activityId,
+              text: item.text.trim(),
+              timestamp: now
+            }
+          } else if (type === 'thread.started') {
             opts.onActivity?.({
               id: activityId ?? 'codex:session',
               kind: 'status',
@@ -252,10 +278,17 @@ export class ChatGPTProvider implements Provider {
           } else if (itemType === 'file_change') {
             const changes = Array.isArray(item?.changes) ? item.changes as Record<string, unknown>[] : []
             const paths = changes.map((change) => String(change.path ?? '')).filter(Boolean)
+            const firstKind = typeof changes[0]?.kind === 'string' ? changes[0].kind.toLowerCase() : ''
+            const verb = firstKind.includes('add') || firstKind.includes('create')
+              ? 'Created'
+              : firstKind.includes('delete') || firstKind.includes('remove')
+                ? 'Deleted'
+                : 'Updated'
             opts.onActivity?.({
               id: activityId,
               kind: 'file',
-              label: paths.length ? paths.join(', ') : 'Updating project files',
+              label: paths.length === 1 ? `${verb} ${paths[0]}` : paths.length > 1 ? `${verb} ${paths.length} files` : 'Updating project files',
+              detail: paths.length > 1 ? paths.join(', ') : undefined,
               status,
               surface: 'files',
               ...lifecycle
@@ -272,6 +305,42 @@ export class ChatGPTProvider implements Provider {
               status,
               surface: 'review',
               ...lifecycle
+            })
+          } else if (itemType === 'mcp_tool_call' || itemType === 'web_search' || itemType === 'tool_call') {
+            const toolName = typeof item?.name === 'string'
+              ? item.name
+              : typeof item?.tool === 'string'
+                ? `${typeof item?.server === 'string' ? `${item.server}.` : ''}${item.tool}`
+              : itemType === 'web_search'
+                ? 'Searching the web'
+                : 'Using a workspace tool'
+            const detail = typeof item?.result === 'string'
+              ? boundedCommandOutput(item.result)
+              : typeof item?.query === 'string'
+                ? item.query
+                : undefined
+            opts.onActivity?.({
+              id: activityId,
+              kind: 'tool',
+              label: toolName,
+              detail,
+              status,
+              ...lifecycle
+            })
+          } else if (type === 'turn.failed' || type === 'error') {
+            const message = typeof event.message === 'string'
+              ? event.message
+              : typeof item?.message === 'string'
+                ? item.message
+                : 'Codex could not complete this workspace step.'
+            opts.onActivity?.({
+              id: activityId ?? 'codex:turn',
+              kind: 'warning',
+              label: 'Codex workspace step failed',
+              detail: message,
+              status: 'error',
+              timestamp: now,
+              endedAt: now
             })
           } else if (type === 'turn.completed') {
             const usage = event.usage && typeof event.usage === 'object'
@@ -327,6 +396,9 @@ export class ChatGPTProvider implements Provider {
         }
         text = res.stdout.trim()
       }
+      const remainingAgentMessage = pendingAgentMessage as { id?: string; text: string; timestamp: number } | null
+      if (remainingAgentMessage && remainingAgentMessage.text !== text) emitPendingAgentMessage()
+      else pendingAgentMessage = null
       if (!text) {
         throw new Error('codex CLI produced no output')
       }

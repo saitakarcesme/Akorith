@@ -1087,6 +1087,29 @@ textarea:focus-visible,
   line-height: 1.68;
   overflow-wrap: anywhere;
 }
+.workspace-activity-current {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font: 400 13px/1.5 var(--font-ui);
+}
+.workspace-activity-current > span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-top: 6px;
+  border: 1px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+.workspace-activity-current div { min-width: 0; }
+.workspace-activity-current strong,
+.workspace-activity-current small { display: block; }
+.workspace-activity-current strong { color: var(--text); font-weight: 500; }
+.workspace-activity-current small { margin-top: 2px; color: var(--text-faint); }
 .workspace-activity-feed {
   display: flex;
   flex-direction: column;

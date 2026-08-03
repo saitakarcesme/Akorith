@@ -9,7 +9,6 @@ import { registerBridgeIpc } from './bridge'
 import { registerRouterIpc } from './router'
 import { registerDigestIpc } from './digest'
 import { registerTestIpc } from './testlab-ipc'
-import { registerBenchmarkIpc } from './benchmarks'
 import { registerEvaluateIpc } from './evaluate'
 import { registerMacroIpc } from './macro'
 import { registerOllamaConnectionIpc } from './ollama-connection'
@@ -37,13 +36,12 @@ import { registerCompanionIpc } from './companions'
 import { registerActionAgentIpc } from './action-agents'
 import { registerGitHubActivityIpc } from './github-activity'
 import { registerProjectPreviewIpc, stopAllProjectPreviews } from './project-preview'
-import { registerResearchIpc, shutdownResearchScheduler, startResearchScheduler } from './research'
 import { installUiZoom, performUiZoom } from './ui-zoom'
 
 let mainWindowRef: BrowserWindow | null = null
 let splashWindowRef: BrowserWindow | null = null
-let researchShutdownComplete = false
-let researchShutdownInProgress = false
+let backgroundShutdownComplete = false
+let backgroundShutdownInProgress = false
 const AKORITH_APP_ID = 'com.akorith.app'
 const WINDOW_THEME_COLORS: Record<AppTheme, { chrome: string; surface: string; symbol: string }> = {
   dark: { chrome: '#1b1d20', surface: '#24272b', symbol: '#f3f4f6' },
@@ -433,7 +431,6 @@ async function initializeStartupData(): Promise<void> {
     // schedulers inspect or resume background work on the same event loop.
     setTimeout(() => {
       resumeWorkspaceGoalsAtStartup()
-      startResearchScheduler()
     }, 0)
   } catch (err) {
     console.error('[db] SQLite initialization failed:', err)
@@ -451,7 +448,6 @@ app.whenReady().then(() => {
   registerActionAgentIpc()
   registerGitHubActivityIpc()
   registerProjectPreviewIpc()
-  registerResearchIpc()
   registerDbIpc()
   registerPtyIpc()
   registerChatIpc()
@@ -459,7 +455,6 @@ app.whenReady().then(() => {
   registerRouterIpc()
   registerDigestIpc()
   registerTestIpc()
-  registerBenchmarkIpc()
   registerEvaluateIpc()
   registerAgentRegistryIpc()
   registerMissionIpc()
@@ -492,18 +487,16 @@ app.whenReady().then(() => {
   })
 })
 
-// Research may be in the middle of writing a checkpoint or validated artifact.
-// Drain those promises before SQLite closes so an app quit never corrupts a
-// report or leaves a lease looking active until its timeout.
+// Drain durable Workspace Goal checkpoints before SQLite closes.
 app.on('before-quit', (event) => {
-  if (researchShutdownComplete) return
+  if (backgroundShutdownComplete) return
   event.preventDefault()
-  if (researchShutdownInProgress) return
-  researchShutdownInProgress = true
-  void Promise.all([shutdownResearchScheduler(), shutdownWorkspaceGoals()])
+  if (backgroundShutdownInProgress) return
+  backgroundShutdownInProgress = true
+  void shutdownWorkspaceGoals()
     .catch((error) => console.error('[shutdown] Background work shutdown failed:', error))
     .finally(() => {
-      researchShutdownComplete = true
+      backgroundShutdownComplete = true
       app.quit()
     })
 })

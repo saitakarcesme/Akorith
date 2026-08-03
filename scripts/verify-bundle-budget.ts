@@ -40,7 +40,7 @@ within(bytes(join(root, 'out', 'main', 'index.js')), 950 * 1024, 'initial main-p
 within(bytes(join(root, 'out', 'preload', 'index.js')), 50 * 1024, 'preload bridge JavaScript')
 
 const eagerNames = [...initialScripts, ...initialStyles].map((path) => basename(path)).join('\n')
-for (const deferred of ['ChatMarkdown', 'ChatMessageView', 'SettingsCenter', 'Dashboard', 'Plugins', 'TestPage', 'ResearchPage']) {
+for (const deferred of ['ChatMarkdown', 'ChatMessageView', 'SettingsCenter', 'Dashboard', 'Plugins']) {
   if (eagerNames.includes(deferred)) {
     failures.push(`${deferred} was referenced by the initial HTML`)
     console.error(`[fail] ${deferred} was referenced by the initial HTML`)
